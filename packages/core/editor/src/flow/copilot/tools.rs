@@ -1802,6 +1802,44 @@ pub struct UiInspectContextTool {
     pub bridge: Arc<dyn PlatformToolBridge>,
 }
 
+pub struct SearchWorkspaceTool {
+    pub bridge: Arc<dyn PlatformToolBridge>,
+}
+
+impl Tool for SearchWorkspaceTool {
+    const NAME: &'static str = "search_workspace";
+    type Error = RuntimeVerificationToolError;
+    type Args = Value;
+    type Output = String;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        workflow_context_tool_definition(Self::NAME)
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        call_workflow_context_tool(&self.bridge, Self::NAME, args).await
+    }
+}
+
+pub struct ReadSymbolTool {
+    pub bridge: Arc<dyn PlatformToolBridge>,
+}
+
+impl Tool for ReadSymbolTool {
+    const NAME: &'static str = "read_symbol";
+    type Error = RuntimeVerificationToolError;
+    type Args = Value;
+    type Output = String;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        workflow_context_tool_definition(Self::NAME)
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        call_workflow_context_tool(&self.bridge, Self::NAME, args).await
+    }
+}
+
 impl Tool for UiInspectContextTool {
     const NAME: &'static str = "ui_inspect";
     type Error = RuntimeVerificationToolError;
@@ -3447,7 +3485,7 @@ impl Tool for WriteFlowScriptTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Start a retained code-first FlowScript draft. Write the complete source document; the host binds it to the immutable user request, parses it into internal BoardAst, returns structured source diagnostics, and preserves the exact text for inline preview and later patches. When a retained draft already exists for this same request (a follow-up repair run), do NOT start a new draft: reuse the SAME draft_id and exact expected_revision and repair it in place. Preserve existing function cache decorators. To cache an input-determined function, place `@cache({ namespace: \"...\", ttlSeconds: 3600, scope: \"user\" })` immediately above it; bare `@cache` defaults to the `global` namespace, 300 seconds, and app scope, while `ttlSeconds: 0` is permanent. A cache hit skips the entire body and all side effects. Function returns accept node outputs, params, literals, and mutable `let` bindings (one return value per declared return pin). A `let` reassigned across if/for promotes to a board variable with its initializer preserved; never reassign a `const` inside a branch arm — declare it with `let`. Catalog-related diagnostics automatically include exact live signatures or bounded candidates in fix.catalog_declarations and structural context in fix.companion_declarations; use those before another lookup. Defaults to additive scope. Use replace mode only for an intentional complete-board document."
+            description: "Start a retained FlowScript draft with the complete source document. The host binds the immutable user request, parses BoardAst, reports source diagnostics and preserves exact text for preview/patches. For repairs, reuse the SAME draft_id and exact expected_revision. Preserve function cache decorators. Cache input-determined functions with `@cache({ namespace: \"...\", ttlSeconds: 3600, scope: \"user\" })`; bare `@cache` uses global/300 seconds/app scope; ttlSeconds: 0 is permanent. A hit skips the entire body and all side effects. A function return must be one trailing top-level statement, with one value per declared output pin. Nested, early and multiple function returns are rejected. Assign a literal-initialized `let` in branches/loops, then return it after the control block. Reassigned let bindings retain their enclosing scope and initializers; never reassign const. Outputs accept node outputs, params, literals and let bindings. Event-handler returns are unchanged. Catalog diagnostics include signatures/candidates in fix.catalog_declarations and structural context in fix.companion_declarations; read them before another lookup. Additive scope is default; replace mode requires an intentional complete-board document."
                 .to_string(),
             parameters: serde_json::to_value(schema_for!(WriteFlowScriptArgs))
                 .unwrap_or_else(|_| json!({ "type": "object" })),
@@ -3479,7 +3517,7 @@ impl Tool for PatchFlowScriptTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Patch one exact, uniquely occurring text range in a retained FlowScript draft using revision compare-and-swap. This is the way to resume a retained draft in a follow-up repair run: keep its SAME draft_id and exact expected_revision instead of rewriting from scratch. The full updated source and structured diagnostics are returned inline. Preserve an existing function `@cache` decorator during unrelated repairs; the canonical configured form is `@cache({ namespace: \"...\", ttlSeconds: 3600, scope: \"user\" })`. Bare `@cache` defaults to the `global` namespace, 300 seconds, and app scope; `ttlSeconds: 0` is permanent. A cache hit skips the body and its side effects. Function returns accept node outputs, params, literals, and mutable `let` bindings; a `let` reassigned across if/for promotes to a board variable — never reassign a `const` inside a branch arm. Catalog-related diagnostics automatically include repair signatures in fix.catalog_declarations and structural context in fix.companion_declarations; use those before another lookup. Ambiguous, stale, replayed, or scope-collapsing patches do not mutate the draft."
+            description: "Patch one unique exact text range in a retained draft using revision compare-and-swap. Resume repairs with the SAME draft_id and exact expected_revision; the full updated source and diagnostics return inline. Preserve function @cache decorators. Configured form: `@cache({ namespace: \"...\", ttlSeconds: 3600, scope: \"user\" })`; bare @cache uses global/300 seconds/app scope; ttlSeconds: 0 is permanent. A hit skips the body and side effects. A function return must be one trailing top-level statement; nested, early and multiple function returns are rejected. Assign a literal-initialized let in branches/loops, then return it after the control block. Reassigned let bindings retain their enclosing scope; never reassign const. Outputs accept node outputs, params, literals and let bindings, one per declared pin. Event-handler returns are unchanged. Read repair signatures in fix.catalog_declarations and context in fix.companion_declarations before another lookup. Ambiguous, stale, replayed or scope-collapsing patches do not mutate the draft."
                 .to_string(),
             parameters: serde_json::to_value(schema_for!(PatchFlowScriptArgs))
                 .unwrap_or_else(|_| json!({ "type": "object" })),
@@ -3859,6 +3897,7 @@ pub fn get_tool_description(name: &str, arguments: &serde_json::Value) -> String
         "write_flowscript" => "Writing and previewing a retained FlowScript draft...".to_string(),
         "patch_flowscript" => "Patching the retained FlowScript source...".to_string(),
         "check_flowscript" => "Checking FlowScript and retaining its exact changes...".to_string(),
+        "test_flowscript" => "Testing the retained FlowScript result in isolation...".to_string(),
         "commit_flowscript" => "Queueing the exact checked FlowScript changes...".to_string(),
         "plan_flow_ir" => {
             "Checking required workflow capabilities and module budgets...".to_string()

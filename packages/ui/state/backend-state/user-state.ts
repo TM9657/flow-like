@@ -9,6 +9,7 @@ import type { ISettingsProfile } from "../../types";
 import type {
 	INotification,
 	INotificationsOverview,
+	IProjectContactsPage,
 	IUserLookup,
 } from "./types";
 
@@ -299,7 +300,11 @@ export interface IUserState {
 	 * account's own id, because that is who it names.
 	 */
 	lookupUsers(userIds: string[]): Promise<IUserLookup[]>;
-	searchUsers(query: string): Promise<IUserLookup[]>;
+	searchUsers(query: string, appId?: string): Promise<IUserLookup[]>;
+	getProjectContacts(
+		appId: string,
+		after?: string,
+	): Promise<IProjectContactsPage>;
 	getNotifications(): Promise<INotificationsOverview>;
 	listNotifications(
 		unreadOnly?: boolean,

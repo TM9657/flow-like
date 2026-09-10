@@ -36,6 +36,8 @@ import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
 import { Textarea } from "../../ui/textarea";
 import { homeGreetingForHour, homeGreetingName } from "../home-greeting";
+import { homeImageReference } from "../home-image-config";
+import { HomeInformationImage } from "../home-information-image";
 import {
 	type HomeContentProps,
 	homeLinksRendering,
@@ -758,14 +760,12 @@ export function HomeInformation({
 	}
 	const prominent = ["banner", "announcement", "story", "quote"].includes(mode);
 	const action = safeHomeHref(textConfig(widget.config, "actionHref"));
-	const imageHref = safeHomeHref(textConfig(widget.config, "imageUrl"));
-	const imageUrl =
-		imageHref && /^(https?:|\/)/.test(imageHref) ? imageHref : undefined;
+	const image = homeImageReference(widget.config);
 	return (
 		<div className={cn("min-w-0", prominent && "flex flex-col gap-1")}>
-			{imageUrl && (
+			{image && (
 				<HomeInformationImage
-					src={imageUrl}
+					image={image}
 					alt={textConfig(widget.config, "imageAlt")}
 				/>
 			)}
@@ -787,10 +787,10 @@ export function HomeInformation({
 				>
 					<Markdown initialContent={body} isMarkdown minimal />
 				</div>
-			) : !imageUrl ? (
+			) : !image ? (
 				<HomeEmpty>
 					{mode === "image"
-						? "Choose an image URL and add a description in widget settings."
+						? "Choose an image from a URL or app storage in widget settings."
 						: "Add a note, links, or instructions in widget settings. Markdown formatting is supported."}
 				</HomeEmpty>
 			) : null}
@@ -811,23 +811,5 @@ export function HomeInformation({
 				</Link>
 			)}
 		</div>
-	);
-}
-
-function HomeInformationImage({ src, alt }: { src: string; alt: string }) {
-	const [failedSrc, setFailedSrc] = useState<string | null>(null);
-	return failedSrc === src ? (
-		<div className="mb-4 rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">
-			This image could not be loaded. Check its URL in widget settings.
-		</div>
-	) : (
-		<img
-			src={src}
-			alt={alt}
-			loading="lazy"
-			referrerPolicy="no-referrer"
-			onError={() => setFailedSrc(src)}
-			className="mb-3 max-h-64 w-full shrink-0 rounded-xl object-cover"
-		/>
 	);
 }

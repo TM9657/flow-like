@@ -34,6 +34,7 @@ interface ResolvableEntity {
 }
 
 const WIDGET_ID_KEYS = new Set(["widgetId", "widget_id"]);
+const BOARD_ID_KEYS = new Set(["boardId", "board_id"]);
 const PAGE_ID_KEYS = new Set([
 	"pageId",
 	"page_id",
@@ -402,6 +403,65 @@ function collectWidgetRefs(page: FlowPilotPageSnapshot): readonly string[] {
 	return [...references].sort();
 }
 
+function unusedEmptyBoardIds(
+	snapshot: FlowPilotAppCreationSnapshot,
+	requirements: FlowPilotE2ECaseDefinition["requirements"],
+): ReadonlySet<string> {
+	const referencedIds = new Set([
+		...snapshot.pages.flatMap((page) => [
+			...(page.boardId ? [page.boardId] : []),
+			...collectKeyedReferences(page.content, BOARD_ID_KEYS),
+		]),
+		...snapshot.events.flatMap((event) =>
+			event.boardId ? [event.boardId] : [],
+		),
+		...(snapshot.flowScriptGenerationRuns ?? []).flatMap((run) =>
+			run.appId === snapshot.appId && run.candidates.length > 0
+				? [run.boardId]
+				: [],
+		),
+		...flowScriptStringValues(snapshot.authoredFlowScript),
+		...snapshot.boards.flatMap((board) => [
+			...flowScriptStringValues(board.authoredFlowScript),
+			...flowScriptStringValues(board.flowScript),
+		]),
+	]);
+	const requiredAliases = new Set(
+		requirements.requiredPageBoardBindings.map((binding) =>
+			normalizeSemanticAlias(binding.board),
+		),
+	);
+	return new Set(
+		snapshot.boards
+			.filter((board) => {
+				// Missing inventory is unknown. An empty source alone cannot prove an unused
+				// scaffold, and required/referenced boards must retain all workflow checks.
+				return (
+					board.nodeCount === 0 &&
+					Array.isArray(board.nodeIds) &&
+					board.nodeIds.length === 0 &&
+					(board.nodeTypes?.length ?? 0) === 0 &&
+					!definedSource(board.flowScript) &&
+					!definedSource(board.authoredFlowScript) &&
+					!(board.lintDiagnostics ?? []).some(
+						(diagnostic) => diagnostic.severity.toLowerCase() === "error",
+					) &&
+					(!board.reconcile ||
+						(board.reconcile.parseValid &&
+							board.reconcile.reconcileValid &&
+							board.reconcile.idempotent !== false &&
+							(board.reconcile.commandCount ?? 0) === 0 &&
+							(board.reconcile.diagnostics?.length ?? 0) === 0)) &&
+					!referencedIds.has(board.id) &&
+					![board.id, board.name, board.semanticAlias ?? ""].some((alias) =>
+						requiredAliases.has(normalizeSemanticAlias(alias)),
+					)
+				);
+			})
+			.map((board) => board.id),
+	);
+}
+
 function integrityChecks(
 	snapshot: FlowPilotAppCreationSnapshot,
 	boards: readonly FlowPilotBoardSnapshot[],
@@ -567,6 +627,10 @@ export function evaluateAppCreationCase(
 	const requirements = caseDefinition.requirements;
 	const expectedName = expectedAppName(caseDefinition);
 	const boards = [...snapshot.boards].sort(byId);
+	const unusedBoardIds = unusedEmptyBoardIds(snapshot, requirements);
+	const workflowBoards = boards.filter(
+		(board) => !unusedBoardIds.has(board.id),
+	);
 	const pages = [...snapshot.pages].sort(byId);
 	const widgets = [...snapshot.widgets].sort(byId);
 	const authored = authoredSource(snapshot, boards);
@@ -665,6 +729,11 @@ export function evaluateAppCreationCase(
 		const successfulChecks = generationRuns.flatMap((run) =>
 			run.compilerReceipts.filter(isSuccessfulFlowScriptCheckReceipt),
 		);
+		const inlineChecks = compilerPairs.filter(
+			(pair) => pair.validationMode === "inline_commit",
+		);
+		const validatedRevisionCount =
+			successfulChecks.length + inlineChecks.length;
 		const successfulCommits = generationRuns.flatMap((run) =>
 			run.compilerReceipts.filter(isSuccessfulFlowScriptCommitReceipt),
 		);
@@ -715,11 +784,11 @@ export function evaluateAppCreationCase(
 			),
 			check(
 				"flowscript.compiler_receipt.check_success",
-				successfulChecks.length > 0,
-				successfulChecks.length > 0
-					? `Captured ${successfulChecks.length} clean check_flowscript receipt(s).`
-					: "No clean check_flowscript receipt with its exact authored source was captured.",
-				{ expected: true, actual: successfulChecks.length > 0 },
+				validatedRevisionCount > 0,
+				validatedRevisionCount > 0
+					? `Captured ${successfulChecks.length} explicit check(s) and ${inlineChecks.length} checked inline commit(s) with exact retained validation evidence.`
+					: "No clean explicit check or checked inline commit with exact retained validation evidence was captured.",
+				{ expected: true, actual: validatedRevisionCount > 0 },
 			),
 			check(
 				"flowscript.compiler_receipt.commit_success",
@@ -733,8 +802,8 @@ export function evaluateAppCreationCase(
 				"flowscript.compiler_receipt.exact_revision",
 				compilerPairs.length > 0,
 				compilerPairs.length > 0
-					? `${compilerPairs.length} committed source revision(s) match an earlier successful check exactly.`
-					: "No committed source matches a successful check_flowscript receipt by source, draft id, and revision.",
+					? `${compilerPairs.length} committed source revision(s) match exact validation evidence (${inlineChecks.length} inline checked commit(s)).`
+					: "No committed source matches exact validation evidence by source, draft id, and revision.",
 				{ expected: true, actual: compilerPairs.length > 0 },
 			),
 			check(
@@ -751,7 +820,10 @@ export function evaluateAppCreationCase(
 				compilerPairs.length > 0 && allPairsHaveRawCandidate
 					? "Every successful compiler pair retains its byte-for-byte model-authored candidate."
 					: "A successful compiler pair is missing its byte-for-byte authored candidate.",
-				{ expected: true, actual: allPairsHaveRawCandidate },
+				{
+					expected: true,
+					actual: compilerPairs.length > 0 && allPairsHaveRawCandidate,
+				},
 			),
 			check(
 				"flowscript.compiler_receipt.full_envelope",
@@ -759,7 +831,10 @@ export function evaluateAppCreationCase(
 				compilerPairs.length > 0 && allPairsHaveFullReceipt
 					? "Successful compiler receipts include fingerprint and command-count evidence."
 					: "A successful compiler receipt is missing its fingerprint or command-count evidence.",
-				{ expected: true, actual: allPairsHaveFullReceipt },
+				{
+					expected: true,
+					actual: compilerPairs.length > 0 && allPairsHaveFullReceipt,
+				},
 			),
 		);
 		for (const board of nonemptyBoards) {
@@ -768,8 +843,8 @@ export function evaluateAppCreationCase(
 					`flowscript.compiler_receipt.board.${board.id}`,
 					pairedBoardIds.has(board.id),
 					pairedBoardIds.has(board.id)
-						? `Board ${board.id} has its own successful exact check→commit pair and persisted readback.`
-						: `Nonempty board ${board.id} has no successful exact check→commit pair with persisted readback.`,
+						? `Board ${board.id} has its own successful exact checked commit and persisted readback.`
+						: `Nonempty board ${board.id} has no successful exact checked commit with persisted readback.`,
 					{
 						path: `boards.${board.id}`,
 						expected: true,
@@ -781,7 +856,7 @@ export function evaluateAppCreationCase(
 	}
 
 	for (const [code, actual, minimum] of [
-		["boards.count", boards.length, requirements.minBoards],
+		["boards.count", workflowBoards.length, requirements.minBoards],
 		["boards.total_nodes", totalNodes, requirements.minTotalNodes],
 		["pages.count", pages.length, requirements.minPages],
 		["widgets.count", widgets.length, requirements.minWidgets],
@@ -800,6 +875,17 @@ export function evaluateAppCreationCase(
 		);
 	}
 	for (const board of boards) {
+		if (unusedBoardIds.has(board.id)) {
+			checks.push(
+				check(
+					`boards.unused_empty.${board.id}`,
+					true,
+					`Empty board ${board.id} has no workflow source or known references; it remains in inventory and does not count toward required boards.`,
+					{ path: `boards.${board.id}`, actual: 0 },
+				),
+			);
+			continue;
+		}
 		const nodeCount = Math.max(
 			0,
 			board.nodeCount ?? board.nodeIds?.length ?? 0,
@@ -962,7 +1048,7 @@ export function evaluateAppCreationCase(
 				{ expected: true, actual: canonicalBoards.length > 0 },
 			),
 		);
-		for (const board of boards) {
+		for (const board of workflowBoards) {
 			checks.push(
 				check(
 					`flowscript.canonical.board_present.${board.id}`,
@@ -992,7 +1078,7 @@ export function evaluateAppCreationCase(
 		);
 	}
 
-	for (const board of boards) {
+	for (const board of workflowBoards) {
 		const diagnostics = board.lintDiagnostics;
 		if (requirements.requireLintDiagnostics) {
 			checks.push(

@@ -1,9 +1,9 @@
 import type { SurfaceComponent } from "../../components/a2ui/types";
-import { upsertAppEvent } from "../../components/global-chat/tools/event-tools";
 import { validateComponents } from "../../components/flowpilot/validateComponents";
 import type { IBackendState } from "../../state/backend-state";
 import type { CompiledAppResource, CompiledAppSpec } from "./compiler";
-import { resourceId, resolveBuildEntry } from "./resource-links";
+import { provisionAppBuildEvents } from "./resource-events";
+import { resolveBuildEntry, resourceId } from "./resource-links";
 
 export interface AppBuildDispatch {
 	assertActive(): void;
@@ -96,7 +96,7 @@ export async function materializeAppBuildResource(
 					app_id: appId,
 					board_id: id,
 					board_name: resource.config.name,
-					create_new_board: true,
+					create_new_board: false,
 					mode: "edit",
 					idempotency_key,
 					instruction: appResourceInstruction(plan, resource, diagnostics),
@@ -193,37 +193,28 @@ export async function materializeAppBuildResource(
 			return;
 		case "event": {
 			const config = resource.config;
-			const boardId = config.board ? resourceId(plan, config.board) : undefined;
-			const nodeId =
-				!config.page && boardId
-					? await resolveBuildEntry(
-							backend,
-							appId,
-							boardId,
-							config.entry_node,
-							config.event_type,
-						)
-					: undefined;
-			const result = await upsertAppEvent(
+			const page = plan.resources.find((item) => item.key === config.page);
+			const boardKey =
+				config.board ?? (page?.kind === "page" ? page.config.board : undefined);
+			if (!boardKey)
+				throw new Error("Event contract does not resolve an owning board.");
+			await provisionAppBuildEvents(
 				backend,
-				{
-					app_id: appId,
-					name: config.name,
-					event_type: config.event_type,
-					active: false,
-					...(boardId ? { board_id: boardId } : {}),
-					...(nodeId ? { node_id: nodeId } : {}),
-					...(config.page ? { page_id: resourceId(plan, config.page) } : {}),
-					...(config.route ? { route: config.route } : {}),
-					...(config.config ? { config: config.config } : {}),
-				},
-				{
-					assertActive: dispatch.assertActive,
-					referenceApp: dispatch.referenceApp,
-					reservedEventId: id,
-				},
+				appId,
+				[
+					{
+						id,
+						name: config.name,
+						event_type: config.event_type,
+						board_id: resourceId(plan, boardKey),
+						entry_node: config.entry_node,
+						...(config.page ? { page_id: resourceId(plan, config.page) } : {}),
+						...(config.route ? { route: config.route } : {}),
+						...(config.config ? { config: config.config } : {}),
+					},
+				],
+				dispatch,
 			);
-			assertToolApplied(result);
 			return;
 		}
 	}

@@ -33,7 +33,7 @@ spec:
       {{- end }}
       containers:
         - name: executor-pool
-          image: "{{ .Values.global.imageRegistry }}{{ .Values.executorPool.image.repository }}:{{ .Values.executorPool.image.tag }}"
+          image: {{ include "flow-like.image" (dict "image" .Values.executorPool.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.executorPool.image.pullPolicy }}
           securityContext:
             runAsNonRoot: true

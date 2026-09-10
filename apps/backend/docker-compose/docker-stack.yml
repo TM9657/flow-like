@@ -56,7 +56,7 @@ services:
       - /tmp
     user: redis
   db-init:
-    image: ${DB_INIT_IMAGE:-flow-like-db-init:latest}
+    image: ${DB_INIT_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-db-init:${FLOW_LIKE_IMAGE_TAG:-dev}}
     working_dir: /workspace
     command:
       - bun
@@ -76,7 +76,7 @@ services:
       - flowlike
     healthcheck: {}
   api:
-    image: ${API_IMAGE:-flow-like-api:latest}
+    image: ${API_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-api:${FLOW_LIKE_IMAGE_TAG:-dev}}
     configs:
       - source: flowlike_runtime_config
         target: /app/flow-like.config.json
@@ -245,7 +245,7 @@ services:
         protocol: tcp
         mode: ingress
   runtime:
-    image: ${RUNTIME_IMAGE:-flow-like-runtime:latest}
+    image: ${RUNTIME_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-runtime:${FLOW_LIKE_IMAGE_TAG:-dev}}
     environment:
       EXECUTOR_SERVER_MODE: "true"
       PORT: 9000
@@ -289,7 +289,7 @@ services:
     networks:
       - flowlike
   compiler:
-    image: ${COMPILER_IMAGE:-flow-like-compiler:latest}
+    image: ${COMPILER_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-compiler:${FLOW_LIKE_IMAGE_TAG:-dev}}
     environment:
       PORT: 8081
       METRICS_PORT: 9091
@@ -326,7 +326,7 @@ services:
     networks:
       - flowlike
   sink-services:
-    image: ${SINK_SERVICES_IMAGE:-flow-like-sink-services:latest}
+    image: ${SINK_SERVICES_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-sink-services:${FLOW_LIKE_IMAGE_TAG:-dev}}
     environment:
       RUST_LOG: ${RUST_LOG:-info,docker_compose_sink_services=debug}
       API_BASE_URL: http://api-gateway:8080
@@ -348,7 +348,7 @@ services:
       - flowlike
     healthcheck: {}
   signaling:
-    image: ${SIGNALING_IMAGE:-flow-like-signaling:latest}
+    image: ${SIGNALING_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-signaling:${FLOW_LIKE_IMAGE_TAG:-dev}}
     environment:
       PORT: 4444
       NODE_ENV: ${SIGNALING_NODE_ENV:-production}
@@ -380,7 +380,7 @@ services:
     networks:
       - flowlike
   web:
-    image: ${WEB_IMAGE:-flow-like-web:latest}
+    image: ${WEB_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-web:${FLOW_LIKE_IMAGE_TAG:-dev}}
     environment:
       FLOW_LIKE_WEB_API_URL: ${FLOW_LIKE_WEB_API_URL:-${NEXT_PUBLIC_API_URL:-http://localhost:8080}}
       FLOW_LIKE_WEB_REDIRECT_URL: ${FLOW_LIKE_WEB_REDIRECT_URL:-${NEXT_PUBLIC_REDIRECT_URL:-}}

@@ -1219,7 +1219,7 @@ impl FlowIrDraftStore {
         FlowScriptDraftResponse::for_draft(
             status,
             if stored.evaluation.diagnostics.is_empty() {
-                "FlowScript source is retained with zero diagnostics. Commit this revision directly; check_flowscript is only needed before growing a staged draft further."
+                "FlowScript source is retained with zero diagnostics. Test an eligible deterministic transformation with test_flowscript, then commit this revision; check_flowscript is only needed before growing a staged draft further."
             } else {
                 "FlowScript source is retained with structured diagnostics. Patch this exact revision in place."
             },
@@ -1438,7 +1438,7 @@ impl FlowIrDraftStore {
         FlowScriptDraftResponse::for_draft(
             status,
             if retained.evaluation.diagnostics.is_empty() {
-                "Patch retained with zero diagnostics. Commit this revision directly; check_flowscript is only needed before growing a staged draft further."
+                "Patch retained with zero diagnostics. Retest an eligible deterministic transformation with test_flowscript, then commit this revision; check_flowscript is only needed before growing a staged draft further."
             } else {
                 "Patch retained with structured diagnostics; repair this same source revision."
             },
@@ -1636,6 +1636,96 @@ impl FlowIrDraftStore {
         FlowScriptDraftResponse::for_draft("valid", message, args.draft_id, &retained)
     }
 
+    /// Capture the checked commands for an isolated test without claiming or queueing an edit.
+    /// The caller supplies a host-owned board snapshot and request binding, never model source.
+    pub fn prepare_flowscript_test(
+        &self,
+        board: &Board,
+        catalog: &[NodeMetadata],
+        args: CheckFlowScriptArgs,
+        binding: &FlowIrAcceptanceBinding,
+    ) -> Result<FlowScriptTestSnapshot, FlowScriptDraftResponse> {
+        let checked =
+            self.check_flowscript_with_acceptance_binding(board, catalog, args.clone(), binding);
+        if !matches!(checked.status.as_str(), "valid" | "no_changes") {
+            return Err(checked);
+        }
+        let drafts = self.source_drafts.lock().map_err(|_| {
+            FlowScriptDraftResponse::error(
+                "FLOWSCRIPT_DRAFT_STORE_UNAVAILABLE",
+                "FlowScript draft store lock is unavailable",
+            )
+        })?;
+        let draft = drafts.get(args.draft_id.trim()).ok_or_else(|| {
+            FlowScriptDraftResponse::error(
+                "FLOWSCRIPT_DRAFT_MISSING",
+                "FlowScript draft does not exist",
+            )
+        })?;
+        if let Some(denied) = source_draft_request_authorization_error(
+            &board.id,
+            args.draft_id.trim(),
+            draft,
+            Some(binding),
+        ) {
+            return Err(flowscript_request_mismatch_response(denied));
+        }
+        let fingerprint = board_fingerprint(board);
+        let catalog_fingerprint = flowscript_catalog_fingerprint(catalog);
+        let exact = draft.checked.as_ref().filter(|checked| {
+            draft.revision == args.expected_revision
+                && checked.revision == args.expected_revision
+                && checked.board_fingerprint == fingerprint
+                && checked.catalog_fingerprint == catalog_fingerprint
+        }).ok_or_else(|| FlowScriptDraftResponse::error(
+            "FLOWSCRIPT_TEST_STALE", "The draft changed while its test snapshot was being prepared. Retry the current revision.",
+        ))?;
+        Ok(FlowScriptTestSnapshot {
+            draft_id: args.draft_id.trim().to_string(),
+            revision: draft.revision,
+            validation_sequence: draft.state_sequence,
+            base_fingerprint: fingerprint,
+            source_fingerprint: blake3::hash(draft.source.as_bytes()).to_hex().to_string(),
+            catalog_fingerprint,
+            commands_fingerprint: flowscript_test_commands_fingerprint(&exact.commands),
+            commands: exact.commands.clone(),
+        })
+    }
+
+    /// A test receipt applies only to the captured source. A concurrent repair invalidates it.
+    pub fn flowscript_test_is_current(
+        &self,
+        board: &Board,
+        catalog: &[NodeMetadata],
+        snapshot: &FlowScriptTestSnapshot,
+        binding: &FlowIrAcceptanceBinding,
+    ) -> bool {
+        let Ok(drafts) = self.source_drafts.lock() else {
+            return false;
+        };
+        drafts.get(&snapshot.draft_id).is_some_and(|draft| {
+            source_draft_request_authorization_error(
+                &board.id,
+                &snapshot.draft_id,
+                draft,
+                Some(binding),
+            )
+            .is_none()
+                && draft.revision == snapshot.revision
+                && draft.base_fingerprint == snapshot.base_fingerprint
+                && board_fingerprint(board) == snapshot.base_fingerprint
+                && flowscript_catalog_fingerprint(catalog) == snapshot.catalog_fingerprint
+                && draft.checked.as_ref().is_some_and(|checked| {
+                    checked.revision == snapshot.revision
+                        && checked.catalog_fingerprint == snapshot.catalog_fingerprint
+                        && flowscript_test_commands_fingerprint(&checked.commands)
+                            == snapshot.commands_fingerprint
+                })
+                && blake3::hash(draft.source.as_bytes()).to_hex().as_str()
+                    == snapshot.source_fingerprint
+        })
+    }
+
     pub fn commit_flowscript(
         &self,
         board: &Board,
@@ -1789,6 +1879,7 @@ impl FlowIrDraftStore {
                 // Shape this exactly like a failing check_flowscript: a special code here reads
                 // as a mechanical "you must call check" failure and makes models/orchestrators
                 // stop instead of repairing the listed diagnostics.
+                snapshot.state_sequence = self.next_access_sequence();
                 return FlowScriptDraftResponse::for_draft(
                     "validation_errors",
                     "Commit ran the required check inline and it failed; nothing was queued. Apply a unique text patch to this retained revision, then commit again.",
@@ -1824,6 +1915,9 @@ impl FlowIrDraftStore {
                 &snapshot,
             );
             response.code = Some("FLOWSCRIPT_CATALOG_REVISION_CONFLICT".to_string());
+            response.validation_sequence = Some(self.next_access_sequence());
+            response.catalog_fingerprint = Some(flowscript_catalog_fingerprint(catalog));
+            response.commands_fingerprint = None;
             return response;
         }
         if typed_drafts.values().any(|draft| {
@@ -9303,7 +9397,7 @@ impl<'a> From<&'a NodeMetadata> for FlowScriptCatalogNodeContract<'a> {
 /// occurrence-addressed during reconciliation. Each node is serialized independently and sorted as
 /// bytes, preserving duplicate declarations while making equivalent catalog permutations produce
 /// the same fingerprint.
-fn flowscript_catalog_fingerprint(catalog: &[NodeMetadata]) -> String {
+pub fn flowscript_catalog_fingerprint(catalog: &[NodeMetadata]) -> String {
     let mut contracts = catalog
         .iter()
         .map(|metadata| {
@@ -9321,6 +9415,12 @@ fn flowscript_catalog_fingerprint(catalog: &[NodeMetadata]) -> String {
         hasher.update(&contract);
     }
     format!("b3:{}", hasher.finalize().to_hex())
+}
+
+fn flowscript_test_commands_fingerprint(commands: &[BoardCommand]) -> String {
+    let value = serde_json::to_value(commands).expect("board commands are JSON serializable");
+    let bytes = serde_json::to_vec(&value).expect("JSON values are serializable");
+    blake3::hash(&bytes).to_hex().to_string()
 }
 
 /// Scope represented by a typed draft when it is reconciled with the live board.
@@ -9384,6 +9484,41 @@ pub struct PatchFlowScriptArgs {
 pub struct CheckFlowScriptArgs {
     pub draft_id: String,
     pub expected_revision: u64,
+}
+
+/// Host-owned provenance and exact materialization commands for a disposable draft test.
+#[derive(Debug, Clone)]
+pub struct FlowScriptTestSnapshot {
+    pub draft_id: String,
+    pub revision: u64,
+    pub validation_sequence: u64,
+    pub base_fingerprint: String,
+    pub source_fingerprint: String,
+    pub catalog_fingerprint: String,
+    pub commands_fingerprint: String,
+    pub commands: Vec<BoardCommand>,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TestFlowScriptArgs {
+    pub draft_id: String,
+    pub expected_revision: u64,
+    /// Exact named Generic Event entry to execute on the disposable draft board.
+    pub entry: String,
+    #[serde(default)]
+    pub payload: Option<serde_json::Value>,
+    /// Expected single Generic Event result, compared by the host using JSON equality.
+    #[serde(deserialize_with = "deserialize_required_test_value")]
+    pub expected_output: serde_json::Value,
+}
+
+// Value normally accepts a missing field as null. An explicit expected null is meaningful,
+// but an omitted expectation must not accidentally turn a null runtime result into a pass.
+fn deserialize_required_test_value<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<serde_json::Value, D::Error> {
+    serde_json::Value::deserialize(deserializer)
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -9870,8 +10005,18 @@ pub struct FlowScriptDraftResponse {
     pub draft_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub revision: Option<u64>,
+    /// Host observation order; a newer check may use a changed catalog at the same source revision.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation_sequence: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub catalog_fingerprint: Option<String>,
+    /// Identity of the valid retained command batch; absent when validation cannot provide one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commands_fingerprint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -9901,7 +10046,11 @@ impl FlowScriptDraftResponse {
             message: message.into(),
             draft_id: None,
             revision: None,
+            validation_sequence: None,
             base_fingerprint: None,
+            source_fingerprint: None,
+            catalog_fingerprint: None,
+            commands_fingerprint: None,
             source: None,
             diagnostics: Vec::new(),
             review_notes: Vec::new(),
@@ -9924,7 +10073,14 @@ impl FlowScriptDraftResponse {
             message: message.into(),
             draft_id: Some(draft_id),
             revision: Some(draft.revision),
+            validation_sequence: Some(draft.state_sequence),
             base_fingerprint: Some(draft.base_fingerprint.clone()),
+            source_fingerprint: Some(blake3::hash(draft.source.as_bytes()).to_hex().to_string()),
+            catalog_fingerprint: (!draft.evaluation_catalog_fingerprint.is_empty())
+                .then(|| draft.evaluation_catalog_fingerprint.clone()),
+            commands_fingerprint: (draft.evaluation.is_valid()
+                && !draft.evaluation_catalog_fingerprint.is_empty())
+            .then(|| flowscript_test_commands_fingerprint(&draft.evaluation.commands)),
             source: Some(draft.source.clone()),
             diagnostics: draft.evaluation.diagnostics.clone(),
             review_notes: draft.evaluation.review_notes.clone(),
@@ -12396,6 +12552,12 @@ eventsSimple() {
             Some("FLOWSCRIPT_CATALOG_REVISION_CONFLICT"),
             "{refused:#?}"
         );
+        assert_eq!(
+            refused.catalog_fingerprint.as_deref(),
+            Some(flowscript_catalog_fingerprint(&changed_catalog).as_str())
+        );
+        assert!(refused.commands_fingerprint.is_none());
+        assert!(refused.validation_sequence > checked.validation_sequence);
         assert!(refused.commands.is_empty());
         assert!(store.latest_pending_commit_token(&board.id).is_none());
 
@@ -12408,9 +12570,217 @@ eventsSimple() {
             },
         );
         assert_eq!(rechecked.status, "valid", "{rechecked:#?}");
+        assert_eq!(rechecked.source_fingerprint, checked.source_fingerprint);
+        assert_ne!(rechecked.catalog_fingerprint, checked.catalog_fingerprint);
+        assert!(rechecked.validation_sequence > refused.validation_sequence);
         let queued = store.commit_flowscript(&board, &changed_catalog, commit_args);
         assert_eq!(queued.status, "queued", "{queued:#?}");
+        assert_eq!(queued.catalog_fingerprint, rechecked.catalog_fingerprint);
+        assert_eq!(queued.commands_fingerprint, rechecked.commands_fingerprint);
         assert!(!queued.commands.is_empty());
+    }
+
+    #[test]
+    fn flowscript_invalid_check_reports_current_catalog_without_valid_command_identity() {
+        let store = FlowIrDraftStore::new();
+        let board = empty_board();
+        let catalog = flowscript_catalog();
+        let written = store.write_flowscript(
+            &board,
+            &catalog,
+            WriteFlowScriptArgs {
+                draft_id: "source-invalid-catalog".into(),
+                replace_existing: false,
+                mode: FlowIrDraftMode::Additive,
+                source: valid_flowscript("hello"),
+                allow_scope_reduction: false,
+            },
+        );
+        assert!(written.commands_fingerprint.is_some(), "{written:#?}");
+        let invalid = store.check_flowscript(
+            &board,
+            &[],
+            CheckFlowScriptArgs {
+                draft_id: "source-invalid-catalog".into(),
+                expected_revision: 0,
+            },
+        );
+        assert_eq!(invalid.status, "validation_errors", "{invalid:#?}");
+        assert_eq!(invalid.source_fingerprint, written.source_fingerprint);
+        assert_eq!(invalid.base_fingerprint, written.base_fingerprint);
+        assert_eq!(invalid.revision, written.revision);
+        assert_eq!(
+            invalid.catalog_fingerprint,
+            Some(flowscript_catalog_fingerprint(&[]))
+        );
+        assert_ne!(invalid.catalog_fingerprint, written.catalog_fingerprint);
+        assert!(invalid.commands_fingerprint.is_none());
+        assert!(invalid.validation_sequence > written.validation_sequence);
+    }
+
+    #[test]
+    fn draft_test_snapshot_is_exact_unqueued_and_invalidated_by_repair() {
+        let store = FlowIrDraftStore::new();
+        let board = empty_board();
+        let catalog = flowscript_catalog();
+        let binding =
+            store.bind_request_acceptance_contract(&board.id, "Log the customer message.");
+        let written = store.write_flowscript_with_acceptance_binding(
+            &board,
+            &catalog,
+            WriteFlowScriptArgs {
+                draft_id: "draft-test".into(),
+                replace_existing: false,
+                mode: FlowIrDraftMode::Additive,
+                source: valid_flowscript("customer"),
+                allow_scope_reduction: false,
+            },
+            &binding,
+        );
+        assert_eq!(written.revision, Some(0), "{written:#?}");
+        let args = CheckFlowScriptArgs {
+            draft_id: "draft-test".into(),
+            expected_revision: 0,
+        };
+        let snapshot = store
+            .prepare_flowscript_test(&board, &catalog, args.clone(), &binding)
+            .unwrap();
+        assert!(Some(snapshot.validation_sequence) > written.validation_sequence);
+        assert_eq!(
+            written.source_fingerprint.as_deref(),
+            Some(snapshot.source_fingerprint.as_str())
+        );
+        assert_eq!(
+            written.catalog_fingerprint.as_deref(),
+            Some(snapshot.catalog_fingerprint.as_str())
+        );
+        assert_eq!(
+            written.commands_fingerprint.as_deref(),
+            Some(snapshot.commands_fingerprint.as_str())
+        );
+        let envelope: serde_json::Value = serde_json::from_str(&written.model_envelope()).unwrap();
+        assert!(envelope.get("source").is_none());
+        assert_eq!(envelope["source_fingerprint"], snapshot.source_fingerprint);
+        assert_eq!(
+            envelope["catalog_fingerprint"],
+            snapshot.catalog_fingerprint
+        );
+        assert_eq!(
+            envelope["commands_fingerprint"],
+            snapshot.commands_fingerprint
+        );
+        assert!(!snapshot.commands.is_empty());
+        assert!(store.latest_pending_commit_token(&board.id).is_none());
+        assert!(
+            store
+                .pending_flowscript_delivery_for_binding(&board, &binding)
+                .is_none()
+        );
+        assert!(board.nodes.is_empty());
+        assert!(store.flowscript_test_is_current(&board, &catalog, &snapshot, &binding));
+        let mut moved_board = board.clone();
+        let marker = Variable::new("revisionMarker", VariableType::String, ValueType::Normal);
+        moved_board.variables.insert(marker.id.clone(), marker);
+        assert!(!store.flowscript_test_is_current(&moved_board, &catalog, &snapshot, &binding));
+        let mut moved_catalog = catalog.clone();
+        moved_catalog[0].description.push_str(" changed");
+        assert!(!store.flowscript_test_is_current(&board, &moved_catalog, &snapshot, &binding));
+        let original_commands = serde_json::to_value(&snapshot.commands).unwrap();
+        let patched = store.patch_flowscript_with_acceptance_binding(
+            &board,
+            &catalog,
+            PatchFlowScriptArgs {
+                draft_id: "draft-test".into(),
+                expected_revision: 0,
+                old_text: "\"customer\"".into(),
+                new_text: "\"repaired customer\"".into(),
+                allow_scope_reduction: false,
+            },
+            &binding,
+        );
+        assert_eq!(patched.revision, Some(1), "{patched:#?}");
+        assert!(!store.flowscript_test_is_current(&board, &catalog, &snapshot, &binding));
+        assert!(
+            store
+                .prepare_flowscript_test(&board, &catalog, args, &binding)
+                .is_err()
+        );
+        assert_eq!(
+            serde_json::to_value(&snapshot.commands).unwrap(),
+            original_commands
+        );
+        let repaired = store
+            .prepare_flowscript_test(
+                &board,
+                &catalog,
+                CheckFlowScriptArgs {
+                    draft_id: "draft-test".into(),
+                    expected_revision: 1,
+                },
+                &binding,
+            )
+            .unwrap();
+        assert_ne!(repaired.source_fingerprint, snapshot.source_fingerprint);
+        assert!(store.flowscript_test_is_current(&board, &catalog, &repaired, &binding));
+        assert!(store.latest_pending_commit_token(&board.id).is_none());
+    }
+
+    #[test]
+    fn draft_test_snapshot_rejects_wrong_request_and_invalid_source() {
+        let store = FlowIrDraftStore::new();
+        let board = empty_board();
+        let catalog = flowscript_catalog();
+        let binding =
+            store.bind_request_acceptance_contract(&board.id, "Log the customer message.");
+        store.write_flowscript_with_acceptance_binding(
+            &board,
+            &catalog,
+            WriteFlowScriptArgs {
+                draft_id: "draft-test-invalid".into(),
+                replace_existing: false,
+                mode: FlowIrDraftMode::Additive,
+                source: valid_flowscript("customer"),
+                allow_scope_reduction: false,
+            },
+            &binding,
+        );
+        let args = CheckFlowScriptArgs {
+            draft_id: "draft-test-invalid".into(),
+            expected_revision: 0,
+        };
+        let unrelated =
+            store.bind_request_acceptance_contract(&board.id, "Another unrelated request.");
+        assert!(
+            store
+                .prepare_flowscript_test(&board, &catalog, args.clone(), &unrelated)
+                .is_err()
+        );
+        let patched = store.patch_flowscript_with_acceptance_binding(
+            &board,
+            &catalog,
+            PatchFlowScriptArgs {
+                draft_id: "draft-test-invalid".into(),
+                expected_revision: 0,
+                old_text: "logInfo".into(),
+                new_text: "missingNode".into(),
+                allow_scope_reduction: false,
+            },
+            &binding,
+        );
+        assert_eq!(patched.status, "validation_errors", "{patched:#?}");
+        let rejected = store
+            .prepare_flowscript_test(
+                &board,
+                &catalog,
+                CheckFlowScriptArgs {
+                    expected_revision: 1,
+                    ..args
+                },
+                &binding,
+            )
+            .unwrap_err();
+        assert_eq!(rejected.status, "validation_errors", "{rejected:#?}");
+        assert!(store.latest_pending_commit_token(&board.id).is_none());
     }
 
     #[test]

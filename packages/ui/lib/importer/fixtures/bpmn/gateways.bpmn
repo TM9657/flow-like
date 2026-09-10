@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+             id="Definitions_gw" targetNamespace="http://example.com/bpmn">
+  <process id="Process_gw" name="Gateways" isExecutable="true" camunda:historyTimeToLive="30">
+    <startEvent id="Start" name="Start" />
+    <sequenceFlow id="f0" sourceRef="Start" targetRef="Xor_split" />
+    <exclusiveGateway id="Xor_split" name="Amount?" default="f_default" />
+    <sequenceFlow id="f_big" name="&gt; 1000" sourceRef="Xor_split" targetRef="Approve">
+      <conditionExpression xsi:type="tFormalExpression">${amount &gt; 1000}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_mid" name="&gt; 100" sourceRef="Xor_split" targetRef="Review">
+      <conditionExpression xsi:type="tFormalExpression" language="juel">${amount &gt; 100 &amp;&amp; amount &lt;= 1000}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_default" name="otherwise" sourceRef="Xor_split" targetRef="Xor_join" />
+    <userTask id="Approve" name="Approve" camunda:assignee="manager" camunda:formKey="embedded:app:forms/approve.html" />
+    <userTask id="Review" name="Review" camunda:candidateGroups="finance" />
+    <sequenceFlow id="f_ap" sourceRef="Approve" targetRef="Xor_join" />
+    <sequenceFlow id="f_rv" sourceRef="Review" targetRef="Xor_join" />
+    <exclusiveGateway id="Xor_join" />
+    <sequenceFlow id="f1" sourceRef="Xor_join" targetRef="And_split" />
+    <parallelGateway id="And_split" gatewayDirection="Diverging" />
+    <sequenceFlow id="f2a" sourceRef="And_split" targetRef="Ship" />
+    <sequenceFlow id="f2b" sourceRef="And_split" targetRef="Invoice" />
+    <serviceTask id="Ship" name="Ship goods" camunda:type="external" camunda:topic="shipping" />
+    <serviceTask id="Invoice" name="Send invoice" camunda:class="com.acme.InvoiceDelegate" camunda:asyncBefore="true" />
+    <sequenceFlow id="f3a" sourceRef="Ship" targetRef="And_join" />
+    <sequenceFlow id="f3b" sourceRef="Invoice" targetRef="And_join" />
+    <parallelGateway id="And_join" gatewayDirection="Converging" />
+    <sequenceFlow id="f4" sourceRef="And_join" targetRef="End" />
+    <endEvent id="End" name="Done" />
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_gw">
+    <bpmndi:BPMNPlane id="BPMNPlane_gw" bpmnElement="Process_gw">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><omgdc:Bounds x="100" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Xor_split_di" bpmnElement="Xor_split" isMarkerVisible="true"><omgdc:Bounds x="185" y="175" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_di" bpmnElement="Approve"><omgdc:Bounds x="290" y="60" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Review_di" bpmnElement="Review"><omgdc:Bounds x="290" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Xor_join_di" bpmnElement="Xor_join" isMarkerVisible="true"><omgdc:Bounds x="445" y="175" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="And_split_di" bpmnElement="And_split"><omgdc:Bounds x="545" y="175" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Ship_di" bpmnElement="Ship"><omgdc:Bounds x="650" y="60" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Invoice_di" bpmnElement="Invoice"><omgdc:Bounds x="650" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="And_join_di" bpmnElement="And_join"><omgdc:Bounds x="805" y="175" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><omgdc:Bounds x="912" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><omgdi:waypoint x="136" y="200" /><omgdi:waypoint x="185" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_big_di" bpmnElement="f_big"><omgdi:waypoint x="210" y="175" /><omgdi:waypoint x="210" y="100" /><omgdi:waypoint x="290" y="100" />
+        <bpmndi:BPMNLabel><omgdc:Bounds x="220" y="82" width="40" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_mid_di" bpmnElement="f_mid"><omgdi:waypoint x="235" y="200" /><omgdi:waypoint x="290" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_default_di" bpmnElement="f_default"><omgdi:waypoint x="210" y="225" /><omgdi:waypoint x="210" y="300" /><omgdi:waypoint x="470" y="300" /><omgdi:waypoint x="470" y="225" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ap_di" bpmnElement="f_ap"><omgdi:waypoint x="390" y="100" /><omgdi:waypoint x="470" y="100" /><omgdi:waypoint x="470" y="175" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_rv_di" bpmnElement="f_rv"><omgdi:waypoint x="390" y="200" /><omgdi:waypoint x="445" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="495" y="200" /><omgdi:waypoint x="545" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2a_di" bpmnElement="f2a"><omgdi:waypoint x="570" y="175" /><omgdi:waypoint x="570" y="100" /><omgdi:waypoint x="650" y="100" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2b_di" bpmnElement="f2b"><omgdi:waypoint x="570" y="225" /><omgdi:waypoint x="570" y="300" /><omgdi:waypoint x="650" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3a_di" bpmnElement="f3a"><omgdi:waypoint x="750" y="100" /><omgdi:waypoint x="830" y="100" /><omgdi:waypoint x="830" y="175" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3b_di" bpmnElement="f3b"><omgdi:waypoint x="750" y="300" /><omgdi:waypoint x="830" y="300" /><omgdi:waypoint x="830" y="225" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><omgdi:waypoint x="855" y="200" /><omgdi:waypoint x="912" y="200" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -19,6 +19,12 @@ import type {
 	IMetadata,
 } from "../../lib";
 import type { IBackendState } from "../../state/backend-state";
+import {
+	MAX_OWNED_TEMPLATE_METADATA,
+	TemplateMetadataReadError,
+	type TemplateReadCoverage,
+	templateReadErrorMessage,
+} from "../../state/backend-state/template-read";
 
 /** Keeps a pathological profile from flooding a single tool result. */
 const MAX_SEARCH_RESULTS = 25;
@@ -70,6 +76,24 @@ function summarizeMetadata(metadata?: IMetadata) {
 		tags: metadata.tags ?? [],
 		use_case: metadata.use_case,
 	};
+}
+
+function summarizeTemplateMetadata(metadata?: IMetadata) {
+	if (!metadata) return undefined;
+	let truncated = false;
+	const trim = (value: string | null | undefined, limit: number) => {
+		if (value && value.length > limit) truncated = true;
+		return value?.slice(0, limit);
+	};
+	const tags = metadata.tags ?? [];
+	if (tags.length > 12) truncated = true;
+	const summary = {
+		name: trim(metadata.name, 240),
+		description: trim(metadata.description, 2_000),
+		use_case: trim(metadata.use_case, 1_000),
+		tags: tags.slice(0, 12).map((tag) => trim(tag, 80)),
+	};
+	return { ...summary, metadata_truncated: truncated };
 }
 
 function summarizeApp(app: IApp, metadata?: IMetadata) {
@@ -164,27 +188,222 @@ export async function scoutSearchTemplates(
 		return { status: "error", message: "search_templates requires a query." };
 	}
 
-	const hits = await backend.templateState.searchTemplates({
-		query,
-		category:
-			typeof args.category === "string"
-				? (args.category as IAppCategory)
-				: undefined,
-		tag: typeof args.tag === "string" ? args.tag : undefined,
-		forkable_only: args.forkable_only === true,
-		limit: clampLimit(args.limit),
+	const publicOffset = args.public_offset ?? 0;
+	const ownedOffset = args.owned_offset ?? 0;
+	if (
+		typeof publicOffset !== "number" ||
+		!Number.isSafeInteger(publicOffset) ||
+		publicOffset < 0 ||
+		publicOffset > Number.MAX_SAFE_INTEGER - 100 ||
+		typeof ownedOffset !== "number" ||
+		!Number.isSafeInteger(ownedOffset) ||
+		ownedOffset < 0 ||
+		ownedOffset > Number.MAX_SAFE_INTEGER - 100
+	) {
+		return {
+			status: "error",
+			message:
+				"Template offsets must be nonnegative integers no greater than Number.MAX_SAFE_INTEGER - 100.",
+		};
+	}
+	const limit = Math.max(1, Math.floor(clampLimit(args.limit)));
+	const publicLimit = Math.min(limit + 1, 100);
+	const category =
+		typeof args.category === "string"
+			? (args.category as IAppCategory)
+			: undefined;
+	const tag = typeof args.tag === "string" ? args.tag : undefined;
+	const forkableOnly = args.forkable_only === true;
+	let ownedCoverage: TemplateReadCoverage = {
+		complete: false,
+		scope: "observed_owned_template_metadata",
+		warning: "The backend did not certify exhaustive owned template coverage.",
+	};
+	const [publicRead, ownedRead] = await Promise.allSettled([
+		backend.templateState.searchTemplates(
+			{
+				query,
+				category,
+				tag,
+				forkable_only: forkableOnly,
+				limit: publicLimit,
+				offset: publicOffset,
+			},
+			{ strict: true, readOnly: true },
+		),
+		backend.templateState.getTemplates(undefined, undefined, {
+			strict: true,
+			readOnly: true,
+			onCoverage: (coverage) => {
+				ownedCoverage = coverage;
+			},
+		}),
+	]);
+	const publicError =
+		publicRead.status === "rejected"
+			? templateReadErrorMessage(publicRead.reason)
+			: undefined;
+	const ownedError =
+		ownedRead.status === "rejected"
+			? templateReadErrorMessage(ownedRead.reason)
+			: undefined;
+	const publicHits = publicRead.status === "fulfilled" ? publicRead.value : [];
+	const inventory =
+		ownedRead.status === "fulfilled"
+			? ownedRead.value
+			: ownedRead.reason instanceof TemplateMetadataReadError
+				? ownedRead.reason.partialTemplates
+				: [];
+	const warnings = [ownedCoverage.warning].filter(
+		(value): value is string => !!value,
+	);
+	if (inventory.length > MAX_OWNED_TEMPLATE_METADATA) {
+		ownedCoverage.complete = false;
+		warnings.push(
+			`Searched at most ${MAX_OWNED_TEMPLATE_METADATA} owned metadata entries.`,
+		);
+	}
+	const ownedMatches = new Map<string, (typeof inventory)[number]>();
+	const normalizedQuery = query.toLowerCase();
+	for (const entry of inventory.slice(0, MAX_OWNED_TEMPLATE_METADATA)) {
+		const metadata = entry[2];
+		if (
+			!metadata ||
+			![metadata.name, metadata.description].some((value) =>
+				value?.toLowerCase().includes(normalizedQuery),
+			) ||
+			(tag && !metadata.tags?.includes(tag))
+		)
+			continue;
+		ownedMatches.set(JSON.stringify([entry[0], entry[1]]), entry);
+	}
+	let ownedEntries = [...ownedMatches.values()].sort((a, b) => {
+		const left = JSON.stringify([a[0], a[1]]);
+		const right = JSON.stringify([b[0], b[1]]);
+		return left < right ? -1 : left > right ? 1 : 0;
 	});
+	// Read authoritative app metadata only when an app-level filter needs it.
+	if (category || forkableOnly) {
+		const appIds = [...new Set(ownedEntries.map(([appId]) => appId))];
+		const inspectedIds = appIds.slice(0, MAX_SEARCH_RESULTS);
+		const apps = await Promise.allSettled(
+			inspectedIds.map((id) => backend.appState.getAppAuthoritative(id)),
+		);
+		const accepted = new Set<string>();
+		let failed = 0;
+		for (const [index, result] of apps.entries()) {
+			if (result.status === "rejected") {
+				failed++;
+				if (failed <= 3)
+					warnings.push(
+						`App filter read failed: ${templateReadErrorMessage(result.reason)}`,
+					);
+				continue;
+			}
+			const app = result.value;
+			if (
+				(!category ||
+					app.primary_category === category ||
+					app.secondary_category === category) &&
+				(!forkableOnly || app.allow_forking === true)
+			)
+				accepted.add(inspectedIds[index]);
+		}
+		if (failed || appIds.length > inspectedIds.length) {
+			ownedCoverage.complete = false;
+			warnings.push(
+				`App-level filters checked at most ${MAX_SEARCH_RESULTS} apps; ${failed} app reads failed. Unverified matches were omitted.`,
+			);
+		}
+		ownedEntries = ownedEntries.filter(([appId]) => accepted.has(appId));
+	}
 
-	return {
-		status: "ok",
-		templates: hits.map((hit) => ({
+	type Source = "owned" | "public";
+	type Match = {
+		app_id: string;
+		template_id: string;
+		sources: Source[];
+		[key: string]: unknown;
+	};
+	const candidates: Record<Source, Match[]> = {
+		public: publicHits.slice(0, publicLimit).map((hit) => ({
 			app_id: hit.app_id,
 			template_id: hit.template_id,
-			app_name: hit.app_name,
+			app_name: hit.app_name?.slice(0, 240),
+			app_name_truncated: (hit.app_name?.length ?? 0) > 240,
 			app_allow_forking: hit.app_allow_forking,
 			app_price: hit.app_price,
-			...summarizeMetadata(hit.metadata),
+			...summarizeTemplateMetadata(hit.metadata),
+			sources: ["public"],
 		})),
+		owned: ownedEntries
+			.slice(ownedOffset)
+			.map(([appId, templateId, metadata]) => ({
+				app_id: appId,
+				template_id: templateId,
+				...summarizeTemplateMetadata(metadata),
+				sources: ["owned"],
+			})),
+	};
+	const consumed = { owned: 0, public: 0 };
+	const merged = new Map<string, Match>();
+	// Advance each source only for consumed rows, including duplicates. Unused
+	// prefetched rows remain available through that source's next offset.
+	for (;;) {
+		let advanced = false;
+		for (const source of ["owned", "public"] as const) {
+			const candidate = candidates[source][consumed[source]];
+			if (!candidate) continue;
+			const key = JSON.stringify([candidate.app_id, candidate.template_id]);
+			const previous = merged.get(key);
+			if (!previous && merged.size >= limit) continue;
+			merged.set(key, {
+				...previous,
+				...candidate,
+				sources: [...new Set([...(previous?.sources ?? []), source])],
+			});
+			consumed[source]++;
+			advanced = true;
+		}
+		if (!advanced) break;
+	}
+	const observedPublicExhausted = consumed.public === publicHits.length;
+	const observedOwnedExhausted = consumed.owned === candidates.owned.length;
+	const ownedComplete =
+		ownedRead.status === "fulfilled" &&
+		ownedCoverage.complete &&
+		observedOwnedExhausted;
+	return {
+		status:
+			publicRead.status === "rejected" &&
+			ownedRead.status === "rejected" &&
+			merged.size === 0
+				? "error"
+				: "ok",
+		templates: [...merged.values()],
+		complete: false,
+		note: "Metadata search only. Reuse both numeric next_offset values to continue. observed_exhausted describes the returned window or owned inventory, not exhaustive account or public search. Public offsets may overlap when the API consolidates metadata rows.",
+		coverage: {
+			public: {
+				offset: publicOffset,
+				next_offset: publicOffset + consumed.public,
+				complete: false,
+				observed_exhausted: observedPublicExhausted,
+				scope: "public_api_window",
+				warning:
+					"The public API does not report a cursor or exhaustion metadata. Short pages can result from metadata consolidation or concurrent deletions.",
+				error: publicError,
+			},
+			owned: {
+				offset: ownedOffset,
+				next_offset: ownedOffset + consumed.owned,
+				complete: ownedComplete,
+				observed_exhausted: observedOwnedExhausted,
+				scope: ownedCoverage.scope,
+				warning: warnings.join(" ") || undefined,
+				error: ownedError,
+			},
+		},
 	};
 }
 

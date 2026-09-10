@@ -161,10 +161,14 @@ export const safeUrl = (description: string) =>
 		reference: reference("safe_home_url"),
 	});
 
-export const imageUrl = (description: string) =>
+export const imageUrl = (
+	description: string,
+	when?: HomeWidgetConfigCondition,
+) =>
 	text(description, {
 		string_format: "image-url",
-		reference: reference("safe_home_url"),
+		when,
+		reference: reference("safe_home_url", undefined, { when }),
 	});
 
 export const informationItem: HomeWidgetObjectContract = {

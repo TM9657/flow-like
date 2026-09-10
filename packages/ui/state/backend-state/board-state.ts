@@ -57,10 +57,19 @@ export interface IApplyFlowIrCommitResponse extends IApplyFlowScriptResponse {
 	status: "applied" | "stale" | "error";
 	code?: string;
 	message: string;
+	/** Exact native graph content after this batch, unchanged on receipt replay. */
+	persisted_board_fingerprint?: string;
 	/** True when native Apply returned a persisted receipt without mutating now. */
 	replayed?: boolean;
 	/** True only after durable remote/outbox sync and idempotent renderer history recording. */
 	delivery_complete?: boolean;
+}
+
+export interface IFlowIrCommitReadback {
+	app_id: string;
+	board_id: string;
+	graph_fingerprint: string;
+	flowscript: string;
 }
 
 export interface IFlowScriptDiagnostic {
@@ -267,15 +276,21 @@ export interface IBoardState {
 		limit?: number,
 	): Promise<ILog[]>;
 
+	/**
+	 * Replay the inverse of a recorded batch. A backend that can hand back the resulting board
+	 * (the desktop's local sync tail) reports it through `options.onBoard`, sparing the refetch.
+	 */
 	undoBoard(
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		options?: IBoardMutationOptions,
 	): Promise<void>;
 	redoBoard(
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		options?: IBoardMutationOptions,
 	): Promise<void>;
 
 	upsertBoard(
@@ -499,6 +514,12 @@ export interface IBoardState {
 		/** Stable native job id used to deduplicate renderer/server receipt replay. */
 		deliveryId?: string,
 	): Promise<IApplyFlowIrCommitResponse>;
+
+	/** Read the native saved graph directly, bypassing registered boards and renderer caches. */
+	readFlowIrCommitBoard?(
+		appId: string,
+		boardId: string,
+	): Promise<IFlowIrCommitReadback>;
 
 	/** Create/recover a provider-neutral host review for an exact compiled workflow batch. */
 	createBoardEditJob?(

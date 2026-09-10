@@ -58,33 +58,63 @@ refuses to overwrite existing files. Preserve them for upgrades and back them up
 with the data services. Use `--namespace`, `--release` and `--output-dir` when
 maintaining multiple installations.
 
-## Build and publish the images
+## Select the images
+
+The chart defaults to the published images
+`ghcr.io/rheosoph/flow-like-kubernetes-<workload>` and
+`ghcr.io/rheosoph/flow-like-docker-compose-<workload>` at the mutable `dev`
+tag. These self-hosted packages are public; no registry login or build machine
+is needed. Every published reference is a multi-architecture index, so AMD64 and
+ARM64 nodes can share one cluster. See
+[container releases](/self-hosting/containers/) for the tag scheme.
+
+Isolated execution requires immutable digests for the manager and executor.
+Resolve one release to digests for all images, without Docker:
+
+```bash
+./scripts/resolve-images.py --tag 1.2.3
+```
+
+The resolver queries the registry API, writes `.generated/values-images.yaml`
+with `digest` values for every first-party image, `executionManager.image.digest`
+and the full `executionManager.sandbox.image` reference, and switches the pull
+policy to `IfNotPresent`. `--tag` accepts `dev`, `main`, `alpha`, `beta`, a
+version or an immutable `sha-<commit>-run-<id>-<attempt>` tag. `--arch amd64`
+or `--arch arm64` adds a `kubernetes.io/arch` node selector to every workload
+with a node selector, which is only needed when a node pool must be avoided.
+
+Forks and private mirrors need credentials. Create a `docker-registry` Secret
+in the release namespace, reference it with `--pull-secret NAME`, and export
+`GHCR_TOKEN` (a `read:packages` token) so the resolver can read private
+packages. The Cloud images are not public. `--registry registry.example.com`
+resolves the same repository names from a mirror.
+
+### Build the images yourself
 
 ```bash
 REGISTRY=registry.example.com/flow-like TAG=release-2026-09 PUSH=true \
   ./scripts/build-images.sh
 ```
 
-The script builds the API, executor, Rust manager and gateway, queue bridge,
-compiler, signaling, migration, RustFS initializer and web images. It writes
-`.generated/values-images.yaml` with image references. Isolated execution
-requires the pushed manager and executor digests.
+The script builds the API, executor, Rust manager and gateway, sink trigger,
+queue bridge, compiler, signaling, migration, RustFS initializer and web images
+under the published repository names and writes the same
+`.generated/values-images.yaml`, recording digests after a push. Local builds are
+single-architecture; keep the build host and execution nodes aligned.
 
 To rebuild selected components, set `COMPONENTS`, for example
 `COMPONENTS="api execution-manager"`. Partial builds preserve other entries in
 the image values file. Generated Secrets are excluded from Docker build contexts.
-
-The upstream [container releases](/self-hosting/containers/) supply these images
-for AMD64 and ARM64. Configure release images through matching Helm repository,
-tag and digest values. Prebuilt API images read the installation's runtime config,
-and the web image reads public URLs at startup. Keep the digest requirements and
-node architecture aligned when replacing local builds with published images.
+Prebuilt and locally built API images read the installation's runtime config,
+and the web image reads public URLs at startup.
 
 ## Review the deployment values
 
 Start from `helm/values-production.yaml` and create an operator override file
-such as `values-operator.yaml`. Replace example domains, registry values and
-node placement. Configure:
+such as `values-operator.yaml`. Replace example domains and node placement.
+The production example mirrors the published images into a private registry
+through `global.imageRegistry` and `global.imagePullSecrets`; delete its image
+blocks when deploying from `ghcr.io` with resolved digests. Configure:
 
 - An external database and its connection budget.
 - API and web ingress hosts, ingress class and TLS Secrets.
@@ -106,15 +136,14 @@ kubectl apply -f .generated/secrets.yaml
 
 ./scripts/deploy.sh \
   -f helm/values-production.yaml \
-  -f .generated/values-generated.yaml \
-  -f values-operator.yaml \
-  -f .generated/values-images.yaml
+  -f values-operator.yaml
 ```
 
-Helm applies later values last. Keep the generated image file last so its actual
-digests replace production examples. The deploy script lints and renders before
-checking Cilium and updating the release. It waits for workloads and initialization
-Jobs; `HELM_TIMEOUT` defaults to `20m`.
+The deploy script always starts with `.generated/values-generated.yaml` and
+appends `.generated/values-images.yaml` after every argument, so resolved or
+built digests replace example image values. It lints and renders before
+checking Cilium and updating the release, then waits for workloads and
+initialization Jobs; `HELM_TIMEOUT` defaults to `20m`.
 
 The namespace must already exist. The script does not apply or rotate Secrets.
 Choose the cluster and identity through `KUBECONFIG` and its selected context;
@@ -168,7 +197,10 @@ uncertain work before reopening dispatch.
 
 | Symptom | First check |
 | --- | --- |
-| Missing digest or rejected values | Pushed image values are present and applied last |
+| Missing digest or rejected values | `.generated/values-images.yaml` exists; run `resolve-images.py` or a pushed build |
+| `ImagePullBackOff` with 401 or `denied` | Fork or private mirror: create the pull Secret and reference it in `global.imagePullSecrets` |
+| `manifest unknown` on pull | The tag or digest was never published to that registry; re-run `resolve-images.py` |
+| `exec format error` in a container | Locally built single-architecture image on a different node architecture; use the published index |
 | Cilium preflight failure | Policy configuration, RuntimeClass and Cilium rollout |
 | Warm slots remain unavailable | Execution node capacity, Pod events, gateway reachability and denied-endpoint probes |
 | API waits in an init container | Release migration or RustFS initialization Job |

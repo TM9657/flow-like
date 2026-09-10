@@ -72,6 +72,64 @@ function fixture() {
 }
 
 describe("persisted app resource links", () => {
+	test.each(["loadInvoices", "Load invoices", "  Exact name  "])(
+		"resolves compiled exact entry name %j without normalization",
+		async (selector) => {
+			const f = fixture();
+			f.nodes.submit.friendly_name = selector;
+			const spec = exampleAppSpec();
+			const plan = compileAppSpec(
+				{
+					...spec,
+					resources: spec.resources.map((resource) =>
+						resource.kind === "event"
+							? {
+									...resource,
+									config: { ...resource.config, entry_node: selector },
+								}
+							: resource,
+					),
+				},
+				{ app_id: "app", build_id: "build" },
+			);
+			const event = plan.resources.find(
+				(resource) => resource.kind === "event",
+			);
+			if (!event) throw new Error("Expected the fixture's workflow Event.");
+			expect(
+				await resolveBuildEntry(
+					f.backend,
+					"app",
+					f.board.physical_id,
+					event.config.entry_node,
+					"quick_action",
+				),
+			).toBe("submit");
+			await expect(
+				resolveBuildEntry(
+					f.backend,
+					"app",
+					f.board.physical_id,
+					selector.toUpperCase(),
+					"quick_action",
+				),
+			).rejects.toThrow("0 compatible");
+		},
+	);
+
+	test("resolves an exact persisted ID that is not a logical resource key", async () => {
+		const f = fixture();
+		f.nodes.submit.id = "01J-NODE:Entry";
+		expect(
+			await resolveBuildEntry(
+				f.backend,
+				"app",
+				f.board.physical_id,
+				"01J-NODE:Entry",
+				"quick_action",
+			),
+		).toBe("01J-NODE:Entry");
+	});
 	test("resolves exactly one compatible runnable entry", async () => {
 		const f = fixture();
 		expect(

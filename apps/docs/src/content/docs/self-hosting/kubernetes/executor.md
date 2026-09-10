@@ -56,7 +56,8 @@ in node sizing.
 Each gateway requests 32 MiB and is limited to 128 MiB. Set kubelet
 `podPidsLimit` on execution nodes to bound process creation; the chart relies on
 that node setting for its portable PID limit. Pin
-`executionManager.image.digest` and `executionManager.sandbox.image`.
+`executionManager.image.digest` and `executionManager.sandbox.image`;
+`scripts/resolve-images.py` reads both from the published packages.
 
 Configured concurrency is approximately manager replicas multiplied by the active
 limit. Sustainable throughput also depends on run duration and preparation rate:

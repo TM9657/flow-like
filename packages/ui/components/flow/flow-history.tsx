@@ -1,267 +1,238 @@
-import { i18n as i18next } from "@flow-like/locales";
-import Dexie from "dexie";
-import { HistoryIcon } from "lucide-react";
-import type { IGenericCommand } from "../../lib";
+import { useTranslation } from "@flow-like/locales";
+import { type UseQueryResult, useQueryClient } from "@tanstack/react-query";
+import { HistoryIcon, Redo2Icon, Undo2Icon, XIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { injectData } from "../../hooks/use-invoke";
+import { getErrorMessage } from "../../lib/error-message";
 import {
-	type IHistoryStacks,
-	REMOTE_BOARD_APPLIED_EVENT,
-	emptyStacks,
-	pushBatch,
-	remoteBoardAppliedHandler,
-	rollbackRedoBatch,
-	rollbackUndoBatch,
-	takeRedo,
-	takeUndo,
-} from "../../lib/flow-history-stacks";
-import type { BoardEditReceiptHistoryMode } from "../../lib/flowpilot/board-edit-job-delivery";
-import { toastWarning } from "../../lib/messages";
+	type HistorySummary,
+	decodeEntry,
+	isTransientReplayError,
+} from "../../lib/flow-history";
+import { createHistoryPersistence } from "../../lib/flow-history-db";
+import {
+	BoardHistoryRegistry,
+	type HistoryDirection,
+	type HistoryRecordMode,
+	installRemoteBoardAppliedListener,
+} from "../../lib/flow-history-store";
+import { toastError, toastSuccess, toastWarning } from "../../lib/messages";
+import type { IGenericCommand } from "../../lib/schema";
+import type { IBoard } from "../../lib/schema/flow/board";
+import { useBackendStore } from "../../state/backend-state";
+
+export const historyRegistry = new BoardHistoryRegistry(
+	createHistoryPersistence(),
+);
+
+// A server-side board reset must invalidate history even when the board is not mounted
+// anywhere: the entries were recorded against a board that no longer exists.
+installRemoteBoardAppliedListener(historyRegistry);
 
 /**
- * The stacks are persisted as one JSON string. On desktop, IndexedDB is a
- * SQLite shim whose structured-clone encoder type-walks every stored value —
- * several full passes per write — so a nested object holding up to
- * MAX_STACK_SIZE batches of full node payloads froze the UI for hundreds of
- * milliseconds after every board edit. A string is encoded in one cheap pass.
- * Rows written before `payload` existed still carry the inline legacy shape.
+ * Recording side of a board's history. The callbacks are stable per board and resolve the
+ * history lazily, so a component may keep them for as long as it likes.
  */
-interface IStackItem extends Partial<IHistoryStacks> {
-	key: string;
-	payload?: string;
-}
-
-/** Kept apart from the stacks so re-stamping never rewrites the whole history. */
-interface IStackMeta {
-	key: string;
-	boardStamp?: string;
-}
-
-interface IHistoryDelivery {
-	key: string;
-	boardKey: string;
-	deliveryId: string;
-	createdAt: Date;
-}
-
-class UndoRedoDB extends Dexie {
-	stacks!: Dexie.Table<IStackItem, string>;
-	meta!: Dexie.Table<IStackMeta, string>;
-	deliveries!: Dexie.Table<IHistoryDelivery, string>;
-
-	constructor() {
-		super("undo-redo");
-		this.version(1).stores({
-			stacks: "key",
-		});
-		this.version(2).stores({
-			stacks: "key",
-			deliveries: "key, boardKey, createdAt",
-		});
-		this.version(3).stores({
-			stacks: "key",
-			meta: "key",
-			deliveries: "key, boardKey, createdAt",
-		});
-	}
-}
-
-const db = new UndoRedoDB();
-
-const historyKey = (appId: string, boardId: string) => `${appId}_${boardId}`;
-
-const deleteStacks = async (key: string) => {
-	await Promise.all([db.stacks.delete(key), db.meta.delete(key)]);
-};
-
-export const clearBoardHistory = async (appId: string, boardId: string) => {
-	await deleteStacks(historyKey(appId, boardId));
-};
-
-// Remote board applies must invalidate persisted stacks even when the board
-// is not mounted anywhere — the entries were recorded against a board state
-// that no longer exists.
-if (typeof window !== "undefined") {
-	window.addEventListener(
-		REMOTE_BOARD_APPLIED_EVENT,
-		remoteBoardAppliedHandler(clearBoardHistory),
+export const useUndoRedo = (appId: string, boardId: string) =>
+	useMemo(
+		() => ({
+			pushCommand: async (command: IGenericCommand): Promise<void> => {
+				await historyRegistry.get(appId, boardId).record([command]);
+			},
+			pushCommands: async (commands: IGenericCommand[]): Promise<void> => {
+				await historyRegistry.get(appId, boardId).record(commands);
+			},
+			pushCommandsOnce: async (
+				commands: IGenericCommand[],
+				deliveryId: string,
+				historyMode: HistoryRecordMode = "append",
+			): Promise<void> => {
+				await historyRegistry
+					.get(appId, boardId)
+					.recordOnce(commands, deliveryId, historyMode);
+			},
+			/**
+			 * Serialize a board mutation against undo/redo. An edit committed inside it is recorded
+			 * before any later undo runs, so undo always targets the last edit the user saw land.
+			 */
+			withHistoryLock<T>(operation: () => Promise<T>): Promise<T> {
+				return historyRegistry.get(appId, boardId).exclusive(operation);
+			},
+		}),
+		[appId, boardId],
 	);
+
+/** Keeps the board's history resident (and hydrated) for as long as the caller is mounted. */
+export function useRetainBoardHistory(appId: string, boardId: string): void {
+	useEffect(() => historyRegistry.retain(appId, boardId), [appId, boardId]);
 }
 
-const decodeStacks = (data: IStackItem | undefined): IHistoryStacks => {
-	if (!data) return emptyStacks();
-	const decoded: Partial<IHistoryStacks> = data.payload
-		? JSON.parse(data.payload)
-		: data;
-	return {
-		undoStack: decoded.undoStack ?? [],
-		redoStack: decoded.redoStack ?? [],
-		boardStamp: decoded.boardStamp,
-		deliveryIds: decoded.deliveryIds ?? [],
-	};
-};
-
-const readStacks = async (key: string): Promise<IHistoryStacks> => {
-	const [data, meta] = await Promise.all([
-		db.stacks.get(key),
-		db.meta.get(key),
-	]);
-	const stacks = decodeStacks(data);
-	if (!meta && stacks.boardStamp) {
-		// Legacy rows carried the stamp inline; move it once so the next write can drop it.
-		await db.meta.put({ key, boardStamp: stacks.boardStamp });
-	}
-	return { ...stacks, boardStamp: meta?.boardStamp ?? stacks.boardStamp };
-};
-
-const writeStacks = async (key: string, stacks: IHistoryStacks) => {
-	const { boardStamp: _boardStamp, ...rest } = stacks;
-	await db.stacks.put({ key, payload: JSON.stringify(rest) });
-};
-
-const toastStaleHistory = (action: "Undo" | "Redo") => {
-	toastWarning(
-		i18next.t(
-			"actionHistoryWasRecordedAgainstAnOlderVersionOfThisBoardAndHasBeenCleared",
-			"{{action}} history was recorded against an older version of this board and has been cleared",
-			{ action },
-		),
-		<HistoryIcon className="w-4 h-4" />,
+/** Undo/redo depth for toolbars and command palettes; re-renders only when it changes. */
+export function useBoardHistory(
+	appId: string,
+	boardId: string,
+): HistorySummary {
+	const subscribe = useCallback(
+		(listener: () => void) =>
+			historyRegistry.get(appId, boardId).subscribe(listener),
+		[appId, boardId],
 	);
-};
+	const getSnapshot = useCallback(
+		() => historyRegistry.get(appId, boardId).getSummary(),
+		[appId, boardId],
+	);
+	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
 
-export const useUndoRedo = (appId: string, boardId: string) => {
-	const key = historyKey(appId, boardId);
+interface HistoryNavigationProps {
+	appId: string;
+	boardId: string;
+	board: UseQueryResult<IBoard>;
+	version: [number, number, number] | undefined;
+	/**
+	 * Advisory hook fired with the batch about to be replayed BEFORE it executes — the board
+	 * surfaces a toast when the batch touches statements a peer is editing. Never blocks.
+	 */
+	onHistoryBatch?: (commands: IGenericCommand[]) => void;
+}
 
-	const clearHistory = async () => {
-		await deleteStacks(key);
-	};
+/**
+ * Replay side of a board's history: undo and redo as single operations that step the cursor,
+ * replay on the backend, and bring the board the backend produced into the query cache.
+ *
+ * Both run under the board's history lock. A backend refusal moves the cursor back; a repeated
+ * refusal of the same entry drops it, because the board no longer holds what it describes.
+ */
+export function useHistoryNavigation({
+	appId,
+	boardId,
+	board,
+	version,
+	onHistoryBatch,
+}: HistoryNavigationProps) {
+	const { t } = useTranslation("flow");
+	const queryClient = useQueryClient();
+	const refetchBoard = board.refetch;
 
-	const pushCommand = async (command: IGenericCommand, append = false) => {
-		await db.transaction("rw", db.stacks, db.meta, async () => {
-			const stacks = await readStacks(key);
-			await writeStacks(key, pushBatch(stacks, [command], append));
-		});
-	};
-
-	const pushCommands = async (commands: IGenericCommand[]) => {
-		await db.transaction("rw", db.stacks, db.meta, async () => {
-			const stacks = await readStacks(key);
-			await writeStacks(key, pushBatch(stacks, commands));
-		});
-	};
-
-	const pushCommandsOnce = async (
-		commands: IGenericCommand[],
-		deliveryId: string,
-		historyMode: BoardEditReceiptHistoryMode = "append",
-	) => {
-		const deliveryKey = `${key}\u001f${deliveryId}`;
-		await db.transaction("rw", db.stacks, db.meta, db.deliveries, async () => {
-			if (await db.deliveries.get(deliveryKey)) return;
-			const stacks = await readStacks(key);
-			// Migrate the former stack-local marker without duplicating its history batch.
-			if (stacks.deliveryIds?.includes(deliveryId)) {
-				await db.deliveries.put({
-					key: deliveryKey,
-					boardKey: key,
-					deliveryId,
-					createdAt: new Date(),
-				});
-				return;
+	const replay = useCallback(
+		async (direction: HistoryDirection): Promise<boolean> => {
+			if (typeof version !== "undefined") {
+				toastError(
+					t("cannotChangeOldVersion", "Cannot change old version"),
+					<XIcon />,
+				);
+				return false;
 			}
-			if (historyMode === "append") {
-				const next = pushBatch(stacks, commands);
-				await writeStacks(key, next);
-			} else {
-				// A rehydrated native apply may predate newer user edits. Recording its inverse batch
-				// on top would make Undo replay history out of order, so atomically invalidate the
-				// stack while retaining the exactly-once delivery marker.
-				await deleteStacks(key);
-			}
-			await db.deliveries.put({
-				key: deliveryKey,
-				boardKey: key,
-				deliveryId,
-				createdAt: new Date(),
+			const backend = useBackendStore.getState().backend;
+			if (!backend) return false;
+			const history = historyRegistry.get(appId, boardId);
+			const label =
+				direction === "undo" ? t("undo", "Undo") : t("redo", "Redo");
+			const icon =
+				direction === "undo" ? (
+					<Undo2Icon className="w-4 h-4" />
+				) : (
+					<Redo2Icon className="w-4 h-4" />
+				);
+
+			return history.exclusive(async () => {
+				const entry = await history.take(direction);
+				if (!entry) return false;
+
+				let commands: IGenericCommand[];
+				try {
+					commands = decodeEntry(entry);
+				} catch (error) {
+					console.error(
+						`[flow-history] Corrupt ${direction} entry dropped:`,
+						error,
+					);
+					history.discard(entry);
+					toastWarning(
+						t("historyEntryUnreadableSkipped", {
+							defaultValue:
+								"{{action}}: one recorded change was unreadable and was skipped",
+							action: label,
+						}),
+						<HistoryIcon className="w-4 h-4" />,
+					);
+					return false;
+				}
+
+				onHistoryBatch?.(commands);
+				let resultingBoard: IBoard | undefined;
+				const options = {
+					onBoard: (next: IBoard) => {
+						resultingBoard = next;
+					},
+				};
+				try {
+					if (direction === "undo") {
+						await backend.boardState.undoBoard(
+							appId,
+							boardId,
+							commands,
+							options,
+						);
+					} else {
+						await backend.boardState.redoBoard(
+							appId,
+							boardId,
+							commands,
+							options,
+						);
+					}
+				} catch (error) {
+					const dropped = history.fail(
+						direction,
+						entry,
+						isTransientReplayError(error),
+					);
+					const message = getErrorMessage(error, "Unknown error");
+					console.error(`[flow-history] ${label} failed:`, error);
+					toastError(
+						dropped
+							? t("historyEntrySkippedAfterRepeatedFailure", {
+									defaultValue:
+										"{{action}} failed again for the same change, so it was skipped: {{message}}",
+									action: label,
+									message,
+								})
+							: t("historyActionFailed", {
+									defaultValue: "{{action}} failed: {{message}}",
+									action: label,
+									message,
+								}),
+						<XIcon />,
+					);
+					await refetchBoard().catch(() => undefined);
+					return false;
+				}
+
+				history.confirm();
+				if (resultingBoard) {
+					injectData(
+						queryClient,
+						backend.boardState.getBoard,
+						[appId, boardId],
+						resultingBoard,
+					);
+				} else {
+					await refetchBoard().catch((error) => {
+						console.warn(
+							`[flow-history] Board refetch after ${direction} failed:`,
+							error,
+						);
+					});
+				}
+				toastSuccess(label, icon);
+				return true;
 			});
-		});
-	};
+		},
+		[appId, boardId, refetchBoard, version, onHistoryBatch, queryClient, t],
+	);
 
-	const stampHistory = async (stamp?: string) => {
-		await db.transaction("rw", db.stacks, db.meta, async () => {
-			if ((await db.stacks.where("key").equals(key).count()) === 0) return;
-			await db.meta.put({ key, boardStamp: stamp });
-		});
-	};
-
-	const undo = async (currentStamp?: string) => {
-		const result = await db.transaction("rw", db.stacks, db.meta, async () => {
-			const stacks = await readStacks(key);
-			const taken = takeUndo(stacks, currentStamp);
-			if (taken.stale) {
-				await deleteStacks(key);
-				return taken;
-			}
-			if (taken.batch) {
-				await writeStacks(key, taken.stacks);
-			}
-			return taken;
-		});
-
-		if (result.stale) {
-			toastStaleHistory("Undo");
-			return null;
-		}
-		return result.batch;
-	};
-
-	const redo = async (currentStamp?: string) => {
-		const result = await db.transaction("rw", db.stacks, db.meta, async () => {
-			const stacks = await readStacks(key);
-			const taken = takeRedo(stacks, currentStamp);
-			if (taken.stale) {
-				await deleteStacks(key);
-				return taken;
-			}
-			if (taken.batch) {
-				await writeStacks(key, taken.stacks);
-			}
-			return taken;
-		});
-
-		if (result.stale) {
-			toastStaleHistory("Redo");
-			return null;
-		}
-		return result.batch;
-	};
-
-	const rollbackUndo = async (commands: IGenericCommand[]) => {
-		await db.transaction("rw", db.stacks, db.meta, async () => {
-			const stacks = await readStacks(key);
-			const rolledBack = rollbackUndoBatch(stacks, commands);
-			if (rolledBack === stacks) return;
-			await writeStacks(key, rolledBack);
-		});
-	};
-
-	const rollbackRedo = async (commands: IGenericCommand[]) => {
-		await db.transaction("rw", db.stacks, db.meta, async () => {
-			const stacks = await readStacks(key);
-			const rolledBack = rollbackRedoBatch(stacks, commands);
-			if (rolledBack === stacks) return;
-			await writeStacks(key, rolledBack);
-		});
-	};
-
-	return {
-		pushCommand,
-		pushCommands,
-		pushCommandsOnce,
-		undo,
-		redo,
-		rollbackUndo,
-		rollbackRedo,
-		clearHistory,
-		stampHistory,
-	};
-};
+	const undo = useCallback(() => replay("undo"), [replay]);
+	const redo = useCallback(() => replay("redo"), [replay]);
+	return { undo, redo };
+}

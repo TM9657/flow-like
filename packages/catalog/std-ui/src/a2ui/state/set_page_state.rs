@@ -8,9 +8,10 @@ use flow_like_types::{Value, async_trait};
 
 /// Sets a value in page-local state by key.
 ///
-/// Page state is scoped to the current page. The page ID is automatically
-/// derived from the `_page_id` in the workflow payload.
-/// Streams a `setPageState` message to the frontend.
+/// Page state is scoped to the app and page and persisted by the frontend.
+/// The page ID comes from `_page_id` in the workflow payload. Streams a
+/// `setPageState` message for subsequent workflow runs. Get Page State in this
+/// run continues to read the snapshot sent when the run started.
 #[crate::register_node]
 #[derive(Default)]
 pub struct SetPageState;

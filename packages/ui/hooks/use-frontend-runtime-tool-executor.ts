@@ -20,6 +20,10 @@ import {
 } from "../lib/database-capability-session";
 import { normalizeDatabaseTableIdentifier } from "../lib/database-table-name";
 import {
+	inspectUiPageList,
+	summarizeUiInspectPage as summarizePage,
+} from "../lib/flowpilot/ui-page-inspection";
+import {
 	interactWithAppPage,
 	parseInteractActions,
 } from "../lib/interact-app-page";
@@ -44,7 +48,6 @@ import type {
 	SubgraphPayload,
 	UpdateOverlayPayload,
 } from "../state/backend-state/graph-state";
-import type { IPage } from "../state/backend-state/page-state";
 import type { IWidget } from "../state/backend-state/widget-state";
 import { useExecutionServiceOptional } from "../state/execution-service-context";
 
@@ -521,24 +524,6 @@ function collectBoundPaths(components: SurfaceComponent[]): string[] {
 	};
 	for (const component of components ?? []) visit(component.component);
 	return [...paths];
-}
-
-function summarizePage(page: IPage) {
-	const customCss = page.canvasSettings?.customCss ?? "";
-	return {
-		page_id: page.id,
-		name: page.name,
-		route: page.route,
-		on_load_event_id: page.onLoadEventId,
-		on_interval_event_id: page.onIntervalEventId,
-		// Size only, never the stylesheet itself — this tool feeds the orchestrator, and the UI
-		// specialist receives the full customCss as its own context. Without this signal the
-		// orchestrator cannot tell a styled page from an unstyled one.
-		custom_css_chars: customCss.length,
-		element_refs: (page.components ?? []).map(
-			(component) => `${page.id}/${component.id}`,
-		),
-	};
 }
 
 function summarizeWidget(widget: IWidget) {
@@ -1982,29 +1967,19 @@ export function useFrontendRuntimeToolExecutor(
 								backend.widgetState.getWidgets(toolAppId),
 								loadUiInspectPackageWidgets(backend, toolAppId),
 							]);
-							const pages = await Promise.all(
-								pageList.map(async (item) => {
-									try {
-										const page = await backend.pageState.getPage(
-											toolAppId,
-											item.pageId,
-											item.boardId ?? boardId,
-										);
-										return summarizePage(page);
-									} catch {
-										return {
-											page_id: item.pageId,
-											name: item.name,
-											element_refs: [],
-										};
-									}
-								}),
+							const pages = await inspectUiPageList(pageList, (item) =>
+								backend.pageState.getPage(
+									toolAppId,
+									item.pageId,
+									item.boardId ?? boardId,
+								),
 							);
 							return {
 								status: "ok",
 								app_id: toolAppId,
 								board_id: boardId,
 								pages,
+								complete: pages.every((page) => !("error" in page)),
 								widgets: resolveUiInspectWidgetEntries(widgetList).entries.map(
 									({ widgetId, selector, description }) => ({
 										selector,

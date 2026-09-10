@@ -4,8 +4,14 @@ nameOverride: ""
 fullnameOverride: ""
 
 # Global settings
+# First-party images are published to ghcr.io/rheosoph for AMD64 and ARM64.
+# imageRegistry is a literal prefix (include a trailing slash) for mirrors.
+# A non-empty digest pins the image and wins over the mutable tag;
+# scripts/resolve-images.py fills digests for one release tag.
 global:
   imageRegistry: ""
+  # Names of docker-registry Secrets for private packages or mirrors;
+  # scripts/setup-config.py --image-pull-secret prints the kubectl command.
   imagePullSecrets: []
 
 # API Service Configuration
@@ -13,9 +19,10 @@ api:
   enabled: true
   replicaCount: 1
   image:
-    repository: k3d-flow-like.localhost:5000/flow-like-k8s-api
-    tag: latest
-    pullPolicy: IfNotPresent
+    repository: ghcr.io/rheosoph/flow-like-kubernetes-api
+    tag: dev
+    digest: ""
+    pullPolicy: Always
 
   service:
     type: ClusterIP
@@ -75,9 +82,10 @@ web:
     redirectUrl: ""
     logoutUrl: ""
   image:
-    repository: k3d-flow-like.localhost:5000/flow-like-k8s-web
-    tag: latest
-    pullPolicy: IfNotPresent
+    repository: ghcr.io/rheosoph/flow-like-kubernetes-web
+    tag: dev
+    digest: ""
+    pullPolicy: Always
 
   service:
     type: ClusterIP
@@ -109,9 +117,10 @@ compiler:
   enabled: false
   replicaCount: 1
   image:
-    repository: k3d-flow-like.localhost:5000/flow-like-k8s-compiler
-    tag: latest
-    pullPolicy: IfNotPresent
+    repository: ghcr.io/rheosoph/flow-like-docker-compose-compiler
+    tag: dev
+    digest: ""
+    pullPolicy: Always
   service:
     port: 8080
   timeoutSecs: 600
@@ -146,9 +155,10 @@ signaling:
   enabled: false
   replicaCount: 1
   image:
-    repository: k3d-flow-like.localhost:5000/flow-like-k8s-signaling
-    tag: latest
-    pullPolicy: IfNotPresent
+    repository: ghcr.io/rheosoph/flow-like-docker-compose-signaling
+    tag: dev
+    digest: ""
+    pullPolicy: Always
   service:
     port: 4444
   # Exact origins allowed to open realtime WebSocket connections (max 20).
@@ -177,9 +187,10 @@ signaling:
 # Executor artifact and execution deadline configuration
 executor:
   image:
-    repository: k3d-flow-like.localhost:5000/flow-like-k8s-executor
-    tag: latest
-    pullPolicy: IfNotPresent
+    repository: ghcr.io/rheosoph/flow-like-kubernetes-executor
+    tag: dev
+    digest: ""
+    pullPolicy: Always
 
   runtimeClass: runsc
   timeout: 3600
@@ -207,9 +218,10 @@ executorPool:
   replicaCount: 1
   maxConcurrentExecutions: 10
   image:
-    repository: k3d-flow-like.localhost:5000/flow-like-k8s-executor
-    tag: latest
-    pullPolicy: IfNotPresent
+    repository: ghcr.io/rheosoph/flow-like-kubernetes-executor
+    tag: dev
+    digest: ""
+    pullPolicy: Always
   service:
     port: 8080
   resources:
@@ -431,8 +443,9 @@ database:
   migration:
     enabled: true
     image:
-      repository: flow-like/migration
-      tag: "dev"
+      repository: ghcr.io/rheosoph/flow-like-kubernetes-migration
+      tag: dev
+      digest: ""
       pullPolicy: Always
     backoffLimit: 5
     # The completed Job remains until the next Helm upgrade so new API pods
@@ -711,11 +724,13 @@ monitoring:
 sinkServices:
   enabled: false
 
-  # Image for the sink-trigger CronJob (ultra-lean ~500KB binary)
+  # Image for the sink-trigger CronJob (ultra-lean ~500KB binary). The API
+  # receives it as SINK_TRIGGER_IMAGE together with global.imagePullSecrets.
   image:
-    repository: flow-like/sink-trigger
-    tag: latest
-    pullPolicy: IfNotPresent
+    repository: ghcr.io/rheosoph/flow-like-kubernetes-sink-trigger
+    tag: dev
+    digest: ""
+    pullPolicy: Always
 
   # Scoped JWT for authenticating sink trigger calls to the API
   # Generate with: bun run tools/gen-sink-jwt.ts --type cron --secret $SECRET
@@ -781,9 +796,10 @@ rustfs:
     limits: {cpu: "2", memory: "2Gi"}
   bootstrap:
     image:
-      repository: flow-like/object-store-init
-      tag: local
-      pullPolicy: IfNotPresent
+      repository: ghcr.io/rheosoph/flow-like-docker-compose-object-store-init
+      tag: dev
+      digest: ""
+      pullPolicy: Always
     resources:
       requests: {cpu: "100m", memory: "128Mi"}
       limits: {cpu: "500m", memory: "256Mi"}
@@ -806,11 +822,11 @@ executionManager:
   replicaCount: 1
   workerThreads: 2
   image:
-    repository: flow-like/execution-manager
-    tag: local
+    repository: ghcr.io/rheosoph/flow-like-kubernetes-execution-manager
+    tag: dev
     # Required digest also pins the external gateway enforcement image.
     digest: ""
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   maxConcurrentExecutions: 10
   warmPoolSize: 2
   warmPoolMaxAgeSeconds: 600
@@ -838,9 +854,10 @@ executionManager:
     replicaCount: 1
     concurrency: 10
     image:
-      repository: flow-like/runtime
-      tag: local
-      pullPolicy: IfNotPresent
+      repository: ghcr.io/rheosoph/flow-like-docker-compose-runtime
+      tag: dev
+      digest: ""
+      pullPolicy: Always
     resources:
       requests: {cpu: "100m", memory: "256Mi"}
       limits: {cpu: "1", memory: "1Gi"}

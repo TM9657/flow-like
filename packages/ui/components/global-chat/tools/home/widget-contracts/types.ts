@@ -108,6 +108,7 @@ export interface HomeWidgetConfigFieldContract {
 		| "string"
 		| "string_list";
 	description?: string;
+	when?: HomeWidgetConfigCondition;
 	default?: unknown;
 	enum?: readonly ContractScalar[];
 	legacy_values?: readonly {
@@ -125,7 +126,7 @@ export interface HomeWidgetConfigFieldContract {
 	item_enum?: readonly string[];
 	item?: HomeWidgetObjectContract;
 	pattern?: string;
-	string_format?: "date-time" | "image-url" | "route";
+	string_format?: "date-time" | "image-url" | "route" | "storage-image-path";
 	reference?: HomeWidgetConfigReferenceContract;
 	ranges?: readonly { minimum: number; maximum: number }[];
 }

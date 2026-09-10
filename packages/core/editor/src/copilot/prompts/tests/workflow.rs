@@ -177,7 +177,10 @@ fn board_prompts_cover_numbers_conversions_and_draft_continuation() {
         assert!(prompt.contains("Never reassign a `const` binding inside a branch arm"));
         assert!(prompt.contains("df::createSession({ sessionName: \"default\" })"));
         assert!(!prompt.contains("collectStatistics: true"));
-        assert!(prompt.contains("never rebuild every field\n  from a fresh `struct::make`"));
+        assert!(prompt.contains("one field on an existing struct"));
+        assert!(prompt.contains(r#"row.status = "done""#));
+        assert!(prompt.contains(r#"row = row.set({ field: "status", value: "done" })"#));
+        assert!(prompt.contains("both preserve its other fields"));
     }
 }
 

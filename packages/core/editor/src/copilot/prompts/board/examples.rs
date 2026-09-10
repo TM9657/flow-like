@@ -59,24 +59,18 @@ Actionable empty-board edits:
 - For `variable::get({ varRef: "NAME" })` and other `varRef` inputs, `NAME` must already exist as a
   board variable or be declared as a top-level FlowScript variable, for example
   `const NAME = ""`.
-- Inside a function/event block, `const name = ...` is only for binding a node-call output. The
-  right side must be a call expression like `db::open({ name: "x" })`, a method call, or a
-  template literal — not a plain literal, object, array, field access, or arithmetic expression.
-- Function-local alias sugar like `let rows = []` or `let subject = ""` is accepted for local
-  literals/aliases and may canonicalize to `rows = []` when rendered. It does not create a board
-  variable or node by itself.
+- Inside a function/event block, `const name = expression` and `let name = expression` can bind
+  calls, literals, references, field access, arithmetic, objects, arrays, and template literals.
+  Use `let` for a value reassigned across branches or loops. Local aliases may render with a
+  different binding spelling; a literal alias alone creates no node or board variable.
 - Object and call-argument fields always use colon syntax: `{ host: "imap.gmail.com", port: 993 }`.
   Do not write `{ host = "imap.gmail.com" }`; `expected Colon, found Assign` means a field used
   `=` where FlowScript expected `:`.
-- If you need a transformed value, prefer binding the output of a real utility node call.
-- For database rows or payload structs with dynamic values, use explicit `struct::make` +
-  `struct::set({ structIn, field, value })` chains (`row.set({ field, value })` in method form). To
-  change fields on an EXISTING struct value, call `struct::set` on it or write a dot-path on a
-  mutable binding (`row.status = "done"` lowers to `struct::set`) — never rebuild every field
-  from a fresh `struct::make` just to change one. Do not put dynamic field expressions directly
-  inside object/array literals for inserts/upserts, for example avoid
-  `{ id: cuid().cuid, vector: embedded.vector }` as an inline row. Inline object literals are
-  safe only when all fields are literal defaults.
+- Build database rows and payloads with object and array expressions, including dynamic values:
+  `const row = { title: title, revision: revision + 1 }`, then `const rows = [row]`. FlowScript
+  lowers computed fields and array elements to the catalog's struct and array nodes. To change
+  one field on an existing struct, use `row.status = "done"` on a mutable binding or
+  `row = row.set({ field: "status", value: "done" })`; both preserve its other fields.
 - Functions ARE first-class in FlowScript: a `function name(params): (returns) { ... }` declaration
   creates a Function layer — its params become input pins, its returns become output pins, and its
   body nodes are placed inside the layer. Use functions to keep boards clean: a reusable helper, a
@@ -136,6 +130,25 @@ FlowScript accepts repeated object keys when the catalog declaration has repeate
 function either(first: bool, second: bool): (result: bool) {
     const result = bool::or({ boolean: first, boolean: second })
     return result
+}
+```
+
+#### Local aliases and computed payloads
+Use ordinary expressions for payload construction. The compiler wires the calculated revision
+into the row and the row into the array.
+```flowscript-verified
+function makePayload(title: string, revision: int): (payload: Struct) {
+    const status = "ready"
+    const nextRevision = revision + 1
+    const row = { title: title, revision: nextRevision, status: status }
+    const rows = [row]
+    const payload = { rows: rows }
+    return payload
+}
+
+eventsSimple() {
+    const payload = makePayload({ title: "Review", revision: 2 })
+    log::info({ message: payload })
 }
 ```
 

@@ -747,6 +747,8 @@ export class EventState implements IEventState {
 				appId: appId,
 				event: event,
 				versionType: versionType,
+				// Keep caller-reserved identities stable across first writes and retries.
+				enforceId: true,
 				offline: isOffline,
 				pat: personalAccessToken,
 				oauthTokens: oauthTokens,

@@ -20,7 +20,7 @@
 		],
 		"position": 18,
 		"description": "Run Flow-Like on your own terms — Docker Compose to Kubernetes, with execution backends, upgrades, and ops you can defend.",
-		"longDescription": "The pilot won everyone over — then security asked where the data goes. Take Flow-Like from a laptop Compose stack to a production Kubernetes cluster inside your own VPC: stand up the single-host stack and survive its .env traps, override the Helm chart's k3d defaults, route interactive and background runs to the right execution backend, and rehearse the upgrades, backups, key rotations, and alert routing you'll be grilled on. The final assessment is the go-live review itself.",
+		"longDescription": "The pilot won everyone over — then security asked where the data goes. Take Flow-Like from a laptop Compose stack to a production Kubernetes cluster inside your own VPC: stand up the single-host stack and survive its .env traps, pin the published images behind the Helm chart's defaults, route interactive and background runs to the right execution backend, and rehearse the upgrades, backups, key rotations, and alert routing you'll be grilled on. The final assessment is the go-live review itself.",
 		"media": {
 			"icon": "media/app-logo.webp",
 			"banner": "assets/course-banner.webp"
@@ -199,7 +199,7 @@
 								"id": "challenge-selfhost-port-owner",
 								"kind": "SINGLE_CHOICE",
 								"prompt": "Your reverse proxy needs the API entrypoint on staging-01. Which service owns published port 8080?",
-								"explanation": "The published API port belongs to api-gateway — an Nginx load balancer in front of the internal API replicas. The tempting answer is \"an API replica directly\", but the replicas only expose an internal 8080 behind the gateway; that's what lets you scale them without changing the public endpoint. The runtime pool is internal on 9000 and the web app is on 3001.",
+								"explanation": "The published API port belongs to api-gateway — an Nginx load balancer in front of the internal API replicas. The tempting answer is \"an API replica directly\", but the replicas only expose an internal 8080 behind the gateway; that's what lets you scale them without changing the public endpoint. Execution traffic stays internal behind the execution gateway, and the same proxy publishes the web app on 3001.",
 								"points": 10,
 								"position": 0,
 								"payload": {
@@ -214,7 +214,7 @@
 										},
 										{
 											"id": "runtime-pool",
-											"label": "The runtime service — execution traffic enters there"
+											"label": "The execution-manager service — execution traffic enters there"
 										},
 										{
 											"id": "web-app",
@@ -227,63 +227,63 @@
 							{
 								"id": "challenge-selfhost-storage-default",
 								"kind": "SINGLE_CHOICE",
-								"prompt": "The API restart-loops at startup complaining about an unsupported runtime provider, and .env still says STORAGE_PROVIDER=aws. What's the fix?",
-								"explanation": "The checked-in Compose API image ships Azure, GCP, and R2 runtime-credential support and omits its AWS feature, so the copied template's aws selection is rejected at startup. Switch to a supported provider — or rebuild the API with flow-like-api/aws. Missing buckets would surface as a different store-construction failure, and this error names the provider, not the signing keys. Never reach for down -v: deleting volumes fixes nothing here and destroys local state.",
+								"prompt": "Fresh clone, setup-env.py done, and up.py stops with 'SANDBOX_IMAGE must be an immutable image ID or repository@sha256 digest' — you never set that variable. What's the fix?",
+								"explanation": "Per-run isolation starts a fresh sandbox per execution from SANDBOX_IMAGE and SANDBOX_GATEWAY_IMAGE, and preflight only accepts an immutable reference there because a moving tag could change what runs between two executions. scripts/pull-images.py pins all nine *_IMAGE values and both sandbox pins to registry digests; prepare-images.py does the same with local builds. Writing the :dev tag by hand fails the same check, docker login is irrelevant — the self-hosted packages are public and nothing was pulled yet — and down -v just deletes state.",
 								"points": 10,
 								"position": 1,
 								"payload": {
 									"options": [
 										{
-											"id": "supported-provider",
-											"label": "Select Azure, GCP, or the R2 configuration — or rebuild the API image with its AWS feature"
+											"id": "pull-images-pin",
+											"label": "Run scripts/pull-images.py — it pins the images and both sandbox references to digests, which per-run isolation requires"
 										},
 										{
-											"id": "create-buckets",
-											"label": "Create the three S3 buckets — the error clears once they exist"
+											"id": "sandbox-dev-tag",
+											"label": "Set SANDBOX_IMAGE to ghcr.io/rheosoph/flow-like-docker-compose-runtime:dev — the tag is public, so it pulls"
 										},
 										{
-											"id": "generate-keys",
-											"label": "Run the key generator — missing BACKEND_KEY values cause this error"
+											"id": "docker-login",
+											"label": "Run docker login ghcr.io — the pull failed because the packages need credentials"
 										},
 										{
 											"id": "down-v-reset",
 											"label": "Run docker compose down -v to reset state, then start again"
 										}
 									],
-									"correct": ["supported-provider"]
+									"correct": ["pull-images-pin"]
 								}
 							},
 							{
 								"id": "challenge-selfhost-env-contract",
 								"kind": "MULTIPLE_CHOICE",
 								"prompt": "Which statements about the Compose template's configuration contract are true?",
-								"explanation": "Two contracts matter: injected values like CDN_BUCKET_NAME count as configured even when empty — nothing falls back — and the trust boundary keeps BACKEND_KEY on the API while runtime and compiler receive only the public key. The tempting distractor is the ambient credential chain: an explicit empty credential field blocks it, it doesn't activate it. The runtime is internal-only (reach 9000 from inside the container), and db-init exiting after success is a completed job, not a crash.",
+								"explanation": "Two contracts matter: an empty *_IMAGE is a selector, not an error — it renders the published ghcr.io image at FLOW_LIKE_IMAGE_TAG — and the trust boundary keeps BACKEND_KEY on the API while runners and the compiler receive only the public key. The tempting distractor is --no-build: up.py still pulls images that are missing on the daemon; what it never does is silently compile when a pull fails. A digest pin cannot be rebuilt — up.py --build refuses while any *_IMAGE contains a digest — and db-init exiting after success is a completed job, not a crash.",
 								"points": 10,
 								"position": 2,
 								"payload": {
 									"options": [
 										{
-											"id": "empty-is-configured",
-											"label": "An explicitly empty CDN_BUCKET_NAME counts as configured — nothing falls back to another value"
+											"id": "empty-selects-published",
+											"label": "An empty API_IMAGE selects ghcr.io/rheosoph/flow-like-docker-compose-api at FLOW_LIKE_IMAGE_TAG"
 										},
 										{
 											"id": "pubkey-only",
 											"label": "Runtime and compiler receive only the public key; BACKEND_KEY stays with the API"
 										},
 										{
-											"id": "empty-ambient-chain",
-											"label": "Leaving credential fields empty activates the cloud provider's ambient credential chain"
+											"id": "no-build-no-pull",
+											"label": "up.py's --no-build default means images are never pulled from the registry"
 										},
 										{
-											"id": "runtime-host-port",
-											"label": "You can health-check the runtime from the host at http://localhost:9000"
+											"id": "build-over-pins",
+											"label": "up.py --build rebuilds digest-pinned images from the checked-out sources"
 										},
 										{
 											"id": "db-init-crash",
 											"label": "db-init showing as exited means the stack crashed and needs a restart"
 										}
 									],
-									"correct": ["empty-is-configured", "pubkey-only"]
+									"correct": ["empty-selects-published", "pubkey-only"]
 								}
 							}
 						],
@@ -311,30 +311,30 @@
 							{
 								"id": "challenge-selfhost-imagepull",
 								"kind": "SINGLE_CHOICE",
-								"prompt": "You install the chart with default values on the company cluster and every pod sits in ImagePullBackOff. Why?",
-								"explanation": "The default image values target the local k3d registry (k3d-flow-like.localhost:5000) with pullPolicy: Never — a development profile for the bundled k3d script, deliberately not an installable production configuration. Override the images with a registry your cluster can pull, plus imagePullSecrets for a private one. A missing JWT Secret fails at pod startup, not image pull, and a RuntimeClass has nothing to do with pulling images.",
+								"prompt": "You install the chart with generated Secrets but otherwise default values on the company cluster, and Helm refuses to render: executionManager.image.digest must pin the manager and gateway image. Why?",
+								"explanation": "The defaults are the public ghcr.io/rheosoph images at the mutable dev tag, which every cluster can pull — but the default per_run isolation starts a sandbox pod per execution and requires the manager and sandbox images to be identified by digest, so a moving tag is rejected at render time. scripts/resolve-images.py resolves one tag to digests through the registry API and writes .generated/values-images.yaml; deploy.sh applies it last. A pull Secret is only needed for forks and private mirrors, the JWT Secret fails at pod startup rather than at render, and --create-namespace changes nothing about image identity.",
 								"points": 10,
 								"position": 0,
 								"payload": {
 									"options": [
 										{
-											"id": "k3d-defaults",
-											"label": "Default images point at the local k3d registry with pullPolicy: Never — override them with images your cluster can pull"
+											"id": "digest-required",
+											"label": "per_run isolation pins the manager and sandbox images by digest — run scripts/resolve-images.py --tag <release> and deploy again"
+										},
+										{
+											"id": "pull-secret-missing",
+											"label": "The public images need a pull Secret before Helm will render the manager"
 										},
 										{
 											"id": "missing-jwt-secret",
-											"label": "The backend-JWT Secret is missing, which blocks image pulls"
-										},
-										{
-											"id": "runtimeclass-first",
-											"label": "The kata RuntimeClass must be created before pods can start"
+											"label": "The backend-JWT Secret is missing, which blocks the render"
 										},
 										{
 											"id": "create-namespace",
-											"label": "Helm needs --create-namespace or every pod stays pending"
+											"label": "Helm needs --create-namespace or the manager template fails"
 										}
 									],
-									"correct": ["k3d-defaults"]
+									"correct": ["digest-required"]
 								}
 							},
 							{
@@ -369,34 +369,38 @@
 							{
 								"id": "challenge-selfhost-values-review",
 								"kind": "MULTIPLE_CHOICE",
-								"prompt": "Reviewing a draft production values file for a chart-only deployment — which lines must change before go-live?",
-								"explanation": "Three blockers: k3d image defaults can't be pulled by a real cluster, the internal single-node insecure database is evaluation-only, and asyncBackend: redis enqueues jobs nothing will consume — the chart's executor-pool binary has no Redis consumer, so a chart-only deployment uses http on both lanes. The two keepers are the point: execution.backend: http IS the operational warm-pool path, and runtimeClass.create: false is correct when no Kata handler exists on the nodes.",
+								"prompt": "Reviewing a draft production values file for a per_run deployment — which lines must change before go-live?",
+								"explanation": "Three blockers: the manager image at the mutable dev tag with an empty digest fails the render (per_run pins manager and sandbox by digest — resolve-images.py writes them), the internal single-node insecure database is evaluation-only, and networkPolicy.enabled: false is rejected because the sandbox boundary depends on enforced NetworkPolicy. The two keepers are the point: execution.backend: http with asyncBackend: redis is exactly the lane pair per_run requires — the queue bridge consumes that Redis queue — so 'switch redis to http' would break the render instead of fixing it.",
 								"points": 10,
 								"position": 2,
 								"payload": {
 									"options": [
 										{
-											"id": "k3d-images",
-											"label": "api.image.repository: k3d-flow-like.localhost:5000/api with pullPolicy: Never"
+											"id": "mutable-manager-image",
+											"label": "executionManager.image at tag dev with digest: \"\""
 										},
 										{
 											"id": "internal-db",
 											"label": "database.type: internal"
 										},
 										{
-											"id": "async-redis",
-											"label": "execution.asyncBackend: redis (with no extra queue consumer deployed)"
+											"id": "networkpolicy-off",
+											"label": "networkPolicy.enabled: false"
 										},
 										{
 											"id": "http-backend",
 											"label": "execution.backend: http"
 										},
 										{
-											"id": "runtimeclass-false",
-											"label": "runtimeClass.create: false"
+											"id": "async-redis",
+											"label": "execution.asyncBackend: redis"
 										}
 									],
-									"correct": ["k3d-images", "internal-db", "async-redis"]
+									"correct": [
+										"mutable-manager-image",
+										"internal-db",
+										"networkpolicy-off"
+									]
 								}
 							}
 						],
@@ -534,14 +538,14 @@
 								"id": "challenge-selfhost-down-v",
 								"kind": "SINGLE_CHOICE",
 								"prompt": "On staging-01, what's the difference between docker compose down and docker compose down -v?",
-								"explanation": "down stops containers and keeps named volumes; down -v additionally deletes the Compose-managed PostgreSQL, Redis, and observability volumes — so back up first. The tempting overreach is the buckets: external object storage is never touched by either command, which also means nothing in the stack backs it up for you. And -v is never part of a normal upgrade; rebuilds don't require deleting volumes.",
+								"explanation": "down stops containers and keeps named volumes; down -v additionally deletes the Compose-managed PostgreSQL, Redis, bundled RustFS, execution-state, and observability volumes — so back up first. The tempting overreach is the buckets: external object storage is never touched by either command, which also means nothing in the stack backs it up for you. And -v is never part of a normal upgrade; rebuilds don't require deleting volumes.",
 								"points": 10,
 								"position": 0,
 								"payload": {
 									"options": [
 										{
 											"id": "v-deletes-volumes",
-											"label": "-v additionally deletes the managed database, Redis, and observability volumes — external buckets stay untouched"
+											"label": "-v additionally deletes the managed database, Redis, bundled RustFS, and observability volumes — external buckets stay untouched"
 										},
 										{
 											"id": "v-deletes-buckets",
@@ -638,66 +642,66 @@
 							{
 								"id": "challenge-selfhost-final-staging-env",
 								"kind": "SINGLE_CHOICE",
-								"prompt": "Artifact A: what unblocks the API on staging-01?",
-								"explanation": "Two compounding template defaults: the checked-in image omits its AWS runtime feature, so STORAGE_PROVIDER=aws is rejected — and the explicitly empty RUNTIME_CREDENTIALS_PROVIDER and CDN_BUCKET_NAME count as configured, blocking any fallback. Switch to Azure, GCP, or R2 with every injected value non-empty (or rebuild with the AWS feature). Creating buckets can't fix a rejected provider, the error names storage rather than signing keys, and down -v just deletes state you'll want back.",
+								"prompt": "Artifact A: what unblocks up.py on staging-01?",
+								"explanation": "The colleague moved RUNTIME_IMAGE to a tag by hand while SANDBOX_IMAGE still carries the digest that pull-images.py wrote, so the queue bridge and the sandboxes would run different builds — preflight refuses that drift on purpose. Re-run scripts/pull-images.py --tag 1.4.0 so all nine *_IMAGE values and both sandbox pins move to the same digests together. Clearing the sandbox pins trades one preflight failure for another (per_run requires immutable references), up.py --build refuses digest-pinned images, and down -v deletes state without touching .env.",
 								"points": 10,
 								"position": 0,
 								"payload": {
 									"options": [
 										{
-											"id": "provider-and-values",
-											"label": "Select a supported provider (Azure, GCP, or R2) and set the injected runtime-provider and CDN values non-empty — or rebuild the API with its AWS feature"
+											"id": "rerun-pull-images",
+											"label": "Re-run scripts/pull-images.py --tag 1.4.0 — every *_IMAGE and both sandbox pins move to the same digests together"
 										},
 										{
-											"id": "just-buckets",
-											"label": "Create the three AWS buckets; the provider error clears when they exist"
+											"id": "clear-sandbox-pins",
+											"label": "Empty SANDBOX_IMAGE and SANDBOX_GATEWAY_IMAGE so preflight stops comparing them"
 										},
 										{
-											"id": "regen-keys",
-											"label": "Regenerate the BACKEND_* trio; the restart loop is a signing-key failure"
+											"id": "build-through",
+											"label": "Run up.py --build — a local build replaces the mismatched pins"
 										},
 										{
 											"id": "reset-volumes",
 											"label": "docker compose down -v, then up — the state is corrupted"
 										}
 									],
-									"correct": ["provider-and-values"]
+									"correct": ["rerun-pull-images"]
 								}
 							},
 							{
 								"id": "challenge-selfhost-final-values-gate",
 								"kind": "MULTIPLE_CHOICE",
-								"prompt": "Artifact B: which lines in the production values file block go-live for this chart-only deployment?",
-								"explanation": "Three blockers: the k3d image reference with pullPolicy: Never guarantees ImagePullBackOff on a real cluster, database.type: internal is a single-node insecure evaluation database, and asyncBackend: redis enqueues background jobs the chart's executor pool will never consume. The keepers are deliberate: execution.backend: http is the operational warm-pool path, and runtimeClass.create: false is correct — creating the object wouldn't install a Kata handler or add isolation anyway.",
+								"prompt": "Artifact B: which lines in the production values file block go-live for this per_run deployment?",
+								"explanation": "Three blockers: the manager image at the mutable dev tag with an empty digest fails the render — per_run pins manager and sandbox by digest, and resolve-images.py writes them; database.type: internal is a single-node insecure evaluation database; and networkPolicy.enabled: false is rejected because the sandbox boundary depends on enforced NetworkPolicy. The keepers are deliberate: execution.backend: http with asyncBackend: redis is the lane pair per_run requires, and the queue bridge consumes that queue.",
 								"points": 10,
 								"position": 1,
 								"payload": {
 									"options": [
 										{
-											"id": "final-k3d-image",
-											"label": "The k3d-flow-like.localhost:5000 image with pullPolicy: Never"
+											"id": "final-mutable-image",
+											"label": "executionManager.image at tag dev with digest: \"\""
 										},
 										{
 											"id": "final-internal-db",
 											"label": "database.type: internal"
 										},
 										{
-											"id": "final-async-redis",
-											"label": "execution.asyncBackend: redis"
+											"id": "final-networkpolicy",
+											"label": "networkPolicy.enabled: false"
 										},
 										{
 											"id": "final-http",
 											"label": "execution.backend: http"
 										},
 										{
-											"id": "final-runtimeclass",
-											"label": "runtimeClass.create: false"
+											"id": "final-async-redis",
+											"label": "execution.asyncBackend: redis"
 										}
 									],
 									"correct": [
-										"final-k3d-image",
+										"final-mutable-image",
 										"final-internal-db",
-										"final-async-redis"
+										"final-networkpolicy"
 									]
 								}
 							},
@@ -734,7 +738,7 @@
 								"id": "challenge-selfhost-final-credential-gap",
 								"kind": "SINGLE_CHOICE",
 								"prompt": "Artifact D: why do the pilot team's remote runs fail CRM authentication, and what's the production fix?",
-								"explanation": "The runtime-variable contract: values are stored locally and never uploaded, and remote execution receives only non-secret values — so a Secret CRM_API_TOKEN on one laptop can't follow the flow into the cluster. Provision the credential server-side, where the run actually executes. Re-badging the token as non-secret \"to make it sync\" turns a credential into plainly-shipped run data — the opposite of the contract's point. It's not a clock or storage-feature problem.",
+								"explanation": "The runtime-variable contract: values are stored locally and never uploaded, and remote execution receives only non-secret values — so a Secret CRM_API_TOKEN on one laptop can't follow the flow into the cluster. Provision the credential server-side, where the run actually executes. Re-badging the token as non-secret \"to make it sync\" turns a credential into plainly-shipped run data — the opposite of the contract's point. It's not a clock or image-pin problem.",
 								"points": 10,
 								"position": 3,
 								"payload": {
@@ -752,8 +756,8 @@
 											"label": "Cluster clock skew is invalidating the execution JWT — sync NTP"
 										},
 										{
-											"id": "aws-feature-rebuild",
-											"label": "The API image needs its AWS feature rebuilt before tokens can transfer"
+											"id": "stale-digest-pin",
+											"label": "The digest-pinned executor image is stale — re-run pull-images.py so tokens can transfer"
 										}
 									],
 									"correct": ["provision-server-side"]
@@ -763,14 +767,14 @@
 								"id": "challenge-selfhost-final-runbook",
 								"kind": "MULTIPLE_CHOICE",
 								"prompt": "Artifact F: which items belong in the runbook you show Priya?",
-								"explanation": "Three belong: upgrades start by reading the .env.example and hub-config diffs before rebuilding with --remove-orphans; anything destructive to volumes is preceded by a database backup because down -v deletes them; and key rotation is a three-service event that invalidates old-signed tokens, so it gets a planned window. The rejects: down -v is state deletion rather than a routine upgrade step, and loaded alert rules page nobody — the review already established there's no Alertmanager yet.",
+								"explanation": "Three belong: upgrades start by reading the .env.example and hub-config diffs, then pin the reviewed release with pull-images.py and let preflight gate the start; anything destructive to volumes is preceded by a database backup because down -v deletes them; and key rotation is a three-service event that invalidates old-signed tokens, so it gets a planned window. The rejects: down -v is state deletion rather than a routine upgrade step, and loaded alert rules page nobody — the review already established there's no Alertmanager yet.",
 								"points": 10,
 								"position": 4,
 								"payload": {
 									"options": [
 										{
 											"id": "review-diffs",
-											"label": "Before rebuilding: review the .env.example diff, hub config template, and release notes, then up -d --build --remove-orphans"
+											"label": "Before upgrading: review the .env.example diff, hub config template, and release notes, then pin the release with pull-images.py --tag and run preflight.py and up.py"
 										},
 										{
 											"id": "backup-before-v",

@@ -32,7 +32,7 @@ spec:
       {{- end }}
       containers:
         - name: signaling
-          image: "{{ .Values.global.imageRegistry }}{{ .Values.signaling.image.repository }}:{{ .Values.signaling.image.tag }}"
+          image: {{ include "flow-like.image" (dict "image" .Values.signaling.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.signaling.image.pullPolicy }}
           env:
             - name: PORT

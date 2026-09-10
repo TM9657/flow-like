@@ -8,8 +8,9 @@ use flow_like_types::{Value, async_trait};
 
 /// Gets a value from global state by key.
 ///
-/// Global state is shared across all pages and persists during the session.
-/// The state is passed in the workflow payload as `_global_state`.
+/// Global state is shared across the app's pages and persisted by the frontend.
+/// Reads the `_global_state` snapshot sent when this workflow started. Values
+/// streamed by Set Global State are available to subsequent workflow runs.
 #[crate::register_node]
 #[derive(Default)]
 pub struct GetGlobalState;

@@ -161,6 +161,8 @@ fn board_runtime_bridge_uses_scoped_specs_before_context_injection() {
         "execute_node",
         "query_execution_logs",
         "read_flowscript_source",
+        "search_workspace",
+        "read_symbol",
     ] {
         assert!(
             frontend_platform_tool_spec(FrontendPlatformToolSet::BoardRuntime, name).is_some(),
@@ -232,10 +234,13 @@ fn specialist_capabilities_follow_exact_tool_policy() {
         specialist_tool_policy(CopilotScope::Board, true, true)
     );
     for board_tool in [
+        "search_workspace",
+        "read_symbol",
         "get_current_flowscript",
         "write_flowscript",
         "patch_flowscript",
         "check_flowscript",
+        "test_flowscript",
         "commit_flowscript",
         "database_tool",
         "storage_tool",
@@ -369,6 +374,33 @@ fn bits_specialists_advertise_exactly_the_agent_backend_tool_policy() {
                 "{scope:?} must be allowed to call its own tool {name}"
             );
         }
+    }
+}
+
+#[test]
+fn workspace_source_tools_stay_out_of_ui_home_and_public_research() {
+    for scope in [
+        CopilotScope::Board,
+        CopilotScope::Both,
+        CopilotScope::Scout,
+        CopilotScope::DataStudio,
+    ] {
+        let allowed = specialist_tool_policy(scope, true, true);
+        assert!(allowed.contains("search_workspace"));
+        assert!(allowed.contains("read_symbol"));
+    }
+    for scope in [
+        CopilotScope::Frontend,
+        CopilotScope::Home,
+        CopilotScope::Research,
+    ] {
+        let allowed = specialist_tool_policy(scope, true, true);
+        assert!(!allowed.contains("search_workspace"));
+        assert!(!allowed.contains("read_symbol"));
+    }
+    for name in ["search_workspace", "read_symbol"] {
+        assert!(is_flowpilot_read_only_tool(name));
+        assert!(frontend_platform_tool_spec(FrontendPlatformToolSet::Global, name).is_none());
     }
 }
 
@@ -508,6 +540,7 @@ fn board_explain_policy_is_an_exact_read_only_allowlist() {
         "write_flowscript",
         "patch_flowscript",
         "check_flowscript",
+        "test_flowscript",
         "commit_flowscript",
         "emit_ui",
         "graph_overlay_tool",
@@ -570,6 +603,7 @@ fn external_frontend_prompt_has_no_workflow_lifecycle() {
         "write_flowscript",
         "patch_flowscript",
         "check_flowscript",
+        "test_flowscript",
         "commit_flowscript",
     ] {
         assert!(!prompt.contains(lifecycle_tool));
@@ -691,4 +725,8 @@ fn source_lifecycle_classification_keeps_commit_boundary_explicit() {
     assert!(!is_workflow_commit_tool("check_flowscript"));
     assert!(is_workflow_commit_tool("commit_flowscript"));
     assert!(is_workflow_commit_tool("edit_flowscript"));
+    assert!(is_workflow_loop_tool("test_flowscript"));
+    assert!(is_order_sensitive_workflow_tool("test_flowscript"));
+    assert!(!is_flowscript_draft_operation_tool("test_flowscript"));
+    assert!(!is_workflow_commit_tool("test_flowscript"));
 }

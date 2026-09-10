@@ -7,10 +7,11 @@ use super::client_pool::{
     acquire_nested_copilot_run_permit, nested_copilot_run_gate, nested_copilot_run_gate_key,
 };
 use super::external_continuation::{
-    build_external_agent_prompt, build_external_agent_prompt_body,
+    build_external_agent_prompt_body, build_external_agent_prompt_with_options,
     build_external_workflow_continuation_prompt, earn_nested_wall_clock_extension,
-    external_agent_role_appendix, external_workflow_incomplete_error, nested_wall_clock_exhausted,
-    nested_wall_clock_extended, nested_wall_clock_incomplete_error, workflow_continuation_budget,
+    external_agent_role_appendix_with_options, external_workflow_incomplete_error,
+    nested_wall_clock_exhausted, nested_wall_clock_extended, nested_wall_clock_incomplete_error,
+    workflow_continuation_budget,
 };
 use super::external_invocation::ExternalAgentInvocation;
 use super::external_process::run_external_agent_invocation;
@@ -92,6 +93,11 @@ pub(super) async fn external_code_agent_chat_internal(
         None => None,
     };
     let authoritative_board = live_board_snapshot.as_ref().or(board);
+    let public_user_prompt = tool_context
+        .as_ref()
+        .and_then(|context| context.source_user_prompt.as_deref())
+        .filter(|prompt| !prompt.trim().is_empty())
+        .unwrap_or(&raw_user_prompt);
     let mut surface = build_flowpilot_agent_surface(
         scope,
         authoritative_board,
@@ -99,8 +105,12 @@ pub(super) async fn external_code_agent_chat_internal(
         selected_node_ids,
         current_surface,
         current_canvas_settings,
+        current_images
+            .as_ref()
+            .is_some_and(|images| !images.is_empty()),
         &history,
         &raw_user_prompt,
+        public_user_prompt,
         &request_identity_prompt,
         host_context_guidance.as_deref(),
         global.as_deref(),
@@ -163,6 +173,7 @@ pub(super) async fn external_code_agent_chat_internal(
         // MCP surface focused on one declaration batch plus iterative text edits.
         tools.retain(|(tool, _)| workflow_authoring_tool_allowed(&tool.name));
     }
+    super::workflow_benchmark::observe_tools(board, &mut tools);
     let tool_names = tools
         .iter()
         .map(|(tool, _)| tool.name.clone())
@@ -214,8 +225,18 @@ pub(super) async fn external_code_agent_chat_internal(
     let mut previous_exhausted_progress: Option<WorkflowProgressMark> = None;
     // Claude Code receives the bounded role/lifecycle appendix through --append-system-prompt so
     // it lands in the real system prompt; other backends keep it inline in the stdin prompt.
-    let claude_role_appendix = matches!(backend, FlowPilotAgentBackendKind::ClaudeCode)
-        .then(|| external_agent_role_appendix(scope, workflow_edit_request, global_agent));
+    let prompt_profile = surface.prompt_profile;
+    let prompt_mode = surface.prompt_mode;
+    let claude_role_appendix =
+        matches!(backend, FlowPilotAgentBackendKind::ClaudeCode).then(|| {
+            external_agent_role_appendix_with_options(
+                scope,
+                workflow_edit_request,
+                global_agent,
+                prompt_profile,
+                prompt_mode,
+            )
+        });
     // The latest Claude session id observed on a finished phase; every later phase in this run
     // (continuation or transport restart) resumes it so the model keeps its own transcript
     // instead of a lossy host reconstruction. Phases with no captured id fall back to the full
@@ -225,12 +246,14 @@ pub(super) async fn external_code_agent_chat_internal(
     let mut prompt = if claude_role_appendix.is_some() {
         build_external_agent_prompt_body(&surface.system_content, &user_prompt)
     } else {
-        build_external_agent_prompt(
+        build_external_agent_prompt_with_options(
             &surface.system_content,
             &user_prompt,
             scope,
             workflow_edit_request,
             global_agent,
+            prompt_profile,
+            prompt_mode,
         )
     };
     let agent_result = loop {
@@ -433,6 +456,7 @@ pub(super) async fn external_code_agent_chat_internal(
             channel.clone(),
             parent_request_id.clone(),
             invocation_cancellation,
+            board.map(|board| board.id.clone()),
         )
         .await;
         phases_run = phases_run.saturating_add(1);
@@ -643,12 +667,14 @@ pub(super) async fn external_code_agent_chat_internal(
             (Some(_), None) => {
                 build_external_agent_prompt_body(&surface.system_content, &repair_request)
             }
-            (None, _) => build_external_agent_prompt(
+            (None, _) => build_external_agent_prompt_with_options(
                 &surface.system_content,
                 &repair_request,
                 scope,
                 true,
                 global_agent,
+                prompt_profile,
+                prompt_mode,
             ),
         };
         send_external_progress_event(

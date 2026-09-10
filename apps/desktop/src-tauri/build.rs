@@ -194,7 +194,77 @@ fn ensure_ios_associated_domain(domain: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn emit_workflow_benchmark_build_identity() {
+    fn collect(dir: &std::path::Path, files: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).expect("benchmark source directory exists") {
+            let entry = entry.expect("benchmark source entry is readable");
+            let kind = entry
+                .file_type()
+                .expect("benchmark source type is readable");
+            let path = entry.path();
+            if kind.is_dir() {
+                if !matches!(
+                    entry.file_name().to_str(),
+                    Some("node_modules" | "target" | ".git")
+                ) {
+                    collect(&path, files);
+                }
+            } else if kind.is_file()
+                && matches!(
+                    path.extension().and_then(|ext| ext.to_str()),
+                    Some("rs" | "toml")
+                )
+            {
+                files.push(path);
+            }
+        }
+    }
+    let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../..");
+    let mut files = Vec::new();
+    for path in ["packages", "apps/desktop/src-tauri/src"] {
+        collect(&root.join(path), &mut files);
+    }
+    for path in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "apps/desktop/src-tauri/Cargo.toml",
+        "apps/desktop/src-tauri/build.rs",
+    ] {
+        let path = root.join(path);
+        println!("cargo:rerun-if-changed={}", path.display());
+        files.push(path);
+    }
+    files.sort();
+    let mut hash = blake3::Hasher::new();
+    hash.update(b"flowpilot.workflow-benchmark-build/v1\n");
+    for path in files {
+        println!("cargo:rerun-if-changed={}", path.display());
+        let relative = path.strip_prefix(&root).unwrap().to_string_lossy();
+        let content = fs::read(&path).expect("benchmark source is readable");
+        hash.update(&(relative.len() as u64).to_le_bytes());
+        hash.update(relative.as_bytes());
+        hash.update(&(content.len() as u64).to_le_bytes());
+        hash.update(&content);
+    }
+    let mut build_settings: Vec<_> = std::env::vars()
+        .filter(|(key, _)| {
+            key.starts_with("CARGO_FEATURE_")
+                || matches!(
+                    key.as_str(),
+                    "TARGET" | "PROFILE" | "CARGO_ENCODED_RUSTFLAGS"
+                )
+        })
+        .collect();
+    build_settings.sort();
+    hash.update(&serde_json::to_vec(&build_settings).unwrap());
+    println!(
+        "cargo:rustc-env=FLOWPILOT_BENCHMARK_BUILD_ID={}",
+        hash.finalize().to_hex()
+    );
+}
+
 fn main() {
+    emit_workflow_benchmark_build_identity();
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 

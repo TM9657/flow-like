@@ -21,6 +21,25 @@ them for the active Profile. Web and desktop use the same editor.
 Finish an active move or resize before saving. If a save fails, the editor
 retains the draft so you can retry.
 
+## Add an image
+
+In **Customize → Add widget → Content**, choose **Image and caption**. In its
+settings, choose an **Image source**:
+
+- **URL**: enter an HTTP(S) image URL or a path on the current site.
+- **App storage**: choose an App, browse its shared storage folders, and select
+  an image. Viewers need permission to read that App's files.
+
+Add an **Image description** for people using a screen reader. You can also add
+a caption in **Content**. Editorial stories and banners support the same image
+sources.
+
+Storage images keep their App and file path in the layout. Home obtains a
+temporary download URL through the App's storage API and refreshes it before
+it expires. Your browser caches the image according to the storage provider's
+HTTP cache settings. If a storage image fails to load, check your connection and
+file permissions, then choose **Try again**.
+
 ## Understand defaults
 
 Home uses the first available layout in this order:

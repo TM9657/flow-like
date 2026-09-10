@@ -22,7 +22,9 @@ Avoid posting rendered configuration or full workflow payloads in support logs.
 | Symptom | Check |
 | --- | --- |
 | Existing `.env` is refused | Setup protects existing secrets. Merge new settings into that file. |
-| Image digest is absent or stale | Run `python3 scripts/prepare-images.py` on the target daemon. |
+| Image digest is absent or stale | Run `python3 scripts/pull-images.py`, or `prepare-images.py` for local builds, on the target daemon. |
+| `RUNTIME_IMAGE must equal the SANDBOX_IMAGE digest pin` | The queue bridge and the sandboxes would run different builds. Rerun `pull-images.py` for one tag, or `prepare-images.py` to switch both to a local build. |
+| `FLOW_LIKE_IMAGE_TAG must be an image tag` | Use a tag such as `dev`, `1.4.0` or `sha-<commit>-run-<run>-<attempt>`; registry hosts and `@` digests belong in the `*_IMAGE` values. |
 | `runsc` validation fails | Install gVisor and configure both `--network=none` and `--host-uds=open`. |
 | Mixed execution profiles | Use `per-run` for `per_run`, or `trusted` for `trusted_shared`. |
 | Warm pool is zero | The Rust manager requires at least one unused slot. |
@@ -32,6 +34,18 @@ Avoid posting rendered configuration or full workflow payloads in support logs.
 
 Do not bypass a gVisor failure by switching an untrusted installation to shared
 workers.
+
+## Images cannot be pulled
+
+| Symptom | Check |
+| --- | --- |
+| `401 Unauthorized` or `denied` from `ghcr.io` | The self-hosted `flow-like-docker-compose-*` packages are public. A fork, a private mirror or a cloud-provider package requires `docker login ghcr.io` with a token that has `read:packages`; the scripts never take tokens. Check the owner in `--registry` and that the tag exists. |
+| `manifest unknown` | The tag was not published for that repository. Channel tags appear after the first successful publication; use `dev` or an immutable `sha-...` tag from a completed run. |
+| `up.py` fails with a missing image | `up.py` runs `--no-build`. Pull the images, or set local `*_IMAGE` tags and use `--build`. |
+| `--build` is refused | Digest pins cannot be built. Run `prepare-images.py` for local runtime images, or replace the `*_IMAGE` pins with local tags before building. |
+| A published tag runs stale local code | A plain `docker compose build` with an empty `*_IMAGE` tagged the local build under the published name; `up.py --build` avoids this by assigning local tags first. Rerun `pull-images.py`, or `docker pull` the tag, to restore the published image. |
+| `exec format error` at container start | The pinned digest or a locally built image does not match the daemon's CPU architecture. Rerun `pull-images.py` on the target daemon so the index resolves the correct platform, or build locally on that daemon. |
+| Sandboxes fail with an image not found | `SANDBOX_IMAGE` and `SANDBOX_GATEWAY_IMAGE` must exist on the execution daemon. The manager never pulls. Rerun `pull-images.py` or `prepare-images.py` there. |
 
 ## An initializer blocks startup
 

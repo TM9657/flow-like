@@ -10,6 +10,11 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use super::behavioral_state::{
+    FlowScriptBehavioralError, FlowScriptBehavioralFeedback, FlowScriptBehavioralOutcome,
+    FlowScriptBehavioralRevision, FlowScriptBehavioralState,
+    flowscript_behavioral_payload_fingerprint,
+};
 use super::manifest::BoardContextManifest;
 
 pub const WORKFLOW_SESSION_SNAPSHOT_VERSION: &str = "flowpilot.workflow-session/v1";
@@ -95,6 +100,7 @@ pub enum ContextReadDomain {
     Database,
     Ui,
     Storage,
+    Workspace,
     Extension(String),
 }
 
@@ -102,7 +108,7 @@ impl ContextReadDomain {
     fn consumes_predraft_budget(&self) -> bool {
         matches!(
             self,
-            Self::Database | Self::Ui | Self::Storage | Self::Extension(_)
+            Self::Database | Self::Ui | Self::Storage | Self::Workspace | Self::Extension(_)
         )
     }
 }
@@ -301,6 +307,10 @@ pub struct WorkflowToolObservation {
     pub validation_recorded: bool,
     pub review_prepared: bool,
     pub strategy_decision: Option<StrategyDecision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behavioral_outcome: Option<FlowScriptBehavioralOutcome>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behavioral_error: Option<String>,
 }
 
 impl WorkflowToolObservation {
@@ -339,6 +349,7 @@ pub enum WorkflowTelemetryKind {
     FirstArtifactSlaBreached,
     ArtifactRetained,
     ValidationCompleted,
+    BehavioralTestObserved,
     StrategyAttempted,
     CircuitOpened,
     ReviewPrepared,
@@ -475,6 +486,10 @@ pub struct WorkflowSessionSnapshot {
     pub first_artifact_sla: FirstArtifactSlaStatus,
     pub artifact: Option<WorkflowArtifactState>,
     pub validation: Option<WorkflowValidationState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behavioral: Option<FlowScriptBehavioralFeedback>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behavioral_error: Option<String>,
     pub prepared: Option<PreparedWorkflowState>,
     pub context_reads: Vec<ContextReadKey>,
     pub in_flight_context_reads: Vec<ContextReadKey>,
@@ -493,6 +508,11 @@ pub struct WorkflowSession {
     phase: WorkflowSessionPhase,
     artifact: Option<WorkflowArtifactState>,
     validation: Option<WorkflowValidationState>,
+    behavioral: Option<FlowScriptBehavioralState>,
+    behavioral_source_fingerprint: Option<String>,
+    behavioral_validation_identity: Option<BehavioralValidationIdentity>,
+    behavioral_validation_sequence: Option<u64>,
+    behavioral_error: Option<String>,
     prepared: Option<PreparedWorkflowState>,
     context_reads: BTreeSet<ContextReadKey>,
     /// Reads admitted by shared preflight but not yet proven successful. Reservations prevent
@@ -507,6 +527,27 @@ pub struct WorkflowSession {
     first_artifact_sla_breach_recorded: bool,
     terminal_reason: Option<String>,
     telemetry: WorkflowTelemetryLedger,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BehavioralValidationIdentity {
+    draft_id: String,
+    revision: u64,
+    source_fingerprint: String,
+    base_fingerprint: String,
+    catalog_fingerprint: String,
+    commands_fingerprint: Option<String>,
+}
+
+impl BehavioralValidationIdentity {
+    fn matches_test(&self, revision: &FlowScriptBehavioralRevision) -> bool {
+        self.draft_id == revision.draft_id
+            && self.revision == revision.revision
+            && self.source_fingerprint == revision.source_fingerprint
+            && self.base_fingerprint == revision.base_fingerprint
+            && self.catalog_fingerprint == revision.catalog_fingerprint
+            && self.commands_fingerprint.as_deref() == Some(&revision.commands_fingerprint)
+    }
 }
 
 impl WorkflowSession {
@@ -527,6 +568,11 @@ impl WorkflowSession {
             phase: WorkflowSessionPhase::Initialized,
             artifact: None,
             validation: None,
+            behavioral: None,
+            behavioral_source_fingerprint: None,
+            behavioral_validation_identity: None,
+            behavioral_validation_sequence: None,
+            behavioral_error: None,
             prepared: None,
             context_reads: BTreeSet::new(),
             in_flight_context_reads: BTreeMap::new(),
@@ -565,6 +611,231 @@ impl WorkflowSession {
 
     pub fn telemetry(&self) -> &WorkflowTelemetryLedger {
         &self.telemetry
+    }
+
+    pub fn behavioral_feedback(&self) -> Option<FlowScriptBehavioralFeedback> {
+        self.behavioral
+            .as_ref()
+            .map(FlowScriptBehavioralState::feedback)
+    }
+
+    /// Hosts call this with the retained document, including when restoring an existing draft.
+    /// A source identity is evidence only for the exact artifact currently held by the session.
+    pub fn observe_flowscript_source(&mut self, draft_id: &str, revision: u64, source: &str) {
+        if self.artifact.as_ref().is_some_and(|artifact| {
+            artifact.kind == WorkflowArtifactKind::FlowScript
+                && artifact.artifact_id == draft_id
+                && artifact.revision == revision
+        }) {
+            self.behavioral_source_fingerprint =
+                Some(blake3::hash(source.as_bytes()).to_hex().to_string());
+        }
+    }
+
+    fn observe_behavioral_validation_identity(&mut self, result: &Value) -> bool {
+        let identity = (|| {
+            Some(BehavioralValidationIdentity {
+                draft_id: result.get("draft_id")?.as_str()?.into(),
+                revision: result.get("revision")?.as_u64()?,
+                source_fingerprint: result.get("source_fingerprint")?.as_str()?.into(),
+                base_fingerprint: result.get("base_fingerprint")?.as_str()?.into(),
+                catalog_fingerprint: result.get("catalog_fingerprint")?.as_str()?.into(),
+                commands_fingerprint: result
+                    .get("commands_fingerprint")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+            })
+        })();
+        let Some(identity) = identity else {
+            return false;
+        };
+        if !self.artifact.as_ref().is_some_and(|artifact| {
+            artifact.kind == WorkflowArtifactKind::FlowScript
+                && artifact.artifact_id == identity.draft_id
+                && artifact.revision == identity.revision
+        }) {
+            return false;
+        }
+        let sequence = result.get("validation_sequence").and_then(Value::as_u64);
+        if self
+            .behavioral_validation_sequence
+            .is_some_and(|current| sequence.is_none_or(|sequence| sequence < current))
+        {
+            return false;
+        }
+        if sequence.is_some()
+            && sequence == self.behavioral_validation_sequence
+            && self
+                .behavioral_validation_identity
+                .as_ref()
+                .is_some_and(|current| current != &identity)
+        {
+            return false;
+        }
+        self.behavioral_source_fingerprint = Some(identity.source_fingerprint.clone());
+        if let Some(behavioral) = self.behavioral.as_mut() {
+            if behavioral
+                .current_revision()
+                .is_some_and(|current| !identity.matches_test(current))
+            {
+                behavioral.invalidate_revision();
+            }
+            if let Some(commands_fingerprint) = identity.commands_fingerprint.as_ref() {
+                let _ = behavioral.advance_revision(FlowScriptBehavioralRevision {
+                    board_id: self.manifest.board.id.clone(),
+                    draft_id: identity.draft_id.clone(),
+                    revision: identity.revision,
+                    source_fingerprint: identity.source_fingerprint.clone(),
+                    base_fingerprint: identity.base_fingerprint.clone(),
+                    catalog_fingerprint: identity.catalog_fingerprint.clone(),
+                    commands_fingerprint: commands_fingerprint.clone(),
+                });
+            }
+        }
+        self.behavioral_validation_identity = Some(identity);
+        self.behavioral_validation_sequence = sequence;
+        true
+    }
+
+    fn record_behavioral_test(
+        &mut self,
+        arguments: &Value,
+        result_text: &str,
+        elapsed_ms: u64,
+    ) -> Result<WorkflowToolObservation, WorkflowSessionError> {
+        self.require_active("observe behavioral test")?;
+        let mut observation = WorkflowToolObservation::default();
+        let Some(receipt) = parse_tool_result_value(result_text) else {
+            return Ok(observation);
+        };
+        // An inline compiler check may invalidate old test evidence before a runtime snapshot
+        // exists. Its host sequence prevents a late rejected check from replacing newer evidence.
+        if receipt.get("schema").and_then(Value::as_str)
+            != Some("flowpilot.flowscript-draft-test/v1")
+        {
+            if receipt.get("status").and_then(Value::as_str) == Some("blocked")
+                && receipt
+                    .get("compiler_status")
+                    .and_then(Value::as_str)
+                    .is_some()
+                && receipt
+                    .get("validation_sequence")
+                    .and_then(Value::as_u64)
+                    .is_some()
+                && self.observe_behavioral_validation_identity(&receipt)
+            {
+                let message = receipt.get("message").and_then(Value::as_str).unwrap_or(
+                    "The inline compiler check could not prepare an executable test snapshot",
+                );
+                self.behavioral_error = Some(message.chars().take(512).collect());
+                observation.behavioral_outcome = Some(FlowScriptBehavioralOutcome::Blocked);
+                observation.behavioral_error = self.behavioral_error.clone();
+                self.telemetry.append(
+                    elapsed_ms,
+                    WorkflowTelemetryKind::BehavioralTestObserved,
+                    json!({"outcome": "blocked", "error": observation.behavioral_error}),
+                );
+            }
+            return Ok(observation);
+        }
+        let result = (|| -> Result<FlowScriptBehavioralOutcome, FlowScriptBehavioralError> {
+            if receipt.get("certification").and_then(Value::as_str) != Some("draft_output_only")
+                || receipt.get("applied") != Some(&Value::Bool(false))
+            {
+                return Err(FlowScriptBehavioralError::MalformedReceipt(
+                    "Receipt does not identify an isolated retained-draft test".into(),
+                ));
+            }
+            let revision = FlowScriptBehavioralRevision::from_receipt(&receipt)?;
+            if receipt.get("status").and_then(Value::as_str) == Some("stale")
+                || revision.board_id != self.manifest.board.id
+                || self.behavioral_source_fingerprint.as_deref()
+                    != Some(&revision.source_fingerprint)
+                || !self.artifact.as_ref().is_some_and(|artifact| {
+                    artifact.kind == WorkflowArtifactKind::FlowScript
+                        && artifact.artifact_id == revision.draft_id
+                        && artifact.revision == revision.revision
+                })
+            {
+                return Ok(FlowScriptBehavioralOutcome::Stale);
+            }
+            let entry = arguments.get("entry").and_then(Value::as_str);
+            let expected = arguments.get("expected_output");
+            let payload = arguments
+                .get("payload")
+                .filter(|value| !value.is_null())
+                .cloned();
+            let payload_fingerprint = flowscript_behavioral_payload_fingerprint(&payload);
+            if arguments.get("draft_id").and_then(Value::as_str) != Some(&revision.draft_id)
+                || arguments.get("expected_revision").and_then(Value::as_u64)
+                    != Some(revision.revision)
+                || entry.is_none()
+                || expected.is_none()
+                || receipt.get("entry").and_then(Value::as_str) != entry
+                || receipt.get("payload_fingerprint").and_then(Value::as_str)
+                    != Some(&payload_fingerprint)
+                || receipt.get("expected_output") != expected
+            {
+                return Err(FlowScriptBehavioralError::MalformedReceipt(
+                    "Test receipt does not match the dispatched input and expectation".into(),
+                ));
+            }
+            if receipt
+                .get("validation_sequence")
+                .and_then(Value::as_u64)
+                .is_some()
+            {
+                if !self.observe_behavioral_validation_identity(&receipt) {
+                    return Ok(FlowScriptBehavioralOutcome::Stale);
+                }
+            } else if self.behavioral_validation_sequence.is_some() {
+                return Ok(FlowScriptBehavioralOutcome::Stale);
+            }
+            if self
+                .behavioral_validation_identity
+                .as_ref()
+                .is_some_and(|identity| !identity.matches_test(&revision))
+            {
+                return Ok(FlowScriptBehavioralOutcome::Stale);
+            }
+            let mut candidate = self.behavioral.clone().map(Ok).unwrap_or_else(|| {
+                FlowScriptBehavioralState::new(self.manifest.fingerprint.clone())
+            })?;
+            if candidate.current_revision().is_none() {
+                candidate.advance_revision(revision.clone())?;
+            }
+            if candidate.current_revision() != Some(&revision) {
+                return Ok(FlowScriptBehavioralOutcome::Stale);
+            }
+            candidate.register_check_with_payload(entry.unwrap(), &payload, expected.unwrap())?;
+            let outcome = candidate.observe_test_receipt(&self.manifest.fingerprint, &receipt)?;
+            if outcome != FlowScriptBehavioralOutcome::Stale {
+                self.behavioral = Some(candidate);
+            }
+            Ok(outcome)
+        })();
+        match result {
+            Ok(FlowScriptBehavioralOutcome::Stale) => {
+                observation.behavioral_outcome = Some(FlowScriptBehavioralOutcome::Stale);
+                return Ok(observation);
+            }
+            Ok(outcome) => {
+                self.behavioral_error = None;
+                observation.behavioral_outcome = Some(outcome);
+            }
+            Err(error) => {
+                let error = error.to_string().chars().take(512).collect::<String>();
+                self.behavioral_error = Some(error.clone());
+                observation.behavioral_error = Some(error);
+            }
+        }
+        self.telemetry.append(
+            elapsed_ms,
+            WorkflowTelemetryKind::BehavioralTestObserved,
+            json!({"outcome": observation.behavioral_outcome, "error": observation.behavioral_error,
+                "decision": self.behavioral.as_ref().map(FlowScriptBehavioralState::decision)}),
+        );
+        Ok(observation)
     }
 
     pub fn mark_manifest_ready(&mut self, elapsed_ms: u64) -> Result<(), WorkflowSessionError> {
@@ -785,6 +1056,21 @@ impl WorkflowSession {
         if let Some(domain) = tool_context_domain(tool_name) {
             let operation = context_read_operation(tool_name, arguments);
             let key = ContextReadKey::new(domain, operation, arguments);
+            let owns_reservation = lease.is_some_and(|lease| {
+                lease.key == key
+                    && self
+                        .in_flight_context_reads
+                        .get(&key)
+                        .is_some_and(|read| read.reservation_id == lease.reservation_id)
+            });
+            if owns_reservation && workspace_result_invalidates_search(tool_name, result_text) {
+                // A changed source requires fresh discovery. Keep the consumed budget so stale
+                // revisions cannot reopen an unbounded research loop, and ignore late leases.
+                self.context_reads.retain(|read| {
+                    read.domain != ContextReadDomain::Workspace
+                        || read.operation != "search_workspace"
+                });
+            }
             let decision = if let Some(lease) = lease.filter(|lease| lease.key == key) {
                 self.finish_context_read(lease, succeeded, elapsed_ms)?
             } else if self.in_flight_context_reads.contains_key(&key) {
@@ -805,6 +1091,11 @@ impl WorkflowSession {
                 context_read: decision,
                 ..WorkflowToolObservation::default()
             });
+        }
+        // Runtime failures are observations, even when an SDK/MCP transport marks the tool
+        // result unsuccessful. They do not become successful reads or compiler validation.
+        if tool_name == "test_flowscript" {
+            return self.record_behavioral_test(arguments, result_text, elapsed_ms);
         }
         if !succeeded && !tool_result_proves_retained_artifact(tool_name, result_text) {
             return Ok(WorkflowToolObservation::default());
@@ -1061,6 +1352,12 @@ impl WorkflowSession {
         self.prepared = None;
         self.phase = WorkflowSessionPhase::Authoring;
         if artifact_progressed {
+            self.behavioral_source_fingerprint = None;
+            self.behavioral_validation_identity = None;
+            self.behavioral_error = None;
+            if let Some(behavioral) = self.behavioral.as_mut() {
+                behavioral.invalidate_revision();
+            }
             self.note_progress(digest);
         }
         self.telemetry.append(
@@ -1209,6 +1506,9 @@ impl WorkflowSession {
         result_text: &str,
         elapsed_ms: u64,
     ) -> Result<WorkflowToolObservation, WorkflowSessionError> {
+        if tool_name == "test_flowscript" {
+            return self.record_behavioral_test(arguments, result_text, elapsed_ms);
+        }
         if tool_context_domain(tool_name).is_some() {
             return self.complete_tool_call(
                 None,
@@ -1253,6 +1553,15 @@ impl WorkflowSession {
                         "FLOWSCRIPT_DRAFT_MISSING" | "FLOWSCRIPT_BASE_REVISION_CONFLICT"
                     )
                 });
+        if rejected_identity {
+            // The host proved these coordinates cannot be tested or committed against the
+            // current board/request. Keep failed cases, but reject late receipts for the old base.
+            self.behavioral_source_fingerprint = None;
+            self.behavioral_validation_identity = None;
+            if let Some(behavioral) = self.behavioral.as_mut() {
+                behavioral.invalidate_revision();
+            }
+        }
 
         let previous_artifact = self.artifact.clone();
         let source = parsed
@@ -1406,8 +1715,39 @@ impl WorkflowSession {
 
         let mut observation = WorkflowToolObservation::default();
         if let Some((artifact_id, revision, digest)) = artifact_candidate {
-            self.record_artifact(artifact_kind, artifact_id, revision, digest, elapsed_ms)?;
+            self.record_artifact(
+                artifact_kind,
+                artifact_id.clone(),
+                revision,
+                digest,
+                elapsed_ms,
+            )?;
+            if artifact_kind == WorkflowArtifactKind::FlowScript
+                && let Some(source) = source
+            {
+                self.observe_flowscript_source(&artifact_id, revision, source);
+            }
             observation.artifact_retained = true;
+        }
+        if artifact_kind == WorkflowArtifactKind::FlowScript
+            && (matches!(
+                status,
+                Some(
+                    "valid"
+                        | "validation_errors"
+                        | "invalid"
+                        | "no_changes"
+                        | "queued"
+                        | "already_queued"
+                )
+            ) || parsed
+                .as_ref()
+                .and_then(|result| result.get("code"))
+                .and_then(Value::as_str)
+                == Some("FLOWSCRIPT_CATALOG_REVISION_CONFLICT"))
+            && let Some(result) = parsed.as_ref()
+        {
+            self.observe_behavioral_validation_identity(result);
         }
         if let (Some(status), Some(revision)) = (validation_status, revision)
             && self
@@ -1611,6 +1951,8 @@ impl WorkflowSession {
             first_artifact_sla: self.first_artifact_sla_status(elapsed_ms),
             artifact: self.artifact.clone(),
             validation: self.validation.clone(),
+            behavioral: self.behavioral_feedback(),
+            behavioral_error: self.behavioral_error.clone(),
             prepared: self.prepared.clone(),
             context_reads: self.context_reads.iter().cloned().collect(),
             in_flight_context_reads: self.in_flight_context_reads.keys().cloned().collect(),
@@ -1690,8 +2032,21 @@ fn tool_context_domain(tool_name: &str) -> Option<ContextReadDomain> {
         "database_tool" => Some(ContextReadDomain::Database),
         "ui_inspect" => Some(ContextReadDomain::Ui),
         "storage_tool" => Some(ContextReadDomain::Storage),
+        "search_workspace" | "read_symbol" => Some(ContextReadDomain::Workspace),
         _ => None,
     }
+}
+
+fn workspace_result_invalidates_search(tool_name: &str, result_text: &str) -> bool {
+    let expected = match tool_name {
+        "read_symbol" => "WORKSPACE_REVISION_CHANGED",
+        "search_workspace" => "WORKSPACE_SNAPSHOT_CHANGED",
+        _ => return false,
+    };
+    serde_json::from_str::<Value>(result_text).is_ok_and(|result| {
+        result.get("status").and_then(Value::as_str) == Some("stale")
+            && result.get("code").and_then(Value::as_str) == Some(expected)
+    })
 }
 
 /// Interpret the semantic disposition inside provider-neutral tool text. Frontend bridges often
@@ -1724,6 +2079,8 @@ pub fn workflow_tool_result_succeeded(result_text: &str) -> bool {
     !matches!(
         status.as_str(),
         "error"
+            | "blocked"
+            | "limit_exceeded"
             | "failed"
             | "failure"
             | "cancelled"
@@ -1964,6 +2321,502 @@ mod tests {
         }
     }
 
+    fn behavioral_source(session: &mut WorkflowSession, revision: u64, source: &str) {
+        session.record_tool_result("write_flowscript", &json!({
+            "draft_id": "behavior", "source": source,
+        }), &json!({
+            "draft_id": "behavior", "revision": revision, "status": "valid", "diagnostics": [],
+        }).to_string(), revision + 1).unwrap();
+    }
+
+    fn behavioral_case(
+        revision: u64,
+        source: &str,
+        expected: Value,
+        actual: Value,
+    ) -> (Value, String) {
+        let payload = Some(json!({"name": "ADA"}));
+        let args = json!({
+            "draft_id": "behavior", "expected_revision": revision,
+            "entry": "normalize", "payload": payload, "expected_output": expected,
+        });
+        let receipt = json!({
+            "schema": "flowpilot.flowscript-draft-test/v1",
+            "certification": "draft_output_only", "applied": false,
+            "board_id": "board-1", "draft_id": "behavior", "revision": revision,
+            "source_fingerprint": blake3::hash(source.as_bytes()).to_hex().to_string(),
+            "base_fingerprint": "base-1", "catalog_fingerprint": "catalog-1", "commands_fingerprint": format!("commands-{revision}"),
+            "entry": "normalize", "payload_fingerprint": flowscript_behavioral_payload_fingerprint(&payload),
+            "expected_output": expected, "passed": actual == expected,
+            "status": if actual == expected {"success"} else {"failed"},
+            "runtime": {"status": "success", "output": actual, "outputs": [actual], "errors": []},
+        });
+        (args, receipt.to_string())
+    }
+
+    #[test]
+    fn behavioral_failures_survive_repairs_without_overwriting_compiler_state() {
+        use super::super::behavioral_state::FlowScriptBehavioralDecisionKind as Decision;
+
+        let mut session = WorkflowSession::new(manifest(), policy());
+        let before = "eventsGeneric normalize() { return \"ADA\" }";
+        let after = "eventsGeneric normalize() { return \"ada\" }";
+        behavioral_source(&mut session, 0, before);
+        let compiled = session.snapshot(2).validation.unwrap();
+        let (args, failed) = behavioral_case(0, before, json!("ada"), json!("ADA"));
+        let observation = session
+            .complete_tool_call(None, "test_flowscript", &args, &failed, false, 2)
+            .unwrap();
+        assert_eq!(
+            observation.behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Failed)
+        );
+        assert!(!observation.artifact_retained && !observation.validation_recorded);
+        assert!(observation.strategy_decision.is_none());
+        let snapshot = session.snapshot(2);
+        assert_eq!(snapshot.validation, Some(compiled));
+        assert_eq!(snapshot.phase, WorkflowSessionPhase::Validated);
+        assert!(snapshot.circuit.is_none());
+        assert_eq!(
+            snapshot.behavioral.unwrap().decision.status,
+            Decision::RepairRequired
+        );
+
+        // A host-computed patch result carries the full merged document even though args do not.
+        session.record_tool_result("patch_flowscript", &json!({"draft_id": "behavior", "expected_revision": 0}),
+            &json!({"draft_id": "behavior", "revision": 1, "status": "valid", "source": after, "diagnostics": []}).to_string(), 3).unwrap();
+        let snapshot = session.snapshot(3);
+        assert_eq!(
+            snapshot.validation.unwrap().status,
+            WorkflowValidationStatus::Valid
+        );
+        let pending = snapshot.behavioral.unwrap();
+        assert_eq!(pending.decision.status, Decision::Unverified);
+        assert_eq!(pending.decision.outstanding_failure_ids.len(), 1);
+        assert!(!pending.checks[0].evidence_current);
+        let (old_args, old_success) = behavioral_case(0, before, json!("ada"), json!("ada"));
+        let ledger = session.telemetry.clone();
+        assert_eq!(
+            session
+                .record_tool_result("test_flowscript", &old_args, &old_success, 4)
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Stale)
+        );
+        assert_eq!(session.behavioral_feedback().unwrap(), pending);
+        assert_eq!(session.telemetry, ledger);
+
+        let (args, success) = behavioral_case(1, after, json!("ada"), json!("ada"));
+        session
+            .record_tool_result("test_flowscript", &args, &success, 5)
+            .unwrap();
+        assert_eq!(
+            session.behavioral_feedback().unwrap().decision.status,
+            Decision::Ready
+        );
+        assert!(
+            session
+                .behavioral_feedback()
+                .unwrap()
+                .decision
+                .outstanding_failure_ids
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn behavioral_expectation_conflicts_are_visible_and_do_not_add_a_commit_gate() {
+        use super::super::behavioral_state::FlowScriptBehavioralDecisionKind as Decision;
+
+        let mut session = WorkflowSession::new(manifest(), policy());
+        let source = "eventsGeneric normalize() { return 0 }";
+        behavioral_source(&mut session, 0, source);
+        let (args, failed) = behavioral_case(0, source, json!(1), json!(0));
+        session
+            .record_tool_result("test_flowscript", &args, &failed, 2)
+            .unwrap();
+        let (weakened_args, weakened_receipt) = behavioral_case(0, source, json!(0), json!(0));
+        let observation = session
+            .record_tool_result("test_flowscript", &weakened_args, &weakened_receipt, 3)
+            .unwrap();
+        assert!(
+            observation
+                .behavioral_error
+                .as_deref()
+                .is_some_and(|error| error.contains("cannot be replaced"))
+        );
+        let snapshot = session.snapshot(3);
+        assert!(snapshot.behavioral_error.is_some());
+        assert_eq!(
+            snapshot.behavioral.unwrap().decision.status,
+            Decision::RepairRequired
+        );
+        assert_eq!(
+            snapshot.validation.unwrap().status,
+            WorkflowValidationStatus::Valid
+        );
+
+        let queued = session.record_tool_result("commit_flowscript", &json!({"draft_id": "behavior", "expected_revision": 0}),
+            &json!({"draft_id": "behavior", "revision": 0, "status": "queued", "diagnostics": []}).to_string(), 4).unwrap();
+        assert!(
+            queued.review_prepared,
+            "this phase adds feedback without changing commit policy"
+        );
+        assert_eq!(
+            session.snapshot(4).behavioral.unwrap().decision.status,
+            Decision::RepairRequired
+        );
+    }
+
+    #[test]
+    fn behavioral_receipts_must_match_dispatched_arguments_and_retained_source() {
+        let mut session = WorkflowSession::new(manifest(), policy());
+        let source = "eventsGeneric normalize() { return null }";
+        behavioral_source(&mut session, 0, source);
+        let (mut args, receipt) = behavioral_case(0, source, Value::Null, Value::Null);
+        args["payload"] = json!({"name": "a different input"});
+        let observation = session
+            .record_tool_result("test_flowscript", &args, &receipt, 2)
+            .unwrap();
+        assert!(observation.behavioral_error.is_some());
+        assert!(session.behavioral_feedback().is_none());
+        let (args, receipt) = behavioral_case(0, "another source", Value::Null, Value::Null);
+        assert_eq!(
+            session
+                .record_tool_result("test_flowscript", &args, &receipt, 3)
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Stale)
+        );
+        assert!(session.behavioral_feedback().is_none());
+        let (args, receipt) = behavioral_case(0, source, Value::Null, Value::Null);
+        session
+            .record_tool_result("test_flowscript", &args, &receipt, 4)
+            .unwrap();
+        assert!(session.snapshot(4).behavioral_error.is_none());
+        assert_eq!(
+            session
+                .behavioral_feedback()
+                .unwrap()
+                .decision
+                .passed_check_ids
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn behavioral_catalog_and_command_drift_invalidates_passes_and_rejects_late_receipts() {
+        use super::super::behavioral_state::FlowScriptBehavioralDecisionKind as Decision;
+
+        let mut session = WorkflowSession::new(manifest(), policy());
+        let source = "eventsGeneric normalize() { return 1 }";
+        behavioral_source(&mut session, 0, source);
+        let (args, pass_a) = behavioral_case(0, source, json!(1), json!(1));
+        session
+            .record_tool_result("test_flowscript", &args, &pass_a, 2)
+            .unwrap();
+        assert_eq!(
+            session.behavioral_feedback().unwrap().decision.status,
+            Decision::Ready
+        );
+        let mut host_check = json!({
+            "draft_id": "behavior", "revision": 0, "status": "valid", "diagnostics": [],
+            "source_fingerprint": blake3::hash(source.as_bytes()).to_hex().to_string(),
+            "base_fingerprint": "base-1", "catalog_fingerprint": "catalog-B", "commands_fingerprint": "commands-B",
+        });
+        session
+            .record_tool_result(
+                "check_flowscript",
+                &json!({"draft_id": "behavior", "expected_revision": 0}),
+                &host_check.to_string(),
+                3,
+            )
+            .unwrap();
+        let pending = session.behavioral_feedback().unwrap();
+        assert_eq!(pending.decision.status, Decision::Unverified);
+        assert_eq!(
+            pending
+                .current_revision
+                .as_ref()
+                .unwrap()
+                .catalog_fingerprint,
+            "catalog-B"
+        );
+        assert!(!pending.checks[0].evidence_current);
+
+        let (_, failed) = behavioral_case(0, source, json!(1), json!(0));
+        let mut failure_b: Value = serde_json::from_str(&failed).unwrap();
+        failure_b["catalog_fingerprint"] = json!("catalog-B");
+        failure_b["commands_fingerprint"] = json!("commands-B");
+        assert_eq!(
+            session
+                .record_tool_result("test_flowscript", &args, &failure_b.to_string(), 4)
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Failed)
+        );
+        let failed = session.behavioral_feedback().unwrap();
+        assert_eq!(failed.decision.status, Decision::RepairRequired);
+        assert_eq!(
+            session
+                .record_tool_result("test_flowscript", &args, &pass_a, 5)
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Stale)
+        );
+        assert_eq!(session.behavioral_feedback().unwrap(), failed);
+
+        // Changed checked commands also invalidate evidence without a source revision change.
+        host_check["commands_fingerprint"] = json!("commands-C");
+        session
+            .record_tool_result(
+                "check_flowscript",
+                &json!({"draft_id": "behavior", "expected_revision": 0}),
+                &host_check.to_string(),
+                6,
+            )
+            .unwrap();
+        assert_eq!(
+            session.behavioral_feedback().unwrap().decision.status,
+            Decision::Unverified
+        );
+        assert_eq!(
+            session
+                .behavioral_feedback()
+                .unwrap()
+                .decision
+                .outstanding_failure_ids
+                .len(),
+            1
+        );
+        assert_eq!(
+            session
+                .record_tool_result("test_flowscript", &args, &failure_b.to_string(), 7)
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Stale)
+        );
+
+        // A catalog that no longer compiles has no executable command fingerprint.
+        host_check["status"] = json!("validation_errors");
+        host_check["catalog_fingerprint"] = json!("catalog-D");
+        host_check["diagnostics"] = json!([{"message": "catalog signature changed"}]);
+        host_check
+            .as_object_mut()
+            .unwrap()
+            .remove("commands_fingerprint");
+        session
+            .record_tool_result(
+                "check_flowscript",
+                &json!({"draft_id": "behavior", "expected_revision": 0}),
+                &host_check.to_string(),
+                8,
+            )
+            .unwrap();
+        let invalid = session.snapshot(8);
+        assert_eq!(
+            invalid.validation.unwrap().status,
+            WorkflowValidationStatus::Invalid
+        );
+        assert_eq!(
+            invalid.behavioral.as_ref().unwrap().decision.status,
+            Decision::Unverified
+        );
+        assert!(invalid.behavioral.unwrap().current_revision.is_none());
+        assert_eq!(
+            session
+                .record_tool_result("test_flowscript", &args, &pass_a, 9)
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Stale)
+        );
+    }
+
+    #[test]
+    fn behavioral_ready_is_cleared_when_commit_rejects_the_catalog_or_base_identity() {
+        use super::super::behavioral_state::FlowScriptBehavioralDecisionKind as Decision;
+
+        for code in [
+            "FLOWSCRIPT_CATALOG_REVISION_CONFLICT",
+            "FLOWSCRIPT_BASE_REVISION_CONFLICT",
+            "FLOWSCRIPT_DRAFT_MISSING",
+        ] {
+            let mut session = WorkflowSession::new(manifest(), policy());
+            let source = "eventsGeneric normalize() { return 1 }";
+            behavioral_source(&mut session, 0, source);
+            let (args, success) = behavioral_case(0, source, json!(1), json!(1));
+            session
+                .record_tool_result("test_flowscript", &args, &success, 2)
+                .unwrap();
+            assert_eq!(
+                session.behavioral_feedback().unwrap().decision.status,
+                Decision::Ready
+            );
+            let rejection = json!({
+                "draft_id": "behavior", "revision": 0, "status": "error", "code": code,
+                "source_fingerprint": blake3::hash(source.as_bytes()).to_hex().to_string(),
+                "base_fingerprint": "base-1", "catalog_fingerprint": "catalog-B",
+            });
+            session
+                .record_tool_result(
+                    "commit_flowscript",
+                    &json!({"draft_id": "behavior", "expected_revision": 0}),
+                    &rejection.to_string(),
+                    3,
+                )
+                .unwrap();
+            assert_eq!(
+                session.behavioral_feedback().unwrap().decision.status,
+                Decision::Unverified,
+                "{code}"
+            );
+            assert_eq!(
+                session
+                    .record_tool_result("test_flowscript", &args, &success, 4)
+                    .unwrap()
+                    .behavioral_outcome,
+                Some(FlowScriptBehavioralOutcome::Stale),
+                "{code}"
+            );
+        }
+    }
+
+    #[test]
+    fn behavioral_inline_checks_advance_by_host_sequence_without_invalidating_identical_checks() {
+        use super::super::behavioral_state::FlowScriptBehavioralDecisionKind as Decision;
+
+        let mut session = WorkflowSession::new(manifest(), policy());
+        let source = "eventsGeneric normalize() { return 1 }";
+        behavioral_source(&mut session, 0, source);
+        let (args, pass) = behavioral_case(0, source, json!(1), json!(1));
+        let mut pass_a: Value = serde_json::from_str(&pass).unwrap();
+        pass_a["validation_sequence"] = json!(10);
+        session
+            .complete_tool_call(None, "test_flowscript", &args, &pass_a.to_string(), true, 2)
+            .unwrap();
+        assert_eq!(
+            session.behavioral_feedback().unwrap().decision.status,
+            Decision::Ready
+        );
+
+        let mut test_b = pass_a.clone();
+        test_b["validation_sequence"] = json!(11);
+        test_b["catalog_fingerprint"] = json!("catalog-B");
+        test_b["commands_fingerprint"] = json!("commands-B");
+        test_b["status"] = json!("failed");
+        test_b["passed"] = json!(false);
+        test_b["runtime"] = json!({"status": "success", "output": 0, "outputs": [0], "errors": []});
+        assert_eq!(
+            session
+                .complete_tool_call(
+                    None,
+                    "test_flowscript",
+                    &args,
+                    &test_b.to_string(),
+                    false,
+                    3
+                )
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Failed)
+        );
+        let failed_b = session.behavioral_feedback().unwrap();
+        assert_eq!(failed_b.decision.status, Decision::RepairRequired);
+        assert_eq!(
+            session
+                .complete_tool_call(None, "test_flowscript", &args, &pass_a.to_string(), true, 4)
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Stale)
+        );
+        assert_eq!(session.behavioral_feedback().unwrap(), failed_b);
+        for (status, sequence) in [("stale", 1000), ("success", 11)] {
+            let mut stale = pass_a.clone();
+            stale["status"] = json!(status);
+            stale["validation_sequence"] = json!(sequence);
+            assert_eq!(
+                session
+                    .complete_tool_call(
+                        None,
+                        "test_flowscript",
+                        &args,
+                        &stale.to_string(),
+                        status == "success",
+                        5
+                    )
+                    .unwrap()
+                    .behavioral_outcome,
+                Some(FlowScriptBehavioralOutcome::Stale)
+            );
+            assert_eq!(session.behavioral_feedback().unwrap(), failed_b);
+        }
+
+        test_b["validation_sequence"] = json!(12);
+        test_b["status"] = json!("success");
+        test_b["passed"] = json!(true);
+        test_b["runtime"] = json!({"status": "success", "output": 1, "outputs": [1], "errors": []});
+        session
+            .complete_tool_call(None, "test_flowscript", &args, &test_b.to_string(), true, 6)
+            .unwrap();
+        let mut second_args = args.clone();
+        second_args["payload"] = json!({"name": "Grace"});
+        let mut second = test_b.clone();
+        second["validation_sequence"] = json!(13);
+        second["payload_fingerprint"] = json!(flowscript_behavioral_payload_fingerprint(&Some(
+            second_args["payload"].clone()
+        )));
+        session
+            .complete_tool_call(
+                None,
+                "test_flowscript",
+                &second_args,
+                &second.to_string(),
+                true,
+                7,
+            )
+            .unwrap();
+        let all_passed = session.behavioral_feedback().unwrap();
+        assert_eq!(all_passed.decision.status, Decision::Ready);
+        assert_eq!(
+            all_passed.decision.passed_check_ids.len(),
+            2,
+            "sequence alone must not invalidate another check of the same exact candidate"
+        );
+
+        let blocked = json!({
+            "status": "blocked", "compiler_status": "validation_errors", "message": "The changed catalog cannot compile this source",
+            "draft_id": "behavior", "revision": 0, "validation_sequence": 14,
+            "source_fingerprint": blake3::hash(source.as_bytes()).to_hex().to_string(),
+            "base_fingerprint": "base-1", "catalog_fingerprint": "catalog-C", "commands_fingerprint": null,
+        });
+        assert_eq!(
+            session
+                .complete_tool_call(
+                    None,
+                    "test_flowscript",
+                    &args,
+                    &blocked.to_string(),
+                    false,
+                    8
+                )
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Blocked)
+        );
+        let pending = session.behavioral_feedback().unwrap();
+        assert_eq!(pending.decision.status, Decision::Unverified);
+        assert!(pending.current_revision.is_none());
+        assert_eq!(
+            session
+                .complete_tool_call(None, "test_flowscript", &args, &test_b.to_string(), true, 9)
+                .unwrap()
+                .behavioral_outcome,
+            Some(FlowScriptBehavioralOutcome::Stale)
+        );
+        assert_eq!(session.behavioral_feedback().unwrap(), pending);
+    }
+
     #[test]
     fn context_reads_are_deduplicated_and_predraft_budget_is_shared() {
         let mut session = WorkflowSession::new(manifest(), policy());
@@ -2016,6 +2869,132 @@ mod tests {
             ContextReadDecision::Accepted { .. }
         ));
         assert_eq!(session.snapshot(8).predraft_unique_context_reads, 2);
+    }
+
+    #[test]
+    fn workspace_research_shares_predraft_budget_and_deduplicates_exact_reads() {
+        let mut session = WorkflowSession::new(manifest(), policy());
+        session.mark_manifest_ready(0).unwrap();
+        session.begin_discovery(0).unwrap();
+        let reads = [
+            (
+                "search_workspace",
+                json!({"query": "retry invoice", "app_id": "source-app"}),
+            ),
+            (
+                "read_symbol",
+                json!({"resource_id": "source-helper", "revision": "revision-1"}),
+            ),
+        ];
+        for (index, (name, args)) in reads.iter().enumerate() {
+            let elapsed = index as u64 + 1;
+            let decision = session.preflight_tool_call(name, args, elapsed).unwrap();
+            assert!(matches!(
+                decision,
+                WorkflowToolPreflightDecision::Dispatch { lease: Some(_) }
+            ));
+            session
+                .complete_tool_call(
+                    decision.lease(),
+                    name,
+                    args,
+                    "{\"status\":\"ok\"}",
+                    true,
+                    elapsed,
+                )
+                .unwrap();
+            assert!(
+                matches!(session.preflight_tool_call(name, args, elapsed).unwrap(),
+                WorkflowToolPreflightDecision::ShortCircuit { ref code, .. } if code == "DUPLICATE_CONTEXT_READ")
+            );
+        }
+        assert_eq!(session.snapshot(3).predraft_unique_context_reads, 2);
+        assert!(matches!(session.preflight_tool_call(
+            "read_symbol", &json!({"resource_id": "source-helper", "revision": "revision-1", "offset": 1000}), 3
+        ).unwrap(), WorkflowToolPreflightDecision::ShortCircuit { ref code, .. } if code == "PREDRAFT_INSPECTION_BUDGET_EXHAUSTED"));
+    }
+
+    #[test]
+    fn changed_workspace_sources_allow_search_refresh_without_resetting_the_budget() {
+        for (tool, args, status, code, should_refresh) in [
+            (
+                "read_symbol",
+                json!({"resource_id": "source-helper", "revision": "revision-1"}),
+                "stale",
+                "WORKSPACE_REVISION_CHANGED",
+                true,
+            ),
+            (
+                "search_workspace",
+                json!({"query": "retry invoice", "cursor": "page-2"}),
+                "stale",
+                "WORKSPACE_SNAPSHOT_CHANGED",
+                true,
+            ),
+            (
+                "search_workspace",
+                json!({"query": "retry invoice", "cursor": "page-2"}),
+                "error",
+                "WORKSPACE_CURSOR_INVALID",
+                false,
+            ),
+        ] {
+            let mut session = WorkflowSession::new(manifest(), policy());
+            session.mark_manifest_ready(0).unwrap();
+            session.begin_discovery(0).unwrap();
+            let query = json!({"query": "retry invoice"});
+            let first = session
+                .preflight_tool_call("search_workspace", &query, 1)
+                .unwrap();
+            session
+                .complete_tool_call(
+                    first.lease(),
+                    "search_workspace",
+                    &query,
+                    "{\"status\":\"ok\"}",
+                    true,
+                    1,
+                )
+                .unwrap();
+            let check = session.preflight_tool_call(tool, &args, 2).unwrap();
+            assert!(check.lease().is_some());
+            session
+                .complete_tool_call(
+                    check.lease(),
+                    tool,
+                    &args,
+                    &json!({"status": status, "code": code}).to_string(),
+                    false,
+                    2,
+                )
+                .unwrap();
+            assert_eq!(session.snapshot(2).predraft_unique_context_reads, 1);
+            let refresh = session
+                .preflight_tool_call("search_workspace", &query, 3)
+                .unwrap();
+            if should_refresh {
+                assert!(refresh.lease().is_some());
+                session
+                    .complete_tool_call(
+                        refresh.lease(),
+                        "search_workspace",
+                        &query,
+                        "{\"status\":\"ok\"}",
+                        true,
+                        3,
+                    )
+                    .unwrap();
+                assert_eq!(session.snapshot(3).predraft_unique_context_reads, 2);
+                assert!(
+                    matches!(session.preflight_tool_call("search_workspace", &json!({"query": "invoice handler"}), 4).unwrap(),
+                    WorkflowToolPreflightDecision::ShortCircuit { ref code, .. } if code == "PREDRAFT_INSPECTION_BUDGET_EXHAUSTED")
+                );
+            } else {
+                assert!(
+                    matches!(refresh, WorkflowToolPreflightDecision::ShortCircuit { ref code, .. } if code == "DUPLICATE_CONTEXT_READ")
+                );
+            }
+        }
     }
 
     #[test]
@@ -2072,6 +3051,8 @@ mod tests {
             r#"{"status":"approval_required"}"#,
             r#"{"status":"DENIED"}"#,
             r#"{"status":"timeout"}"#,
+            r#"{"status":"blocked","passed":false}"#,
+            r#"{"status":"limit_exceeded"}"#,
             r#"{"status":"scope_violation"}"#,
             r#"{"status":"ok","error":"frontend bridge failed"}"#,
             r#"{"cancelled":true}"#,

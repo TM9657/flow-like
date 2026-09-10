@@ -3,6 +3,28 @@ import { describe, expect, test } from "vitest";
 import { constantTimeEqual, parseArgs } from "../../../scripts/flowpilot-e2e";
 
 describe("FlowPilot E2E CLI options", () => {
+	test("requires isolated serial behavioral execution for intake reliability", () => {
+		const base = [
+			"--case",
+			"intake-reliability",
+			"--isolated",
+			"--tier",
+			"behavioral",
+			"--repeat",
+			"10",
+		];
+		expect(parseArgs(base)).toMatchObject({
+			repeat: 10,
+			isolated: true,
+			tier: "behavioral",
+		});
+		expect(() => parseArgs(base.filter((arg) => arg !== "--isolated"))).toThrow(
+			"requires --isolated",
+		);
+		expect(() => parseArgs([...base, "--concurrency", "2"])).toThrow(
+			"serial runs",
+		);
+	});
 	test("compares callback capabilities without throwing on length mismatch", () => {
 		expect(constantTimeEqual("/callback-secret", "/callback-secret")).toBe(
 			true,

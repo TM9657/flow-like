@@ -403,7 +403,7 @@ const FlowNodeInner = memo(
 					command,
 				);
 
-				await pushCommand(result, false);
+				await pushCommand(result);
 
 				await invalidate(backend.boardState.getBoard, [
 					props.data.appId,
@@ -467,7 +467,7 @@ const FlowNodeInner = memo(
 					command,
 				);
 
-				await pushCommand(result, false);
+				await pushCommand(result);
 
 				await invalidate(backend.boardState.getBoard, [
 					props.data.appId,
@@ -1217,7 +1217,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 				props.data.boardId,
 				updateNode,
 			);
-			await pushCommand(updateNode, false);
+			await pushCommand(updateNode);
 			invalidate(backend.boardState.getBoard, [
 				props.data.appId,
 				props.data.boardId,
@@ -1341,7 +1341,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 				props.data.boardId,
 				command,
 			);
-			await pushCommand(result, false);
+			await pushCommand(result);
 			await invalidate(backend.boardState.getBoard, [
 				props.data.appId,
 				props.data.boardId,
@@ -1600,7 +1600,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 							command,
 						);
 
-						await pushCommand(result, false);
+						await pushCommand(result);
 						await invalidate(backend.boardState.getBoard, [
 							props.data.appId,
 							props.data.boardId,

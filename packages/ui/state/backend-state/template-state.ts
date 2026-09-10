@@ -6,18 +6,23 @@ import type {
 	ITemplateSearchQuery,
 	IVersionType,
 } from "../../lib";
+import type { TemplateReadOptions } from "./template-read";
 
 export interface ITemplateState {
 	getTemplates(
 		appId?: string,
 		language?: string,
+		options?: TemplateReadOptions,
 		// [appId, templateId, metadata]
 	): Promise<[string, string, IMetadata | undefined][]>;
 	/**
 	 * Store-wide template search across publicly visible apps.
 	 * (GET /apps/templates/search)
 	 */
-	searchTemplates(query: ITemplateSearchQuery): Promise<ITemplateSearchHit[]>;
+	searchTemplates(
+		query: ITemplateSearchQuery,
+		options?: TemplateReadOptions,
+	): Promise<ITemplateSearchHit[]>;
 	/**
 	 * A template's structural summary — counts and node types, never its
 	 * contents. Readable for any publicly visible app, so a template can be

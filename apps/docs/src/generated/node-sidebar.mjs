@@ -337,6 +337,10 @@ export const generatedNodeSidebar = [
                     "slug": "nodes/ai/generative/image/options/ai-image-options-together"
                   },
                   {
+                    "label": "stable-diffusion.cpp Image Options",
+                    "slug": "nodes/ai/generative/image/options/ai-image-options-stablediffusion"
+                  },
+                  {
                     "label": "xAI Image Options",
                     "slug": "nodes/ai/generative/image/options/ai-image-options-xai"
                   }
@@ -471,6 +475,10 @@ export const generatedNodeSidebar = [
                 "slug": "nodes/ai/generative/provider/ai-generative-build-voyageai"
               },
               {
+                "label": "stable-diffusion.cpp Image Model",
+                "slug": "nodes/ai/generative/provider/ai-image-build-stablediffusion"
+              },
+              {
                 "label": "xAI Model",
                 "slug": "nodes/ai/generative/provider/ai-generative-build-xai"
               }
@@ -577,6 +585,10 @@ export const generatedNodeSidebar = [
                   {
                     "label": "fal Video Options",
                     "slug": "nodes/ai/generative/video/options/ai-video-options-fal"
+                  },
+                  {
+                    "label": "stable-diffusion.cpp Video Options",
+                    "slug": "nodes/ai/generative/video/options/ai-video-options-stablediffusion"
                   }
                 ]
               },
@@ -599,6 +611,10 @@ export const generatedNodeSidebar = [
                   {
                     "label": "fal Video Model",
                     "slug": "nodes/ai/generative/video/provider/ai-video-build-fal"
+                  },
+                  {
+                    "label": "stable-diffusion.cpp Video Model",
+                    "slug": "nodes/ai/generative/video/provider/ai-video-build-stablediffusion"
                   }
                 ]
               },
@@ -6537,6 +6553,14 @@ export const generatedNodeSidebar = [
         "slug": "nodes/structs/struct-break"
       },
       {
+        "label": "Cast to Schema",
+        "slug": "nodes/structs/struct-cast-to-schema"
+      },
+      {
+        "label": "Cast to Struct",
+        "slug": "nodes/structs/struct-cast-to-struct"
+      },
+      {
         "label": "Make Struct",
         "slug": "nodes/structs/struct-make"
       },
@@ -9305,6 +9329,172 @@ export const generatedNodeSidebar = [
           {
             "label": "Overview",
             "slug": "nodes/web/geo"
+          },
+          {
+            "label": "Geometry",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/web/geo/geometry"
+              },
+              {
+                "label": "Extract Legacy Location Point",
+                "slug": "nodes/web/geo/geometry/geometry-from-legacy-location"
+              },
+              {
+                "label": "Extract Legacy Route Geometry",
+                "slug": "nodes/web/geo/geometry/geometry-from-legacy-route"
+              },
+              {
+                "label": "Geometry Area (Square Degrees)",
+                "slug": "nodes/web/geo/geometry/geometry-planar-area"
+              },
+              {
+                "label": "Geometry Area (Square Meters)",
+                "slug": "nodes/web/geo/geometry/geometry-geodesic-area"
+              },
+              {
+                "label": "Geometry Bounds",
+                "slug": "nodes/web/geo/geometry/geometry-bounds"
+              },
+              {
+                "label": "Geometry Centroid (Planar)",
+                "slug": "nodes/web/geo/geometry/geometry-centroid"
+              },
+              {
+                "label": "Geometry Contains (Planar)",
+                "slug": "nodes/web/geo/geometry/geometry-contains"
+              },
+              {
+                "label": "Geometry Convex Hull (Planar)",
+                "slug": "nodes/web/geo/geometry/geometry-convex-hull"
+              },
+              {
+                "label": "Geometry Distance (Degrees)",
+                "slug": "nodes/web/geo/geometry/geometry-planar-distance"
+              },
+              {
+                "label": "Geometry Intersection (Planar)",
+                "slug": "nodes/web/geo/geometry/geometry-intersection"
+              },
+              {
+                "label": "Geometry Intersects (Planar)",
+                "slug": "nodes/web/geo/geometry/geometry-intersects"
+              },
+              {
+                "label": "Geometry Length (Degrees)",
+                "slug": "nodes/web/geo/geometry/geometry-planar-length"
+              },
+              {
+                "label": "Geometry Length (Meters)",
+                "slug": "nodes/web/geo/geometry/geometry-geodesic-length"
+              },
+              {
+                "label": "Geometry Position Count",
+                "slug": "nodes/web/geo/geometry/geometry-num-points"
+              },
+              {
+                "label": "Geometry Type",
+                "slug": "nodes/web/geo/geometry/geometry-type"
+              },
+              {
+                "label": "Geometry Within (Planar)",
+                "slug": "nodes/web/geo/geometry/geometry-within"
+              },
+              {
+                "label": "Geometry to GeoJSON",
+                "slug": "nodes/web/geo/geometry/geometry-to-geojson"
+              },
+              {
+                "label": "Geometry to WKB",
+                "slug": "nodes/web/geo/geometry/geometry-to-wkb"
+              },
+              {
+                "label": "Geometry to WKT",
+                "slug": "nodes/web/geo/geometry/geometry-to-wkt"
+              },
+              {
+                "label": "Legacy Boundary to Polygon",
+                "slug": "nodes/web/geo/geometry/geometry-from-legacy-boundary"
+              },
+              {
+                "label": "Legacy Coordinate to Point",
+                "slug": "nodes/web/geo/geometry/geometry-from-legacy-coordinate"
+              },
+              {
+                "label": "Legacy H3 Polygons to MultiPolygon",
+                "slug": "nodes/web/geo/geometry/geometry-from-legacy-polygons"
+              },
+              {
+                "label": "Make Point",
+                "slug": "nodes/web/geo/geometry/geometry-make-point"
+              },
+              {
+                "label": "Parse GeoJSON Geometry",
+                "slug": "nodes/web/geo/geometry/geometry-from-geojson"
+              },
+              {
+                "label": "Parse WGS 84 WKB",
+                "slug": "nodes/web/geo/geometry/geometry-from-wkb"
+              },
+              {
+                "label": "Parse WGS 84 WKT",
+                "slug": "nodes/web/geo/geometry/geometry-from-wkt"
+              },
+              {
+                "label": "Point Distance (Meters)",
+                "slug": "nodes/web/geo/geometry/geometry-geodesic-distance"
+              },
+              {
+                "label": "Point Latitude",
+                "slug": "nodes/web/geo/geometry/geometry-y"
+              },
+              {
+                "label": "Point Longitude",
+                "slug": "nodes/web/geo/geometry/geometry-x"
+              },
+              {
+                "label": "Point to Legacy Coordinate",
+                "slug": "nodes/web/geo/geometry/geometry-to-legacy-coordinate"
+              },
+              {
+                "label": "Simplify Geometry (Planar)",
+                "slug": "nodes/web/geo/geometry/geometry-simplify"
+              },
+              {
+                "label": "Update Legacy Route Geometry",
+                "slug": "nodes/web/geo/geometry/geometry-to-legacy-route"
+              },
+              {
+                "label": "Validate GeometryCollection",
+                "slug": "nodes/web/geo/geometry/geometry-cast-geometry-collection"
+              },
+              {
+                "label": "Validate LineString",
+                "slug": "nodes/web/geo/geometry/geometry-cast-line-string"
+              },
+              {
+                "label": "Validate MultiLineString",
+                "slug": "nodes/web/geo/geometry/geometry-cast-multi-line-string"
+              },
+              {
+                "label": "Validate MultiPoint",
+                "slug": "nodes/web/geo/geometry/geometry-cast-multi-point"
+              },
+              {
+                "label": "Validate MultiPolygon",
+                "slug": "nodes/web/geo/geometry/geometry-cast-multi-polygon"
+              },
+              {
+                "label": "Validate Point",
+                "slug": "nodes/web/geo/geometry/geometry-cast-point"
+              },
+              {
+                "label": "Validate Polygon",
+                "slug": "nodes/web/geo/geometry/geometry-cast-polygon"
+              }
+            ]
           },
           {
             "label": "H3",

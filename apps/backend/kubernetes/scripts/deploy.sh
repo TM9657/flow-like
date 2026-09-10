@@ -16,18 +16,19 @@ for argument in "$@"; do
       exit 1 ;;
   esac
 done
+# Generated image pins are applied after every operator file so they win.
 extra=()
 [[ ! -f "$IMAGE_VALUES" ]] || extra+=(-f "$IMAGE_VALUES")
 # Render first so missing secrets, digests and incompatible modes fail before writes.
-helm lint "$BACKEND_DIR/helm" -f "$VALUES" ${extra[@]+"${extra[@]}"} "$@"
+helm lint "$BACKEND_DIR/helm" -f "$VALUES" "$@" ${extra[@]+"${extra[@]}"}
 rendered=$(mktemp)
 trap 'rm -f "$rendered"' EXIT
-helm template "$RELEASE" "$BACKEND_DIR/helm" --namespace "$NAMESPACE" -f "$VALUES" ${extra[@]+"${extra[@]}"} "$@" > "$rendered"
+helm template "$RELEASE" "$BACKEND_DIR/helm" --namespace "$NAMESPACE" -f "$VALUES" "$@" ${extra[@]+"${extra[@]}"} > "$rendered"
 if grep -q '^kind: CiliumNetworkPolicy$' "$rendered"; then
   python3 "$SCRIPT_DIR/check-cilium.py"
 fi
 kubectl get namespace "$NAMESPACE" >/dev/null
 helm upgrade --install "$RELEASE" "$BACKEND_DIR/helm" \
-  --namespace "$NAMESPACE" --values "$VALUES" ${extra[@]+"${extra[@]}"} \
-  --wait --wait-for-jobs --timeout "${HELM_TIMEOUT:-20m}" "$@"
+  --namespace "$NAMESPACE" --values "$VALUES" "$@" ${extra[@]+"${extra[@]}"} \
+  --wait --wait-for-jobs --timeout "${HELM_TIMEOUT:-20m}"
 printf 'Deployment ready. Inspect with: kubectl get pods -n %s\n' "$NAMESPACE"

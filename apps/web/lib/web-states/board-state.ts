@@ -38,7 +38,11 @@ import type {
 	SurfaceComponent,
 } from "@flow-like/flow-like-ui/components/a2ui/types";
 import { apiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
-import type { BoardFormatCapabilities } from "@flow-like/flow-like-ui/lib/board-format";
+import {
+	BOARD_FORMAT_HEADER,
+	type BoardFormatCapabilities,
+	CURRENT_BOARD_FORMAT_VERSION,
+} from "@flow-like/flow-like-ui/lib/board-format";
 import {
 	BoardSyncClient,
 	type IBoardSyncRequest,
@@ -605,6 +609,7 @@ export class WebBoardState implements IBoardState {
 
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
+			[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
 		};
 		if (this.backend.auth?.user?.access_token) {
 			headers["Authorization"] =
@@ -634,7 +639,8 @@ export class WebBoardState implements IBoardState {
 			});
 
 			if (!response.ok) {
-				throw new Error(`Execution failed: ${response.status}`);
+				const body = await response.text().catch(() => "");
+				throw apiResponseError(response, body, url);
 			}
 
 			let foundRunId = false;
@@ -704,7 +710,8 @@ export class WebBoardState implements IBoardState {
 							// Forward event to callback as array (consistent with local execution)
 							if (cb) cb([event]);
 
-							// Check for terminal events
+							// Completion can share a network chunk with trailing output or usage.
+							// Keep delivering the rest of the decoded batch.
 							if (
 								eventName === "done" ||
 								eventName === "completed" ||
@@ -712,12 +719,9 @@ export class WebBoardState implements IBoardState {
 							) {
 								executionFinished = true;
 								finishAllProgressToasts(true);
-								break;
-							}
-							if (event.event_type === "error") {
+							} else if (event.event_type === "error") {
 								executionFinished = true;
 								finishAllProgressToasts(false);
-								break;
 							}
 						} catch {
 							// Ignore parse errors
@@ -802,8 +806,9 @@ export class WebBoardState implements IBoardState {
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		_options?: IBoardMutationOptions,
 	): Promise<void> {
-		await apiPost(
+		await apiPatch(
 			`apps/${appId}/board/${boardId}/undo`,
 			{ commands },
 			this.backend.auth,
@@ -814,8 +819,9 @@ export class WebBoardState implements IBoardState {
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		_options?: IBoardMutationOptions,
 	): Promise<void> {
-		await apiPost(
+		await apiPatch(
 			`apps/${appId}/board/${boardId}/redo`,
 			{ commands },
 			this.backend.auth,
@@ -1150,6 +1156,7 @@ export class WebBoardState implements IBoardState {
 
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
+			[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
 		};
 		if (onToken) {
 			headers.Accept = "text/event-stream";

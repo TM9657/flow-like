@@ -4,16 +4,23 @@ Sink Trigger Image Build Documentation
 The sink-trigger container is an ultra-lean binary (~500KB) designed to be run
 by Kubernetes CronJobs to trigger sink events via the central API.
 
+## Published Image
+
+Releases publish ghcr.io/rheosoph/flow-like-kubernetes-sink-trigger for AMD64
+and ARM64. The chart passes sinkServices.image to the API as SINK_TRIGGER_IMAGE
+and global.imagePullSecrets as SINK_IMAGE_PULL_SECRETS; scripts/resolve-images.py
+pins its digest together with the other images.
+
 ## Building the Image
 
-From the repository root:
+From the repository root (scripts/build-images.sh does this for COMPONENTS=sink-trigger):
 
     docker build -f apps/backend/kubernetes/sink-trigger/Dockerfile \
-        -t your-registry/sink-trigger:latest .
+        -t your-registry/flow-like-kubernetes-sink-trigger:local .
 
 ## Pushing to Registry
 
-    docker push your-registry/sink-trigger:latest
+    docker push your-registry/flow-like-kubernetes-sink-trigger:local
 
 ## Usage in CronJob
 
@@ -37,7 +44,7 @@ Example CronJob spec:
             spec:
               containers:
               - name: sink-trigger
-                image: your-registry/sink-trigger:latest
+                image: ghcr.io/rheosoph/flow-like-kubernetes-sink-trigger:dev
                 env:
                 - name: EVENT_ID
                   value: "your-event-id"

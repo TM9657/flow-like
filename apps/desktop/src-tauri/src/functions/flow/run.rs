@@ -717,6 +717,17 @@ async fn execute_prepared(
     };
 
     let app_handle_for_report = app_handle.clone();
+    crate::e2e_runtime::require_isolated_run(
+        &app,
+        &template.board,
+        event_id.as_deref(),
+        page_trigger.as_ref(),
+        credentials.is_some()
+            || token.is_some()
+            || oauth_tokens
+                .as_ref()
+                .is_some_and(|tokens| !tokens.is_empty()),
+    )?;
     let token_for_report = token.clone();
     let app_visibility_for_report = app.visibility.clone();
     let channel_dead = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -883,6 +894,13 @@ async fn execute_prepared(
         tokio::spawn(async move { internal_run.execute(flow_like_state_for_task).await });
 
     let abort_handle = handle.abort_handle();
+    let e2e_deadline = crate::e2e_runtime::isolated_runtime_active().then(|| {
+        let token = cancellation_token.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            token.cancel();
+        })
+    });
 
     let meta = tokio::select! {
         biased;
@@ -929,6 +947,11 @@ async fn execute_prepared(
             }
         }
     };
+
+    if let Some(deadline) = e2e_deadline {
+        deadline.abort();
+    }
+    crate::e2e_runtime::record_outcome(&*run_arc.lock().await);
 
     if let Err(err) = buffered_sender.flush().await {
         println!("Error flushing buffered sender: {}", err);

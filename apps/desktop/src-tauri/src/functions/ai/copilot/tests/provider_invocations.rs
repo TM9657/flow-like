@@ -468,6 +468,9 @@ fn external_agent_prompt_split_keeps_the_full_wrap_byte_identical() {
     );
     assert!(appendix.contains("BOARD specialist"));
     assert!(appendix.contains("WORKFLOW MUTATION RUN"));
+    assert!(appendix.contains("test_flowscript"));
+    assert!(appendix.contains("expected_output derived from the request"));
+    assert!(appendix.contains("A blocked test remains unverified"));
 }
 
 #[test]
@@ -487,6 +490,7 @@ fn claude_invocation_uses_shared_mcp_config() {
             "write_flowscript".to_string(),
             "patch_flowscript".to_string(),
             "check_flowscript".to_string(),
+            "test_flowscript".to_string(),
             "commit_flowscript".to_string(),
         ],
         &[],
@@ -522,6 +526,7 @@ fn claude_invocation_uses_shared_mcp_config() {
                 && arg.contains("mcp__flowpilot__write_flowscript")
                 && arg.contains("mcp__flowpilot__patch_flowscript")
                 && arg.contains("mcp__flowpilot__check_flowscript")
+                && arg.contains("mcp__flowpilot__test_flowscript")
                 && arg.contains("mcp__flowpilot__commit_flowscript")),
         "claude invocation should allow only shared FlowPilot MCP tools: {:?}",
         invocation.args

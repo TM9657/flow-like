@@ -6,7 +6,7 @@ sidebar:
 ---
 
 The default Compose deployment requires a Linux Docker daemon with gVisor.
-Prepare that execution host before generating configuration or building images.
+Prepare that execution host before generating configuration or pulling images.
 A client workstation may connect to a suitable remote daemon, but ordinary
 Docker Desktop containers do not satisfy the required execution runtime setup.
 
@@ -92,8 +92,8 @@ Select smaller counts before installation when the host cannot support those
 limits. See [Scaling](/self-hosting/docker-compose/scaling/) for the capacity
 calculation.
 
-The host needs registry/package access for builds and access to your identity
-provider. Workflows can reach only the destinations permitted by the execution
+The host needs access to `ghcr.io` for image pulls, package access for local
+builds, and access to your identity provider. Workflows can reach only the destinations permitted by the execution
 gateway. Plan explicit HTTPS integration grants; raw TCP/UDP clients cannot use
 the default sandbox network.
 

@@ -3,6 +3,14 @@
 mod data;
 mod examples;
 mod guidance;
+mod profile;
+
+#[cfg(test)]
+pub(crate) use profile::FOCUSED_CORE_EXAMPLES;
+pub use profile::{
+    BoardPromptEligibility, BoardPromptMode, BoardPromptProfile,
+    select_ordinary_board_prompt_profile,
+};
 
 pub use data::{A2UI_STATE_GUIDANCE, DASHBOARD_A2UI_GUIDANCE, DATABASE_WORKFLOW_GUIDANCE};
 pub use examples::{FLOWSCRIPT_DOMAIN_EXAMPLES, FLOWSCRIPT_FEW_SHOT_EXAMPLES};
@@ -26,6 +34,71 @@ pub fn board_system_prompt(
     has_templates: bool,
     has_run_context: bool,
 ) -> String {
+    board_system_prompt_with_mode(
+        context_json,
+        flowscript,
+        node_count,
+        has_templates,
+        has_run_context,
+        BoardPromptMode::General,
+    )
+}
+
+/// The direct agent retains full Legacy guidance; only its host-authorized tool advice changes.
+pub fn board_system_prompt_with_mode(
+    context_json: &str,
+    flowscript: &str,
+    node_count: usize,
+    has_templates: bool,
+    has_run_context: bool,
+    mode: BoardPromptMode,
+) -> String {
+    if mode == BoardPromptMode::Authoring {
+        let mut extra_tools = vec![("think", "reason through the workflow")];
+        if has_templates {
+            extra_tools.push((
+                "search_templates",
+                "search workflow implementation examples",
+            ));
+        }
+        if has_run_context {
+            extra_tools.push((
+                "query_logs",
+                "read the attached run's existing execution logs",
+            ));
+        }
+        // The shared Legacy section projects only static guidance. Insert both source and
+        // graph context literally, after those decisions, without any text replacement.
+        return format!(
+            r#"{board_prompt}
+
+## Graph Context
+This compact layout map contains node ids, positions (`p`), sizes (`s`), containing layers (`l`),
+`layers`, and `selected_nodes`. Every executable node, pin, default and edge fact lives in the
+FlowScript above. Use the layout map as context; this authoring session does not edit canvas layout.
+{context_json}
+
+## Layer Context
+The layer entries describe their ids, names, types, parents, node membership and optional function
+cache settings. Author function layers and cache settings through FlowScript `function` declarations
+and `@cache`. Preserve kept anchors and unrelated board content.
+
+## Additional Direct-Agent Tools
+{extra_tools}
+
+## Node References
+Reference nodes in explanations with <focus_node>NODE_ID</focus_node> to highlight them in the UI.
+Node ids are cuid2 identifiers. Copy their exact values from the current source and graph context."#,
+            board_prompt = board_sdk_flowscript_system_prompt_with_options(
+                flowscript,
+                node_count,
+                "",
+                BoardPromptProfile::Legacy,
+                mode,
+            ),
+            extra_tools = authoring_tool_descriptions(&extra_tools),
+        );
+    }
     let templates_tool = if has_templates {
         "\n- **search_templates**: Search workflow templates for implementation examples"
     } else {
@@ -91,8 +164,9 @@ For every NEW or EXISTING executable workflow, author the result as FlowScript:
    `write_flowscript` with the same draft id and `replace_existing: true`; scope-regressing rewrites
    are rejected unless the user explicitly asked to remove behavior.
 6. Every write/patch result already carries the full structured diagnostics for that revision. If the
-   latest write/patch returned ZERO diagnostics, commit directly at that exact revision — no separate
-   check round is needed, because commit runs the identical evaluation inline and, on failure, queues
+   latest write/patch returned ZERO diagnostics, no separate structural check round is needed.
+   Use `test_flowscript` for an eligible deterministic transformation before commit, repairing and
+   retesting mismatches. Commit runs the identical structural evaluation inline and, on failure, queues
    nothing and returns the same structured `validation_errors` to repair. Call `check_flowscript`
    (exact current revision; it parses FlowScript into the compiler's internal typed AST, reconciles
    it against the exact catalog, and retains the resulting command batch) only as the growth gate
@@ -196,7 +270,7 @@ already-persisted board. They are not part of the current board build loop and m
 merely queued draft.
 **Build or modify FlowScript**: get_current_flowscript (retrieve exact live board code),
 write_flowscript (retain/preview full source), patch_flowscript (focused exact-text repair),
-check_flowscript (compile and validate), commit_flowscript (queue the checked batch),
+check_flowscript (compile and validate), test_flowscript (isolated draft input/output check), commit_flowscript (queue the checked batch),
 emit_commands (position-only MoveNode and canvas comments only)
 
 ## Key Rules
@@ -321,6 +395,36 @@ resend it; if the error says FlowScript is required, switch to the retained sour
 /// source through the FlowScript lifecycle; `emit_commands` stays available for canvas positioning
 /// plus canvas comments.
 pub fn board_sdk_flowscript_system_prompt(flowscript: &str, node_count: usize) -> String {
+    board_sdk_flowscript_system_prompt_with_profile(
+        flowscript,
+        node_count,
+        "",
+        BoardPromptProfile::Legacy,
+    )
+}
+
+pub fn board_sdk_flowscript_system_prompt_with_profile(
+    flowscript: &str,
+    node_count: usize,
+    request: &str,
+    profile: BoardPromptProfile,
+) -> String {
+    board_sdk_flowscript_system_prompt_with_options(
+        flowscript,
+        node_count,
+        request,
+        profile,
+        BoardPromptMode::General,
+    )
+}
+
+pub fn board_sdk_flowscript_system_prompt_with_options(
+    flowscript: &str,
+    node_count: usize,
+    request: &str,
+    profile: BoardPromptProfile,
+    mode: BoardPromptMode,
+) -> String {
     format!(
         r#"{enforcement}
 You are FlowPilot, an expert workflow/graph editor assistant.
@@ -330,7 +434,8 @@ You are FlowPilot, an expert workflow/graph editor assistant.
 {context}"#,
         enforcement = TOOL_ENFORCEMENT_RULES,
         specialist_boundary = BOARD_SPECIALIST_BOUNDARY,
-        context = flowscript_board_context(flowscript, node_count),
+        context =
+            flowscript_board_context_with_options(flowscript, node_count, request, profile, mode),
     )
 }
 
@@ -339,6 +444,34 @@ You are FlowPilot, an expert workflow/graph editor assistant.
 /// lifecycle tools) plus the `emit_commands` fallback. Shared by the board-only and unified
 /// (`Both`) prompts so board-bearing sessions always see the live graph and the right tools.
 pub fn flowscript_board_context(flowscript: &str, node_count: usize) -> String {
+    flowscript_board_context_with_profile(flowscript, node_count, "", BoardPromptProfile::Legacy)
+}
+
+pub fn flowscript_board_context_with_profile(
+    flowscript: &str,
+    node_count: usize,
+    request: &str,
+    profile: BoardPromptProfile,
+) -> String {
+    flowscript_board_context_with_options(
+        flowscript,
+        node_count,
+        request,
+        profile,
+        BoardPromptMode::General,
+    )
+}
+
+pub fn flowscript_board_context_with_options(
+    flowscript: &str,
+    node_count: usize,
+    request: &str,
+    profile: BoardPromptProfile,
+    mode: BoardPromptMode,
+) -> String {
+    let domains = profile::PromptDomains::infer(request, flowscript);
+    let legacy = profile == BoardPromptProfile::Legacy;
+    let authoring = mode == BoardPromptMode::Authoring;
     format!(
         r#"## PRIMARY SURFACE: FlowScript
 The current board is rendered below as **FlowScript** — a TypeScript-flavoured text view of the
@@ -384,14 +517,15 @@ node carries a `//@n:<id>` anchor comment tying it to that node's stable identit
      layer with boundary pins from the signature and places the body nodes inside it.
    - Put new catalog calls inside a function/event block. Top-level `const name: Type = literal`
      declares state/defaults only; it cannot call nodes and is not enough to create a workflow.
-   - Do not use `emit_commands` for workflow functions; use FlowScript functions.
+   {function_authoring_rule}
    - Never submit implementation plans, TODOs, function stubs, or comments-only FlowScript. Use
      exact declarations and concrete node calls.
 5. Fix focused diagnostics with `patch_flowscript`; its `old_text` must occur exactly once. A
    coherent whole-document rewrite may use `write_flowscript` with `replace_existing: true`.
 6. Every write/patch result already carries the full structured diagnostics for that revision. If the
-   latest write/patch returned ZERO diagnostics, commit directly at that exact revision — no separate
-   check round is needed, because commit runs the identical evaluation inline and, on failure, queues
+   latest write/patch returned ZERO diagnostics, no separate structural check round is needed.
+   Use `test_flowscript` for an eligible deterministic transformation before commit, repairing and
+   retesting mismatches. Commit runs the identical structural evaluation inline and, on failure, queues
    nothing and returns the same structured `validation_errors` to repair. Call `check_flowscript`
    (exact current revision; it parses the source into an internal typed AST, reconciles exact
    catalog/pin/execution semantics, and retains the derived commands) only as the growth gate under
@@ -411,15 +545,7 @@ node carries a `//@n:<id>` anchor comment tying it to that node's stable identit
 11. On `FLOWSCRIPT_BASE_REVISION_CONFLICT` the retained draft is permanently dead: start a fresh
    `draft_id` from the CURRENT board source instead of retrying the old draft.
 
-## WHEN TO USE emit_commands INSTEAD
-Use the lower-level `emit_commands` tool ONLY for what FlowScript text cannot express:
-- Position-only node movement on the canvas (MoveNode) — it cannot change layer membership.
-- CreateComment/DeleteComment canvas notes.
-It rejects executable nodes, placeholders, connections, pin values, variables, function layers,
-function references, layer creation/removal, and layer-membership changes. Author every executable change in FlowScript; use
-`function ... {{ ... }}` for function layers.
-`emit_commands` validates before queueing; if it reports errors, nothing was queued — fix and
-resend.
+{visual_guidance}
 
 {autonomy_guidance}
 
@@ -452,14 +578,10 @@ resend.
 {flowscript_examples}
 
 ## Board Tools
-**Understanding**: get_node_details (full info about a node), list_board_nodes (summarize graph),
-get_unconfigured_nodes (nodes missing required inputs)
-**Catalog** ({node_count} nodes): catalog_search (by name/description), get_declarations
-(FlowScript .flow.d signatures)
+{inspection_and_catalog_tools}
 **Read-only cross-domain context**: database_tool (list_tables/describe_table/read-only query only),
 storage_tool (list/read only), ui_inspect
-(read-only pages/widgets/element refs — call before any a2ui* call), query_execution_logs (read logs
-for an exact persisted run). Never use database_tool or storage_tool mutation operations from this
+(read-only pages/widgets/element refs — call before any a2ui* call){persisted_logs_tool}. Never use database_tool or storage_tool mutation operations from this
 board specialist — including `delete_table`, which permanently drops a table and its schema.
 **Post-apply runtime verification**: execute_event, execute_node, run_board_tests (run every
 `test*` event and return per-test assertion verdicts), interact_app_page (drive a live
@@ -467,35 +589,165 @@ rendered page: set inputs, trigger buttons, observe runs + screenshots) and call
 real message to the app's chat Event) are only for a separate later verification request against an
 already-persisted board. They are not part of the current board build loop and must never run a
 merely queued draft.
-**Build or modify FlowScript**: get_current_flowscript (retrieve exact live board code),
-write_flowscript (retain/preview full source), patch_flowscript (focused exact-text repair),
-check_flowscript (compile/validate), commit_flowscript (queue the checked batch), emit_commands
-(position-only MoveNode and canvas comments only; validates internally)
+{authoring_tools}
 
 ## Board Rules
 1. Reference nodes in explanations with <focus_node>NODE_ID</focus_node> to highlight them.
-2. Never guess node names or pin names — use get_declarations / get_node_details first.
+2. {declarations_rule}
 3. Connect compatible types only; execution flow follows exact exec pins and multi-output nodes
    require explicit normal/success/error semantics.
 4. After a successful queue, do NOT resubmit the same edit.
 5. If validation returns issues, treat the draft as failed, fix the reported problems, and resend."#,
         flowscript = flowscript,
-        node_count = node_count,
-        database_guidance = DATABASE_WORKFLOW_GUIDANCE,
-        a2ui_guidance = A2UI_STATE_GUIDANCE,
-        dashboard_guidance = DASHBOARD_A2UI_GUIDANCE,
-        execution_guidance = EXECUTION_FLOW_GUIDANCE,
+        function_authoring_rule = if authoring {
+            "- Author workflow functions with FlowScript function declarations."
+        } else {
+            "- Do not use `emit_commands` for workflow functions; use FlowScript functions."
+        },
+        visual_guidance = if authoring {
+            "## AUTHORING SURFACE\nThis session edits executable workflow behavior through the retained FlowScript lifecycle.\nCanvas positioning and canvas comments require a separate visual-edit session."
+        } else {
+            LEGACY_VISUAL_GUIDANCE
+        },
+        inspection_and_catalog_tools = if authoring {
+            format!(
+                "**Catalog** ({node_count} nodes): {}",
+                authoring_tool_descriptions(&[(
+                    "get_declarations",
+                    "FlowScript .flow.d signatures"
+                )])
+            )
+        } else {
+            format!(
+                "**Understanding**: get_node_details (full info about a node), list_board_nodes (summarize graph),\nget_unconfigured_nodes (nodes missing required inputs)\n**Catalog** ({node_count} nodes): catalog_search (by name/description), get_declarations\n(FlowScript .flow.d signatures)"
+            )
+        },
+        authoring_tools = if authoring {
+            format!(
+                "**Build or modify FlowScript**: {}",
+                authoring_tool_descriptions(&[
+                    (
+                        "get_current_flowscript",
+                        "re-read after a host-applied segment"
+                    ),
+                    (
+                        "plan_board_scope",
+                        "retain the whole requested scope and active segment"
+                    ),
+                    ("write_flowscript", "retain/preview full source"),
+                    ("patch_flowscript", "focused exact-text repair"),
+                    ("check_flowscript", "compile/validate"),
+                    ("test_flowscript", "isolated draft input/output check"),
+                    ("commit_flowscript", "queue the checked batch"),
+                ])
+            )
+        } else {
+            LEGACY_AUTHORING_TOOLS.to_string()
+        },
+        persisted_logs_tool = if authoring {
+            ""
+        } else {
+            ", query_execution_logs (read logs\nfor an exact persisted run)"
+        },
+        declarations_rule = if authoring {
+            "Never guess node names or pin names; use get_declarations first."
+        } else {
+            "Never guess node names or pin names — use get_declarations / get_node_details first."
+        },
+        database_guidance = project_trusted_guidance(
+            if legacy || domains.database {
+                DATABASE_WORKFLOW_GUIDANCE
+            } else {
+                ""
+            },
+            mode
+        ),
+        a2ui_guidance = if legacy || domains.ui {
+            A2UI_STATE_GUIDANCE
+        } else {
+            ""
+        },
+        dashboard_guidance = if legacy || domains.ui {
+            DASHBOARD_A2UI_GUIDANCE
+        } else {
+            ""
+        },
+        execution_guidance = project_trusted_guidance(EXECUTION_FLOW_GUIDANCE, mode),
         numbers_guidance = NUMBERS_CONVERSIONS_GUIDANCE,
         dynamic_pin_guidance = DYNAMIC_PIN_GUIDANCE,
-        flowpath_guidance = FLOW_PATH_ACCESSOR_GUIDANCE,
+        flowpath_guidance = if legacy || domains.files {
+            FLOW_PATH_ACCESSOR_GUIDANCE
+        } else {
+            ""
+        },
         organization_guidance = BOARD_ORGANIZATION_GUIDANCE,
         testing_guidance = TESTING_GUIDANCE,
         function_cache_guidance = FUNCTION_CACHE_GUIDANCE,
-        explanation_guidance = EXPLANATION_WORKFLOW_GUIDANCE,
+        explanation_guidance = if authoring {
+            ""
+        } else {
+            EXPLANATION_WORKFLOW_GUIDANCE
+        },
         autonomy_guidance = AUTONOMY_PLACEHOLDER_GUIDANCE,
         segmentation_guidance = SCOPE_SEGMENTATION_GUIDANCE,
         unbuildable_guidance = UNBUILDABLE_UNIT_GUIDANCE,
         event_guidance = EVENT_ENTRY_GUIDANCE,
-        flowscript_examples = [FLOWSCRIPT_FEW_SHOT_EXAMPLES, FLOWSCRIPT_DOMAIN_EXAMPLES].concat(),
+        flowscript_examples = project_trusted_guidance(
+            &if legacy {
+                [FLOWSCRIPT_FEW_SHOT_EXAMPLES, FLOWSCRIPT_DOMAIN_EXAMPLES].concat()
+            } else {
+                profile::focused_examples(domains)
+            },
+            mode
+        ),
     )
+}
+
+const LEGACY_VISUAL_GUIDANCE: &str = r#"## WHEN TO USE emit_commands INSTEAD
+Use the lower-level `emit_commands` tool ONLY for what FlowScript text cannot express:
+- Position-only node movement on the canvas (MoveNode) — it cannot change layer membership.
+- CreateComment/DeleteComment canvas notes.
+It rejects executable nodes, placeholders, connections, pin values, variables, function layers,
+function references, layer creation/removal, and layer-membership changes. Author every executable change in FlowScript; use
+`function ... { ... }` for function layers.
+`emit_commands` validates before queueing; if it reports errors, nothing was queued — fix and
+resend."#;
+
+const LEGACY_AUTHORING_TOOLS: &str = r#"**Build or modify FlowScript**: get_current_flowscript (retrieve exact live board code),
+write_flowscript (retain/preview full source), patch_flowscript (focused exact-text repair),
+check_flowscript (compile/validate), test_flowscript (isolated draft input/output check), commit_flowscript (queue the checked batch), emit_commands
+(position-only MoveNode and canvas comments only; validates internally)"#;
+
+fn authoring_tool_descriptions(tools: &[(&str, &str)]) -> String {
+    tools
+        .iter()
+        .filter(|(name, _)| crate::flow::copilot::workflow_authoring_tool_allowed(name))
+        .map(|(name, description)| format!("{name} ({description})"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Projects only repository-owned guidance. Board source and user text never pass through here.
+fn project_trusted_guidance(guidance: &str, mode: BoardPromptMode) -> String {
+    let mut result = guidance.to_string();
+    if mode != BoardPromptMode::Authoring {
+        return result;
+    }
+    if !crate::flow::copilot::workflow_authoring_tool_allowed("emit_commands") {
+        result = result.replace(
+            "one long event block. You do NOT need `emit_commands` to create function layers; write the\n  `function` in FlowScript. Reserve `emit_commands` for position-only node moves and canvas\n  comments; placeholders and all layer mutations are not accepted.",
+            "one long event block. Author each function layer with a FlowScript `function` declaration.",
+        );
+        result = result.replace(
+            "blocks for explicit wiring; model-facing `emit_commands` cannot connect executable pins.",
+            "blocks for explicit wiring.",
+        );
+    }
+    if !crate::flow::copilot::workflow_authoring_tool_allowed("catalog_search") {
+        result = result.replace(
+            "gap; use `catalog_search` only for read-only exploration, not to postpone the first write.",
+            "gap. Use the diagnostic's exact missing declaration for any follow-up lookup.",
+        );
+    }
+    result
 }

@@ -269,7 +269,7 @@ function FlowPinInnerComponent({
 				boardId,
 				command,
 			);
-			await pushCommand(result, false);
+			await pushCommand(result);
 			await refetchBoard();
 		},
 		[pin.id, refetchBoard, boardId, pushCommand, getNode, node, pin, version],

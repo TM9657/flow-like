@@ -151,6 +151,7 @@ impl Modify for SecurityAddon {
         crate::routes::user::lookup::user_lookup,
         crate::routes::user::lookup::user_batch_lookup,
         crate::routes::user::lookup::user_search,
+        crate::routes::user::contacts::user_contacts,
         crate::routes::user::billing::get_billing_session,
         crate::routes::user::notifications::get_notifications,
         crate::routes::user::notifications::list_notifications,
@@ -945,6 +946,7 @@ impl Modify for SecurityAddon {
         // University
         crate::routes::user::lookup::UserLookupResponse,
         crate::routes::user::lookup::UserBatchLookupBody,
+        crate::routes::user::contacts::UserContactsResponse,
         crate::routes::course::courses::CourseListItem,
         crate::routes::course::courses::CourseUpsertBody,
         crate::routes::course::courses::CourseDetail,

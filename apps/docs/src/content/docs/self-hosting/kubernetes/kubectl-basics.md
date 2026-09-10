@@ -143,7 +143,7 @@ kubectl logs <pod-name> -n flow-like --previous --tail=200
 | Status | First checks |
 |---|---|
 | `Pending` | Scheduling events, resource requests, PVC binding, node selectors |
-| `ImagePullBackOff` | Image name/tag, pull policy, registry credentials |
+| `ImagePullBackOff` | Image name/tag or digest, pull policy, `global.imagePullSecrets` for forks and mirrors |
 | `CrashLoopBackOff` | Current and previous logs, environment references, probes |
 | `Running` but not ready | Readiness probe, dependencies, Service endpoints |
 
@@ -227,7 +227,7 @@ as installation:
 
 ```bash
 cd apps/backend/kubernetes
-./scripts/deploy.sh -f values-operator.yaml -f .generated/values-images.yaml
+./scripts/deploy.sh -f values-operator.yaml
 ```
 
 The helper checks rendered values and Cilium prerequisites before updating the

@@ -259,6 +259,14 @@ pub(super) fn workflow_tool_record_with_outcome(
         }
         return;
     }
+    if tool_name == "test_flowscript" {
+        // The shared session above owns revision-bound runtime evidence. This legacy field
+        // only releases dispatch serialization; compiler status and diagnostics stay intact.
+        if let Ok(mut state) = state.lock() {
+            state.edit_in_flight = false;
+        }
+        return;
+    }
     if is_flowscript_draft_operation_tool(tool_name) {
         let parsed = serde_json::from_str::<serde_json::Value>(result_text).ok();
         let Ok(mut state) = state.lock() else {
@@ -662,6 +670,12 @@ pub(super) fn workflow_tool_abort(
                 state.initial_declaration_attempts =
                     state.initial_declaration_attempts.saturating_sub(1);
             }
+        }
+        return;
+    }
+    if tool_name == "test_flowscript" {
+        if let Ok(mut state) = state.lock() {
+            state.edit_in_flight = false;
         }
         return;
     }

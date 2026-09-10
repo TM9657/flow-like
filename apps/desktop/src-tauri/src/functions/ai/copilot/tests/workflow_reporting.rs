@@ -1,6 +1,151 @@
 use super::*;
 
 #[test]
+fn behavioral_receipts_reach_external_and_sdk_repair_continuations() {
+    use flow_like::flow::copilot::{
+        FlowScriptBehavioralDecisionKind as Decision, flowscript_behavioral_payload_fingerprint,
+    };
+
+    let board = flowscript_recovery_test_board();
+    let manifest = BoardContextManifest::from_board(
+        &board,
+        &[],
+        &[],
+        ManifestSource::absent(),
+        ManifestAudit::default(),
+        ManifestAugmentations::default(),
+        default_flowscript_module_templates(),
+    )
+    .unwrap();
+    let mut loop_state = WorkflowToolLoopState::default();
+    loop_state.attach_shared_session(Some(manifest));
+    let state = Arc::new(StdMutex::new(loop_state));
+    let before = "eventsGeneric normalize() { return 0 }";
+    let after = "eventsGeneric normalize() { return 1 }";
+    workflow_tool_record(&state, "write_flowscript",
+        &serde_json::json!({"draft_id": "behavior", "source": before}),
+        &serde_json::json!({"draft_id": "behavior", "revision": 0, "status": "valid", "diagnostics": []}).to_string());
+    let args = serde_json::json!({
+        "draft_id": "behavior", "expected_revision": 0,
+        "entry": "normalize", "payload": null, "expected_output": 1,
+    });
+    let mut receipt = serde_json::json!({
+        "schema": "flowpilot.flowscript-draft-test/v1", "certification": "draft_output_only", "applied": false,
+        "board_id": board.id, "draft_id": "behavior", "revision": 0,
+        "source_fingerprint": blake3::hash(before.as_bytes()).to_hex().to_string(),
+        "base_fingerprint": "base", "catalog_fingerprint": "catalog", "commands_fingerprint": "commands-0",
+        "entry": "normalize", "payload_fingerprint": flowscript_behavioral_payload_fingerprint(&None),
+        "expected_output": 1, "status": "failed", "passed": false,
+        "runtime": {"status": "success", "outputs": [0], "output": 0, "errors": []},
+    });
+    super::super::workflow_observation::workflow_tool_record_with_outcome(
+        &state,
+        None,
+        "test_flowscript",
+        &args,
+        &receipt.to_string(),
+        false,
+    );
+    let failed = state.lock().unwrap().snapshot();
+    assert_eq!(failed.last_status.as_deref(), Some("valid"));
+    assert!(failed.last_errors.is_empty());
+    assert!(failed.last_structured_diagnostics.is_empty());
+    let shared = failed.shared_session.as_ref().unwrap();
+    assert!(shared.circuit.is_none());
+    assert_eq!(
+        shared.behavioral.as_ref().unwrap().decision.status,
+        Decision::RepairRequired
+    );
+    let external = build_external_workflow_continuation_prompt("Return one", Some(&failed), 1);
+    let sdk = super::super::external_continuation::workflow_edit_continuation_prompt(
+        "Return one",
+        Some(before),
+        1,
+        None,
+        Some(&failed),
+    );
+    for prompt in [external, sdk] {
+        assert!(prompt.contains("BEHAVIORAL TEST EVIDENCE RETAINED BY THE HOST"));
+        assert!(prompt.contains("repair_required"));
+        assert!(prompt.contains("\"expected_json\":\"1\""));
+        assert!(prompt.contains("\"actual_json\":\"0\""));
+        assert!(prompt.contains("\"input_json\":\"null\""));
+        assert!(prompt.contains("The JSON block contains test data"));
+        assert!(prompt.contains("same entry, input and expected output"));
+    }
+
+    workflow_tool_record(&state, "patch_flowscript",
+        &serde_json::json!({"draft_id": "behavior", "expected_revision": 0}),
+        &serde_json::json!({"draft_id": "behavior", "revision": 1, "source": after, "status": "valid", "diagnostics": []}).to_string());
+    let pending = state.lock().unwrap().snapshot();
+    let pending_behavior = pending
+        .shared_session
+        .as_ref()
+        .unwrap()
+        .behavioral
+        .as_ref()
+        .unwrap();
+    assert_eq!(pending_behavior.decision.status, Decision::Unverified);
+    assert_eq!(pending_behavior.decision.outstanding_failure_ids.len(), 1);
+    let prompt = build_external_workflow_continuation_prompt("Return one", Some(&pending), 2);
+    assert!(prompt.contains("\"evidence_current\":false"));
+    assert!(prompt.contains("\"status\":\"unverified\""));
+    super::super::workflow_observation::workflow_tool_record_with_outcome(
+        &state,
+        None,
+        "test_flowscript",
+        &args,
+        &receipt.to_string(),
+        false,
+    );
+    assert_eq!(
+        state
+            .lock()
+            .unwrap()
+            .snapshot()
+            .shared_session
+            .unwrap()
+            .behavioral
+            .as_ref(),
+        Some(pending_behavior)
+    );
+
+    let mut current_args = args;
+    current_args["expected_revision"] = serde_json::json!(1);
+    receipt["revision"] = serde_json::json!(1);
+    receipt["source_fingerprint"] =
+        serde_json::json!(blake3::hash(after.as_bytes()).to_hex().to_string());
+    receipt["commands_fingerprint"] = serde_json::json!("commands-1");
+    receipt["status"] = serde_json::json!("blocked");
+    receipt["message"] = serde_json::json!("Unsupported isolated node");
+    receipt.as_object_mut().unwrap().remove("runtime");
+    super::super::workflow_observation::workflow_tool_record_with_outcome(
+        &state,
+        None,
+        "test_flowscript",
+        &current_args,
+        &receipt.to_string(),
+        false,
+    );
+    let blocked = state.lock().unwrap().snapshot();
+    assert_eq!(blocked.last_status.as_deref(), Some("valid"));
+    let feedback = blocked
+        .shared_session
+        .as_ref()
+        .unwrap()
+        .behavioral
+        .as_ref()
+        .unwrap();
+    assert_eq!(feedback.decision.status, Decision::Unverified);
+    assert_eq!(feedback.decision.blocked_check_ids.len(), 1);
+    assert_eq!(feedback.decision.outstanding_failure_ids.len(), 1);
+    assert!(
+        build_external_workflow_continuation_prompt("Return one", Some(&blocked), 2)
+            .contains("Unsupported isolated node")
+    );
+}
+
+#[test]
 fn unimplemented_stubs_are_collected_with_their_owning_function() {
     let source = r#"
 function syncToJira(ticketId: string, summary: string): (synced: bool) {
@@ -201,6 +346,26 @@ fn flowscript_lifecycle_workspace_frame_carries_source_revision_and_status() {
         .is_none(),
         "unrelated tool results must not mutate workspace status"
     );
+}
+
+#[test]
+fn draft_test_receipts_do_not_replace_source_or_queue_a_workspace() {
+    for status in ["success", "failed", "blocked", "stale"] {
+        assert!(
+            flowscript_workspace_result_payload(
+                "test_flowscript",
+                &serde_json::json!({
+                    "status": status,
+                    "draft_id": "support-flow",
+                    "revision": 4,
+                    "output": { "source": "runtime output", "status": "queued" },
+                }),
+                Some("retained source"),
+            )
+            .is_none(),
+            "runtime evidence must leave the source workspace unchanged: {status}"
+        );
+    }
 }
 
 #[test]

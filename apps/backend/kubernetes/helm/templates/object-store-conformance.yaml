@@ -26,7 +26,7 @@ spec:
       {{- end }}
       containers:
         - name: conformance
-          image: "{{ .Values.global.imageRegistry }}{{ .Values.rustfs.bootstrap.image.repository }}:{{ .Values.rustfs.bootstrap.image.tag }}"
+          image: {{ include "flow-like.image" (dict "image" .Values.rustfs.bootstrap.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.rustfs.bootstrap.image.pullPolicy }}
           command: [python, /opt/object-store/conformance.py]
           envFrom:

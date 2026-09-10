@@ -724,6 +724,7 @@ impl ExecutionContext {
     /// Resolve only the runtime fields needed to read a variable value.
     ///
     /// This avoids cloning the variable's descriptive metadata on hot read paths.
+    /// The boolean marks values that must be omitted from diagnostic logs.
     pub async fn get_variable_value_ref(
         &self,
         variable_id: &str,
@@ -731,7 +732,10 @@ impl ExecutionContext {
         if let Some(local) = &self.local_variables {
             let local = local.lock().await;
             if let Some(variable) = local.get(variable_id) {
-                return Ok((variable.value.clone(), variable.secret));
+                return Ok((
+                    variable.value.clone(),
+                    variable.secret || variable.runtime_configured,
+                ));
             }
         }
 
@@ -739,7 +743,10 @@ impl ExecutionContext {
         let variable = variables
             .get(variable_id)
             .ok_or_else(|| flow_like_types::anyhow!("Variable not found"))?;
-        Ok((variable.value.clone(), variable.secret))
+        Ok((
+            variable.value.clone(),
+            variable.secret || variable.runtime_configured,
+        ))
     }
 
     pub async fn get_payload(&self) -> flow_like_types::Result<Arc<RunPayload>> {

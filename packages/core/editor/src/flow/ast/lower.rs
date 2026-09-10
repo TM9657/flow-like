@@ -771,7 +771,7 @@ fn expr_node_anchors<'b>(expr: &'b Expr, out: &mut Vec<&'b str>) {
 /// reference arguments.
 fn collect_referenced_function_names(body: &Block, out: &mut HashSet<String>) {
     let mut calls = Vec::new();
-    collect_calls_in_block_with(body, &mut calls, true);
+    collect_calls_in_block_with(body, &mut calls, true, false);
     for call in calls {
         // A cross-module call is spelled with a module path, so `path.is_empty()` alone no longer
         // recognizes every function call — the node type does.
@@ -3920,10 +3920,11 @@ fn ref_name_of_arg(args: &[Arg], pin: &str) -> Option<String> {
 /// Nested handlers intentionally are not traversed: they are independent scopes and own their
 /// registrations themselves.
 fn collect_calls_in_block<'a>(block: &'a Block, calls: &mut Vec<&'a Call>) {
-    collect_calls_in_block_with(block, calls, false);
+    collect_calls_in_block_with(block, calls, false, false);
 }
 
-/// Every call in the document, nested handlers, function bodies and module blocks included.
+/// Every rendered call in the document, including handlers, functions and modules. Calls hidden
+/// by statement syntax cannot use a namespace import.
 fn collect_calls_in_ast(ast: &BoardAst) -> Vec<&Call> {
     fn sections<'a>(
         functions: &'a [FnDecl],
@@ -3933,13 +3934,13 @@ fn collect_calls_in_ast(ast: &BoardAst) -> Vec<&Call> {
         calls: &mut Vec<&'a Call>,
     ) {
         for function in functions {
-            collect_calls_in_block_with(&function.body, calls, true);
+            collect_calls_in_block_with(&function.body, calls, true, true);
         }
         for event in events {
-            collect_calls_in_block_with(&event.body, calls, true);
+            collect_calls_in_block_with(&event.body, calls, true, true);
         }
         for block in detached {
-            collect_calls_in_block_with(block, calls, true);
+            collect_calls_in_block_with(block, calls, true, true);
         }
         for module in modules {
             sections(
@@ -3972,6 +3973,7 @@ fn collect_calls_in_block_with<'a>(
     block: &'a Block,
     calls: &mut Vec<&'a Call>,
     include_handlers: bool,
+    rendered_only: bool,
 ) {
     for statement in &block.stmts {
         match statement {
@@ -3979,17 +3981,20 @@ fn collect_calls_in_block_with<'a>(
                 collect_calls_in_call(call, calls);
             }
             Stmt::Branch {
+                bind,
                 call,
                 condition,
                 arms,
                 ..
             } => {
-                collect_calls_in_call(call, calls);
+                if !rendered_only || condition.is_none() || bind.is_some() {
+                    collect_calls_in_call(call, calls);
+                }
                 if let Some(condition) = condition {
                     collect_calls_in_expr(condition, calls);
                 }
                 for arm in arms {
-                    collect_calls_in_block_with(&arm.body, calls, include_handlers);
+                    collect_calls_in_block_with(&arm.body, calls, include_handlers, rendered_only);
                 }
             }
             Stmt::Loop {
@@ -3998,11 +4003,13 @@ fn collect_calls_in_block_with<'a>(
                 body,
                 ..
             } => {
-                collect_calls_in_call(call, calls);
+                if !rendered_only || iterable.is_none() {
+                    collect_calls_in_call(call, calls);
+                }
                 if let Some(iterable) = iterable {
                     collect_calls_in_expr(iterable, calls);
                 }
-                collect_calls_in_block_with(body, calls, include_handlers);
+                collect_calls_in_block_with(body, calls, include_handlers, rendered_only);
             }
             Stmt::Assign { value, .. }
             | Stmt::FieldAssign { value, .. }
@@ -4013,7 +4020,7 @@ fn collect_calls_in_block_with<'a>(
                 }
             }
             Stmt::Handler(event) if include_handlers => {
-                collect_calls_in_block_with(&event.body, calls, include_handlers);
+                collect_calls_in_block_with(&event.body, calls, include_handlers, rendered_only);
             }
             Stmt::Handler(_) | Stmt::Local(_) | Stmt::Comment(_) => {}
         }
@@ -4637,7 +4644,7 @@ mod rendering_tests {
 
     /// Reconcile the board's own anchored text against itself: a no-op proves every rendered
     /// spelling resolves back to the same node with the same wiring.
-    fn assert_roundtrip(board: &Board) {
+    fn assert_roundtrip(board: &Board) -> super::super::ReconcileResult {
         let anchored = super::super::board_to_flowscript(
             board,
             &RenderOptions {
@@ -4657,6 +4664,7 @@ mod rendering_tests {
             "round trip commands {:?}\n{anchored}",
             result.commands
         );
+        result
     }
 
     /// event(s) → log(trim(s)); `second` adds a second string input to the trim node.
@@ -4863,7 +4871,42 @@ mod rendering_tests {
             text.contains("    info({ message: s })\n    info({ message: s })\n"),
             "{text}"
         );
-        assert_roundtrip(&board);
+        let result = assert_roundtrip(&board);
+        assert!(result.corrections.is_empty(), "{:?}", result.corrections);
+    }
+
+    #[test]
+    fn sugared_branches_do_not_derive_unused_control_imports() {
+        let mut board = two_logs_board();
+        for (id, predecessor, successor) in [("first", "start", "a"), ("second", "a", "b")] {
+            let mut branch = Node::new(CONTROL_BRANCH, "Branch", "", "Control");
+            branch.id = id.to_string();
+            branch.add_input_pin("exec_in", "In", "", VariableType::Execution);
+            branch
+                .add_input_pin("condition", "Condition", "", VariableType::Boolean)
+                .default_value = Some(b"true".to_vec());
+            branch.add_output_pin("true", "True", "", VariableType::Execution);
+            branch.add_output_pin("false", "False", "", VariableType::Execution);
+            add(&mut board, branch);
+            for pin in board.nodes.get_mut(predecessor).unwrap().pins.values_mut() {
+                if pin.name == "exec_out" {
+                    pin.connected_to.clear();
+                }
+            }
+            for pin in board.nodes.get_mut(successor).unwrap().pins.values_mut() {
+                if pin.name == "exec_in" {
+                    pin.depends_on.clear();
+                }
+            }
+            wire(&mut board, (predecessor, "exec_out"), (id, "exec_in"));
+            wire(&mut board, (id, "true"), (successor, "exec_in"));
+        }
+        let text = text(&board);
+        assert_eq!(text.matches("if (true)").count(), 2, "{text}");
+        assert!(!text.contains("use control"), "{text}");
+        assert!(text.contains("use log::*"), "{text}");
+        let result = assert_roundtrip(&board);
+        assert!(result.corrections.is_empty(), "{:?}", result.corrections);
     }
 
     #[test]

@@ -38,6 +38,8 @@ interface IExecuteEventOptions {
 	payload: IRunPayload;
 	streamState?: boolean;
 	onExecutionStart?: (executionId: string) => void;
+	/** Receives each new event once, even with no subscribers. Excludes replay. */
+	onLiveEvents?: (events: IIntercomEvent[]) => void;
 	path?: string;
 	title?: string;
 	interfaceType?: string;
@@ -232,6 +234,7 @@ export class ExecutionEngineProvider {
 
 				if (unique.length > 0) {
 					stream!.accumulatedEvents.push(...unique);
+					options.onLiveEvents?.(unique);
 
 					// Publish to all subscribers
 					for (const [

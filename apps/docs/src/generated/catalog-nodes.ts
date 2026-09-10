@@ -6195,7 +6195,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}},\"StableDiffusionImageOptions\":{\"description\":\"Sampling controls for an image generated by stable-diffusion.cpp.\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":20},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed; zero is a reproducible seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Use auto to keep the model's sampling method.\",\"type\":\"string\",\"default\":\"auto\"},\"scheduler\":{\"description\":\"Use auto to keep the model's scheduler.\",\"type\":\"string\",\"default\":\"auto\"}},\"additionalProperties\":false}}}",
         "defaultValue": {
           "provider": "default"
         },
@@ -6249,7 +6249,7 @@ export const catalogNodes: CatalogNode[] = [
     "flags": [
       "Long running"
     ],
-    "version": 3,
+    "version": 4,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []
@@ -6380,7 +6380,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}},\"StableDiffusionImageOptions\":{\"description\":\"Sampling controls for an image generated by stable-diffusion.cpp.\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":20},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed; zero is a reproducible seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Use auto to keep the model's sampling method.\",\"type\":\"string\",\"default\":\"auto\"},\"scheduler\":{\"description\":\"Use auto to keep the model's scheduler.\",\"type\":\"string\",\"default\":\"auto\"}},\"additionalProperties\":false}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -6483,7 +6483,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}},\"StableDiffusionImageOptions\":{\"description\":\"Sampling controls for an image generated by stable-diffusion.cpp.\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":20},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed; zero is a reproducible seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Use auto to keep the model's sampling method.\",\"type\":\"string\",\"default\":\"auto\"},\"scheduler\":{\"description\":\"Use auto to keep the model's scheduler.\",\"type\":\"string\",\"default\":\"auto\"}},\"additionalProperties\":false}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -6586,7 +6586,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}},\"StableDiffusionImageOptions\":{\"description\":\"Sampling controls for an image generated by stable-diffusion.cpp.\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":20},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed; zero is a reproducible seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Use auto to keep the model's sampling method.\",\"type\":\"string\",\"default\":\"auto\"},\"scheduler\":{\"description\":\"Use auto to keep the model's scheduler.\",\"type\":\"string\",\"default\":\"auto\"}},\"additionalProperties\":false}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -6702,7 +6702,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}},\"StableDiffusionImageOptions\":{\"description\":\"Sampling controls for an image generated by stable-diffusion.cpp.\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":20},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed; zero is a reproducible seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Use auto to keep the model's sampling method.\",\"type\":\"string\",\"default\":\"auto\"},\"scheduler\":{\"description\":\"Use auto to keep the model's scheduler.\",\"type\":\"string\",\"default\":\"auto\"}},\"additionalProperties\":false}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -6786,7 +6786,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}},\"StableDiffusionImageOptions\":{\"description\":\"Sampling controls for an image generated by stable-diffusion.cpp.\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":20},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed; zero is a reproducible seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Use auto to keep the model's sampling method.\",\"type\":\"string\",\"default\":\"auto\"},\"scheduler\":{\"description\":\"Use auto to keep the model's scheduler.\",\"type\":\"string\",\"default\":\"auto\"}},\"additionalProperties\":false}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -6908,7 +6908,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}},\"StableDiffusionImageOptions\":{\"description\":\"Sampling controls for an image generated by stable-diffusion.cpp.\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":20},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed; zero is a reproducible seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Use auto to keep the model's sampling method.\",\"type\":\"string\",\"default\":\"auto\"},\"scheduler\":{\"description\":\"Use auto to keep the model's scheduler.\",\"type\":\"string\",\"default\":\"auto\"}},\"additionalProperties\":false}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -6916,6 +6916,179 @@ export const catalogNodes: CatalogNode[] = [
       }
     ],
     "inputCount": 5,
+    "outputCount": 1,
+    "flags": [],
+    "version": 1,
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/ai/generative/image/options/ai-image-options-stablediffusion",
+    "packageName": "media",
+    "name": "ai_image_options_stablediffusion",
+    "friendlyName": "stable-diffusion.cpp Image Options",
+    "description": "Sets image dimensions, sampling controls, and seed for PNG generation.",
+    "category": "AI/Generative/Image/Options",
+    "categoryPath": [
+      "AI",
+      "Generative",
+      "Image",
+      "Options"
+    ],
+    "categorySlug": "nodes/ai/generative/image/options",
+    "icon": "/flow/icons/struct.svg",
+    "scores": {
+      "privacy": 10,
+      "security": 10,
+      "performance": 9,
+      "governance": 9,
+      "reliability": 10,
+      "cost": 10
+    },
+    "pins": [
+      {
+        "name": "width",
+        "friendlyName": "Width",
+        "description": "Image width in pixels, a positive multiple of 8",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 512,
+        "index": 1
+      },
+      {
+        "name": "height",
+        "friendlyName": "Height",
+        "description": "Image height in pixels, a positive multiple of 8",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 512,
+        "index": 2
+      },
+      {
+        "name": "steps",
+        "friendlyName": "Steps",
+        "description": "Number of sampling steps, between 1 and 100",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 20,
+        "index": 3
+      },
+      {
+        "name": "seed",
+        "friendlyName": "Seed",
+        "description": "Use -1 for randomness, or zero and above for a reproducible seed",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": -1,
+        "index": 4
+      },
+      {
+        "name": "cfg_scale",
+        "friendlyName": "CFG Scale",
+        "description": "Text guidance strength, a finite non-negative 32-bit float",
+        "pinType": "Input",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "defaultValue": 7.0,
+        "index": 5
+      },
+      {
+        "name": "negative_prompt",
+        "friendlyName": "Negative Prompt",
+        "description": "Content to discourage in the generated image",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 6
+      },
+      {
+        "name": "sampler",
+        "friendlyName": "Sampler",
+        "description": "Sampling method; auto uses the model default",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "auto",
+        "index": 7,
+        "options": {
+          "validValues": [
+            "auto",
+            "euler",
+            "euler_a",
+            "heun",
+            "dpm2",
+            "dpm++2s_a",
+            "dpm++2m",
+            "dpm++2mv2",
+            "ipndm",
+            "ipndm_v",
+            "lcm",
+            "ddim_trailing",
+            "tcd",
+            "res_multistep",
+            "res_2s",
+            "er_sde",
+            "euler_cfg_pp",
+            "euler_a_cfg_pp",
+            "euler_ge",
+            "dpm++2m_sde",
+            "dpm++2m_sde_bt",
+            "lms"
+          ]
+        }
+      },
+      {
+        "name": "scheduler",
+        "friendlyName": "Scheduler",
+        "description": "Noise schedule; auto uses the model default",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "auto",
+        "index": 8,
+        "options": {
+          "validValues": [
+            "auto",
+            "discrete",
+            "karras",
+            "exponential",
+            "ays",
+            "gits",
+            "sgm_uniform",
+            "simple",
+            "smoothstep",
+            "kl_optimal",
+            "lcm",
+            "bong_tangent",
+            "ltx2",
+            "logit_normal",
+            "flux2",
+            "flux",
+            "beta"
+          ]
+        }
+      },
+      {
+        "name": "options",
+        "friendlyName": "Options",
+        "description": "Typed image generation provider options",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}},\"StableDiffusionImageOptions\":{\"description\":\"Sampling controls for an image generated by stable-diffusion.cpp.\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":20},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed; zero is a reproducible seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Use auto to keep the model's sampling method.\",\"type\":\"string\",\"default\":\"auto\"},\"scheduler\":{\"description\":\"Use auto to keep the model's scheduler.\",\"type\":\"string\",\"default\":\"auto\"}},\"additionalProperties\":false}}}",
+        "index": 1,
+        "options": {
+          "enforceSchema": true
+        }
+      }
+    ],
+    "inputCount": 8,
     "outputCount": 1,
     "flags": [],
     "version": 1,
@@ -6972,7 +7145,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ImageGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai\"},\"options\":{\"$ref\":\"#/$defs/OpenAiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"google_imagen\"},\"options\":{\"$ref\":\"#/$defs/GoogleImagenImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"aws_bedrock\"},\"options\":{\"$ref\":\"#/$defs/AwsBedrockImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"xai\"},\"options\":{\"$ref\":\"#/$defs/XaiImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"together\"},\"options\":{\"$ref\":\"#/$defs/TogetherImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"hugging_face\"},\"options\":{\"$ref\":\"#/$defs/HuggingFaceImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_router\"},\"options\":{\"$ref\":\"#/$defs/OpenRouterImageOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionImageOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"},\"background\":{\"$ref\":\"#/$defs/ImageBackground\",\"default\":\"auto\"}}},\"ImageSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"512x512\",\"768x768\",\"1024x1024\",\"1024x1536\",\"1536x1024\",\"768x1024\",\"1024x768\",\"768x1152\",\"1152x768\",\"640x1152\",\"1173x640\"]},\"ImageQuality\":{\"type\":\"string\",\"enum\":[\"auto\",\"low\",\"medium\",\"high\",\"standard\",\"premium\"]},\"ImageOutputFormat\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\",\"webp\"]},\"ImageBackground\":{\"type\":\"string\",\"enum\":[\"auto\",\"opaque\",\"transparent\"]},\"GoogleImagenImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"ImageAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"1:1\",\"16:9\",\"9:16\",\"4:3\",\"3:4\",\"3:2\",\"2:3\"]},\"AwsBedrockImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"quality\":{\"$ref\":\"#/$defs/ImageQuality\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"XaiImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"}}},\"TogetherImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"HuggingFaceImageOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/ImageOutputFormat\",\"default\":\"png\"}}},\"OpenRouterImageOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/ImageAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/ImageSize\",\"default\":\"auto\"}}},\"StableDiffusionImageOptions\":{\"description\":\"Sampling controls for an image generated by stable-diffusion.cpp.\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":512},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":20},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed; zero is a reproducible seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Use auto to keep the model's sampling method.\",\"type\":\"string\",\"default\":\"auto\"},\"scheduler\":{\"description\":\"Use auto to keep the model's scheduler.\",\"type\":\"string\",\"default\":\"auto\"}},\"additionalProperties\":false}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -8923,6 +9096,22 @@ export const catalogNodes: CatalogNode[] = [
         }
       },
       {
+        "name": "api_surface",
+        "friendlyName": "API Surface",
+        "description": "Which OpenAI API the endpoint serves. Responses is the default; pick Chat Completions for gateways that only expose /chat/completions",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "Responses",
+        "index": 5,
+        "options": {
+          "validValues": [
+            "Responses",
+            "ChatCompletions"
+          ]
+        }
+      },
+      {
         "name": "exec_out",
         "friendlyName": "Output",
         "description": "Fires when the Bit is ready",
@@ -8942,12 +9131,12 @@ export const catalogNodes: CatalogNode[] = [
         "index": 2
       }
     ],
-    "inputCount": 4,
+    "inputCount": 5,
     "outputCount": 2,
     "flags": [
       "Long running"
     ],
-    "version": 4,
+    "version": 5,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []
@@ -9446,6 +9635,93 @@ export const catalogNodes: CatalogNode[] = [
       "Long running"
     ],
     "version": 3,
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/ai/generative/provider/ai-image-build-stablediffusion",
+    "packageName": "media",
+    "name": "ai_image_build_stablediffusion",
+    "friendlyName": "stable-diffusion.cpp Image Model",
+    "description": "Prepares an image provider for local model files or an existing stable-diffusion.cpp server.",
+    "category": "AI/Generative/Provider",
+    "categoryPath": [
+      "AI",
+      "Generative",
+      "Provider"
+    ],
+    "categorySlug": "nodes/ai/generative/provider",
+    "icon": "/flow/icons/find_model.svg",
+    "scores": {
+      "privacy": 10,
+      "security": 10,
+      "performance": 9,
+      "governance": 9,
+      "reliability": 10,
+      "cost": 10
+    },
+    "pins": [
+      {
+        "name": "exec_in",
+        "friendlyName": "Input",
+        "description": "Prepare the provider",
+        "pinType": "Input",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "config",
+        "friendlyName": "Configuration",
+        "description": "Set a server endpoint, or a local model path with any required VAE and text encoders. Local paths refer to the machine executing the flow.",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"StableDiffusionConfig\",\"type\":\"object\",\"properties\":{\"endpoint\":{\"type\":[\"string\",\"null\"],\"default\":null},\"model_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"diffusion_model_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"vae_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"clip_l_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"clip_g_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"t5xxl_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"llm_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"offload_to_cpu\":{\"type\":\"boolean\",\"default\":true},\"diffusion_flash_attention\":{\"type\":\"boolean\",\"default\":false},\"startup_timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"request_timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":1800}}}",
+        "defaultValue": {
+          "endpoint": null,
+          "model_path": null,
+          "diffusion_model_path": null,
+          "vae_path": null,
+          "clip_l_path": null,
+          "clip_g_path": null,
+          "t5xxl_path": null,
+          "llm_path": null,
+          "offload_to_cpu": true,
+          "diffusion_flash_attention": false,
+          "startup_timeout_seconds": 300,
+          "request_timeout_seconds": 1800
+        },
+        "index": 2,
+        "options": {
+          "enforceSchema": true
+        }
+      },
+      {
+        "name": "exec_out",
+        "friendlyName": "Output",
+        "description": "Provider is ready",
+        "pinType": "Output",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "model",
+        "friendlyName": "Model",
+        "description": "Image generation provider Bit",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Bit\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"default\":\"\"},\"type\":{\"$ref\":\"#/$defs/BitTypes\",\"default\":\"Other\"},\"meta\":{\"type\":\"object\",\"additionalProperties\":{\"$ref\":\"#/$defs/Metadata\"},\"default\":{}},\"authors\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"repository\":{\"type\":[\"string\",\"null\"],\"default\":null},\"download_link\":{\"type\":[\"string\",\"null\"],\"default\":null},\"file_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"hash\":{\"type\":\"string\",\"default\":\"\"},\"size\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"hub\":{\"type\":\"string\",\"default\":\"\"},\"parameters\":{\"default\":null},\"version\":{\"type\":[\"string\",\"null\"],\"default\":null},\"license\":{\"type\":[\"string\",\"null\"],\"default\":null},\"dependencies\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"dependency_tree_hash\":{\"type\":\"string\",\"default\":\"\"},\"created\":{\"type\":\"string\",\"default\":\"\"},\"updated\":{\"type\":\"string\",\"default\":\"\"},\"model_slug\":{\"type\":[\"string\",\"null\"],\"default\":null},\"model_evaluation\":{\"anyOf\":[{\"$ref\":\"#/$defs/LlmModelEvaluation\"},{\"type\":\"null\"}],\"default\":null}},\"$defs\":{\"BitTypes\":{\"type\":\"string\",\"enum\":[\"Llm\",\"Vlm\",\"Tts\",\"Stt\",\"Embedding\",\"ImageEmbedding\",\"File\",\"Media\",\"ImageGeneration\",\"VideoGeneration\",\"Template\",\"Tokenizer\",\"TokenizerConfig\",\"SpecialTokensMap\",\"Config\",\"Course\",\"PreprocessorConfig\",\"Projection\",\"Project\",\"Board\",\"Other\",\"ObjectDetection\"]},\"Metadata\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"long_description\":{\"type\":[\"string\",\"null\"]},\"release_notes\":{\"type\":[\"string\",\"null\"]},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"use_case\":{\"type\":[\"string\",\"null\"]},\"icon\":{\"type\":[\"string\",\"null\"]},\"thumbnail\":{\"type\":[\"string\",\"null\"]},\"preview_media\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"age_rating\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"website\":{\"type\":[\"string\",\"null\"]},\"support_url\":{\"type\":[\"string\",\"null\"]},\"docs_url\":{\"type\":[\"string\",\"null\"]},\"organization_specific_values\":{\"type\":[\"array\",\"null\"],\"items\":{\"type\":\"integer\",\"format\":\"uint8\",\"minimum\":0,\"maximum\":255}},\"created_at\":{\"$ref\":\"#/$defs/SystemTime\"},\"updated_at\":{\"$ref\":\"#/$defs/SystemTime\"}},\"required\":[\"name\",\"description\",\"tags\",\"preview_media\",\"created_at\",\"updated_at\"]},\"SystemTime\":{\"type\":\"object\",\"properties\":{\"secs_since_epoch\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"nanos_since_epoch\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0}},\"required\":[\"secs_since_epoch\",\"nanos_since_epoch\"]},\"LlmModelEvaluation\":{\"type\":\"object\",\"properties\":{\"slug\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"release_date\":{\"type\":[\"string\",\"null\"]},\"creator_name\":{\"type\":\"string\"},\"creator_slug\":{\"type\":\"string\"},\"evaluations\":true,\"pricing\":true,\"median_output_tokens_per_second\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"},\"median_time_to_first_token_seconds\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"},\"median_time_to_first_answer_token\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"}},\"required\":[\"slug\",\"name\",\"creator_name\",\"creator_slug\"]}}}",
+        "index": 2
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 2,
+    "flags": [],
+    "version": 1,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []
@@ -10308,7 +10584,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"StableDiffusionVideoOptions\":{\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":832},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":480},\"video_frames\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":33},\"fps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":16},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":28},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed. Zero is a deterministic seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Omit to use the loaded model's default sampler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"scheduler\":{\"description\":\"Omit to use the loaded model's default scheduler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/StableDiffusionVideoOutputFormat\",\"default\":\"avi\"}},\"additionalProperties\":false},\"StableDiffusionVideoOutputFormat\":{\"type\":\"string\",\"enum\":[\"avi\",\"webp\",\"webm\"]}}}",
         "defaultValue": {
           "provider": "default"
         },
@@ -10362,7 +10638,7 @@ export const catalogNodes: CatalogNode[] = [
     "flags": [
       "Long running"
     ],
-    "version": 3,
+    "version": 4,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []
@@ -10446,7 +10722,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"StableDiffusionVideoOptions\":{\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":832},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":480},\"video_frames\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":33},\"fps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":16},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":28},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed. Zero is a deterministic seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Omit to use the loaded model's default sampler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"scheduler\":{\"description\":\"Omit to use the loaded model's default scheduler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/StableDiffusionVideoOutputFormat\",\"default\":\"avi\"}},\"additionalProperties\":false},\"StableDiffusionVideoOutputFormat\":{\"type\":\"string\",\"enum\":[\"avi\",\"webp\",\"webm\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -10590,7 +10866,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"StableDiffusionVideoOptions\":{\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":832},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":480},\"video_frames\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":33},\"fps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":16},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":28},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed. Zero is a deterministic seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Omit to use the loaded model's default sampler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"scheduler\":{\"description\":\"Omit to use the loaded model's default scheduler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/StableDiffusionVideoOutputFormat\",\"default\":\"avi\"}},\"additionalProperties\":false},\"StableDiffusionVideoOutputFormat\":{\"type\":\"string\",\"enum\":[\"avi\",\"webp\",\"webm\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -10712,7 +10988,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"StableDiffusionVideoOptions\":{\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":832},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":480},\"video_frames\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":33},\"fps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":16},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":28},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed. Zero is a deterministic seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Omit to use the loaded model's default sampler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"scheduler\":{\"description\":\"Omit to use the loaded model's default scheduler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/StableDiffusionVideoOutputFormat\",\"default\":\"avi\"}},\"additionalProperties\":false},\"StableDiffusionVideoOutputFormat\":{\"type\":\"string\",\"enum\":[\"avi\",\"webp\",\"webm\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -10859,7 +11135,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"StableDiffusionVideoOptions\":{\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":832},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":480},\"video_frames\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":33},\"fps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":16},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":28},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed. Zero is a deterministic seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Omit to use the loaded model's default sampler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"scheduler\":{\"description\":\"Omit to use the loaded model's default scheduler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/StableDiffusionVideoOutputFormat\",\"default\":\"avi\"}},\"additionalProperties\":false},\"StableDiffusionVideoOutputFormat\":{\"type\":\"string\",\"enum\":[\"avi\",\"webp\",\"webm\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -11003,7 +11279,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"StableDiffusionVideoOptions\":{\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":832},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":480},\"video_frames\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":33},\"fps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":16},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":28},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed. Zero is a deterministic seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Omit to use the loaded model's default sampler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"scheduler\":{\"description\":\"Omit to use the loaded model's default scheduler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/StableDiffusionVideoOutputFormat\",\"default\":\"avi\"}},\"additionalProperties\":false},\"StableDiffusionVideoOutputFormat\":{\"type\":\"string\",\"enum\":[\"avi\",\"webp\",\"webm\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -11011,6 +11287,217 @@ export const catalogNodes: CatalogNode[] = [
       }
     ],
     "inputCount": 8,
+    "outputCount": 1,
+    "flags": [],
+    "version": 1,
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/ai/generative/video/options/ai-video-options-stablediffusion",
+    "packageName": "media",
+    "name": "ai_video_options_stablediffusion",
+    "friendlyName": "stable-diffusion.cpp Video Options",
+    "description": "Sets local video dimensions, sampling settings, frame count, and container format.",
+    "category": "AI/Generative/Video/Options",
+    "categoryPath": [
+      "AI",
+      "Generative",
+      "Video",
+      "Options"
+    ],
+    "categorySlug": "nodes/ai/generative/video/options",
+    "icon": "/flow/icons/struct.svg",
+    "scores": {
+      "privacy": 10,
+      "security": 10,
+      "performance": 9,
+      "governance": 9,
+      "reliability": 10,
+      "cost": 10
+    },
+    "pins": [
+      {
+        "name": "width",
+        "friendlyName": "Width",
+        "description": "Frame width in pixels, a positive multiple of 8",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 832,
+        "index": 1
+      },
+      {
+        "name": "height",
+        "friendlyName": "Height",
+        "description": "Frame height in pixels, a positive multiple of 8",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 480,
+        "index": 2
+      },
+      {
+        "name": "video_frames",
+        "friendlyName": "Frames",
+        "description": "Frame count must be 4n + 1, for example 33 or 81",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 33,
+        "index": 3
+      },
+      {
+        "name": "fps",
+        "friendlyName": "FPS",
+        "description": "Playback frames per second",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 16,
+        "index": 4
+      },
+      {
+        "name": "steps",
+        "friendlyName": "Steps",
+        "description": "Number of sampling steps, between 1 and 100",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 28,
+        "index": 5
+      },
+      {
+        "name": "cfg_scale",
+        "friendlyName": "CFG Scale",
+        "description": "Text guidance scale, a finite non-negative 32-bit float",
+        "pinType": "Input",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "defaultValue": 7.0,
+        "index": 6
+      },
+      {
+        "name": "negative_prompt",
+        "friendlyName": "Negative Prompt",
+        "description": "Text describing what to avoid",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 7
+      },
+      {
+        "name": "seed",
+        "friendlyName": "Seed",
+        "description": "Use -1 for random generation. Zero is a deterministic seed.",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": -1,
+        "index": 8
+      },
+      {
+        "name": "sampler",
+        "friendlyName": "Sampler",
+        "description": "Use auto to keep the loaded model's default",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "auto",
+        "index": 9,
+        "options": {
+          "validValues": [
+            "auto",
+            "euler",
+            "euler_a",
+            "heun",
+            "dpm2",
+            "dpm++2s_a",
+            "dpm++2m",
+            "dpm++2mv2",
+            "ipndm",
+            "ipndm_v",
+            "lcm",
+            "ddim_trailing",
+            "tcd",
+            "res_multistep",
+            "res_2s",
+            "er_sde",
+            "euler_cfg_pp",
+            "euler_a_cfg_pp",
+            "euler_ge",
+            "dpm++2m_sde",
+            "dpm++2m_sde_bt",
+            "lms"
+          ]
+        }
+      },
+      {
+        "name": "scheduler",
+        "friendlyName": "Scheduler",
+        "description": "Use auto to keep the loaded model's default",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "auto",
+        "index": 10,
+        "options": {
+          "validValues": [
+            "auto",
+            "discrete",
+            "normal",
+            "karras",
+            "exponential",
+            "ays",
+            "gits",
+            "sgm_uniform",
+            "simple",
+            "smoothstep",
+            "kl_optimal",
+            "lcm",
+            "bong_tangent",
+            "ltx2",
+            "logit_normal",
+            "flux2",
+            "flux",
+            "beta"
+          ]
+        }
+      },
+      {
+        "name": "output_format",
+        "friendlyName": "Output Format",
+        "description": "AVI is built in. Animated WebP and WebM require support in the server build.",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "avi",
+        "index": 11,
+        "options": {
+          "validValues": [
+            "avi",
+            "webp",
+            "webm"
+          ]
+        }
+      },
+      {
+        "name": "options",
+        "friendlyName": "Options",
+        "description": "Typed video generation provider options",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"VideoGenerationProviderOptions\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"default\"}},\"required\":[\"provider\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"open_ai_sora\"},\"options\":{\"$ref\":\"#/$defs/OpenAiSoraVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"vertex_veo\"},\"options\":{\"$ref\":\"#/$defs/VertexVeoVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"runway\"},\"options\":{\"$ref\":\"#/$defs/RunwayVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"fal\"},\"options\":{\"$ref\":\"#/$defs/FalVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"replicate\"},\"options\":{\"$ref\":\"#/$defs/ReplicateVideoOptions\"}},\"required\":[\"provider\",\"options\"]},{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\",\"const\":\"stable_diffusion\"},\"options\":{\"$ref\":\"#/$defs/StableDiffusionVideoOptions\"}},\"required\":[\"provider\",\"options\"]}],\"$defs\":{\"OpenAiSoraVideoOptions\":{\"type\":\"object\",\"properties\":{\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoSize\":{\"type\":\"string\",\"enum\":[\"auto\",\"480p\",\"720p\",\"1080p\",\"1280x720\",\"720x1280\",\"960x960\",\"1024x1024\",\"1920x1080\",\"1080x1920\"]},\"VertexVeoVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"count\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"VideoAspectRatio\":{\"type\":\"string\",\"enum\":[\"auto\",\"16:9\",\"9:16\",\"1:1\",\"4:3\",\"3:4\"]},\"RunwayVideoOptions\":{\"type\":\"object\",\"properties\":{\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"FalVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"ReplicateVideoOptions\":{\"type\":\"object\",\"properties\":{\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"aspect_ratio\":{\"$ref\":\"#/$defs/VideoAspectRatio\",\"default\":\"auto\"},\"size\":{\"$ref\":\"#/$defs/VideoSize\",\"default\":\"auto\"},\"duration_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0,\"default\":null},\"seed\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"generate_audio\":{\"type\":[\"boolean\",\"null\"],\"default\":null},\"poll_interval_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"max_wait_seconds\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null}}},\"StableDiffusionVideoOptions\":{\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":832},\"height\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":480},\"video_frames\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":33},\"fps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":16},\"steps\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":28},\"cfg_scale\":{\"type\":\"number\",\"format\":\"double\",\"default\":7E0},\"negative_prompt\":{\"type\":[\"string\",\"null\"],\"default\":null},\"seed\":{\"description\":\"Use -1 for a random seed. Zero is a deterministic seed.\",\"type\":\"integer\",\"format\":\"int64\",\"default\":-1},\"sampler\":{\"description\":\"Omit to use the loaded model's default sampler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"scheduler\":{\"description\":\"Omit to use the loaded model's default scheduler.\",\"type\":[\"string\",\"null\"],\"default\":null},\"output_format\":{\"$ref\":\"#/$defs/StableDiffusionVideoOutputFormat\",\"default\":\"avi\"}},\"additionalProperties\":false},\"StableDiffusionVideoOutputFormat\":{\"type\":\"string\",\"enum\":[\"avi\",\"webp\",\"webm\"]}}}",
+        "index": 1,
+        "options": {
+          "enforceSchema": true
+        }
+      }
+    ],
+    "inputCount": 11,
     "outputCount": 1,
     "flags": [],
     "version": 1,
@@ -11331,6 +11818,97 @@ export const catalogNodes: CatalogNode[] = [
       "Long running"
     ],
     "version": 3,
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/ai/generative/video/provider/ai-video-build-stablediffusion",
+    "packageName": "media",
+    "name": "ai_video_build_stablediffusion",
+    "friendlyName": "stable-diffusion.cpp Video Model",
+    "description": "Configures a local video model or an existing stable-diffusion.cpp server.",
+    "category": "AI/Generative/Video/Provider",
+    "categoryPath": [
+      "AI",
+      "Generative",
+      "Video",
+      "Provider"
+    ],
+    "categorySlug": "nodes/ai/generative/video/provider",
+    "icon": "/flow/icons/find_model.svg",
+    "scores": {
+      "privacy": 10,
+      "security": 10,
+      "performance": 9,
+      "governance": 9,
+      "reliability": 10,
+      "cost": 10
+    },
+    "pins": [
+      {
+        "name": "exec_in",
+        "friendlyName": "Input",
+        "description": "Execution trigger",
+        "pinType": "Input",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "config",
+        "friendlyName": "Configuration",
+        "description": "Set a local model path and optional companion models, or an existing server endpoint. Paths refer to the machine executing the flow.",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"StableDiffusionConfig\",\"type\":\"object\",\"properties\":{\"endpoint\":{\"type\":[\"string\",\"null\"],\"default\":null},\"model_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"diffusion_model_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"vae_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"clip_l_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"clip_g_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"t5xxl_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"llm_path\":{\"type\":[\"string\",\"null\"],\"default\":null},\"offload_to_cpu\":{\"type\":\"boolean\",\"default\":true},\"diffusion_flash_attention\":{\"type\":\"boolean\",\"default\":false},\"startup_timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"request_timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":1800}}}",
+        "defaultValue": {
+          "endpoint": null,
+          "model_path": null,
+          "diffusion_model_path": null,
+          "vae_path": null,
+          "clip_l_path": null,
+          "clip_g_path": null,
+          "t5xxl_path": null,
+          "llm_path": null,
+          "offload_to_cpu": true,
+          "diffusion_flash_attention": false,
+          "startup_timeout_seconds": 300,
+          "request_timeout_seconds": 1800
+        },
+        "index": 2,
+        "options": {
+          "enforceSchema": true
+        }
+      },
+      {
+        "name": "exec_out",
+        "friendlyName": "Output",
+        "description": "Fires when the video provider Bit is ready",
+        "pinType": "Output",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "provider",
+        "friendlyName": "Provider",
+        "description": "Bit containing the video generation provider configuration",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Bit\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"default\":\"\"},\"type\":{\"$ref\":\"#/$defs/BitTypes\",\"default\":\"Other\"},\"meta\":{\"type\":\"object\",\"additionalProperties\":{\"$ref\":\"#/$defs/Metadata\"},\"default\":{}},\"authors\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"repository\":{\"type\":[\"string\",\"null\"],\"default\":null},\"download_link\":{\"type\":[\"string\",\"null\"],\"default\":null},\"file_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"hash\":{\"type\":\"string\",\"default\":\"\"},\"size\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"hub\":{\"type\":\"string\",\"default\":\"\"},\"parameters\":{\"default\":null},\"version\":{\"type\":[\"string\",\"null\"],\"default\":null},\"license\":{\"type\":[\"string\",\"null\"],\"default\":null},\"dependencies\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"dependency_tree_hash\":{\"type\":\"string\",\"default\":\"\"},\"created\":{\"type\":\"string\",\"default\":\"\"},\"updated\":{\"type\":\"string\",\"default\":\"\"},\"model_slug\":{\"type\":[\"string\",\"null\"],\"default\":null},\"model_evaluation\":{\"anyOf\":[{\"$ref\":\"#/$defs/LlmModelEvaluation\"},{\"type\":\"null\"}],\"default\":null}},\"$defs\":{\"BitTypes\":{\"type\":\"string\",\"enum\":[\"Llm\",\"Vlm\",\"Tts\",\"Stt\",\"Embedding\",\"ImageEmbedding\",\"File\",\"Media\",\"ImageGeneration\",\"VideoGeneration\",\"Template\",\"Tokenizer\",\"TokenizerConfig\",\"SpecialTokensMap\",\"Config\",\"Course\",\"PreprocessorConfig\",\"Projection\",\"Project\",\"Board\",\"Other\",\"ObjectDetection\"]},\"Metadata\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"long_description\":{\"type\":[\"string\",\"null\"]},\"release_notes\":{\"type\":[\"string\",\"null\"]},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"use_case\":{\"type\":[\"string\",\"null\"]},\"icon\":{\"type\":[\"string\",\"null\"]},\"thumbnail\":{\"type\":[\"string\",\"null\"]},\"preview_media\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"age_rating\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"website\":{\"type\":[\"string\",\"null\"]},\"support_url\":{\"type\":[\"string\",\"null\"]},\"docs_url\":{\"type\":[\"string\",\"null\"]},\"organization_specific_values\":{\"type\":[\"array\",\"null\"],\"items\":{\"type\":\"integer\",\"format\":\"uint8\",\"minimum\":0,\"maximum\":255}},\"created_at\":{\"$ref\":\"#/$defs/SystemTime\"},\"updated_at\":{\"$ref\":\"#/$defs/SystemTime\"}},\"required\":[\"name\",\"description\",\"tags\",\"preview_media\",\"created_at\",\"updated_at\"]},\"SystemTime\":{\"type\":\"object\",\"properties\":{\"secs_since_epoch\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"nanos_since_epoch\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0}},\"required\":[\"secs_since_epoch\",\"nanos_since_epoch\"]},\"LlmModelEvaluation\":{\"type\":\"object\",\"properties\":{\"slug\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"release_date\":{\"type\":[\"string\",\"null\"]},\"creator_name\":{\"type\":\"string\"},\"creator_slug\":{\"type\":\"string\"},\"evaluations\":true,\"pricing\":true,\"median_output_tokens_per_second\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"},\"median_time_to_first_token_seconds\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"},\"median_time_to_first_answer_token\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"}},\"required\":[\"slug\",\"name\",\"creator_name\",\"creator_slug\"]}}}",
+        "index": 2,
+        "options": {
+          "enforceSchema": true
+        }
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 2,
+    "flags": [],
+    "version": 1,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []
@@ -24766,6 +25344,68 @@ export const catalogNodes: CatalogNode[] = [
         "index": 8
       },
       {
+        "name": "prompt_preset",
+        "friendlyName": "Prompt Preset",
+        "description": "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n• Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n• Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n• DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n• olmOCR — allenai/olmOCR-2, emits YAML front matter\n• Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2\n• dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode\n• Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags\n• PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL\n\nEvery preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1).",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "Default",
+        "index": 9,
+        "options": {
+          "validValues": [
+            "Default",
+            "Unlimited-OCR",
+            "DeepSeek-OCR",
+            "olmOCR",
+            "Nanonets-OCR",
+            "dots.ocr",
+            "Granite-Docling",
+            "PaddleOCR-VL"
+          ]
+        }
+      },
+      {
+        "name": "page_prompt",
+        "friendlyName": "Page Prompt",
+        "description": "Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 10
+      },
+      {
+        "name": "image_prompt",
+        "friendlyName": "Image Prompt",
+        "description": "Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 11
+      },
+      {
+        "name": "batch_prompt",
+        "friendlyName": "Batch Image Prompt",
+        "description": "Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default.",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 12
+      },
+      {
+        "name": "force_ocr",
+        "friendlyName": "Force OCR",
+        "description": "Run every PDF page through the model instead of only pages whose extracted text looks poor. Presets other than Default turn this on regardless.",
+        "pinType": "Input",
+        "dataType": "Boolean",
+        "valueType": "Normal",
+        "defaultValue": false,
+        "index": 13
+      },
+      {
         "name": "exec_out",
         "friendlyName": "Output",
         "description": "Execution output after extraction completes.",
@@ -24788,12 +25428,12 @@ export const catalogNodes: CatalogNode[] = [
         }
       }
     ],
-    "inputCount": 8,
+    "inputCount": 13,
     "outputCount": 2,
     "flags": [
       "Long running"
     ],
-    "version": 2,
+    "version": 3,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []
@@ -24906,6 +25546,68 @@ export const catalogNodes: CatalogNode[] = [
         "index": 8
       },
       {
+        "name": "prompt_preset",
+        "friendlyName": "Prompt Preset",
+        "description": "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n• Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n• Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n• DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n• olmOCR — allenai/olmOCR-2, emits YAML front matter\n• Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2\n• dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode\n• Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags\n• PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL\n\nEvery preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1).",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "Default",
+        "index": 9,
+        "options": {
+          "validValues": [
+            "Default",
+            "Unlimited-OCR",
+            "DeepSeek-OCR",
+            "olmOCR",
+            "Nanonets-OCR",
+            "dots.ocr",
+            "Granite-Docling",
+            "PaddleOCR-VL"
+          ]
+        }
+      },
+      {
+        "name": "page_prompt",
+        "friendlyName": "Page Prompt",
+        "description": "Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 10
+      },
+      {
+        "name": "image_prompt",
+        "friendlyName": "Image Prompt",
+        "description": "Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 11
+      },
+      {
+        "name": "batch_prompt",
+        "friendlyName": "Batch Image Prompt",
+        "description": "Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default.",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 12
+      },
+      {
+        "name": "force_ocr",
+        "friendlyName": "Force OCR",
+        "description": "Run every PDF page through the model instead of only pages whose extracted text looks poor. Presets other than Default turn this on regardless.",
+        "pinType": "Input",
+        "dataType": "Boolean",
+        "valueType": "Normal",
+        "defaultValue": false,
+        "index": 13
+      },
+      {
         "name": "exec_out",
         "friendlyName": "Output",
         "description": "Execution output after all extractions complete.",
@@ -24928,12 +25630,12 @@ export const catalogNodes: CatalogNode[] = [
         }
       }
     ],
-    "inputCount": 8,
+    "inputCount": 13,
     "outputCount": 2,
     "flags": [
       "Long running"
     ],
-    "version": 2,
+    "version": 3,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []
@@ -55182,7 +55884,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GraphSchemaResult\",\"type\":\"object\",\"properties\":{\"node_labels\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphLabelInfo\"}},\"edge_labels\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphLabelInfo\"}}},\"required\":[\"node_labels\",\"edge_labels\"],\"$defs\":{\"GraphLabelInfo\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"table\":{\"type\":\"string\"},\"properties\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphPropertyInfo\"}}},\"required\":[\"label\",\"table\",\"properties\"]},\"GraphPropertyInfo\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"data_type\":{\"type\":\"string\"},\"nullable\":{\"type\":\"boolean\"}},\"required\":[\"name\",\"data_type\",\"nullable\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GraphSchemaResult\",\"type\":\"object\",\"properties\":{\"node_labels\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphLabelInfo\"}},\"edge_labels\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphLabelInfo\"}}},\"required\":[\"node_labels\",\"edge_labels\"],\"$defs\":{\"GraphLabelInfo\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"table\":{\"type\":\"string\"},\"properties\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphPropertyInfo\"}}},\"required\":[\"label\",\"table\",\"properties\"]},\"GraphPropertyInfo\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"data_type\":{\"type\":\"string\"},\"nullable\":{\"type\":\"boolean\"},\"metadata\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\"}}},\"required\":[\"name\",\"data_type\",\"nullable\"]}}}",
         "index": 2
       }
     ],
@@ -55736,7 +56438,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Array",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphNode\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"caption\":{\"type\":[\"string\",\"null\"]},\"props\":true,\"stats\":{\"description\":\"Only the seedless sampler knows population counts; every other path\\nleaves this unset. `flow-like-catalog-core` mirrors this struct without\\nthe field, so a subgraph routed through that type loses the stats.\",\"anyOf\":[{\"$ref\":\"#/$defs/SubgraphNodeStats\"},{\"type\":\"null\"}]}},\"required\":[\"id\",\"label\",\"props\"],\"$defs\":{\"SubgraphNodeStats\":{\"description\":\"Population fan-out of one object, as seen through the sampling window.\",\"type\":\"object\",\"properties\":{\"out_by_label\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/EdgeLabelCount\"}},\"exact\":{\"description\":\"False when the window did not cover the whole relationship table, which\\nmakes every count a lower bound.\",\"type\":\"boolean\"}},\"required\":[\"out_by_label\",\"exact\"]},\"EdgeLabelCount\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0}},\"required\":[\"label\",\"count\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphNode\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"caption\":{\"type\":[\"string\",\"null\"]},\"props\":true,\"stats\":{\"description\":\"Only the seedless sampler knows population counts; every other path\\nleaves this unset. `flow-like-catalog-core` mirrors this struct without\\nthe field, so a subgraph routed through that type loses the stats.\",\"anyOf\":[{\"$ref\":\"#/$defs/SubgraphNodeStats\"},{\"type\":\"null\"}]},\"property_metadata\":{\"description\":\"Arrow field metadata for typed property previews.\",\"type\":\"object\",\"additionalProperties\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\"}}}},\"required\":[\"id\",\"label\",\"props\"],\"$defs\":{\"SubgraphNodeStats\":{\"description\":\"Population fan-out of one object, as seen through the sampling window.\",\"type\":\"object\",\"properties\":{\"out_by_label\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/EdgeLabelCount\"}},\"exact\":{\"description\":\"False when the window did not cover the whole relationship table, which\\nmakes every count a lower bound.\",\"type\":\"boolean\"}},\"required\":[\"out_by_label\",\"exact\"]},\"EdgeLabelCount\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0}},\"required\":[\"label\",\"count\"]}}}",
         "index": 4
       },
       {
@@ -55746,7 +56448,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Array",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphEdge\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"source\":{\"type\":\"string\"},\"target\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"props\":true},\"required\":[\"id\",\"source\",\"target\",\"label\",\"props\"]}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphEdge\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"source\":{\"type\":\"string\"},\"target\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"props\":true,\"property_metadata\":{\"description\":\"Arrow field metadata for typed property previews.\",\"type\":\"object\",\"additionalProperties\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\"}}}},\"required\":[\"id\",\"source\",\"target\",\"label\",\"props\"]}",
         "index": 5
       }
     ],
@@ -55950,7 +56652,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Array",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphNode\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"caption\":{\"type\":[\"string\",\"null\"]},\"props\":true,\"stats\":{\"description\":\"Only the seedless sampler knows population counts; every other path\\nleaves this unset. `flow-like-catalog-core` mirrors this struct without\\nthe field, so a subgraph routed through that type loses the stats.\",\"anyOf\":[{\"$ref\":\"#/$defs/SubgraphNodeStats\"},{\"type\":\"null\"}]}},\"required\":[\"id\",\"label\",\"props\"],\"$defs\":{\"SubgraphNodeStats\":{\"description\":\"Population fan-out of one object, as seen through the sampling window.\",\"type\":\"object\",\"properties\":{\"out_by_label\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/EdgeLabelCount\"}},\"exact\":{\"description\":\"False when the window did not cover the whole relationship table, which\\nmakes every count a lower bound.\",\"type\":\"boolean\"}},\"required\":[\"out_by_label\",\"exact\"]},\"EdgeLabelCount\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0}},\"required\":[\"label\",\"count\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphNode\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"caption\":{\"type\":[\"string\",\"null\"]},\"props\":true,\"stats\":{\"description\":\"Only the seedless sampler knows population counts; every other path\\nleaves this unset. `flow-like-catalog-core` mirrors this struct without\\nthe field, so a subgraph routed through that type loses the stats.\",\"anyOf\":[{\"$ref\":\"#/$defs/SubgraphNodeStats\"},{\"type\":\"null\"}]},\"property_metadata\":{\"description\":\"Arrow field metadata for typed property previews.\",\"type\":\"object\",\"additionalProperties\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\"}}}},\"required\":[\"id\",\"label\",\"props\"],\"$defs\":{\"SubgraphNodeStats\":{\"description\":\"Population fan-out of one object, as seen through the sampling window.\",\"type\":\"object\",\"properties\":{\"out_by_label\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/EdgeLabelCount\"}},\"exact\":{\"description\":\"False when the window did not cover the whole relationship table, which\\nmakes every count a lower bound.\",\"type\":\"boolean\"}},\"required\":[\"out_by_label\",\"exact\"]},\"EdgeLabelCount\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0}},\"required\":[\"label\",\"count\"]}}}",
         "index": 4
       }
     ],
@@ -115267,6 +115969,202 @@ export const catalogNodes: CatalogNode[] = [
     "permissions": []
   },
   {
+    "slug": "nodes/structs/struct-cast-to-schema",
+    "packageName": "std",
+    "name": "struct_cast_to_schema",
+    "friendlyName": "Cast to Schema",
+    "description": "Checks a struct against a JSON schema and hands it on carrying that shape",
+    "category": "Structs",
+    "categoryPath": [
+      "Structs"
+    ],
+    "categorySlug": "nodes/structs",
+    "icon": "/flow/icons/struct.svg",
+    "scores": {
+      "privacy": 10,
+      "security": 10,
+      "performance": 10,
+      "governance": 10,
+      "reliability": 10,
+      "cost": 10
+    },
+    "pins": [
+      {
+        "name": "exec_in",
+        "friendlyName": "In",
+        "description": "Run the cast",
+        "pinType": "Input",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "struct_in",
+        "friendlyName": "Struct",
+        "description": "The struct to cast. Whatever schema it arrives with is ignored",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"type\":\"object\",\"additionalProperties\":true}",
+        "index": 2
+      },
+      {
+        "name": "schema",
+        "friendlyName": "Schema",
+        "description": "JSON Schema or OpenAI function definition describing the target shape",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 3
+      },
+      {
+        "name": "exec_out",
+        "friendlyName": "Success",
+        "description": "The value fits the shape",
+        "pinType": "Output",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "struct_out",
+        "friendlyName": "Struct",
+        "description": "The same value, now declaring the target shape",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"type\":\"object\",\"additionalProperties\":true}",
+        "index": 2,
+        "options": {
+          "enforceSchema": false
+        }
+      },
+      {
+        "name": "error",
+        "friendlyName": "Failed",
+        "description": "The value does not fit the shape",
+        "pinType": "Output",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 3
+      },
+      {
+        "name": "error_message",
+        "friendlyName": "Reason",
+        "description": "What did not fit, naming the field",
+        "pinType": "Output",
+        "dataType": "String",
+        "valueType": "Normal",
+        "index": 4
+      }
+    ],
+    "inputCount": 3,
+    "outputCount": 4,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/structs/struct-cast-to-struct",
+    "packageName": "std",
+    "name": "struct_cast_to_struct",
+    "friendlyName": "Cast to Struct",
+    "description": "Checks a struct against the shape of another struct and hands it on carrying that shape",
+    "category": "Structs",
+    "categoryPath": [
+      "Structs"
+    ],
+    "categorySlug": "nodes/structs",
+    "icon": "/flow/icons/struct.svg",
+    "scores": {
+      "privacy": 10,
+      "security": 10,
+      "performance": 10,
+      "governance": 10,
+      "reliability": 10,
+      "cost": 10
+    },
+    "pins": [
+      {
+        "name": "exec_in",
+        "friendlyName": "In",
+        "description": "Run the cast",
+        "pinType": "Input",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "struct_in",
+        "friendlyName": "Struct",
+        "description": "The struct to cast. Whatever schema it arrives with is ignored",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"type\":\"object\",\"additionalProperties\":true}",
+        "index": 2
+      },
+      {
+        "name": "struct_shape",
+        "friendlyName": "Shape",
+        "description": "A struct of the shape to cast to. Only its schema is read — its value is never evaluated",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"type\":\"object\",\"additionalProperties\":true}",
+        "index": 3,
+        "options": {
+          "enforceSchema": false
+        }
+      },
+      {
+        "name": "exec_out",
+        "friendlyName": "Success",
+        "description": "The value fits the shape",
+        "pinType": "Output",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "struct_out",
+        "friendlyName": "Struct",
+        "description": "The same value, now declaring the target shape",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"type\":\"object\",\"additionalProperties\":true}",
+        "index": 2
+      },
+      {
+        "name": "error",
+        "friendlyName": "Failed",
+        "description": "The value does not fit the shape",
+        "pinType": "Output",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 3
+      },
+      {
+        "name": "error_message",
+        "friendlyName": "Reason",
+        "description": "What did not fit, naming the field",
+        "pinType": "Output",
+        "dataType": "String",
+        "valueType": "Normal",
+        "index": 4
+      }
+    ],
+    "inputCount": 3,
+    "outputCount": 4,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
     "slug": "nodes/structs/struct-make",
     "packageName": "std",
     "name": "struct_make",
@@ -116595,7 +117493,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SurfaceComponent\",\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"component\"],\"$defs\":{\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SurfaceComponent\",\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\"}},\"required\":[\"id\",\"component\"],\"$defs\":{\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
         "index": 2,
         "options": {
           "enforceSchema": true
@@ -117200,7 +118098,7 @@ export const catalogNodes: CatalogNode[] = [
     "packageName": "std",
     "name": "a2ui_request_elements",
     "friendlyName": "Request Elements",
-    "description": "Requests element values from the frontend before processing",
+    "description": "Fetches elements from the live page in one round-trip so later reads hit the cache",
     "category": "UI/Data",
     "categoryPath": [
       "UI",
@@ -117220,12 +118118,22 @@ export const catalogNodes: CatalogNode[] = [
       },
       {
         "name": "element_ids",
-        "friendlyName": "Element IDs",
-        "description": "Array of element IDs to request (e.g., ['main/input-field', 'main/checkbox'])",
+        "friendlyName": "Selectors",
+        "description": "Element selectors, e.g. ['main/input-field', 'type:switch', 'glob:feed-row-*/subscribed', 'children:main/list', 'host:main/feed-row-1']",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Array",
         "index": 2
+      },
+      {
+        "name": "timeout_ms",
+        "friendlyName": "Timeout (ms)",
+        "description": "How long to wait for the page to answer",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 15000,
+        "index": 3
       },
       {
         "name": "exec_out",
@@ -117237,11 +118145,12 @@ export const catalogNodes: CatalogNode[] = [
         "index": 1
       }
     ],
-    "inputCount": 2,
+    "inputCount": 3,
     "outputCount": 1,
     "flags": [
       "Long running"
     ],
+    "version": 2,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []
@@ -120231,7 +121140,8 @@ export const catalogNodes: CatalogNode[] = [
           "validValues": [
             "Markers",
             "Routes",
-            "Viewport"
+            "Viewport",
+            "Geometry"
           ]
         }
       },
@@ -122703,7 +123613,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Surface\",\"description\":\"A surface represents an isolated UI region with its own component tree and data\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"rootComponentId\":{\"type\":\"string\"},\"components\":{\"type\":\"object\",\"additionalProperties\":{\"$ref\":\"#/$defs/SurfaceComponent\"}},\"catalogId\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"id\",\"rootComponentId\",\"components\"],\"$defs\":{\"SurfaceComponent\":{\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"component\"]},\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Surface\",\"description\":\"A surface represents an isolated UI region with its own component tree and data\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"rootComponentId\":{\"type\":\"string\"},\"components\":{\"type\":\"object\",\"additionalProperties\":{\"$ref\":\"#/$defs/SurfaceComponent\"}},\"catalogId\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"id\",\"rootComponentId\",\"components\"],\"$defs\":{\"SurfaceComponent\":{\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\"}},\"required\":[\"id\",\"component\"]},\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
         "index": 2,
         "options": {
           "enforceSchema": true
@@ -122716,7 +123626,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Array",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SurfaceComponent\",\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"component\"],\"$defs\":{\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SurfaceComponent\",\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\"}},\"required\":[\"id\",\"component\"],\"$defs\":{\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
         "index": 3,
         "options": {
           "enforceSchema": true
@@ -122822,7 +123732,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Surface\",\"description\":\"A surface represents an isolated UI region with its own component tree and data\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"rootComponentId\":{\"type\":\"string\"},\"components\":{\"type\":\"object\",\"additionalProperties\":{\"$ref\":\"#/$defs/SurfaceComponent\"}},\"catalogId\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"id\",\"rootComponentId\",\"components\"],\"$defs\":{\"SurfaceComponent\":{\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"component\"]},\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Surface\",\"description\":\"A surface represents an isolated UI region with its own component tree and data\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"rootComponentId\":{\"type\":\"string\"},\"components\":{\"type\":\"object\",\"additionalProperties\":{\"$ref\":\"#/$defs/SurfaceComponent\"}},\"catalogId\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"id\",\"rootComponentId\",\"components\"],\"$defs\":{\"SurfaceComponent\":{\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\"}},\"required\":[\"id\",\"component\"]},\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
         "index": 2,
         "options": {
           "enforceSchema": true
@@ -123032,7 +123942,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Array",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SurfaceComponent\",\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"component\"],\"$defs\":{\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SurfaceComponent\",\"description\":\"A component in the A2UI surface\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"style\":{\"anyOf\":[{\"$ref\":\"#/$defs/Style\"},{\"type\":\"null\"}]},\"component\":true,\"eventRelevant\":{\"description\":\"When true, this component's current value is included in widget action event payloads\",\"type\":\"boolean\"}},\"required\":[\"id\",\"component\"],\"$defs\":{\"Style\":{\"description\":\"Complete style definition\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"background\":{\"anyOf\":[{\"$ref\":\"#/$defs/Background\"},{\"type\":\"null\"}]},\"border\":{\"anyOf\":[{\"$ref\":\"#/$defs/Border\"},{\"type\":\"null\"}]},\"shadow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Shadow\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxWidth\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"minHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"maxHeight\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"position\":{\"anyOf\":[{\"$ref\":\"#/$defs/Position\"},{\"type\":\"null\"}]},\"zIndex\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"transform\":{\"anyOf\":[{\"$ref\":\"#/$defs/Transform\"},{\"type\":\"null\"}]},\"opacity\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"overflow\":{\"anyOf\":[{\"$ref\":\"#/$defs/Overflow\"},{\"type\":\"null\"}]},\"cursor\":{\"type\":[\"string\",\"null\"]},\"responsiveOverrides\":{\"anyOf\":[{\"$ref\":\"#/$defs/ResponsiveOverrides\"},{\"type\":\"null\"}]},\"flex\":{\"type\":[\"string\",\"null\"]},\"flexGrow\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexShrink\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"flexBasis\":{\"type\":[\"string\",\"null\"]},\"alignSelf\":{\"type\":[\"string\",\"null\"]},\"gridColumn\":{\"type\":[\"string\",\"null\"]},\"gridRow\":{\"type\":[\"string\",\"null\"]},\"gridArea\":{\"type\":[\"string\",\"null\"]},\"justifySelf\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"fontWeight\":{\"type\":[\"string\",\"null\"]},\"fontFamily\":{\"type\":[\"string\",\"null\"]},\"lineHeight\":{\"type\":[\"string\",\"null\"]},\"letterSpacing\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"textDecoration\":{\"type\":[\"string\",\"null\"]},\"textTransform\":{\"type\":[\"string\",\"null\"]},\"whiteSpace\":{\"type\":[\"string\",\"null\"]},\"wordBreak\":{\"type\":[\"string\",\"null\"]},\"visibility\":{\"type\":[\"string\",\"null\"]},\"userSelect\":{\"type\":[\"string\",\"null\"]},\"pointerEvents\":{\"type\":[\"string\",\"null\"]},\"transition\":{\"type\":[\"string\",\"null\"]},\"animation\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"outline\":{\"type\":[\"string\",\"null\"]},\"outlineOffset\":{\"type\":[\"string\",\"null\"]},\"filter\":{\"type\":[\"string\",\"null\"]},\"backdropFilter\":{\"type\":[\"string\",\"null\"]},\"aspectRatio\":{\"type\":[\"string\",\"null\"]}}},\"Background\":{\"description\":\"Background type\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"gradient\":{\"$ref\":\"#/$defs/Gradient\"}},\"required\":[\"gradient\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"image\":{\"$ref\":\"#/$defs/BackgroundImage\"}},\"required\":[\"image\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"blur\":{\"type\":\"string\"}},\"required\":[\"blur\"],\"additionalProperties\":false}]},\"Gradient\":{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\"},\"angle\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"direction\":{\"type\":[\"string\",\"null\"]},\"stops\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GradientStop\"}}},\"required\":[\"type\",\"stops\"]},\"GradientStop\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"},\"position\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"}},\"required\":[\"color\"]},\"BackgroundImage\":{\"type\":\"object\",\"properties\":{\"url\":{\"$ref\":\"#/$defs/BoundValue\"},\"size\":{\"type\":[\"string\",\"null\"]},\"position\":{\"type\":[\"string\",\"null\"]},\"repeat\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"url\"]},\"BoundValue\":{\"description\":\"Represents a value that can be either a literal or a data path binding\",\"anyOf\":[{\"$ref\":\"#/$defs/PathBinding\"},{\"type\":\"object\",\"properties\":{\"literalString\":{\"type\":\"string\"}},\"required\":[\"literalString\"]},{\"type\":\"object\",\"properties\":{\"literalNumber\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"literalNumber\"]},{\"type\":\"object\",\"properties\":{\"literalBool\":{\"type\":\"boolean\"}},\"required\":[\"literalBool\"]},{\"type\":\"object\",\"properties\":{\"literalOptions\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/SelectOption\"}}},\"required\":[\"literalOptions\"]},{\"type\":\"object\",\"properties\":{\"literalJson\":{\"type\":\"string\"}},\"required\":[\"literalJson\"]}]},\"PathBinding\":{\"description\":\"Path binding with optional default value for preview\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"defaultValue\":{\"anyOf\":[{\"$ref\":\"#/$defs/PathDefault\"},{\"type\":\"null\"}]}},\"required\":[\"path\"]},\"PathDefault\":{\"description\":\"Default value for path bindings - stores the preview value\",\"anyOf\":[{\"type\":\"string\"},{\"type\":\"number\",\"format\":\"double\"},{\"type\":\"boolean\"}]},\"SelectOption\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"}},\"required\":[\"value\",\"label\"]},\"Border\":{\"description\":\"Border styling\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":[\"string\",\"null\"]},\"style\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"radius\":{\"type\":[\"string\",\"null\"]}}},\"Shadow\":{\"description\":\"Shadow styling. The JSON representation intentionally matches the original\\nfrontend contract. The previous `{ boxShadows, textShadow }` shape is still\\naccepted during deserialization and normalized to these fields.\",\"type\":\"object\",\"properties\":{\"x\":{\"type\":[\"string\",\"null\"]},\"y\":{\"type\":[\"string\",\"null\"]},\"blur\":{\"type\":[\"string\",\"null\"]},\"spread\":{\"type\":[\"string\",\"null\"]},\"color\":{\"type\":[\"string\",\"null\"]},\"inset\":{\"type\":[\"boolean\",\"null\"]},\"textShadow\":{\"type\":[\"string\",\"null\"]}}},\"Spacing\":{\"description\":\"Spacing (padding/margin). Edge fields are the canonical frontend JSON shape;\\nstrings and `{ \\\"value\\\": \\\"...\\\" }` remain accepted for compatibility.\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]}}},\"Size\":{\"description\":\"Size value - accepts both \\\"20px\\\" and { \\\"value\\\": \\\"20px\\\" }\",\"type\":\"string\"},\"Position\":{\"description\":\"Position styling\",\"type\":\"object\",\"properties\":{\"top\":{\"type\":[\"string\",\"null\"]},\"right\":{\"type\":[\"string\",\"null\"]},\"bottom\":{\"type\":[\"string\",\"null\"]},\"left\":{\"type\":[\"string\",\"null\"]},\"type\":{\"type\":\"string\"}},\"required\":[\"type\"]},\"Transform\":{\"description\":\"Transform styling\",\"type\":\"object\",\"properties\":{\"translate\":{\"type\":[\"string\",\"null\"]},\"rotate\":{\"type\":[\"number\",\"null\"],\"format\":\"float\"},\"scale\":{\"type\":[\"string\",\"null\"]},\"transformOrigin\":{\"type\":[\"string\",\"null\"]},\"skew\":{\"type\":[\"string\",\"null\"]}}},\"Overflow\":{\"description\":\"Overflow behavior\",\"type\":\"string\",\"enum\":[\"visible\",\"hidden\",\"scroll\",\"auto\"]},\"ResponsiveOverrides\":{\"description\":\"Responsive overrides for different breakpoints\",\"type\":\"object\",\"properties\":{\"sm\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"md\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"lg\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]},\"xxl\":{\"anyOf\":[{\"$ref\":\"#/$defs/BreakpointStyle\"},{\"type\":\"null\"}]}}},\"BreakpointStyle\":{\"description\":\"Breakpoint style overrides\",\"type\":\"object\",\"properties\":{\"className\":{\"type\":[\"string\",\"null\"]},\"display\":{\"type\":[\"string\",\"null\"]},\"flexDirection\":{\"type\":[\"string\",\"null\"]},\"justifyContent\":{\"type\":[\"string\",\"null\"]},\"alignItems\":{\"type\":[\"string\",\"null\"]},\"gap\":{\"type\":[\"string\",\"null\"]},\"gridCols\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"width\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"height\":{\"anyOf\":[{\"$ref\":\"#/$defs/Size\"},{\"type\":\"null\"}]},\"padding\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"margin\":{\"anyOf\":[{\"$ref\":\"#/$defs/Spacing\"},{\"type\":\"null\"}]},\"hidden\":{\"type\":[\"boolean\",\"null\"]},\"fontSize\":{\"type\":[\"string\",\"null\"]},\"textAlign\":{\"type\":[\"string\",\"null\"]},\"order\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"}}}}}",
         "index": 3,
         "options": {
           "enforceSchema": true
@@ -126061,7 +126971,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "boolean",
         "friendlyName": "Boolean",
-        "description": "Input Pin for OR Operation",
+        "description": "Boolean value to compare",
         "pinType": "Input",
         "dataType": "Boolean",
         "valueType": "Normal",
@@ -126071,7 +126981,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "boolean",
         "friendlyName": "Boolean",
-        "description": "Input Pin for OR Operation",
+        "description": "Boolean value to compare",
         "pinType": "Input",
         "dataType": "Boolean",
         "valueType": "Normal",
@@ -147460,6 +148370,1757 @@ export const catalogNodes: CatalogNode[] = [
     "permissions": []
   },
   {
+    "slug": "nodes/web/geo/geometry/geometry-from-legacy-location",
+    "packageName": "geo",
+    "name": "geometry_from_legacy_location",
+    "friendlyName": "Extract Legacy Location Point",
+    "description": "Extracts a Point from a search result or waypoint coordinate. Returns the original rich location wrapper unchanged.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "location",
+        "friendlyName": "location",
+        "description": "location",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 1
+      },
+      {
+        "name": "location_out",
+        "friendlyName": "location_out",
+        "description": "Original location wrapper",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "index": 2
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 2,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-from-legacy-route",
+    "packageName": "geo",
+    "name": "geometry_from_legacy_route",
+    "friendlyName": "Extract Legacy Route Geometry",
+    "description": "Extracts a LineString from RouteResult.geometry.points or RouteGeometry.points. Returns the original wrapper unchanged.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "route",
+        "friendlyName": "route",
+        "description": "route",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"LineString\"}",
+        "index": 1
+      },
+      {
+        "name": "route_out",
+        "friendlyName": "route_out",
+        "description": "Original route wrapper",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "index": 2
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 2,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-planar-area",
+    "packageName": "geo",
+    "name": "geometry_planar_area",
+    "friendlyName": "Geometry Area (Square Degrees)",
+    "description": "Computes Polygon or MultiPolygon area in square coordinate degrees, subtracting holes. This is a planar measurement.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "area",
+        "friendlyName": "area",
+        "description": "Planar area in square coordinate degrees",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-geodesic-area",
+    "packageName": "geo",
+    "name": "geometry_geodesic_area",
+    "friendlyName": "Geometry Area (Square Meters)",
+    "description": "Computes WGS 84 ellipsoidal Polygon or MultiPolygon area in square meters, subtracting holes. Each polygon must describe a region smaller than half the Earth.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "area",
+        "friendlyName": "area",
+        "description": "Area in square meters",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-bounds",
+    "packageName": "geo",
+    "name": "geometry_bounds",
+    "friendlyName": "Geometry Bounds",
+    "description": "Returns minimum and maximum longitude and latitude using a planar coordinate envelope. Empty geometries have no bounds.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "min_longitude",
+        "friendlyName": "min_longitude",
+        "description": "Coordinate in degrees",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "min_latitude",
+        "friendlyName": "min_latitude",
+        "description": "Coordinate in degrees",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 2
+      },
+      {
+        "name": "max_longitude",
+        "friendlyName": "max_longitude",
+        "description": "Coordinate in degrees",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 3
+      },
+      {
+        "name": "max_latitude",
+        "friendlyName": "max_latitude",
+        "description": "Coordinate in degrees",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 4
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 4,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-centroid",
+    "packageName": "geo",
+    "name": "geometry_centroid",
+    "friendlyName": "Geometry Centroid (Planar)",
+    "description": "Computes the centroid in the longitude/latitude coordinate plane. Empty geometries have no centroid.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-contains",
+    "packageName": "geo",
+    "name": "geometry_contains",
+    "friendlyName": "Geometry Contains (Planar)",
+    "description": "Tests whether geometry A contains B in the longitude/latitude coordinate plane. A point on a polygon boundary is not contained.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "a",
+        "friendlyName": "a",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "b",
+        "friendlyName": "b",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 2
+      },
+      {
+        "name": "result",
+        "friendlyName": "result",
+        "description": "Planar predicate result",
+        "pinType": "Output",
+        "dataType": "Boolean",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-convex-hull",
+    "packageName": "geo",
+    "name": "geometry_convex_hull",
+    "friendlyName": "Geometry Convex Hull (Planar)",
+    "description": "Computes a polygon hull in the longitude/latitude coordinate plane. Fails when the input cannot form a valid polygon with at least three non-collinear positions.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Polygon\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-planar-distance",
+    "packageName": "geo",
+    "name": "geometry_planar_distance",
+    "friendlyName": "Geometry Distance (Degrees)",
+    "description": "Computes the shortest planar distance in coordinate degrees. This longitude/latitude plane does not wrap at the antimeridian. Empty inputs are rejected.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "a",
+        "friendlyName": "a",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "b",
+        "friendlyName": "b",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 2
+      },
+      {
+        "name": "distance",
+        "friendlyName": "distance",
+        "description": "Planar distance in coordinate degrees",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-intersection",
+    "packageName": "geo",
+    "name": "geometry_intersection",
+    "friendlyName": "Geometry Intersection (Planar)",
+    "description": "Intersects Polygon or MultiPolygon inputs in the longitude/latitude coordinate plane. Returns a MultiPolygon, which can be empty.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "a",
+        "friendlyName": "a",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "b",
+        "friendlyName": "b",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 2
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiPolygon\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-intersects",
+    "packageName": "geo",
+    "name": "geometry_intersects",
+    "friendlyName": "Geometry Intersects (Planar)",
+    "description": "Tests whether geometries share any point in the longitude/latitude coordinate plane, including boundary touches.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "a",
+        "friendlyName": "a",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "b",
+        "friendlyName": "b",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 2
+      },
+      {
+        "name": "result",
+        "friendlyName": "result",
+        "description": "Planar predicate result",
+        "pinType": "Output",
+        "dataType": "Boolean",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-planar-length",
+    "packageName": "geo",
+    "name": "geometry_planar_length",
+    "friendlyName": "Geometry Length (Degrees)",
+    "description": "Sums line lengths and polygon ring perimeters in planar coordinate degrees. Points contribute zero.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "length",
+        "friendlyName": "length",
+        "description": "Planar length in coordinate degrees",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-geodesic-length",
+    "packageName": "geo",
+    "name": "geometry_geodesic_length",
+    "friendlyName": "Geometry Length (Meters)",
+    "description": "Sums WGS 84 ellipsoidal geodesic segment lengths in meters, including polygon exterior and interior ring perimeters. Points contribute zero.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "length",
+        "friendlyName": "length",
+        "description": "Length in meters",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-num-points",
+    "packageName": "geo",
+    "name": "geometry_num_points",
+    "friendlyName": "Geometry Position Count",
+    "description": "Counts coordinate positions, including closing polygon positions and recursive collection members.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "count",
+        "friendlyName": "count",
+        "description": "Number of positions, including closing ring positions",
+        "pinType": "Output",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-type",
+    "packageName": "geo",
+    "name": "geometry_type",
+    "friendlyName": "Geometry Type",
+    "description": "Returns the GeoJSON geometry type name.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "type",
+        "friendlyName": "type",
+        "description": "GeoJSON type name",
+        "pinType": "Output",
+        "dataType": "String",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-within",
+    "packageName": "geo",
+    "name": "geometry_within",
+    "friendlyName": "Geometry Within (Planar)",
+    "description": "Tests whether geometry B contains A in the longitude/latitude coordinate plane.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "a",
+        "friendlyName": "a",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "b",
+        "friendlyName": "b",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 2
+      },
+      {
+        "name": "result",
+        "friendlyName": "result",
+        "description": "Planar predicate result",
+        "pinType": "Output",
+        "dataType": "Boolean",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-to-geojson",
+    "packageName": "geo",
+    "name": "geometry_to_geojson",
+    "friendlyName": "Geometry to GeoJSON",
+    "description": "Writes a validated geometry as GeoJSON text, retaining bbox and foreign members and normalizing ring winding.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "text",
+        "friendlyName": "text",
+        "description": "Serialized geometry",
+        "pinType": "Output",
+        "dataType": "String",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-to-wkb",
+    "packageName": "geo",
+    "name": "geometry_to_wkb",
+    "friendlyName": "Geometry to WKB",
+    "description": "Writes two-dimensional WKB bytes. WKB omits GeoJSON bbox and foreign members; keep application properties in a surrounding Struct.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "bytes",
+        "friendlyName": "bytes",
+        "description": "WKB byte sequence",
+        "pinType": "Output",
+        "dataType": "Byte",
+        "valueType": "Array",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-to-wkt",
+    "packageName": "geo",
+    "name": "geometry_to_wkt",
+    "friendlyName": "Geometry to WKT",
+    "description": "Writes two-dimensional WKT. WKT omits GeoJSON bbox and foreign members; keep application properties in a surrounding Struct.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "text",
+        "friendlyName": "text",
+        "description": "Serialized geometry",
+        "pinType": "Output",
+        "dataType": "String",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-from-legacy-boundary",
+    "packageName": "geo",
+    "name": "geometry_from_legacy_boundary",
+    "friendlyName": "Legacy Boundary to Polygon",
+    "description": "Converts the coordinate vector emitted by H3 Cell Boundary into a Polygon. Closes the ring and validates topology.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "boundary",
+        "friendlyName": "boundary",
+        "description": "boundary",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GeoCoordinate\",\"type\":\"object\",\"properties\":{\"latitude\":{\"type\":\"number\",\"format\":\"double\"},\"longitude\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"latitude\",\"longitude\"]}",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Polygon\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-from-legacy-coordinate",
+    "packageName": "geo",
+    "name": "geometry_from_legacy_coordinate",
+    "friendlyName": "Legacy Coordinate to Point",
+    "description": "Converts the existing GeoCoordinate latitude/longitude object to a Geometry Point without swapping the axes.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "coordinate",
+        "friendlyName": "coordinate",
+        "description": "coordinate",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GeoCoordinate\",\"type\":\"object\",\"properties\":{\"latitude\":{\"type\":\"number\",\"format\":\"double\"},\"longitude\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"latitude\",\"longitude\"]}",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-from-legacy-polygons",
+    "packageName": "geo",
+    "name": "geometry_from_legacy_polygons",
+    "friendlyName": "Legacy H3 Polygons to MultiPolygon",
+    "description": "Converts the existing H3 polygon vector, preserving exterior and interior rings and closing each ring.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "polygons",
+        "friendlyName": "polygons",
+        "description": "polygons",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Polygon\",\"type\":\"object\",\"properties\":{\"exterior\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GeoCoordinate\"}},\"interiors\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GeoCoordinate\"}}}},\"required\":[\"exterior\",\"interiors\"],\"$defs\":{\"GeoCoordinate\":{\"type\":\"object\",\"properties\":{\"latitude\":{\"type\":\"number\",\"format\":\"double\"},\"longitude\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"latitude\",\"longitude\"]}}}",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiPolygon\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-make-point",
+    "packageName": "geo",
+    "name": "geometry_make_point",
+    "friendlyName": "Make Point",
+    "description": "Creates a WGS 84 Point from longitude and latitude. Both coordinates must be finite and within geographic bounds.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "longitude",
+        "friendlyName": "longitude",
+        "description": "longitude",
+        "pinType": "Input",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "latitude",
+        "friendlyName": "latitude",
+        "description": "latitude",
+        "pinType": "Input",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 2
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-from-geojson",
+    "packageName": "geo",
+    "name": "geometry_from_geojson",
+    "friendlyName": "Parse GeoJSON Geometry",
+    "description": "Parses a GeoJSON geometry object, validates its two-dimensional WGS 84 coordinates and normalizes ring winding. Retains bbox and foreign members. Feature wrappers require extraction.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "text",
+        "friendlyName": "text",
+        "description": "text",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-from-wkb",
+    "packageName": "geo",
+    "name": "geometry_from_wkb",
+    "friendlyName": "Parse WGS 84 WKB",
+    "description": "Parses two-dimensional WKB bytes. Calling this node asserts WGS 84 longitude/latitude. Unsupported dimensions, SRIDs and out-of-range coordinates are rejected.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "bytes",
+        "friendlyName": "bytes",
+        "description": "bytes",
+        "pinType": "Input",
+        "dataType": "Byte",
+        "valueType": "Array",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-from-wkt",
+    "packageName": "geo",
+    "name": "geometry_from_wkt",
+    "friendlyName": "Parse WGS 84 WKT",
+    "description": "Parses two-dimensional WKT. Calling this node asserts coordinates are WGS 84 longitude/latitude; it does not transform a projected CRS. Empty scalar geometries are rejected.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "text",
+        "friendlyName": "text",
+        "description": "text",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-geodesic-distance",
+    "packageName": "geo",
+    "name": "geometry_geodesic_distance",
+    "friendlyName": "Point Distance (Meters)",
+    "description": "Computes the WGS 84 ellipsoidal geodesic distance between two Points in meters, including antimeridian crossings.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "a",
+        "friendlyName": "a",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 1
+      },
+      {
+        "name": "b",
+        "friendlyName": "b",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 2
+      },
+      {
+        "name": "distance",
+        "friendlyName": "distance",
+        "description": "Distance in meters",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-y",
+    "packageName": "geo",
+    "name": "geometry_y",
+    "friendlyName": "Point Latitude",
+    "description": "Returns the Point y coordinate, latitude in degrees.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 1
+      },
+      {
+        "name": "value",
+        "friendlyName": "value",
+        "description": "Coordinate in degrees",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-x",
+    "packageName": "geo",
+    "name": "geometry_x",
+    "friendlyName": "Point Longitude",
+    "description": "Returns the Point x coordinate, longitude in degrees.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 1
+      },
+      {
+        "name": "value",
+        "friendlyName": "value",
+        "description": "Coordinate in degrees",
+        "pinType": "Output",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-to-legacy-coordinate",
+    "packageName": "geo",
+    "name": "geometry_to_legacy_coordinate",
+    "friendlyName": "Point to Legacy Coordinate",
+    "description": "Converts a Geometry Point into the existing GeoCoordinate shape used by H3, routing, search and map nodes.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 1
+      },
+      {
+        "name": "coordinate",
+        "friendlyName": "coordinate",
+        "description": "Legacy latitude/longitude object",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GeoCoordinate\",\"type\":\"object\",\"properties\":{\"latitude\":{\"type\":\"number\",\"format\":\"double\"},\"longitude\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"latitude\",\"longitude\"]}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-simplify",
+    "packageName": "geo",
+    "name": "geometry_simplify",
+    "friendlyName": "Simplify Geometry (Planar)",
+    "description": "Simplifies lines and polygon rings with a nonnegative tolerance in coordinate degrees. Validates the result and rejects a topology-breaking result.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "tolerance",
+        "friendlyName": "tolerance",
+        "description": "tolerance",
+        "pinType": "Input",
+        "dataType": "Float",
+        "valueType": "Normal",
+        "index": 2
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-to-legacy-route",
+    "packageName": "geo",
+    "name": "geometry_to_legacy_route",
+    "friendlyName": "Update Legacy Route Geometry",
+    "description": "Updates only the points of an existing RouteResult or RouteGeometry with a LineString, retaining route metadata and other fields.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "route",
+        "friendlyName": "route",
+        "description": "route",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"LineString\"}",
+        "index": 2
+      },
+      {
+        "name": "route_out",
+        "friendlyName": "route_out",
+        "description": "Route with updated points and retained metadata",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "index": 1
+      }
+    ],
+    "inputCount": 2,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-cast-geometry-collection",
+    "packageName": "geo",
+    "name": "geometry_cast_geometry_collection",
+    "friendlyName": "Validate GeometryCollection",
+    "description": "Validates a geometry as GeometryCollection and returns it with an explicit subtype. Incompatible values fail the node.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"GeometryCollection\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-cast-line-string",
+    "packageName": "geo",
+    "name": "geometry_cast_line_string",
+    "friendlyName": "Validate LineString",
+    "description": "Validates a geometry as LineString and returns it with an explicit subtype. Incompatible values fail the node.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"LineString\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-cast-multi-line-string",
+    "packageName": "geo",
+    "name": "geometry_cast_multi_line_string",
+    "friendlyName": "Validate MultiLineString",
+    "description": "Validates a geometry as MultiLineString and returns it with an explicit subtype. Incompatible values fail the node.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiLineString\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-cast-multi-point",
+    "packageName": "geo",
+    "name": "geometry_cast_multi_point",
+    "friendlyName": "Validate MultiPoint",
+    "description": "Validates a geometry as MultiPoint and returns it with an explicit subtype. Incompatible values fail the node.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiPoint\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-cast-multi-polygon",
+    "packageName": "geo",
+    "name": "geometry_cast_multi_polygon",
+    "friendlyName": "Validate MultiPolygon",
+    "description": "Validates a geometry as MultiPolygon and returns it with an explicit subtype. Incompatible values fail the node.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiPolygon\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-cast-point",
+    "packageName": "geo",
+    "name": "geometry_cast_point",
+    "friendlyName": "Validate Point",
+    "description": "Validates a geometry as Point and returns it with an explicit subtype. Incompatible values fail the node.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
+    "slug": "nodes/web/geo/geometry/geometry-cast-polygon",
+    "packageName": "geo",
+    "name": "geometry_cast_polygon",
+    "friendlyName": "Validate Polygon",
+    "description": "Validates a geometry as Polygon and returns it with an explicit subtype. Incompatible values fail the node.",
+    "category": "Web/Geo/Geometry",
+    "categoryPath": [
+      "Web",
+      "Geo",
+      "Geometry"
+    ],
+    "categorySlug": "nodes/web/geo/geometry",
+    "icon": "/flow/icons/map.svg",
+    "pins": [
+      {
+        "name": "geometry",
+        "friendlyName": "geometry",
+        "description": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+        "pinType": "Input",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "geometry_out",
+        "friendlyName": "Geometry",
+        "description": "Validated WGS 84 GeoJSON geometry",
+        "pinType": "Output",
+        "dataType": "Geometry",
+        "valueType": "Normal",
+        "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Polygon\"}",
+        "index": 1
+      }
+    ],
+    "inputCount": 1,
+    "outputCount": 1,
+    "flags": [],
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
     "slug": "nodes/web/geo/h3/h3-cell-area",
     "packageName": "geo",
     "name": "h3_cell_area",
@@ -149570,7 +152231,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 2,
         "options": {
           "enforceSchema": true
@@ -149717,7 +152378,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -149752,7 +152413,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -149772,22 +152433,33 @@ export const catalogNodes: CatalogNode[] = [
         }
       },
       {
+        "name": "flow_like_auth",
+        "friendlyName": "Flow-Like Authentication",
+        "description": "Hosted public OAuth servers only: resolve the verified caller to a Flow-Like account and enforce app permissions. Requires a trusted platform issuer and an allowed OAuth client.",
+        "pinType": "Input",
+        "dataType": "Boolean",
+        "valueType": "Normal",
+        "defaultValue": false,
+        "index": 3
+      },
+      {
         "name": "config_out",
         "friendlyName": "Config",
         "description": "Updated config",
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
         }
       }
     ],
-    "inputCount": 2,
+    "inputCount": 3,
     "outputCount": 1,
     "flags": [],
+    "version": 1,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []
@@ -149813,7 +152485,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -149826,7 +152498,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -149866,7 +152538,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -149906,7 +152578,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -149941,7 +152613,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Input",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -149994,7 +152666,7 @@ export const catalogNodes: CatalogNode[] = [
         "pinType": "Output",
         "dataType": "Struct",
         "valueType": "Normal",
-        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}",
         "index": 1,
         "options": {
           "enforceSchema": true
@@ -152590,8 +155262,8 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "AI",
     "slug": "nodes/ai",
     "depth": 1,
-    "count": 246,
-    "description": "Browse 246 generated Flow-Like node references in AI with pin details and available schema, package, and risk-rating metadata."
+    "count": 250,
+    "description": "Browse 250 generated Flow-Like node references in AI with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Agents",
@@ -152622,8 +155294,8 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "AI/Generative",
     "slug": "nodes/ai/generative",
     "depth": 2,
-    "count": 97,
-    "description": "Browse 97 generated Flow-Like node references in AI/Generative with pin details and available schema, package, and risk-rating metadata."
+    "count": 101,
+    "description": "Browse 101 generated Flow-Like node references in AI/Generative with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Audio",
@@ -152662,16 +155334,16 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "AI/Generative/Image",
     "slug": "nodes/ai/generative/image",
     "depth": 3,
-    "count": 8,
-    "description": "Browse 8 generated Flow-Like node references in AI/Generative/Image with pin details and available schema, package, and risk-rating metadata."
+    "count": 9,
+    "description": "Browse 9 generated Flow-Like node references in AI/Generative/Image with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Options",
     "path": "AI/Generative/Image/Options",
     "slug": "nodes/ai/generative/image/options",
     "depth": 4,
-    "count": 7,
-    "description": "Browse 7 generated Flow-Like node references in AI/Generative/Image/Options with pin details and available schema, package, and risk-rating metadata."
+    "count": 8,
+    "description": "Browse 8 generated Flow-Like node references in AI/Generative/Image/Options with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Preferences",
@@ -152686,8 +155358,8 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "AI/Generative/Provider",
     "slug": "nodes/ai/generative/provider",
     "depth": 3,
-    "count": 24,
-    "description": "Browse 24 generated Flow-Like node references in AI/Generative/Provider with pin details and available schema, package, and risk-rating metadata."
+    "count": 25,
+    "description": "Browse 25 generated Flow-Like node references in AI/Generative/Provider with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Response",
@@ -152718,24 +155390,24 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "AI/Generative/Video",
     "slug": "nodes/ai/generative/video",
     "depth": 3,
-    "count": 9,
-    "description": "Browse 9 generated Flow-Like node references in AI/Generative/Video with pin details and available schema, package, and risk-rating metadata."
+    "count": 11,
+    "description": "Browse 11 generated Flow-Like node references in AI/Generative/Video with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Options",
     "path": "AI/Generative/Video/Options",
     "slug": "nodes/ai/generative/video/options",
     "depth": 4,
-    "count": 5,
-    "description": "Browse 5 generated Flow-Like node references in AI/Generative/Video/Options with pin details and available schema, package, and risk-rating metadata."
+    "count": 6,
+    "description": "Browse 6 generated Flow-Like node references in AI/Generative/Video/Options with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Provider",
     "path": "AI/Generative/Video/Provider",
     "slug": "nodes/ai/generative/video/provider",
     "depth": 4,
-    "count": 3,
-    "description": "Browse 3 generated Flow-Like node references in AI/Generative/Video/Provider with pin details and available schema, package, and risk-rating metadata."
+    "count": 4,
+    "description": "Browse 4 generated Flow-Like node references in AI/Generative/Video/Provider with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "GitHub",
@@ -154158,8 +156830,8 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "Structs",
     "slug": "nodes/structs",
     "depth": 1,
-    "count": 10,
-    "description": "Browse 10 generated Flow-Like node references in Structs with pin details and available schema, package, and risk-rating metadata."
+    "count": 12,
+    "description": "Browse 12 generated Flow-Like node references in Structs with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Fields",
@@ -154822,8 +157494,8 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "Web",
     "slug": "nodes/web",
     "depth": 1,
-    "count": 92,
-    "description": "Browse 92 generated Flow-Like node references in Web with pin details and available schema, package, and risk-rating metadata."
+    "count": 131,
+    "description": "Browse 131 generated Flow-Like node references in Web with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "API",
@@ -154870,8 +157542,16 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "Web/Geo",
     "slug": "nodes/web/geo",
     "depth": 2,
-    "count": 21,
-    "description": "Browse 21 generated Flow-Like node references in Web/Geo with pin details and available schema, package, and risk-rating metadata."
+    "count": 60,
+    "description": "Browse 60 generated Flow-Like node references in Web/Geo with pin details and available schema, package, and risk-rating metadata."
+  },
+  {
+    "label": "Geometry",
+    "path": "Web/Geo/Geometry",
+    "slug": "nodes/web/geo/geometry",
+    "depth": 3,
+    "count": 39,
+    "description": "Browse 39 generated Flow-Like node references in Web/Geo/Geometry with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "H3",

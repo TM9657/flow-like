@@ -18,8 +18,10 @@ import {
 } from "../index";
 
 describe("FlowPilot app-creation E2E cases", () => {
-	test("defines twelve stable cases and the three requested smoke archetypes", () => {
+	test("defines stable cases including a separate paired retrieval case", () => {
 		expect(FLOWPILOT_APP_CREATION_CASES.map(({ id }) => id)).toEqual([
+			"intake-reliability",
+			"retrieval-intake",
 			"simple-agent",
 			"forum",
 			"ops-dashboard",
@@ -119,6 +121,30 @@ describe("FlowPilot app-creation E2E cases", () => {
 		);
 		expect(built.prompt).toContain("at least 321 non-whitespace characters");
 		expect(built.prompt).toContain('table named exactly "Forum Threads"');
+	});
+
+	test("orders host-provisioned intake workflow before page binding without repeating data setup", () => {
+		const built = buildCasePrompt(
+			getFlowPilotAppCreationCase("intake-reliability"),
+			"run-intake",
+		);
+		expect(built.prompt).toContain("Build and commit the workflow first.");
+		expect(built.prompt).toContain("exact submitTicket entry node ID");
+		expect(built.prompt).toContain("no Data Studio delegation is needed");
+		expect(built.prompt).toContain("reserved page does not exist");
+		expect(built.prompt).not.toContain(
+			"Finish the UI and data setup, then implement",
+		);
+		expect(built.prompt).toContain(
+			"eventsGeneric submitTicket(payload: Struct)",
+		);
+		expect(built.prompt).toContain("ui::getElementValue");
+		expect(built.prompt).toContain("ui::setElementText");
+		expect(built.prompt).toContain("exactly one workflow_event action");
+		expect(built.prompt).toContain("host will register Events");
+		expect(
+			buildCasePrompt(getFlowPilotAppCreationCase("forum")).prompt,
+		).toContain("Finish the UI and data setup, then implement");
 	});
 
 	test("pins the AI adventure case to its agent-directed campaign contract", () => {

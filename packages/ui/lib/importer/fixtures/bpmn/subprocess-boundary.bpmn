@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_sub" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:error id="Error_Payment" name="PaymentFailed" errorCode="PAYMENT_FAILED" />
+  <bpmn:process id="Process_main" name="Order with payment" isExecutable="true">
+    <bpmn:startEvent id="Start" name="Start" />
+    <bpmn:sequenceFlow id="f0" sourceRef="Start" targetRef="Sub_Payment" />
+    <bpmn:subProcess id="Sub_Payment" name="Collect payment">
+      <bpmn:startEvent id="Sub_Start" />
+      <bpmn:sequenceFlow id="s1" sourceRef="Sub_Start" targetRef="Charge" />
+      <bpmn:serviceTask id="Charge" name="Charge card">
+        <bpmn:extensionElements>
+          <zeebe:taskDefinition type="charge-card" />
+        </bpmn:extensionElements>
+      </bpmn:serviceTask>
+      <bpmn:sequenceFlow id="s2" sourceRef="Charge" targetRef="Sub_Xor" />
+      <bpmn:exclusiveGateway id="Sub_Xor" name="Charged?" default="s3_ok" />
+      <bpmn:sequenceFlow id="s3_ok" sourceRef="Sub_Xor" targetRef="Sub_End" />
+      <bpmn:sequenceFlow id="s3_fail" sourceRef="Sub_Xor" targetRef="Sub_ErrorEnd">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=not(charged)</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:endEvent id="Sub_End" />
+      <bpmn:endEvent id="Sub_ErrorEnd" name="Payment failed">
+        <bpmn:errorEventDefinition id="ErrDef_throw" errorRef="Error_Payment" />
+      </bpmn:endEvent>
+    </bpmn:subProcess>
+    <bpmn:boundaryEvent id="B_Timer" name="Every hour" cancelActivity="false" attachedToRef="Sub_Payment">
+      <bpmn:timerEventDefinition><bpmn:timeCycle>R3/PT1H</bpmn:timeCycle></bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="B_Error" name="Payment failed" attachedToRef="Sub_Payment">
+      <bpmn:errorEventDefinition id="ErrDef_catch" errorRef="Error_Payment" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="f_timer" sourceRef="B_Timer" targetRef="Remind" />
+    <bpmn:sendTask id="Remind" name="Send reminder" />
+    <bpmn:sequenceFlow id="f_remind_end" sourceRef="Remind" targetRef="End_Reminded" />
+    <bpmn:endEvent id="End_Reminded" />
+    <bpmn:sequenceFlow id="f_err" sourceRef="B_Error" targetRef="End_Failed" />
+    <bpmn:endEvent id="End_Failed" name="Failed">
+      <bpmn:terminateEventDefinition />
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="Sub_Payment" targetRef="Call_Archive" />
+    <bpmn:callActivity id="Call_Archive" name="Archive order" calledElement="Process_archive">
+      <bpmn:extensionElements>
+        <zeebe:calledElement processId="Process_archive" propagateAllChildVariables="false" />
+      </bpmn:extensionElements>
+    </bpmn:callActivity>
+    <bpmn:sequenceFlow id="f2" sourceRef="Call_Archive" targetRef="End" />
+    <bpmn:endEvent id="End" name="Done" />
+    <bpmn:subProcess id="EventSub" name="On cancel" triggeredByEvent="true">
+      <bpmn:startEvent id="EventSub_Start" name="Cancel requested" isInterrupting="true">
+        <bpmn:messageEventDefinition messageRef="Msg_Cancel" />
+      </bpmn:startEvent>
+      <bpmn:sequenceFlow id="e1" sourceRef="EventSub_Start" targetRef="EventSub_End" />
+      <bpmn:endEvent id="EventSub_End" />
+    </bpmn:subProcess>
+  </bpmn:process>
+  <bpmn:process id="Process_archive" name="Archive" isExecutable="true">
+    <bpmn:startEvent id="A_Start" />
+    <bpmn:sequenceFlow id="a1" sourceRef="A_Start" targetRef="A_Task" />
+    <bpmn:scriptTask id="A_Task" name="Compute key" scriptFormat="javascript">
+      <bpmn:script>execution.setVariable("key", orderId + "-archived");</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="a2" sourceRef="A_Task" targetRef="A_End" />
+    <bpmn:endEvent id="A_End" />
+  </bpmn:process>
+  <bpmn:message id="Msg_Cancel" name="cancel-order" />
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_main">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="152" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Payment_di" bpmnElement="Sub_Payment" isExpanded="true"><dc:Bounds x="240" y="80" width="520" height="240" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start"><dc:Bounds x="272" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Charge_di" bpmnElement="Charge"><dc:Bounds x="350" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Xor_di" bpmnElement="Sub_Xor" isMarkerVisible="true"><dc:Bounds x="495" y="175" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End"><dc:Bounds x="662" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_ErrorEnd_di" bpmnElement="Sub_ErrorEnd"><dc:Bounds x="662" y="262" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="B_Timer_di" bpmnElement="B_Timer"><dc:Bounds x="382" y="302" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="B_Error_di" bpmnElement="B_Error"><dc:Bounds x="582" y="302" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Remind_di" bpmnElement="Remind"><dc:Bounds x="350" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Reminded_di" bpmnElement="End_Reminded"><dc:Bounds x="502" y="402" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Failed_di" bpmnElement="End_Failed"><dc:Bounds x="582" y="402" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_Archive_di" bpmnElement="Call_Archive"><dc:Bounds x="820" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="982" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EventSub_di" bpmnElement="EventSub" isExpanded="true"><dc:Bounds x="240" y="500" width="300" height="120" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EventSub_Start_di" bpmnElement="EventSub_Start"><dc:Bounds x="272" y="542" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EventSub_End_di" bpmnElement="EventSub_End"><dc:Bounds x="472" y="542" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="188" y="200" /><di:waypoint x="240" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s1_di" bpmnElement="s1"><di:waypoint x="308" y="200" /><di:waypoint x="350" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s2_di" bpmnElement="s2"><di:waypoint x="450" y="200" /><di:waypoint x="495" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s3_ok_di" bpmnElement="s3_ok"><di:waypoint x="545" y="200" /><di:waypoint x="662" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s3_fail_di" bpmnElement="s3_fail"><di:waypoint x="520" y="225" /><di:waypoint x="520" y="280" /><di:waypoint x="662" y="280" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_timer_di" bpmnElement="f_timer"><di:waypoint x="400" y="338" /><di:waypoint x="400" y="380" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_remind_end_di" bpmnElement="f_remind_end"><di:waypoint x="450" y="420" /><di:waypoint x="502" y="420" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_err_di" bpmnElement="f_err"><di:waypoint x="600" y="338" /><di:waypoint x="600" y="402" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="760" y="200" /><di:waypoint x="820" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="920" y="200" /><di:waypoint x="982" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e1_di" bpmnElement="e1"><di:waypoint x="308" y="560" /><di:waypoint x="472" y="560" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_2">
+    <bpmndi:BPMNPlane id="BPMNPlane_2" bpmnElement="Process_archive">
+      <bpmndi:BPMNShape id="A_Start_di" bpmnElement="A_Start"><dc:Bounds x="152" y="102" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_Task_di" bpmnElement="A_Task"><dc:Bounds x="240" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_End_di" bpmnElement="A_End"><dc:Bounds x="402" y="102" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="a1_di" bpmnElement="a1"><di:waypoint x="188" y="120" /><di:waypoint x="240" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a2_di" bpmnElement="a2"><di:waypoint x="340" y="120" /><di:waypoint x="402" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

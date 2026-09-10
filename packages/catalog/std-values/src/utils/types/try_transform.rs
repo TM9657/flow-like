@@ -93,8 +93,73 @@ impl NodeLogic for TryTransformNode {
     }
 
     async fn on_update(&self, node: &mut Node, board: &Board) {
-        let _ = node.match_type("type_out", board, None, None);
+        match_output_type(node, board);
         let _ = node.match_type("type_in", board, None, None);
+    }
+}
+
+// Generic consumers impose no target type. When ordinary matching selects a Generic
+// peer, use concrete consumers if their contracts agree. Keep legacy conflict handling.
+fn match_output_type(node: &mut Node, board: &Board) {
+    let _ = node.match_type("type_out", board, None, None);
+    let Some(output) = node.get_pin_by_name("type_out") else {
+        return;
+    };
+    if output.data_type != VariableType::Generic {
+        return;
+    }
+
+    let mut inferred = None;
+    for peer in output
+        .connected_to
+        .iter()
+        .filter_map(|id| board.get_pin_by_id(id))
+        .filter(|pin| pin.data_type != VariableType::Generic)
+    {
+        let schema = peer
+            .schema
+            .as_deref()
+            .map(|schema| board.refs.get(schema).map(String::as_str).unwrap_or(schema))
+            .filter(|schema| !flow_like::flow::pin::is_open_object_schema(schema))
+            .map(str::to_owned);
+        let Some((data_type, value_type, inferred_schema)) = inferred.as_mut() else {
+            inferred = Some((peer.data_type.clone(), peer.value_type.clone(), schema));
+            continue;
+        };
+        if *data_type != peer.data_type || *value_type != peer.value_type {
+            return;
+        }
+        match (&*inferred_schema, schema) {
+            (Some(current), Some(next)) if *current != next => return,
+            (None, Some(next)) => *inferred_schema = Some(next),
+            _ => {}
+        }
+    }
+
+    let Some((data_type, value_type, schema)) = inferred else {
+        return;
+    };
+    if output
+        .connected_to
+        .iter()
+        .filter_map(|id| board.get_pin_by_id(id))
+        .any(|peer| {
+            peer.data_type == VariableType::Generic
+                && (peer.value_type != flow_like::flow::pin::ValueType::Normal
+                    || peer
+                        .options
+                        .as_ref()
+                        .and_then(|options| options.enforce_generic_value_type)
+                        == Some(true))
+                && peer.value_type != value_type
+        })
+    {
+        return;
+    }
+    if let Some(output) = node.get_pin_mut_by_name("type_out") {
+        output.data_type = data_type;
+        output.value_type = value_type;
+        output.schema = schema;
     }
 }
 
@@ -443,4 +508,262 @@ fn value_to_pathbuf(input: &Value, target: &mut Value) -> bool {
     }
 
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flow_like::flow::pin::{OPEN_OBJECT_SCHEMA, ValueType};
+
+    fn add_consumer(
+        board: &mut Board,
+        converter: &mut Node,
+        pin_id: &str,
+        data_type: VariableType,
+        value_type: ValueType,
+        schema: Option<&str>,
+    ) {
+        let mut consumer = Node::new("consumer", "Consumer", "", "Tests");
+        consumer.id = format!("consumer_{pin_id}");
+        let old_id = consumer
+            .add_input_pin("value", "Value", "", data_type)
+            .id
+            .clone();
+        let mut pin = consumer.pins.remove(&old_id).unwrap();
+        pin.id = pin_id.to_string();
+        pin.value_type = value_type;
+        pin.schema = schema.map(str::to_owned);
+        let output = converter.get_pin_mut_by_name("type_out").unwrap();
+        pin.depends_on.insert(output.id.clone());
+        output.connected_to.insert(pin.id.clone());
+        consumer.pins.insert(pin.id.clone(), pin);
+        board.nodes.insert(consumer.id.clone(), consumer);
+    }
+
+    #[test]
+    fn generic_consumer_cannot_mask_an_unambiguous_string_consumer() {
+        // Run 4 sorted its Struct Set consumer before the typed helper argument.
+        // Run 6 sorted the helper first. Both must infer the same output contract.
+        for (generic_id, string_id) in [("a", "z"), ("z", "a")] {
+            let mut board = Board::new_detached(None, Default::default());
+            let mut converter = TryTransformNode::new().get_node();
+            add_consumer(
+                &mut board,
+                &mut converter,
+                generic_id,
+                VariableType::Generic,
+                ValueType::Normal,
+                None,
+            );
+            add_consumer(
+                &mut board,
+                &mut converter,
+                string_id,
+                VariableType::String,
+                ValueType::Normal,
+                None,
+            );
+            let original_edges = converter
+                .get_pin_by_name("type_out")
+                .unwrap()
+                .connected_to
+                .clone();
+
+            match_output_type(&mut converter, &board);
+
+            let output = converter.get_pin_by_name("type_out").unwrap();
+            assert_eq!(output.data_type, VariableType::String);
+            assert_eq!(output.value_type, ValueType::Normal);
+            assert_eq!(output.schema, None);
+            assert_eq!(output.connected_to, original_edges);
+        }
+    }
+
+    #[test]
+    fn output_inference_treats_open_schemas_as_unspecified() {
+        const CONCRETE: &str = r#"{"type":"object","properties":{"summary":{"type":"string"}}}"#;
+        for (open_id, concrete_id) in [("b", "c"), ("c", "b")] {
+            let mut board = Board::new_detached(None, Default::default());
+            board.refs.insert("concrete-schema".into(), CONCRETE.into());
+            let mut converter = TryTransformNode::new().get_node();
+            add_consumer(
+                &mut board,
+                &mut converter,
+                "a",
+                VariableType::Generic,
+                ValueType::Normal,
+                None,
+            );
+            add_consumer(
+                &mut board,
+                &mut converter,
+                open_id,
+                VariableType::Struct,
+                ValueType::Normal,
+                Some(OPEN_OBJECT_SCHEMA),
+            );
+            add_consumer(
+                &mut board,
+                &mut converter,
+                concrete_id,
+                VariableType::Struct,
+                ValueType::Normal,
+                Some("concrete-schema"),
+            );
+
+            match_output_type(&mut converter, &board);
+
+            let output = converter.get_pin_by_name("type_out").unwrap();
+            assert_eq!(output.data_type, VariableType::Struct);
+            assert_eq!(output.value_type, ValueType::Normal);
+            assert_eq!(output.schema.as_deref(), Some(CONCRETE));
+        }
+    }
+
+    #[test]
+    fn output_inference_preserves_legacy_ambiguous_contract_behavior() {
+        for generic_id in ["a", "z"] {
+            for (
+                left_type,
+                left_container,
+                left_schema,
+                right_type,
+                right_container,
+                right_schema,
+            ) in [
+                (
+                    VariableType::String,
+                    ValueType::Normal,
+                    None,
+                    VariableType::Integer,
+                    ValueType::Normal,
+                    None,
+                ),
+                (
+                    VariableType::String,
+                    ValueType::Normal,
+                    None,
+                    VariableType::String,
+                    ValueType::Array,
+                    None,
+                ),
+                (
+                    VariableType::Struct,
+                    ValueType::Normal,
+                    Some(r#"{"type":"object","required":["left"]}"#),
+                    VariableType::Struct,
+                    ValueType::Normal,
+                    Some(r#"{"type":"object","required":["right"]}"#),
+                ),
+            ] {
+                let mut board = Board::new_detached(None, Default::default());
+                let mut converter = TryTransformNode::new().get_node();
+                add_consumer(
+                    &mut board,
+                    &mut converter,
+                    generic_id,
+                    VariableType::Generic,
+                    ValueType::Normal,
+                    None,
+                );
+                add_consumer(
+                    &mut board,
+                    &mut converter,
+                    "b",
+                    left_type,
+                    left_container,
+                    left_schema,
+                );
+                add_consumer(
+                    &mut board,
+                    &mut converter,
+                    "c",
+                    right_type,
+                    right_container,
+                    right_schema,
+                );
+                let mut legacy = converter.clone();
+                legacy.match_type("type_out", &board, None, None).unwrap();
+
+                match_output_type(&mut converter, &board);
+
+                assert_eq!(
+                    flow_like_types::json::to_value(converter.get_pin_by_name("type_out").unwrap())
+                        .unwrap(),
+                    flow_like_types::json::to_value(legacy.get_pin_by_name("type_out").unwrap())
+                        .unwrap(),
+                    "conflicting concrete contracts keep the previous matching behavior"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn output_inference_preserves_generic_container_constraints() {
+        for leading_unconstrained_peer in [false, true] {
+            let mut board = Board::new_detached(None, Default::default());
+            let mut converter = TryTransformNode::new().get_node();
+            if leading_unconstrained_peer {
+                add_consumer(
+                    &mut board,
+                    &mut converter,
+                    "a",
+                    VariableType::Generic,
+                    ValueType::Normal,
+                    None,
+                );
+            }
+            add_consumer(
+                &mut board,
+                &mut converter,
+                "b",
+                VariableType::Generic,
+                ValueType::Array,
+                None,
+            );
+            add_consumer(
+                &mut board,
+                &mut converter,
+                "z",
+                VariableType::String,
+                ValueType::Normal,
+                None,
+            );
+            let mut legacy = converter.clone();
+            legacy.match_type("type_out", &board, None, None).unwrap();
+
+            match_output_type(&mut converter, &board);
+
+            assert_eq!(
+                flow_like_types::json::to_value(converter.get_pin_by_name("type_out").unwrap())
+                    .unwrap(),
+                flow_like_types::json::to_value(legacy.get_pin_by_name("type_out").unwrap())
+                    .unwrap(),
+                "the scalar consumer must not override a Generic/Array contract"
+            );
+        }
+    }
+
+    #[test]
+    fn output_inference_without_a_concrete_consumer_stays_generic() {
+        for has_generic_consumer in [false, true] {
+            let mut board = Board::new_detached(None, Default::default());
+            let mut converter = TryTransformNode::new().get_node();
+            if has_generic_consumer {
+                add_consumer(
+                    &mut board,
+                    &mut converter,
+                    "a",
+                    VariableType::Generic,
+                    ValueType::Normal,
+                    None,
+                );
+            }
+            match_output_type(&mut converter, &board);
+            assert_eq!(
+                converter.get_pin_by_name("type_out").unwrap().data_type,
+                VariableType::Generic
+            );
+        }
+    }
 }

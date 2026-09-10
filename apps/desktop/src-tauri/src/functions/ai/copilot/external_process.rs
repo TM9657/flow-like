@@ -3,12 +3,14 @@
 use super::backend_types::FlowPilotAgentBackendKind;
 use super::cli_resolution::augmented_path_with_dirs;
 use super::external_invocation::ExternalAgentInvocation;
+use super::external_phase::{ExternalPhaseFailure, ExternalPhaseTelemetry};
 use super::external_stream::{
     ExternalAgentStreamState, claude_agent_tool_events, external_agent_error_text,
     external_agent_flowscript_workspace_event, external_agent_mcp_connect_failure,
     external_agent_process_event, external_agent_progress_label, external_agent_reasoning_frame,
     external_agent_result_text, external_agent_stream_delta, send_external_progress_event,
 };
+use super::external_usage::ExternalPhaseUsage;
 use super::provider_errors::{EXTERNAL_AGENT_TOOL_CALL_ID, ExternalAgentRunOutput};
 use super::runtime::{
     EXTERNAL_AGENT_SHUTDOWN_TIMEOUT, EXTERNAL_AGENT_STDERR_MAX_BYTES, EXTERNAL_AGENT_TEXT_MAX_BYTES,
@@ -16,7 +18,7 @@ use super::runtime::{
 use super::stream_events::{append_bounded_tail, append_bounded_text, correlate_stream_frame};
 use super::telemetry::backend_label;
 use flow_like_types::tokio_util::sync::CancellationToken;
-use std::{path::PathBuf, process::Stdio};
+use std::{path::PathBuf, process::Stdio, sync::Arc};
 use tauri::ipc::Channel;
 
 pub(super) async fn run_external_agent_invocation(
@@ -24,6 +26,7 @@ pub(super) async fn run_external_agent_invocation(
     channel: Channel<String>,
     parent_request_id: Option<String>,
     cancellation: CancellationToken,
+    benchmark_board_id: Option<String>,
 ) -> Result<ExternalAgentRunOutput, String> {
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
@@ -37,6 +40,24 @@ pub(super) async fn run_external_agent_invocation(
     }
 
     let _temporary_output_cleanup = TemporaryOutputCleanup(invocation.final_output_path.clone());
+    let mut phase_usage = ExternalPhaseUsage::new(invocation.backend, benchmark_board_id.clone());
+    let appended_system_prompt_bytes = invocation
+        .args
+        .windows(2)
+        .filter(|args| args[0] == "--append-system-prompt")
+        .fold(0usize, |total, args| total.saturating_add(args[1].len()));
+    let phase = ExternalPhaseTelemetry::new(
+        invocation.backend,
+        invocation.prompt.len(),
+        appended_system_prompt_bytes,
+        cancellation.clone(),
+        Arc::new(move |snapshot| {
+            if let Some(board_id) = benchmark_board_id.as_deref() {
+                super::workflow_benchmark::observe_external_phase_state(board_id, snapshot);
+            }
+        }),
+    );
+    let phase_observer = phase.observer();
     let mut command = tokio::process::Command::new(&invocation.executable);
     command
         .args(&invocation.args)
@@ -56,12 +77,15 @@ pub(super) async fn run_external_agent_invocation(
     }
 
     let mut child = command.spawn().map_err(|e| {
+        phase_observer.failure(ExternalPhaseFailure::Spawn);
+        phase.finish(false);
         format!(
             "Failed to start {} CLI at {}: {e}",
             invocation.backend.label(),
             invocation.executable.display()
         )
     })?;
+    phase_observer.spawned();
 
     // Write the prompt concurrently with stdout/stderr draining. A full stdin pipe must not block
     // the runtime or prevent the watchdog from killing an unresponsive CLI.
@@ -69,28 +93,41 @@ pub(super) async fn run_external_agent_invocation(
         Some(mut stdin) if !invocation.prompt.is_empty() => {
             let prompt = invocation.prompt.clone();
             let backend_label = invocation.backend.label();
+            let phase_observer = phase_observer.clone();
             Some(tokio::spawn(async move {
-                stdin
-                    .write_all(prompt.as_bytes())
-                    .await
-                    .map_err(|e| format!("Failed to send prompt to {backend_label}: {e}"))?;
-                stdin
-                    .flush()
-                    .await
-                    .map_err(|e| format!("Failed to flush prompt to {backend_label}: {e}"))
+                phase_observer.stdin_started();
+                stdin.write_all(prompt.as_bytes()).await.map_err(|e| {
+                    phase_observer.stdin_failed(ExternalPhaseFailure::StdinWrite);
+                    format!("Failed to send prompt to {backend_label}: {e}")
+                })?;
+                stdin.flush().await.map_err(|e| {
+                    phase_observer.stdin_failed(ExternalPhaseFailure::StdinFlush);
+                    format!("Failed to flush prompt to {backend_label}: {e}")
+                })?;
+                phase_observer.stdin_sent();
+                Ok::<(), String>(())
             }))
         }
-        _ => None,
+        _ => {
+            if invocation.prompt.is_empty() {
+                phase_observer.stdin_not_required();
+            } else {
+                phase_observer.stdin_failed(ExternalPhaseFailure::MissingStdin);
+            }
+            None
+        }
     };
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| format!("{} did not expose stdout", invocation.backend.label()))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| format!("{} did not expose stderr", invocation.backend.label()))?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        phase_observer.failure(ExternalPhaseFailure::MissingStdout);
+        phase.finish(false);
+        format!("{} did not expose stdout", invocation.backend.label())
+    })?;
+    let stderr = child.stderr.take().ok_or_else(|| {
+        phase_observer.failure(ExternalPhaseFailure::MissingStderr);
+        phase.finish(false);
+        format!("{} did not expose stderr", invocation.backend.label())
+    })?;
 
     let stderr_handle = tokio::spawn(async move {
         let mut stderr = tokio::io::BufReader::new(stderr);
@@ -131,6 +168,7 @@ pub(super) async fn run_external_agent_invocation(
         let mut lines = tokio::io::BufReader::new(stdout).lines();
         let drain_stdout = async {
             while let Some(line) = lines.next_line().await.map_err(|error| {
+                phase_observer.failure(ExternalPhaseFailure::StdoutRead);
                 format!(
                     "Failed to read {} output: {error}",
                     invocation.backend.label()
@@ -140,8 +178,11 @@ pub(super) async fn run_external_agent_invocation(
                     continue;
                 }
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+                    phase_observer.protocol_event(&value);
+                    phase_usage.observe(&value);
                     let event_error = external_agent_error_text(&value);
                     if let Some(error) = event_error.as_deref() {
+                        phase_observer.failure(ExternalPhaseFailure::Protocol);
                         let safe_error =
                             flow_like::flow::copilot::stream::safe_text_preview(error, 1_200);
                         // Keep draining the stream so partial/final text is preserved; the error is
@@ -172,6 +213,7 @@ pub(super) async fn run_external_agent_invocation(
                     // A failed FlowPilot MCP connection leaves the agent tool-less: it will answer
                     // in plain text and "succeed" without editing. Treat that as a terminal failure.
                     if let Some(error) = external_agent_mcp_connect_failure(&value) {
+                        phase_observer.failure(ExternalPhaseFailure::McpConnection);
                         send_external_progress_event(
                             &channel,
                             EXTERNAL_AGENT_TOOL_CALL_ID,
@@ -245,6 +287,7 @@ pub(super) async fn run_external_agent_invocation(
                         );
                     }
                 } else {
+                    phase_observer.non_json_stdout_line();
                     send_external_progress_event(
                         &channel,
                         EXTERNAL_AGENT_TOOL_CALL_ID,
@@ -258,7 +301,10 @@ pub(super) async fn run_external_agent_invocation(
         tokio::pin!(drain_stdout);
         tokio::select! {
             result = &mut drain_stdout => result,
-            _ = cancellation.cancelled() => Err("FlowPilot external agent run was cancelled".to_string()),
+            _ = cancellation.cancelled() => {
+                phase_observer.cancelled();
+                Err("FlowPilot external agent run was cancelled".to_string())
+            },
         }
     };
 
@@ -266,9 +312,12 @@ pub(super) async fn run_external_agent_invocation(
     let status = if forced_stop.is_none() {
         tokio::select! {
             result = child.wait() => Some(result.map_err(|error| {
+                phase_observer.failure(ExternalPhaseFailure::ChildWait);
+                phase.finish(false);
                 format!("Failed to wait for {}: {error}", invocation.backend.label())
             })?),
             _ = cancellation.cancelled() => {
+                phase_observer.cancelled();
                 forced_stop = Some("FlowPilot external agent run was cancelled".to_string());
                 None
             }
@@ -276,17 +325,26 @@ pub(super) async fn run_external_agent_invocation(
     } else {
         None
     };
-
     let status = match status {
         Some(status) => Some(status),
         None => {
             let _ = child.start_kill();
-            tokio::time::timeout(EXTERNAL_AGENT_SHUTDOWN_TIMEOUT, child.wait())
-                .await
-                .ok()
-                .and_then(Result::ok)
+            match tokio::time::timeout(EXTERNAL_AGENT_SHUTDOWN_TIMEOUT, child.wait()).await {
+                Ok(Ok(status)) => Some(status),
+                Ok(Err(_)) => {
+                    phase_observer.failure(ExternalPhaseFailure::ChildWait);
+                    None
+                }
+                Err(_) => {
+                    phase_observer.failure(ExternalPhaseFailure::ShutdownTimeout);
+                    None
+                }
+            }
         }
     };
+    if let Some(status) = status.as_ref() {
+        phase_observer.exited(status.code(), status.success());
+    }
 
     let stderr_text = tokio::time::timeout(EXTERNAL_AGENT_SHUTDOWN_TIMEOUT, stderr_handle)
         .await
@@ -341,6 +399,8 @@ pub(super) async fn run_external_agent_invocation(
         error = stdin_error;
     }
 
+    phase_usage.finish(error.is_none() && status.is_some_and(|status| status.success()));
+    phase.finish(error.is_none() && status.is_some_and(|status| status.success()));
     match (text.is_empty(), error) {
         (true, Some(error)) => Err(error),
         (_, error) => Ok(ExternalAgentRunOutput {

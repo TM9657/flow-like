@@ -6,7 +6,10 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -239,6 +242,490 @@ class CLITests(unittest.TestCase):
             self.assertEqual(containers.main(["matrix", "--cloud", "aws"]), 0)
         self.assertEqual(len(output.getvalue().splitlines()), 1)
         self.assertEqual(json.loads(output.getvalue()), containers.matrix("aws"))
+
+
+
+
+class FakeRegistryRun:
+    """Answer docker buildx imagetools and git calls from an in-memory registry."""
+
+    def __init__(self, existing=None, ancestors=(), unknown=(), versions=None, fail_create=False, docker_media_types=False):
+        self.existing = dict(existing or {})
+        self.ancestors = set(ancestors)
+        self.unknown = set(unknown)
+        self.versions = dict(versions or {})
+        self.fail_create = fail_create
+        self.docker_media_types = docker_media_types
+        self.commands = []
+        self.references = {}
+
+    def __call__(self, command):
+        self.commands.append(list(command))
+        return subprocess.CompletedProcess(command, *self.answer(command))
+
+    def answer(self, command):
+        if command[:2] == ["git", "merge-base"]:
+            revision = command[3]
+            if revision in self.unknown:
+                return 128, "", "fatal: Not a valid commit name"
+            return (0 if revision in self.ancestors else 1), "", ""
+        if command[:2] == ["git", "tag"]:
+            return 0, "\n".join(self.versions.get(command[3], [])) + "\n", ""
+        assert command[:3] == ["docker", "buildx", "imagetools"], command
+        if command[3] == "create":
+            return self.create(command[4:])
+        return self.inspect(command[4:])
+
+    def create(self, arguments):
+        if self.fail_create:
+            return 1, "", "ERROR: push denied\n"
+        tags, sources, annotations, prefer_index = [], [], {}, True
+        iterator = iter(arguments)
+        for argument in iterator:
+            if argument == "--tag":
+                tags.append(next(iterator))
+            elif argument == "--annotation":
+                key, _, value = next(iterator).partition("=")
+                annotations[key] = value
+            elif argument == "--prefer-index=false":
+                prefer_index = False
+            else:
+                sources.append(argument)
+        resolved = [self.resolve(source) for source in sources]
+        if len(resolved) == 1 and not annotations and (not prefer_index or "manifests" in resolved[0]["manifest"]):
+            image = resolved[0]
+        else:
+            manifests = [entry for source in resolved for entry in (source["manifest"].get("manifests") or [source["manifest"]])]
+            digest = "sha256:" + hashlib.sha256(json.dumps([entry["digest"] for entry in manifests] + sorted(annotations.items())).encode()).hexdigest()
+            image = {"manifest": {"schemaVersion": 2, "digest": digest, "manifests": manifests, "annotations": {k.partition(":")[2]: v for k, v in annotations.items()}},
+                     "image": {entry["platform"]: source["image"] for source, entry in zip(resolved, manifests)}}
+            if self.docker_media_types:
+                # buildx builds a Docker manifest list from schema2 sources and drops every index annotation.
+                image["manifest"].pop("annotations")
+        for tag in tags:
+            self.references[tag] = image
+            repository = tag.rpartition(":")[0]
+            self.references[f"{repository}@{image['manifest']['digest']}"] = image
+        return 0, "", ""
+
+    def resolve(self, reference):
+        if reference in self.references:
+            return self.references[reference]
+        repository, _, digest = reference.partition("@")
+        architecture = "amd64" if digest.startswith("sha256:a") else "arm64"
+        manifest = {"schemaVersion": 2, "digest": digest, "platform": f"linux/{architecture}"}
+        return {"manifest": manifest, "image": {"architecture": architecture, "config": {"Labels": {containers.REVISION_ANNOTATION: SOURCE_SHA}}}}
+
+    def inspect(self, arguments):
+        reference = arguments[0]
+        image = self.references.get(reference) or self.existing.get(reference)
+        if image is None:
+            return 1, "", f"ERROR: {reference}: not found\n"
+        if arguments[1:] == ["--raw"]:
+            raw = dict(image["manifest"])
+            raw.pop("digest")
+            return 0, json.dumps(raw), ""
+        if arguments[1:] == ["--format", "{{json .Manifest}}"]:
+            return 0, json.dumps(image["manifest"]), ""
+        return 0, json.dumps({"name": reference, **image}), ""
+
+
+def existing_index(revision=SOURCE_SHA, version=None, annotate=True):
+    annotations = {containers.REVISION_ANNOTATION: revision}
+    if version:
+        annotations[containers.VERSION_ANNOTATION] = version
+    manifest = {"schemaVersion": 2, "digest": "sha256:" + "e" * 64, "manifests": [{"digest": "sha256:" + "f" * 64, "platform": "linux/amd64"}]}
+    labels = {containers.REVISION_ANNOTATION: revision}
+    if annotate:
+        manifest["annotations"] = annotations
+    return {"manifest": manifest, "image": {"linux/amd64": {"config": {"Labels": labels}}}}
+
+
+def existing_single_platform_index(revision=SOURCE_SHA):
+    """buildx inspects a one-platform index with a single image config instead of a platform map."""
+    index = existing_index(revision, annotate=False)
+    return {"manifest": index["manifest"], "image": {"architecture": "amd64", "config": {"Labels": {containers.REVISION_ANNOTATION: revision}}}}
+
+
+def existing_manifest(revision=SOURCE_SHA):
+    return {"manifest": {"schemaVersion": 2, "digest": "sha256:" + "e" * 64},
+            "image": {"architecture": "amd64", "config": {"Labels": {containers.REVISION_ANNOTATION: revision}}}}
+
+
+def release_manifest(cloud="self-hosted", digests=None):
+    records = []
+    for entry in containers.matrix(cloud)["include"]:
+        architecture = entry["platform"].split("/")[1]
+        digest = (digests or {}).get(entry["id"]) or ("sha256:" + ("a" if architecture == "amd64" else "b") * 32 + hashlib.sha256(entry["id"].encode()).hexdigest()[:32])
+        records.append(containers.record(entry["id"], OWNER, SOURCE_SHA, digest, RUN_ID, RUN_ATTEMPT))
+    return containers.manifest(cloud, OWNER, SOURCE_SHA, RUN_ID, RUN_ATTEMPT, records)
+
+
+class ChannelTagTests(unittest.TestCase):
+    def test_refs_map_to_channel_tags_and_versions(self):
+        for ref, tags, version in (
+            ("refs/heads/dev", ["dev"], "dev"),
+            ("refs/heads/main", ["main"], "main"),
+            ("refs/heads/alpha", ["alpha"], "alpha"),
+            ("refs/tags/v1.2.3", ["1.2.3", "1.2", "1", "latest"], "1.2.3"),
+            ("refs/tags/v0.4.0", ["0.4.0", "0.4", "latest"], "0.4.0"),
+            ("refs/tags/v1.2.3-rc.1", ["1.2.3-rc.1"], "1.2.3-rc.1"),
+            ("refs/tags/beta-v0.4.0", ["0.4.0-beta", "beta"], "0.4.0"),
+            ("refs/tags/beta-v0.4.0-rc.1", ["0.4.0-rc.1-beta", "beta"], "0.4.0-rc.1"),
+            ("refs/tags/rc-v2.0.0", ["2.0.0-rc", "rc"], "2.0.0"),
+            ("refs/heads/feature/x", [], None),
+            ("refs/heads/beta", [], None),
+            ("refs/tags/v1.2", [], None),
+            ("refs/tags/v01.2.3", [], None),
+            ("refs/tags/1.2.3", [], None),
+            ("refs/tags/Beta-v1.2.3", [], None),
+            ("refs/tags/v1.2.3+build", [], None),
+            ("refs/pull/1/merge", [], None),
+            ("", [], None),
+        ):
+            with self.subTest(ref=ref):
+                self.assertEqual(containers.channel_tags(ref), tags)
+                self.assertEqual(containers.release_version(ref), version)
+                self.assertTrue(all(containers.TAG.fullmatch(tag) for tag in tags))
+
+    def test_guard_classification_and_semver_ordering(self):
+        self.assertEqual([containers.tag_guard(tag) for tag in ("latest", "1", "1.2", "dev", "beta", "1.2.3", "1.2.3-beta", "1.2.3-rc.1")],
+                         ["version", "version", "version", "ancestor", "ancestor", None, None, None])
+        ordered = ["0.9.0", "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "1.0.0", "1.0.1", "1.10.0", "2.0.0"]
+        self.assertEqual(sorted(reversed(ordered), key=containers.semver_key), ordered)
+        self.assertIsNone(containers.semver_key("dev"))
+        self.assertIsNone(containers.semver_key(None))
+
+    def test_tags_cli_prints_channel_tags(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(containers.main(["tags", "--ref", "refs/tags/v1.2.3"]), 0)
+        self.assertEqual(json.loads(output.getvalue()), {"ref": "refs/tags/v1.2.3", "version": "1.2.3", "tags": ["1.2.3", "1.2", "1", "latest"]})
+
+
+class History:
+    def __init__(self, ancestors=(), unknown=(), versions=None):
+        self.ancestors, self.unknown, self.versions = set(ancestors), set(unknown), versions or {}
+
+    def is_ancestor(self, revision, source_sha):
+        return None if revision in self.unknown else revision in self.ancestors
+
+    def tagged_version(self, revision):
+        return self.versions.get(revision)
+
+
+class TagGuardTests(unittest.TestCase):
+    OLD = "c" * 40
+
+    def decide(self, tag, existing, version="1.2.3", **history):
+        return containers.tag_decision(tag, existing, SOURCE_SHA, version, History(**history))
+
+    def test_existing_metadata_is_read_from_index_annotations_or_image_labels(self):
+        self.assertEqual(containers.existing_release(existing_index(self.OLD, "1.0.0")), {"revision": self.OLD, "version": "1.0.0"})
+        self.assertEqual(containers.existing_release(existing_index(self.OLD, annotate=False)), {"revision": self.OLD, "version": None})
+        self.assertEqual(containers.existing_release(existing_manifest(self.OLD)), {"revision": self.OLD, "version": None})
+        self.assertEqual(containers.existing_release(existing_single_platform_index(self.OLD)), {"revision": self.OLD, "version": None})
+        self.assertEqual(containers.existing_release({}), {"revision": None, "version": None})
+        self.assertEqual(containers.existing_release("garbage"), {})
+
+    def test_branch_tags_follow_ancestry(self):
+        self.assertEqual(self.decide("dev", None)[0], True)
+        self.assertEqual(self.decide("dev", {"revision": SOURCE_SHA})[0], True)
+        self.assertEqual(self.decide("dev", {"revision": self.OLD}, ancestors=[self.OLD])[0], True)
+        self.assertEqual(self.decide("dev", {"revision": self.OLD}, unknown=[self.OLD])[0], True)
+        self.assertEqual(self.decide("dev", {"revision": None})[0], True)
+        self.assertEqual(self.decide("dev", {"revision": "HEAD"})[0], True)
+        move, reason = self.decide("beta", {"revision": self.OLD})
+        self.assertFalse(move)
+        self.assertIn(self.OLD, reason)
+        self.assertIn(SOURCE_SHA, reason)
+
+    def test_version_tags_never_regress(self):
+        for tag in ("latest", "1", "1.2"):
+            with self.subTest(tag=tag):
+                self.assertTrue(self.decide(tag, None)[0])
+                self.assertTrue(self.decide(tag, {"version": "1.2.3"})[0])
+                self.assertTrue(self.decide(tag, {"version": "1.2.2"})[0])
+                self.assertTrue(self.decide(tag, {"version": "1.2.3-rc.1"})[0])
+                self.assertTrue(self.decide(tag, {"version": "dev"})[0])
+                self.assertTrue(self.decide(tag, {})[0])
+                move, reason = self.decide(tag, {"version": "1.3.0"})
+                self.assertFalse(move)
+                self.assertIn("1.3.0", reason)
+                self.assertFalse(self.decide(tag, {"version": "2.0.0"}, version="1.2.3")[0])
+                self.assertFalse(self.decide(tag, {"version": "1.2.3"}, version="1.2.3-rc.1")[0])
+
+    def test_version_falls_back_to_the_git_tag_on_the_recorded_commit(self):
+        self.assertFalse(self.decide("latest", {"revision": self.OLD}, versions={self.OLD: "1.3.0"})[0])
+        self.assertTrue(self.decide("latest", {"revision": self.OLD}, versions={self.OLD: "1.2.0"})[0])
+        self.assertTrue(self.decide("latest", {"revision": self.OLD})[0])
+        self.assertTrue(self.decide("latest", {"revision": "bad", "version": "x"}, versions={"bad": "9.0.0"})[0])
+        self.assertFalse(self.decide("latest", {"revision": self.OLD, "version": "1.4.0"}, versions={self.OLD: "1.0.0"})[0])
+
+    def test_exact_versions_and_prerelease_tags_are_not_guarded(self):
+        for tag in ("1.2.3", "1.2.3-beta", "1.2.3-rc.1"):
+            self.assertEqual(self.decide(tag, {"revision": self.OLD, "version": "9.9.9"}), (True, "unguarded tag"))
+
+
+class PublishTests(unittest.TestCase):
+    def repository(self, suffix):
+        return f"ghcr.io/{OWNER}/flow-like-{suffix}"
+
+    def publish(self, release, ref, **kwargs):
+        run = FakeRegistryRun(**kwargs)
+        with contextlib.redirect_stderr(io.StringIO()) as errors:
+            document = containers.publish(release, ref, "Rheosoph/flow-like", containers.Registry(run))
+        return document, run, errors.getvalue()
+
+    def test_self_hosted_repositories_become_annotated_indexes_with_every_tag(self):
+        release = release_manifest("self-hosted")
+        document, run, _ = self.publish(release, "refs/tags/v1.2.3")
+        self.assertEqual(containers.validate_indexes(document, release), document)
+        self.assertEqual(document["ref"], "refs/tags/v1.2.3")
+        self.assertEqual(len(document["images"]), 15)
+        immutable = f"sha-{SOURCE_SHA}-run-{RUN_ID}-{RUN_ATTEMPT}"
+        for image in document["images"]:
+            self.assertEqual(image["kind"], "index")
+            self.assertEqual(image["platforms"], ["linux/amd64", "linux/arm64"])
+            self.assertEqual(image["tags"], [immutable, "1.2.3", "1.2", "1", "latest"])
+            self.assertEqual(image["skipped_tags"], [])
+            created = run.references[f"{image['repository']}:{immutable}"]
+            self.assertEqual(created["manifest"]["digest"], image["digest"])
+            self.assertEqual(created["manifest"]["annotations"], {
+                containers.REVISION_ANNOTATION: SOURCE_SHA,
+                containers.SOURCE_ANNOTATION: "https://github.com/Rheosoph/flow-like",
+                containers.VERSION_ANNOTATION: "1.2.3",
+            })
+            for tag in image["tags"]:
+                self.assertIs(run.references[f"{image['repository']}:{tag}"], created)
+        creates = [command for command in run.commands if command[3] == "create"]
+        self.assertEqual(len(creates), 30)
+        self.assertTrue(all("--prefer-index=false" not in command for command in creates[::2]))
+        self.assertTrue(all("--prefer-index=false" in command and "--annotation" not in command for command in creates[1::2]))
+        sources = {source for command in creates[::2] for source in command[-2:]}
+        self.assertEqual(sources, {entry["image"] for entry in release["images"]})
+
+    def test_cloud_repositories_are_carbon_copied_without_annotations(self):
+        release = release_manifest("aws")
+        document, run, _ = self.publish(release, "refs/heads/main")
+        self.assertEqual(len(document["images"]), 10)
+        records = {entry["repository"]: entry for entry in release["images"]}
+        for image in document["images"]:
+            self.assertEqual(image["kind"], "manifest")
+            self.assertEqual(image["digest"], records[image["repository"]]["digest"])
+            self.assertEqual(image["platforms"], [records[image["repository"]]["platform"]])
+            self.assertEqual(image["tags"][1:], ["main"])
+            self.assertNotIn("manifests", run.references[f"{image['repository']}:main"]["manifest"])
+        for command in run.commands:
+            if command[3] == "create":
+                self.assertIn("--prefer-index=false", command)
+                self.assertNotIn("--annotation", command)
+
+    def test_single_platform_copy_that_becomes_an_index_fails(self):
+        release = release_manifest("gcp")
+        run = FakeRegistryRun()
+        original = run.create
+
+        def wrap(arguments):
+            return original([argument for argument in arguments if argument != "--prefer-index=false"])
+        run.create = wrap
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaisesRegex(ValueError, "single-platform manifest was not preserved"):
+            containers.publish(release, "refs/heads/dev", "Rheosoph/flow-like", containers.Registry(run))
+
+    def test_registry_failures_stop_publication_without_index_output(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaisesRegex(ValueError, "imagetools create failed"):
+            self.publish(release_manifest("gcp"), "refs/heads/dev", fail_create=True)
+
+    def test_guarded_tags_are_skipped_and_recorded_without_failing(self):
+        old = "c" * 40
+        api, web = self.repository("kubernetes-api"), self.repository("kubernetes-web")
+        existing = {
+            f"{api}:latest": existing_index(old, "2.0.0"),
+            f"{api}:1": existing_index(old, "1.9.0"),
+            f"{web}:latest": existing_index(old, annotate=False),
+        }
+        release = release_manifest("kubernetes")
+        document, run, errors = self.publish(release, "refs/tags/v1.2.3", existing=existing, versions={old: ["v1.3.0", "v1.3.1"]})
+        images = {image["repository"]: image for image in document["images"]}
+        self.assertEqual(images[api]["tags"][1:], ["1.2.3", "1.2"])
+        self.assertEqual([entry["tag"] for entry in images[api]["skipped_tags"]], ["1", "latest"])
+        self.assertIn("2.0.0", images[api]["skipped_tags"][1]["reason"])
+        self.assertEqual(images[web]["tags"][1:], ["1.2.3", "1.2", "1"])
+        self.assertEqual(images[web]["skipped_tags"], [{"tag": "latest", "reason": "existing version 1.3.1 is newer than 1.2.3"}])
+        self.assertEqual(images[self.repository("docker-compose-runtime")]["skipped_tags"], [])
+        self.assertIn("::warning::", errors)
+        self.assertNotIn(f"{api}:latest", run.references)
+        self.assertIn(f"{api}:1.2", run.references)
+        self.assertEqual(containers.validate_indexes(document, release), document)
+
+    def test_branch_tags_only_move_forward(self):
+        old = "c" * 40
+        api = self.repository("docker-compose-api")
+        release = release_manifest("docker-compose")
+        existing = {f"{api}:dev": existing_index(old), f"{self.repository('docker-compose-web')}:dev": existing_manifest(old)}
+        document, run, _ = self.publish(release, "refs/heads/dev", existing=existing)
+        images = {image["repository"]: image for image in document["images"]}
+        self.assertEqual(images[api]["skipped_tags"][0]["tag"], "dev")
+        self.assertEqual(images[self.repository("docker-compose-web")]["tags"], [images[api]["tags"][0]])
+        self.assertEqual([command for command in run.commands if command[:2] == ["git", "merge-base"]][0], ["git", "merge-base", "--is-ancestor", old, SOURCE_SHA])
+        document, _, _ = self.publish(release, "refs/heads/dev", existing=existing, ancestors=[old])
+        self.assertTrue(all(image["tags"][1:] == ["dev"] for image in document["images"]))
+        document, _, _ = self.publish(release, "refs/heads/dev", existing=existing, unknown=[old])
+        self.assertTrue(all(image["tags"][1:] == ["dev"] for image in document["images"]))
+
+    def test_docker_manifest_lists_warn_that_index_annotations_were_dropped(self):
+        release = release_manifest("kubernetes")
+        document, run, errors = self.publish(release, "refs/tags/v1.2.3", docker_media_types=True)
+        immutable = document["images"][0]["tags"][0]
+        for image in document["images"]:
+            self.assertNotIn("annotations", run.references[f"{image['repository']}:{immutable}"]["manifest"])
+            self.assertIn(f"::warning::{image['repository']}:{immutable} is a Docker manifest list", errors)
+        self.assertEqual(containers.validate_indexes(document, release), document)
+        _, _, errors = self.publish(release, "refs/tags/v1.2.3")
+        self.assertNotIn("Docker manifest list", errors)
+        _, _, errors = self.publish(release_manifest("aws"), "refs/tags/v1.2.3", docker_media_types=True)
+        self.assertNotIn("Docker manifest list", errors)
+
+    def test_unreleased_refs_only_get_the_immutable_tag(self):
+        release = release_manifest("azure")
+        document, run, _ = self.publish(release, "refs/heads/feature")
+        self.assertTrue(all(len(image["tags"]) == 1 and not image["skipped_tags"] for image in document["images"]))
+        self.assertEqual(len([command for command in run.commands if command[3] == "create"]), 8)
+        self.assertNotIn(containers.VERSION_ANNOTATION, json.dumps(run.commands))
+
+
+class IndexesTests(unittest.TestCase):
+    def setUp(self):
+        self.release = release_manifest("kubernetes")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.document = containers.publish(self.release, "refs/tags/beta-v0.4.0", "Rheosoph/flow-like", containers.Registry(FakeRegistryRun()))
+
+    def test_index_manifest_shape(self):
+        self.assertEqual(set(self.document), {"schema_version", "registry", "owner", "source_sha", "build", "ref", "images"})
+        self.assertEqual(self.document["build"], {"run_id": RUN_ID, "run_attempt": RUN_ATTEMPT})
+        self.assertEqual([image["repository"] for image in self.document["images"]], sorted({entry["repository"] for entry in self.release["images"]}))
+        for image in self.document["images"]:
+            self.assertEqual(set(image), {"repository", "cloud", "workload", "kind", "digest", "platforms", "tags", "skipped_tags"})
+            self.assertEqual(image["tags"], [f"sha-{SOURCE_SHA}-run-{RUN_ID}-{RUN_ATTEMPT}", "0.4.0-beta", "beta"])
+
+    def test_release_binding_and_record_mutations_fail(self):
+        with self.assertRaisesRegex(ValueError, "does not belong to this build"):
+            containers.validate_manifest(self.release, SOURCE_SHA, "999", RUN_ATTEMPT)
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            containers.validate_manifest(dict(self.release, owner="other"))
+        with self.assertRaisesRegex(ValueError, "every channel tag"):
+            containers.validate_indexes(dict(self.document, ref="refs/tags/v0.4.0"), self.release)
+        with self.assertRaisesRegex(ValueError, "does not match the release"):
+            containers.validate_indexes(dict(self.document, owner="other"), self.release)
+        with self.assertRaisesRegex(ValueError, "released repository"):
+            containers.validate_indexes(self.document, release_manifest("docker-compose"))
+        for mutate, message in (
+            (lambda image: image.update(digest="latest"), "SHA-256"),
+            (lambda image: image.update(tags=["beta"]), "immutable tag first"),
+            (lambda image: image.update(tags=image["tags"][:1]), "every channel tag"),
+            (lambda image: image.update(tags=image["tags"] + ["latest"]), "every channel tag"),
+            (lambda image: image.update(skipped_tags=[{"tag": "beta", "reason": "kept"}]), "every channel tag"),
+            (lambda image: image.update(skipped_tags=[{"tag": "x", "reason": ""}]), "malformed skipped tag"),
+            (lambda image: image.update(skipped_tags=[{"tag": "x", "reason": "r", "extra": 1}]), "malformed skipped tag"),
+            (lambda image: image.update(kind="manifest"), "does not match the release: kind"),
+            (lambda image: image.update(platforms=["linux/amd64"]), "does not match the release: platforms"),
+            (lambda image: image.update(workload="api"), "does not match the release: workload"),
+            (lambda image: image.update(extra=True), "does not match the release: extra"),
+            (lambda image: image.update(repository="ghcr.io/rheosoph/flow-like-aws-api"), "naming a released repository"),
+        ):
+            document = copy.deepcopy(self.document)
+            mutate(document["images"][0])
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                containers.validate_indexes(document, self.release)
+        for images, message in (
+            (self.document["images"][1:], "missing index records"),
+            (self.document["images"] + self.document["images"][:1], "duplicate index record"),
+            ("images", "must be a list"),
+        ):
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                containers.indexes(self.release, self.document["ref"], images)
+        with self.assertRaisesRegex(ValueError, "fully qualified"):
+            containers.indexes(self.release, "dev", self.document["images"])
+
+    def test_single_platform_digest_must_match_the_record(self):
+        release = release_manifest("aws")
+        with contextlib.redirect_stderr(io.StringIO()):
+            document = containers.publish(release, "refs/heads/dev", "Rheosoph/flow-like", containers.Registry(FakeRegistryRun()))
+        document["images"][0]["digest"] = "sha256:" + "9" * 64
+        with self.assertRaisesRegex(ValueError, "single-platform digest"):
+            containers.validate_indexes(document, release)
+
+    def test_publish_and_indexes_cli_round_trip_with_stubbed_tools(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stub = root / "bin"
+            stub.mkdir()
+            state = root / "registry.json"
+            state.write_text("{}")
+            script = f"""#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+state = Path({str(state)!r})
+references = json.loads(state.read_text())
+args = sys.argv[1:]
+if Path(sys.argv[0]).name == "git":
+    sys.exit(1 if args[1] == "merge-base" else 0)
+assert args[:2] == ["buildx", "imagetools"], args
+if args[2] == "create":
+    tags = [args[i + 1] for i, a in enumerate(args) if a == "--tag"]
+    sources = [a for a in args[3:] if not a.startswith("--") and a not in tags]
+    if sources[0] in references:
+        image = references[sources[0]]
+    elif len(sources) == 1 and "--prefer-index=false" in args:
+        image = {{"digest": sources[0].partition("@")[2]}}
+    else:
+        image = {{"digest": "sha256:" + "d" * 64, "manifests": [{{"digest": s.partition("@")[2]}} for s in sources]}}
+    for tag in tags:
+        references[tag] = image
+        references[tag.rpartition(":")[0] + "@" + image["digest"]] = image
+    state.write_text(json.dumps(references))
+    sys.exit(0)
+image = references.get(args[3])
+if image is None:
+    sys.exit(1)
+if args[4:] == ["--raw"]:
+    print(json.dumps({{k: v for k, v in image.items() if k != "digest"}}))
+elif args[4:] == ["--format", "{{{{json .Manifest}}}}"]:
+    print(json.dumps(image))
+else:
+    print(json.dumps({{"manifest": image, "image": {{}}}}))
+"""
+            for name in ("docker", "git"):
+                (stub / name).write_text(script)
+                (stub / name).chmod(0o700)
+            release = release_manifest("gcp")
+            manifest_path = root / "container-images.json"
+            manifest_path.write_text(json.dumps(release))
+            output = root / "container-indexes.json"
+            environment = dict(os.environ, PATH=f"{stub}{os.pathsep}{os.environ['PATH']}")
+            common = ["--manifest", str(manifest_path), "--source-sha", SOURCE_SHA, "--run-id", RUN_ID, "--run-attempt", RUN_ATTEMPT]
+            process = subprocess.run(
+                [sys.executable, str(SCRIPT), "publish", "--ref", "refs/tags/v2.0.0", "--github-repository", "Rheosoph/flow-like", "--output", str(output), *common],
+                env=environment, capture_output=True, text=True,
+            )
+            self.assertEqual(process.returncode, 0, process.stderr)
+            document = json.loads(output.read_text())
+            self.assertEqual(containers.validate_indexes(document, release), document)
+            self.assertTrue(all(image["tags"] == [f"sha-{SOURCE_SHA}-run-{RUN_ID}-{RUN_ATTEMPT}", "2.0.0", "2.0", "2", "latest"] for image in document["images"]))
+            process = subprocess.run([sys.executable, str(SCRIPT), "indexes", "--manifest", str(manifest_path), "--path", str(output)], capture_output=True, text=True)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertEqual(json.loads(process.stdout), document)
+            output.write_text(json.dumps(dict(document, owner="other")))
+            process = subprocess.run([sys.executable, str(SCRIPT), "indexes", "--manifest", str(manifest_path), "--path", str(output)], capture_output=True, text=True)
+            self.assertEqual(process.returncode, 1)
+            self.assertIn("does not match the release", process.stderr)
+            process = subprocess.run(
+                [sys.executable, str(SCRIPT), "publish", "--ref", "refs/heads/dev", "--github-repository", "Rheosoph/flow-like", "--manifest", str(manifest_path),
+                 "--source-sha", "d" * 40, "--run-id", RUN_ID, "--run-attempt", RUN_ATTEMPT],
+                env=environment, capture_output=True, text=True,
+            )
+            self.assertEqual(process.returncode, 1)
+            self.assertIn("does not belong to this build", process.stderr)
 
 
 if __name__ == "__main__":

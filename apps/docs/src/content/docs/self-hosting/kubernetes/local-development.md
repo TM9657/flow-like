@@ -47,7 +47,8 @@ The bootstrap command writes private Secrets and matching values under
 `.generated/`; it does not modify the cluster. Setup:
 
 1. Creates the k3d cluster when absent and waits for its nodes.
-2. Builds the application images and imports them directly into k3d.
+2. Builds the application images under the published repository names with the
+   local `dev` tag and imports them directly into k3d.
 3. Reuses the generated configuration, creating it only when absent.
 4. Applies its namespace and Secrets.
 5. Deploys the chart with `trusted_shared`, HTTP asynchronous dispatch and
@@ -56,6 +57,14 @@ The bootstrap command writes private Secrets and matching values under
 Bundled RustFS is included and its initialization Job creates private buckets.
 The helper no longer relies on an external object store, a local image registry
 or an implicit `.env` file.
+
+To run the published images instead of local builds, run
+`./scripts/resolve-images.py --tag dev` after setup and apply the chart again
+through `deploy.sh` with the helper's `--set` arguments (`trusted_shared`,
+HTTP asynchronous dispatch and Traefik ingress). k3d nodes pull the
+multi-architecture index directly from `ghcr.io`; the next `dev.sh rebuild`
+replaces those entries with local builds. Set `COMPONENTS` before `dev.sh
+rebuild` to rebuild only the images you changed; the others keep their entries.
 
 Existing generated files are preserved. Change non-secret settings in the values
 file and apply the updated chart. Update the Hub config Secret and restart API

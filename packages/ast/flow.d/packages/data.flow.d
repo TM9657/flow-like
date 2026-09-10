@@ -1070,7 +1070,7 @@ declare namespace db {
      * @node index_local_db @receiver database @alias indexLocalDb
      * @param database — Database Connection Reference (receiver: `this` in `x.buildIndex(...)`)
      * @param column (optional) — Column to Index
-     * @param type (optional) — Index Type to build
+     * @param type (optional) — Index type to build. Vector indexes use cosine distance; VECTOR and vector AUTO retain IVF-PQ.
      * @impure has side effects / drives control flow
      */
     function buildIndex(this: NodeDBConnection, { database: Struct, column?: string, type?: string }): void;
@@ -1105,11 +1105,11 @@ declare namespace db {
     // === Data/Database/Schema ===
 
     /**
-     * Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). LanceDB rejects bare NULL — wrap it in CAST(... AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.
+     * Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). Flow-Like requires an explicit type for NULL. Use CAST(NULL AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.
      * @node add_column_local_db @receiver database @alias addColumnLocalDb
      * @param database — Database Connection Reference (receiver: `this` in `x.addColumn(...)`)
      * @param columnName (optional) — Name of the column to add
-     * @param sqlExpression (optional) — Typed SQL expression used to populate existing rows. Examples: 0, '', CAST(NULL AS STRING). Bare NULL is rejected; LanceDB supports int, bigint, float, double, string, binary, boolean, date, timestamp.
+     * @param sqlExpression (optional) — Typed SQL expression used to populate existing rows. Examples: 0, '', CAST(NULL AS STRING). Flow-Like requires an explicit type for NULL. Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.
      * @returns schema — Updated database schema
      * @impure has side effects / drives control flow
      */

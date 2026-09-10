@@ -8,9 +8,10 @@ use super::declarations::{
     DeclarationMatch, declaration_semantic_evidence, render_declaration_matches,
     search_declarations,
 };
-use super::search::score_catalog_metadata;
-use super::types::{NodeMetadata, PinMetadata};
+use super::search::{CatalogPinSearchIndex, score_catalog_metadata_with_pin_matches};
+use super::types::{BoardCommand, NodeMetadata, PinMetadata};
 use crate::flow::ast::catalog_names;
+use crate::flow::board::Board;
 use crate::flow::node::Node;
 use crate::flow::pin::{Pin, PinType};
 use crate::flow::variable::VariableType;
@@ -86,6 +87,18 @@ pub trait CatalogProvider: Send + Sync {
     async fn get_node_metadata(&self, node_type: &str) -> Option<NodeMetadata>;
     async fn get_all_nodes(&self) -> Vec<String>;
 
+    /// Execute a retained draft's exact command batch in the host's restricted test runtime.
+    /// Providers without that runtime must refuse rather than execute the live board.
+    async fn test_draft_board(
+        &self,
+        _board: Board,
+        _commands: Vec<BoardCommand>,
+        _entry: String,
+        _payload: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        Err("This catalog provider has no isolated draft test runtime.".to_string())
+    }
+
     /// Return metadata for the full catalog. FlowScript reconciliation uses this to resolve
     /// parsed calls (`ns::alias`, `x.alias()` or the legacy camelCase name) back to catalog node
     /// types without asking the model to manually emit command JSON.
@@ -141,6 +154,7 @@ pub trait CatalogProvider: Send + Sync {
 struct DeclarationCatalogSnapshot {
     all_metadata: Vec<NodeMetadata>,
     function_names: Vec<String>,
+    pin_search_indices: Vec<CatalogPinSearchIndex>,
     metadata_by_function: BTreeMap<String, Vec<usize>>,
     available_functions: BTreeMap<String, String>,
     imap_chain_compatible: bool,
@@ -150,6 +164,7 @@ impl DeclarationCatalogSnapshot {
     fn new(mut all_metadata: Vec<NodeMetadata>) -> Self {
         all_metadata.sort_by(|left, right| left.name.cmp(&right.name));
         let mut function_names = Vec::with_capacity(all_metadata.len());
+        let mut pin_search_indices = Vec::with_capacity(all_metadata.len());
         let mut metadata_by_function: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         for (index, metadata) in all_metadata.iter().enumerate() {
             let signature = metadata_to_signature(metadata);
@@ -166,6 +181,7 @@ impl DeclarationCatalogSnapshot {
                 }
             }
             function_names.push(function_name);
+            pin_search_indices.push(CatalogPinSearchIndex::new(metadata));
         }
         // Companion hints must obey the same ambiguity rule as declarations. Otherwise a direct
         // declaration can be correctly suppressed while a usage note still recommends the same
@@ -184,6 +200,7 @@ impl DeclarationCatalogSnapshot {
         Self {
             all_metadata,
             function_names,
+            pin_search_indices,
             metadata_by_function,
             available_functions,
             imap_chain_compatible,
@@ -226,6 +243,7 @@ struct AssessedDeclarationCandidate {
     confidence_basis_points: u16,
     accepted: bool,
     exact_symbol: bool,
+    relies_on_pin_evidence: bool,
     reason_codes: Vec<String>,
 }
 
@@ -236,6 +254,7 @@ fn assess_declaration_candidate(
 ) -> AssessedDeclarationCandidate {
     let metadata = &snapshot.all_metadata[metadata_index];
     let function_name = snapshot.function_names[metadata_index].clone();
+    let pin_matches = snapshot.pin_search_indices[metadata_index].matches(query);
     let evidence = declaration_semantic_evidence(
         query,
         &function_name,
@@ -244,8 +263,10 @@ fn assess_declaration_candidate(
         &metadata.description,
         metadata.category.as_deref(),
         &metadata.capability_tags,
+        &pin_matches,
     );
-    let lexical_score = score_catalog_metadata(metadata, query).max(0);
+    let lexical_score =
+        score_catalog_metadata_with_pin_matches(metadata, query, &pin_matches).max(0);
     let mut score = lexical_score
         .saturating_add((evidence.strong_matched_token_count as i32).saturating_mul(40))
         .saturating_add(
@@ -284,6 +305,7 @@ fn assess_declaration_candidate(
         confidence_basis_points,
         accepted,
         exact_symbol: evidence.exact_symbol,
+        relies_on_pin_evidence: evidence.relies_on_pin_evidence,
         reason_codes,
     }
 }
@@ -316,7 +338,7 @@ fn declaration_resolution_metadata(
         .collect::<Vec<_>>();
     let exact = accepted.iter().any(|candidate| candidate.exact_symbol);
     let weak_low_margin = accepted.first().is_some_and(|candidate| {
-        candidate.score < STRONG_DECLARATION_RESOLUTION_SCORE
+        (candidate.score < STRONG_DECLARATION_RESOLUTION_SCORE || candidate.relies_on_pin_evidence)
             && accepted.get(1).is_some()
             && margin.unwrap_or_default() < MIN_DECLARATION_RESOLUTION_MARGIN
     });
@@ -1626,6 +1648,155 @@ mod tests {
         assert!(declarations[1].contains("function test::customPackageDatabaseExport("));
         assert!(!declarations[2].contains("function test::stringReplace("));
         assert!(declarations[2].contains("Ambiguous live catalog declarations omitted"));
+    }
+
+    #[tokio::test]
+    async fn declaration_retrieval_uses_pin_contracts_without_authorizing_pin_only_matches() {
+        // These fields mirror catalog contracts for attachments, Microsoft Graph and actions.
+        let cases = [
+            (
+                "attachment_fields",
+                "email",
+                "attachmentToFields",
+                "Attachment Fields",
+                "Access filename, content_type and data",
+                "Email/Access",
+                "content_type",
+                "MIME content type",
+                "attachment MIME",
+                "MIME",
+            ),
+            (
+                "data_microsoft_graph_request",
+                "microsoft",
+                "graphRequest",
+                "Graph Request",
+                "Call any Microsoft Graph endpoint with optional collection pagination",
+                "Data/Microsoft",
+                "delta_link",
+                "@odata.deltaLink",
+                "microsoft graph odata deltaLink",
+                "deltaLink",
+            ),
+            (
+                "ontology_action_input",
+                "ontology",
+                "actionInput",
+                "Ontology Action Input",
+                "Reads the typed objects and parameters the ontology action was invoked with",
+                "Data Studio/Actions",
+                "idempotency_key",
+                "Client-supplied retry key, if any",
+                "ontology action idempotency key",
+                "idempotency",
+            ),
+        ];
+        for (
+            name,
+            namespace,
+            alias,
+            friendly,
+            description,
+            category,
+            field,
+            field_doc,
+            query,
+            field_query,
+        ) in cases
+        {
+            let mut output = pin(field, "String", "Normal", None, None);
+            output.description = field_doc.to_string();
+            let mut node = metadata(name, Vec::new(), vec![output]);
+            node.namespace = Some(namespace.to_string());
+            node.alias = Some(alias.to_string());
+            node.friendly_name = friendly.to_string();
+            node.description = description.to_string();
+            node.category = Some(category.to_string());
+            let qualified = format!("{namespace}::{alias}");
+
+            let without_pins = declaration_semantic_evidence(
+                query,
+                &qualified,
+                name,
+                friendly,
+                description,
+                Some(category),
+                &[],
+                &[],
+            );
+            assert!(
+                !without_pins.accepts(),
+                "{query}: pin-blind baseline must miss this query"
+            );
+
+            let provider = LiveOnlyProvider { nodes: vec![node] };
+            let rendered = provider.get_declarations(query).await;
+            let resolution = parse_declaration_resolution_metadata(&rendered).unwrap();
+            assert_eq!(
+                resolution.status,
+                DeclarationResolutionStatus::Resolved,
+                "{query}: {rendered}"
+            );
+            assert_eq!(resolution.candidates[0].function_name, qualified);
+            assert!(resolution.candidates[0].accepted);
+            assert!(
+                resolution.candidates[0]
+                    .reason_codes
+                    .iter()
+                    .any(|reason| reason.starts_with("pin_field_match:"))
+            );
+            assert!(
+                rendered.contains(&format!("function {qualified}(")),
+                "{rendered}"
+            );
+
+            let discovery = provider.get_declarations(field_query).await;
+            let resolution = parse_declaration_resolution_metadata(&discovery).unwrap();
+            assert_eq!(
+                resolution.status,
+                DeclarationResolutionStatus::Unresolved,
+                "{discovery}"
+            );
+            assert_eq!(resolution.candidates[0].function_name, qualified);
+            assert!(!resolution.candidates[0].accepted);
+            assert!(
+                resolution.candidates[0]
+                    .reason_codes
+                    .iter()
+                    .any(|reason| reason.starts_with("pin_field_match:"))
+            );
+
+            let exact = provider.get_declarations(&qualified).await;
+            assert_eq!(
+                parse_declaration_resolution_metadata(&exact)
+                    .unwrap()
+                    .status,
+                DeclarationResolutionStatus::Exact
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn declaration_retrieval_does_not_promote_operations_mentioned_in_pins() {
+        let mut output = pin("result", "Struct", "Normal", None, None);
+        output.description = "Use upsert after insertion to update existing records".to_string();
+        let node = metadata("set_insert_ref", Vec::new(), vec![output]);
+        let provider = LiveOnlyProvider { nodes: vec![node] };
+        let rendered = provider.get_declarations("upsert").await;
+        let resolution = parse_declaration_resolution_metadata(&rendered).unwrap();
+        assert_eq!(resolution.status, DeclarationResolutionStatus::Unresolved);
+        let candidate = &resolution.candidates[0];
+        assert!(!candidate.accepted);
+        assert!(
+            candidate
+                .reason_codes
+                .contains(&"pin_field_match:upsert".to_string())
+        );
+        assert!(
+            candidate
+                .reason_codes
+                .contains(&"missing_strong_anchor:upsert".to_string())
+        );
     }
 
     #[tokio::test]

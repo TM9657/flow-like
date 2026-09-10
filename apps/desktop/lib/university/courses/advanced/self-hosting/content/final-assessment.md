@@ -2,12 +2,14 @@ Thursday, 14:00. The go-live review. Priya sits across the table with the securi
 
 ## Artifact A — `staging-01`, the Compose box
 
-The API container restart-loops. Its startup log ends with an error about an unsupported runtime provider. The relevant `.env` lines:
+A colleague "upgraded" the box by hand. `python3 scripts/up.py` now stops with `Startup refused: RUNTIME_IMAGE must equal the SANDBOX_IMAGE digest pin; run scripts/pull-images.py or scripts/prepare-images.py to align them`. The relevant `.env` lines:
 
 ```dotenv
-STORAGE_PROVIDER=aws
-RUNTIME_CREDENTIALS_PROVIDER=
-CDN_BUCKET_NAME=
+FLOW_LIKE_IMAGE_TAG=1.4.0
+RUNTIME_IMAGE=ghcr.io/rheosoph/flow-like-docker-compose-runtime:1.4.0
+EXECUTION_MANAGER_IMAGE=ghcr.io/rheosoph/flow-like-docker-compose-execution-manager@sha256:9f2c…
+SANDBOX_IMAGE=ghcr.io/rheosoph/flow-like-docker-compose-runtime@sha256:41ab…
+SANDBOX_GATEWAY_IMAGE=ghcr.io/rheosoph/flow-like-docker-compose-execution-manager@sha256:9f2c…
 ```
 
 ## Artifact B — production values excerpt
@@ -15,18 +17,19 @@ CDN_BUCKET_NAME=
 `flow-like-values.yaml` for the cluster release, as currently committed:
 
 ```yaml
-api:
+executionManager:
   image:
-    repository: k3d-flow-like.localhost:5000/api
+    repository: ghcr.io/rheosoph/flow-like-kubernetes-execution-manager
     tag: dev
-    pullPolicy: Never
+    digest: ""
 database:
   type: internal
 execution:
+  isolationMode: per_run
   backend: http
   asyncBackend: redis
-runtimeClass:
-  create: false
+networkPolicy:
+  enabled: false
 monitoring:
   enabled: true
 ```

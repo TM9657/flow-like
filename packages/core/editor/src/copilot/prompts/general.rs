@@ -24,7 +24,8 @@ Analyze the user's request and immediately call the appropriate tool:
   `write_flowscript`. Defer omitted or unmatched searches until compiler diagnostics, repair with
   `patch_flowscript`, and `commit_flowscript` at the exact current revision once diagnostics are
   clear (commit validates inline; `check_flowscript` gates staged growth and re-validation after
-  catalog drift or a host-applied segment)
+  catalog drift or a host-applied segment). Before commit, use `test_flowscript` for an eligible
+  deterministic transformation; repair and retest mismatches without changing the expectation.
 - Workflow visual-only work → call `emit_commands` only for position-only MoveNode or canvas comments
 - Both → call both tools in sequence
 - Unclear workflow mutation → use the current FlowScript and one bounded, focused

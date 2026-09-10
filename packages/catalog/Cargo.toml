@@ -24,6 +24,15 @@ package-automation = ["dep:flow-like-catalog-automation"]
 # Product catalogs omit nodes whose optional runtime implementation is absent.
 # Metadata tooling leaves this disabled so it can inspect every valid node.
 runtime-catalog = []
+draft-testing = [
+    "package-std",
+    "package-data",
+    "dep:flow-like-runtime",
+    "flow-like-runtime/flow-runtime",
+    "dep:flow-like-types",
+    "dep:flow-like-storage",
+    "dep:futures",
+]
 portable-metadata = [
     "package-std",
     "package-data",
@@ -251,6 +260,10 @@ all-execute = ["all", "execute"]
 all-server-execute = ["portable-all", "server-execute"]
 
 [dependencies]
+flow-like-runtime = { workspace = true, optional = true }
+flow-like-types = { workspace = true, optional = true }
+flow-like-storage = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
 flow-like-catalog-core.workspace = true
 flow-like-catalog-std = { workspace = true, optional = true }
 flow-like-catalog-data = { workspace = true, optional = true }

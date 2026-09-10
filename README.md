@@ -137,10 +137,11 @@ The detailed setup guide lives at
 
 ### Self-host with Docker Compose
 
-The checked-in [Compose directory](./apps/backend/docker-compose/) builds the browser app, API
-gateway and API replicas, Rust runtime workers, WASM compiler, realtime signaling, server-side
-Event services, PostgreSQL, Redis, and database initialization on one host. Studio remains the
-desktop application and can connect to that backend.
+The checked-in [Compose directory](./apps/backend/docker-compose/) runs the browser app, API
+gateway and API replicas, the execution manager with disposable gVisor sandboxes, queue bridges,
+WASM compiler, realtime signaling, server-side Event services, PostgreSQL, Redis, and bundled
+RustFS object storage on one Linux host. Studio remains the desktop application and can connect
+to that backend.
 
 <p align="center">
   <img src="apps/docs/src/assets/DockerComposeArchitecture.svg" alt="The Docker Compose stack connects browser and desktop clients to the web app, API, execution workers, persistence, collaboration, and optional monitoring services." width="100%" />
@@ -151,35 +152,60 @@ Start with these files:
 | File | Purpose |
 | --- | --- |
 | [`docker-compose.yml`](./apps/backend/docker-compose/docker-compose.yml) | Service topology, health checks, ports, volumes, and optional monitoring profile |
-| [`.env.example`](./apps/backend/docker-compose/.env.example) | Image, URL, identity, storage, replica, and signing-key settings |
+| [`.env.example`](./apps/backend/docker-compose/.env.example) | Image tag, URL, identity, storage, replica, and signing-key settings |
 | [`flow-like.config.example.json`](./apps/backend/docker-compose/flow-like.config.example.json) | Hub identity provider, domains, feature flags, legal links, and Event sinks |
+| [`scripts/`](./apps/backend/docker-compose/scripts/) | `setup-env.py`, `pull-images.py`, `prepare-images.py`, `preflight.py`, and `up.py` |
 | [`monitoring/`](./apps/backend/docker-compose/monitoring/) | Prometheus, Grafana, Tempo, exporters, dashboards, and rules |
 
-The documented installation path is:
+The stack runs the published images `ghcr.io/rheosoph/flow-like-docker-compose-<workload>` at
+the tag in `FLOW_LIKE_IMAGE_TAG` (default `dev`). The self-hosted packages are public, so no
+registry login or Rust toolchain is needed. The documented installation path is:
 
 ```bash
 git clone --branch dev https://github.com/Rheosoph/flow-like.git
 cd flow-like/apps/backend/docker-compose
-cp .env.example .env
+python3 scripts/setup-env.py
 cp flow-like.config.example.json flow-like.config.json
+# Replace the OIDC and domain placeholders in flow-like.config.json and point
+# FLOW_LIKE_RUNTIME_CONFIG_FILE in .env at it. setup-env.py already generated
+# the signing keys and service credentials.
 
-../../../tools/gen-execution-keys.sh --export
-# Add the generated keys, OIDC settings, public URLs, and storage configuration to .env.
-# Point FLOW_LIKE_RUNTIME_CONFIG_FILE at ./flow-like.config.json.
-# The API and sink services read this mounted file at startup.
-
-docker compose config --quiet
-docker compose up -d --build
+python3 scripts/pull-images.py        # optional: pin every image to a digest, e.g. --tag 1.4.0
+python3 scripts/preflight.py
+python3 scripts/up.py
 docker compose ps --all
 ```
 
-The stack expects external object storage and does not create its buckets or containers. The
-copied environment template currently selects AWS, while the stock API image omits the AWS
-runtime-credential feature. Select a provider supported by that image or rebuild the API target
-with the required feature. Read the complete
+`pull-images.py` pins the nine first-party images and the sandbox references to
+`repository@sha256:…` digests; the default per-run isolation mode requires those immutable
+references. To run unpublished code instead, build locally with `python3 scripts/prepare-images.py`
+for the runner and manager images and `python3 scripts/up.py --build` for the rest.
+
+The template selects the bundled RustFS S3 store with `STORAGE_PROVIDER=aws`, and the published
+API image includes the AWS runtime-credential feature. Configure an external provider only when
+needed. Read the complete
 [Docker Compose installation guide](https://docs.flow-like.com/self-hosting/docker-compose/installation/)
 before exposing the stack publicly. The optional `monitoring` profile adds Prometheus, Grafana,
 Tempo, and PostgreSQL and Redis exporters.
+
+### Self-host on Kubernetes
+
+The [Helm chart](./apps/backend/kubernetes/helm/) deploys the same components across a cluster,
+defaulting to `ghcr.io/rheosoph/flow-like-kubernetes-<workload>` and the shared Compose images at
+tag `dev`. Isolated execution requires digest pins for the manager and executor:
+
+```bash
+cd flow-like/apps/backend/kubernetes
+./scripts/setup-config.sh
+./scripts/resolve-images.py --tag 1.4.0   # resolves digests through the registry API, no Docker needed
+./scripts/deploy.sh -f helm/values-production.yaml -f values-operator.yaml
+```
+
+`resolve-images.py` accepts `--pull-secret` for forks and private mirrors and `--arch` for
+single-architecture node pools. For local evaluation, `./scripts/dev.sh setup` creates a k3d
+cluster and `scripts/build-images.sh` builds the images into it. Read the
+[Kubernetes installation guide](https://docs.flow-like.com/self-hosting/kubernetes/installation/)
+for prerequisites such as gVisor and Cilium.
 
 ## Runtime requirements stay with the Flow
 

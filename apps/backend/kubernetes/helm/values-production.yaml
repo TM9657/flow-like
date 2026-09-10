@@ -1,11 +1,21 @@
 # Example production overrides for the Flow-Like Helm chart.
 # Replace every placeholder and keep credentials in pre-created Kubernetes
 # Secrets rather than in this file.
+#
+# Images: this example mirrors the public ghcr.io/rheosoph release images into
+# a private registry. imageRegistry is a literal prefix, so the repository
+# names below stay the published ones. Each digest pins one release; obtain
+# them with `scripts/resolve-images.py --tag <release> --registry
+# registry.example.com` (or from ghcr.io before mirroring). The all-zero
+# digests are placeholders that fail at image pull, never silently.
+# When deploying straight from ghcr.io, delete the image blocks below, drop
+# imagePullSecrets and let .generated/values-images.yaml supply the digests.
 
 fullnameOverride: flow-like
 
 global:
-  imageRegistry: "registry.example.com/flow-like/"
+  imageRegistry: "registry.example.com/"
+  # Create with: kubectl create secret docker-registry registry-credentials ...
   imagePullSecrets:
     - name: registry-credentials
 
@@ -15,8 +25,9 @@ api:
   corsAllowedOrigins: ["https://app.flow-like.example.com", "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]
   replicaCount: 3
   image:
-    repository: api
-    tag: "replace-me"
+    repository: flow-like-kubernetes-api
+    tag: "1.0.0"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
     pullPolicy: IfNotPresent
   autoscaling:
     enabled: true
@@ -26,8 +37,9 @@ api:
 web:
   replicaCount: 2
   image:
-    repository: web
-    tag: "replace-me"
+    repository: flow-like-kubernetes-web
+    tag: "1.0.0"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
     pullPolicy: IfNotPresent
 
 # Realtime collaboration signaling. The hub config's signaling URL must point
@@ -37,8 +49,9 @@ signaling:
   enabled: true
   replicaCount: 2
   image:
-    repository: signaling
-    tag: "replace-me"
+    repository: flow-like-docker-compose-signaling
+    tag: "1.0.0"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
     pullPolicy: IfNotPresent
   allowedOrigins:
     - https://app.flow-like.example.com
@@ -50,8 +63,9 @@ signaling:
 
 executor:
   image:
-    repository: executor
-    tag: "replace-me"
+    repository: flow-like-kubernetes-executor
+    tag: "1.0.0"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
     pullPolicy: IfNotPresent
   # Install runsc on execution nodes before deploying.
   runtimeClass: runsc
@@ -63,8 +77,9 @@ executorPool:
   enabled: false
   replicaCount: 2
   image:
-    repository: executor
-    tag: "replace-me"
+    repository: flow-like-kubernetes-executor
+    tag: "1.0.0"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
     pullPolicy: IfNotPresent
   autoscaling:
     enabled: false
@@ -89,8 +104,9 @@ database:
     existingSecret: flow-like-database
   migration:
     image:
-      repository: migration
-      tag: "replace-me"
+      repository: flow-like-kubernetes-migration
+      tag: "1.0.0"
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
       pullPolicy: IfNotPresent
 
 storage:
@@ -159,19 +175,23 @@ executionManager:
   maxConcurrentExecutions: 20
   warmPoolSize: 4
   image:
-    repository: execution-manager
-    tag: replace-me
-    digest: "" # Set the real pushed sha256 digest, or use values-images.yaml.
+    repository: flow-like-kubernetes-execution-manager
+    tag: "1.0.0"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    pullPolicy: IfNotPresent
   sandbox:
-    image: "" # Full registry/repository@sha256 reference.
+    # Full registry/repository@sha256 reference of the executor image above.
+    image: "registry.example.com/flow-like-kubernetes-executor@sha256:0000000000000000000000000000000000000000000000000000000000000000"
     nodeSelector:
       flow-like.io/execution: "true"
   queueBridge:
     replicaCount: 2
     concurrency: 20
     image:
-      repository: runtime
-      tag: replace-me
+      repository: flow-like-docker-compose-runtime
+      tag: "1.0.0"
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      pullPolicy: IfNotPresent
   objectStoreTlsGateway: true
 
 rustfs:
@@ -179,8 +199,10 @@ rustfs:
   existingSecret: flow-like-rustfs-root
   bootstrap:
     image:
-      repository: object-store-init
-      tag: replace-me
+      repository: flow-like-docker-compose-object-store-init
+      tag: "1.0.0"
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      pullPolicy: IfNotPresent
   persistence:
     size: 250Gi
   gateway:

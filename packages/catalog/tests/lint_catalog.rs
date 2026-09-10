@@ -604,11 +604,24 @@ async fn covered_on_update_nodes_are_hash_stable_after_second_run() {
     // Start with fixed regressions and grow this list as dynamic nodes are audited.
     const COVERED_NODES: &[&str] = &[
         "a2ui_update_overlay",
+        "ai_processing_extract_document_ai",
+        "ai_processing_extract_documents_ai",
         "struct_cast_to_schema",
         "struct_cast_to_struct",
     ];
-    const DEFAULT_SETTINGS: &[Option<&str>] = &[None];
-    const OVERLAY_SETTINGS: &[Option<&str>] = &[Some("Set All"), Some("Add"), Some("Clear")];
+    // (settings pin, values to drive it with; None leaves the node at its defaults)
+    const DEFAULT_SETTINGS: (&str, &[Option<&str>]) = ("", &[None]);
+    const OVERLAY_SETTINGS: (&str, &[Option<&str>]) =
+        ("operation", &[Some("Set All"), Some("Add"), Some("Clear")]);
+    const PROMPT_PRESET_SETTINGS: (&str, &[Option<&str>]) = (
+        "prompt_preset",
+        &[
+            Some("Default"),
+            Some("Unlimited-OCR"),
+            Some("DeepSeek-OCR"),
+            Some("olmOCR"),
+        ],
+    );
 
     let board = empty_board();
     let logic_nodes = selected_logic_nodes(COVERED_NODES);
@@ -626,16 +639,19 @@ async fn covered_on_update_nodes_are_hash_stable_after_second_run() {
     let mut violations = Vec::new();
 
     for (name, logic) in logic_nodes {
-        let settings = match name.as_str() {
+        let (settings_pin, settings) = match name.as_str() {
             "a2ui_update_overlay" => OVERLAY_SETTINGS,
+            "ai_processing_extract_document_ai" | "ai_processing_extract_documents_ai" => {
+                PROMPT_PRESET_SETTINGS
+            }
             _ => DEFAULT_SETTINGS,
         };
 
         for operation in settings {
             let mut node = logic.get_node();
             if let Some(operation) = operation {
-                node.get_pin_mut_by_name("operation")
-                    .expect("covered on_update node has an operation pin")
+                node.get_pin_mut_by_name(settings_pin)
+                    .expect("covered on_update node has its settings pin")
                     .set_default_value(Some(json!(operation)));
             }
 

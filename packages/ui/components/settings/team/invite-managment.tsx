@@ -1,7 +1,6 @@
 "use client";
 
 import { useTranslation } from "@flow-like/locales";
-import { useDebounce } from "@uidotdev/usehooks";
 import {
 	ClockIcon,
 	CopyIcon,
@@ -20,7 +19,6 @@ import {
 	UserCheckIcon,
 	UserPlus2Icon,
 	UserPlusIcon,
-	UserX,
 	Users,
 	UsersIcon,
 } from "lucide-react";
@@ -66,6 +64,7 @@ import {
 	useInvalidateInfiniteInvoke,
 	useInvoke,
 } from "../../../";
+import { useProjectUserSearch } from "../../../hooks/use-project-user-search";
 import { apiErrorMessage } from "../../../lib/api-error";
 import {
 	userAvatarUrl,
@@ -95,22 +94,15 @@ export function InviteUserDialog({
 	const invalidateInfinite = useInvalidateInfiniteInvoke();
 	const [message, setMessage] = useState("");
 	const [invitee, setInvitee] = useState("");
-	const inviteeSearch = useDebounce(invitee.trim(), 350);
+	const [invitingId, setInvitingId] = useState<string | null>(null);
 	const [showInviteDialog, setShowInviteDialog] = useState(false);
 
-	// One character matches most of the directory, so it is not worth a round trip.
-	const canSearch = inviteeSearch.length >= 2;
-	const userSearch = useInvoke(
-		backend.userState.searchUsers,
-		backend.userState,
-		[inviteeSearch],
-		canSearch,
-	);
+	const userSearch = useProjectUserSearch(appId, invitee, showInviteDialog);
 
 	return (
 		<Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
 			<DialogTrigger asChild>{trigger}</DialogTrigger>
-			<DialogContent className="sm:max-w-md">
+			<DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
 				<DialogHeader className="space-y-3">
 					<div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
 						<UserPlus2Icon className="h-6 w-6 text-primary" />
@@ -141,6 +133,8 @@ export function InviteUserDialog({
 								value={invitee}
 								onChange={(e) => setInvitee(e.target.value)}
 								className="pl-10"
+								maxLength={200}
+								autoComplete="off"
 							/>
 							<User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 						</div>
@@ -162,165 +156,174 @@ export function InviteUserDialog({
 						/>
 					</div>
 
-					{canSearch && (
-						<div className="space-y-3">
-							<Separator />
-
-							{userSearch.isFetching && (
-								<div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-									<RefreshCw className="h-4 w-4 animate-spin" />
-									<span className="text-sm">
-										{t("searchingForUsers", "Searching for users...")}
-									</span>
-								</div>
-							)}
-
-							{!userSearch.isFetching &&
-								userSearch.data &&
-								userSearch.data.length > 0 && (
-									<div className="space-y-2">
-										<h4 className="text-sm font-medium text-foreground">
-											{t("searchResults", "Search Results")}
-										</h4>
-										<div className="max-h-48 space-y-2 overflow-y-auto pr-2">
-											{userSearch.data.map((user) => {
-												const displayName = userDisplayName(user, user.id);
-												const secondary = userSecondaryLabel(user);
-												return (
-													<div
-														key={user.id}
-														className="group flex items-center justify-between gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-accent/50"
-													>
-														<div className="flex min-w-0 items-center gap-3">
-															<Avatar className="h-9 w-9 shrink-0">
-																<AvatarImage
-																	src={userAvatarUrl(user)}
-																	alt={displayName}
-																/>
-																<AvatarFallback className="bg-primary/10 text-primary">
-																	{userInitials(user)}
-																</AvatarFallback>
-															</Avatar>
-															<div className="min-w-0 flex-1">
-																<p className="truncate text-sm font-medium">
-																	{displayName}
-																</p>
-																{secondary && (
-																	<p className="truncate text-xs text-muted-foreground">
-																		{secondary}
-																	</p>
-																)}
-															</div>
-														</div>
-														<Button
-															size="sm"
-															onClick={async () => {
-																try {
-																	await backend.teamState.inviteUser(
-																		appId,
-																		user.id,
-																		message,
-																	);
-																	// Surface the new invitation in the people
-																	// list without waiting for a manual refresh.
-																	await invalidateInfinite(
-																		backend.teamState.getAppInvites,
-																		[appId],
-																	);
-																	toast.success(
-																		`Invitation sent to ${displayName}!`,
-																	);
-																	setShowInviteDialog(false);
-																	setInvitee("");
-																	setMessage("");
-																} catch (error) {
-																	console.error(error);
-																	toast.error(
-																		apiErrorMessage(
-																			error,
-																			"Failed to send invite. Please try again.",
-																		),
-																	);
-																}
-															}}
-															className="h-8 shrink-0 gap-1.5 text-xs"
-														>
-															<Mail className="h-3 w-3" />
-															{t("invite", "Invite")}
-														</Button>
+					<div className="space-y-3">
+						<Separator />
+						{userSearch.results.length > 0 && (
+							<div className="space-y-2">
+								<h4 className="text-sm font-medium">
+									{invitee.trim()
+										? t("searchResults", "Search Results")
+										: t("peopleFromYourProjects", "People from your projects")}
+								</h4>
+								<div className="max-h-60 space-y-2 overflow-y-auto pr-2">
+									{userSearch.results.map(({ user, fromProject }) => {
+										const displayName = userDisplayName(user, user.id);
+										const secondary = userSecondaryLabel(user);
+										return (
+											<div
+												key={user.id}
+												className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3"
+											>
+												<div className="flex min-w-0 items-center gap-3">
+													<Avatar className="h-9 w-9 shrink-0">
+														<AvatarImage
+															src={userAvatarUrl(user)}
+															alt={displayName}
+														/>
+														<AvatarFallback className="bg-primary/10 text-primary">
+															{userInitials(user)}
+														</AvatarFallback>
+													</Avatar>
+													<div className="min-w-0 flex-1">
+														<p className="truncate text-sm font-medium">
+															{displayName}
+														</p>
+														{secondary && (
+															<p className="truncate text-xs text-muted-foreground">
+																{secondary}
+															</p>
+														)}
+														{fromProject && (
+															<p className="text-xs text-primary">
+																{t("fromYourProjects", "From your projects")}
+															</p>
+														)}
 													</div>
-												);
-											})}
-										</div>
-									</div>
-								)}
-
-							{!userSearch.isFetching && userSearch.isError && (
-								<div className="flex flex-col items-center gap-3 py-8 text-center">
-									<div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-										<UserX className="h-6 w-6 text-destructive" />
-									</div>
-									<div className="space-y-1">
-										<p className="text-sm font-medium">
-											{t("userSearchFailed", "Could not search for users")}
-										</p>
-										<p className="text-xs text-muted-foreground">
-											{apiErrorMessage(
-												userSearch.error,
-												t(
-													"userSearchFailedHint",
-													"The directory is unreachable right now. Try again in a moment.",
-												),
-											)}
-										</p>
-									</div>
+												</div>
+												<Button
+													size="sm"
+													disabled={invitingId !== null}
+													aria-label={t("inviteNamedUser", {
+														defaultValue: "Invite {{name}}",
+														name: displayName,
+													})}
+													onClick={async () => {
+														setInvitingId(user.id);
+														try {
+															await backend.teamState.inviteUser(
+																appId,
+																user.id,
+																message,
+															);
+															setShowInviteDialog(false);
+															setInvitee("");
+															setMessage("");
+															toast.success(
+																t("invitationSentToUser", {
+																	defaultValue: "Invitation sent to {{name}}",
+																	name: displayName,
+																}),
+															);
+															void userSearch.invalidate(user.id);
+															void invalidateInfinite(
+																backend.teamState.getAppInvites,
+																[appId],
+															);
+														} catch (error) {
+															toast.error(
+																apiErrorMessage(
+																	error,
+																	"Failed to send invite. Please try again.",
+																),
+															);
+														} finally {
+															setInvitingId(null);
+														}
+													}}
+													className="h-8 shrink-0 gap-1.5 text-xs"
+												>
+													{invitingId === user.id ? (
+														<RefreshCw className="h-3 w-3 animate-spin" />
+													) : (
+														<Mail className="h-3 w-3" />
+													)}
+													{t("invite", "Invite")}
+												</Button>
+											</div>
+										);
+									})}
+								</div>
+							</div>
+						)}
+						<section
+							aria-label={t("userSearchStatus", "User search status")}
+							aria-live="polite"
+							className="space-y-2 text-sm text-muted-foreground"
+						>
+							{userSearch.isLoadingContacts && (
+								<p className="flex items-center gap-2">
+									<RefreshCw className="h-3 w-3 animate-spin" />
+									{t(
+										"loadingProjectContacts",
+										"Loading people from your projects...",
+									)}
+								</p>
+							)}
+							{userSearch.isSearchingDirectory && (
+								<p className="flex items-center gap-2">
+									<RefreshCw className="h-3 w-3 animate-spin" />
+									{t("searchingDirectory", "Searching for more people...")}
+								</p>
+							)}
+							{userSearch.contactsError && (
+								<div className="flex items-center justify-between gap-2">
+									<p>
+										{t(
+											"projectContactsFailed",
+											"Could not load people from your projects.",
+										)}
+									</p>
 									<Button
 										size="sm"
 										variant="outline"
-										className="h-8 gap-1.5 text-xs"
-										onClick={() => userSearch.refetch()}
+										onClick={() => userSearch.retryContacts()}
 									>
-										<RefreshCw className="h-3 w-3" />
 										{t("retry", "Retry")}
 									</Button>
 								</div>
 							)}
-
-							{!userSearch.isFetching &&
-								!userSearch.isError &&
-								(!userSearch.data || userSearch.data.length === 0) && (
-									<div className="flex flex-col items-center gap-2 py-8 text-center">
-										<div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-											<UserX className="h-6 w-6 text-muted-foreground" />
-										</div>
-										<div className="space-y-1">
-											<p className="text-sm font-medium">
-												{t("noUsersFound", "No users found")}
-											</p>
-											<p className="text-xs text-muted-foreground">
-												{t(
-													"searchByNameHandleEmailOrUserId2",
-													"Search by name, handle, email or user ID",
-												)}
-											</p>
-										</div>
-									</div>
+							{userSearch.directoryError && (
+								<div className="flex items-center justify-between gap-2">
+									<p>{t("userSearchFailed", "Could not search for users")}</p>
+									<Button
+										size="sm"
+										variant="outline"
+										onClick={() => userSearch.retryDirectory()}
+									>
+										{t("retry", "Retry")}
+									</Button>
+								</div>
+							)}
+							{!userSearch.canSearchDirectory && (
+								<p>
+									{t(
+										"searchDirectoryHint",
+										"Enter at least 2 characters to search for anyone by name, handle, email or user ID.",
+									)}
+								</p>
+							)}
+							{userSearch.canSearchDirectory &&
+								!userSearch.isSearchingDirectory &&
+								!userSearch.isLoadingContacts &&
+								!userSearch.directoryError &&
+								!userSearch.contactsError &&
+								userSearch.results.length === 0 && (
+									<p className="py-4 text-center">
+										{t("noUsersFound", "No users found")}
+									</p>
 								)}
-						</div>
-					)}
-
-					{!canSearch && (
-						<div className="flex flex-col items-center gap-2 py-6 text-center text-muted-foreground">
-							<Users className="h-8 w-8" />
-							<p className="text-sm">
-								{t("keepTypingAtLeast2Characters", {
-									defaultValue_zero: "Start typing to search for users",
-									defaultValue_other: "Keep typing — at least 2 characters",
-									count: inviteeSearch.length,
-								})}
-							</p>
-						</div>
-					)}
+						</section>
+					</div>
 				</div>
 			</DialogContent>
 		</Dialog>

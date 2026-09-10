@@ -14,7 +14,9 @@ use flow_like::{
         board::{Board, commands::GenericCommand},
         copilot::{BoardCommand, board_fingerprint},
     },
+    flow_like_storage::object_store::path::Path,
 };
+use flow_like_types::{FromProto, ToProto};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -55,6 +57,93 @@ pub struct ApplyFlowIrCommitResult {
     pub diagnostics: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub final_board_node_count: Option<usize>,
+    /// Exact persisted graph content after this batch, retained unchanged on receipt replay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persisted_board_fingerprint: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct FlowIrCommitReadback {
+    pub app_id: String,
+    pub board_id: String,
+    pub graph_fingerprint: String,
+    pub flowscript: String,
+}
+
+/// Hash the storage representation, including every node/pin identity and connection. FlowScript
+/// can inline distinct getter nodes into identical expressions, so source text cannot prove the
+/// compiled graph was persisted. Internal receipt refs are excluded by Board's JSON serializer.
+pub(super) fn persisted_board_graph_fingerprint(board: &Board) -> Result<String, String> {
+    let stored = Board::from_proto(board.to_proto());
+    let mut value = serde_json::to_value(stored).map_err(|error| error.to_string())?;
+    let fields = value
+        .as_object_mut()
+        .ok_or("Board did not serialize as an object")?;
+    for key in ["created_at", "updated_at", "hash"] {
+        fields.remove(key);
+    }
+    value.sort_all_objects();
+    let bytes = serde_json::to_vec(&value).map_err(|error| error.to_string())?;
+    Ok(format!(
+        "flowpilot-board-v1:{}",
+        blake3::hash(&bytes).to_hex()
+    ))
+}
+
+/// Read the saved object directly. Loading a registered board or running catalog migrations here
+/// would audit editor memory or a derived graph instead of the native Apply's persistence boundary.
+#[tauri::command(async)]
+pub async fn flowpilot_read_flow_ir_commit_board(
+    app_handle: AppHandle,
+    app_id: String,
+    board_id: String,
+) -> Result<FlowIrCommitReadback, String> {
+    if app_id.trim().is_empty() || board_id.trim().is_empty() {
+        return Err("IR_READBACK_TARGET_INVALID: App and board ids are required.".to_string());
+    }
+    let state = TauriFlowLikeState::construct(&app_handle)
+        .await
+        .map_err(|error| error.to_string())?;
+    let app = App::load(app_id.clone(), state)
+        .await
+        .map_err(|error| format!("IR_READBACK_APP_UNAVAILABLE: {error}"))?;
+    if app.id != app_id || !app.boards.contains(&board_id) {
+        return Err(
+            "IR_READBACK_APP_BOARD_MISMATCH: The board is not owned by this app.".to_string(),
+        );
+    }
+    let store = TauriFlowLikeState::get_project_meta_store(&app_handle)
+        .await
+        .map_err(|error| error.to_string())?;
+    let proto = Board::load_proto(
+        store,
+        &Path::from("apps").join(app_id.clone()),
+        &board_id,
+        None,
+    )
+    .await
+    .map_err(|error| format!("IR_READBACK_PERSISTENCE_UNAVAILABLE: {error}"))?;
+    let board = Board::from_proto(proto);
+    if board.id != board_id {
+        return Err(
+            "IR_READBACK_BOARD_ID_MISMATCH: The saved object contains another board.".to_string(),
+        );
+    }
+    board
+        .ensure_supported_format()
+        .map_err(|error| error.to_string())?;
+    Ok(FlowIrCommitReadback {
+        app_id,
+        board_id,
+        graph_fingerprint: persisted_board_graph_fingerprint(&board)?,
+        flowscript: flow_like::flow::ast::board_to_flowscript(
+            &board,
+            &flow_like::flow::ast::RenderOptions {
+                anchors: true,
+                ..Default::default()
+            },
+        ),
+    })
 }
 
 const FLOW_IR_APPLIED_RECEIPT_TTL: Duration = Duration::from_secs(2 * 60 * 60);
@@ -258,6 +347,7 @@ impl ApplyFlowIrCommitResult {
             board_commands: Vec::new(),
             diagnostics: Vec::new(),
             final_board_node_count: None,
+            persisted_board_fingerprint: None,
         }
     }
 
@@ -276,6 +366,7 @@ impl ApplyFlowIrCommitResult {
             board_commands,
             diagnostics,
             final_board_node_count: None,
+            persisted_board_fingerprint: None,
         }
     }
 }
@@ -678,6 +769,18 @@ pub(super) async fn flowpilot_apply_flow_ir_commit_with_recovery(
         );
     }
 
+    let persisted_board_fingerprint = match persisted_board_graph_fingerprint(&board) {
+        Ok(fingerprint) => fingerprint,
+        Err(error) => {
+            *board = original_board;
+            return ApplyFlowIrCommitResult::apply_error(
+                "IR_COMMIT_FINGERPRINT_FAILED",
+                "The compiled workflow was rolled back because its persisted graph could not be fingerprinted.",
+                apply_result.board_commands,
+                vec![error],
+            );
+        }
+    };
     let mut result = ApplyFlowIrCommitResult {
         status: "applied".to_string(),
         replayed: false,
@@ -690,6 +793,7 @@ pub(super) async fn flowpilot_apply_flow_ir_commit_with_recovery(
         board_commands: apply_result.board_commands.clone(),
         diagnostics: Vec::new(),
         final_board_node_count: Some(board_total_node_count(&board)),
+        persisted_board_fingerprint: Some(persisted_board_fingerprint),
     };
     if let Err(error) = validate_board_edit_delivery_bounds(
         &result,

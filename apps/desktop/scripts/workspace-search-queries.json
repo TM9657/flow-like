@@ -1,0 +1,282 @@
+[
+	{
+		"id": "book-exact-helper",
+		"query": "normalizeSystemId",
+		"category": "identifier",
+		"targets": [
+			{
+				"source_path": "apps/book/examples/functions-and-caching/functions.flow",
+				"symbol": "normalizeSystemId"
+			}
+		],
+		"reason": "This helper trims the incident system identifier before routing."
+	},
+	{
+		"id": "book-cached-runbook",
+		"query": "Find the cached helper that chooses the payments on-call team and runbook",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "apps/book/examples/functions-and-caching/functions.flow",
+				"symbol": "resolveSystem"
+			}
+		],
+		"reason": "resolveSystem has a cache decorator and selects payments-on-call with runbooks/payments.md."
+	},
+	{
+		"id": "book-classification",
+		"query": "Which helper classifies a degraded incident as a warning?",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "apps/book/examples/control-flow/control.flow",
+				"symbol": "classify"
+			}
+		],
+		"reason": "classify tests the report for degraded and assigns the warning status; several other incident examples are distractors."
+	},
+	{
+		"id": "book-cache-sequence",
+		"query": "commit durable update then invalidate cache before publishing success",
+		"category": "multi-step",
+		"targets": [
+			{
+				"source_path": "apps/book/examples/workflow-figures/cache-invalidation.flow",
+				"symbol": "updateDirectory"
+			}
+		],
+		"reason": "The event calls commitDurableUpdate, advanceRevision, invalidateCache and publishSuccess in sequence."
+	},
+	{
+		"id": "book-body-catalog-call",
+		"query": "splitOnce separator fromEnd",
+		"category": "body-only",
+		"targets": [
+			{
+				"source_path": "apps/book/examples/calling-the-catalog/catalog.flow",
+				"symbol": "catalogIncident"
+			}
+		],
+		"reason": "The event body splits a normalized report once at a colon using separator and fromEnd arguments."
+	},
+	{
+		"id": "book-typo-event",
+		"query": "configureIncidnetRest",
+		"category": "typo",
+		"targets": [
+			{
+				"source_path": "apps/book/examples/events-and-interfaces/events.flow",
+				"symbol": "configureIncidentRest"
+			}
+		],
+		"reason": "The intended event registers the incident REST endpoint, authentication and OpenAPI routes; the query transposes two letters."
+	},
+	{
+		"id": "app-cache-namespace",
+		"query": "inventory-routing-v3",
+		"category": "body-only",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t2-cron-cache.flow",
+				"symbol": "resolveWarehouseRoute"
+			},
+			{
+				"source_path": "tests/ast/handwritten/t2-cron-cache.flow",
+				"symbol": "invalidateRoutingCache"
+			}
+		],
+		"reason": "The exact namespace occurs in the route helper's cache decorator and in the handler that invalidates that namespace."
+	},
+	{
+		"id": "app-ui-chart",
+		"query": "Render a bar chart of vehicle counts grouped by depot",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t2-widget-action.flow",
+				"symbol": "paintDepotChart"
+			}
+		],
+		"reason": "The helper groups vehicle rows by depot, sets a Nivo bar chart and publishes each group's vehicle count."
+	},
+	{
+		"id": "app-extraction-body",
+		"query": "extractTables rendered_chars",
+		"category": "body-only",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t3-document-extraction.flow",
+				"symbol": "worksheetDigest"
+			}
+		],
+		"reason": "The worksheet helper calls excel::extractTables and stores the rendered JSON character count in rendered_chars."
+	},
+	{
+		"id": "app-settlement-query",
+		"query": "Find carrier invoice reconciliation against executed shipments",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-freight-tower.flow",
+				"symbol": "settlement::reconciliationSql"
+			}
+		],
+		"reason": "The SQL builder left joins executed_shipments with carrier_invoices and computes the invoiced-versus-executed variance."
+	},
+	{
+		"id": "app-qualified-helper",
+		"query": "tender::mail::extractPdf",
+		"category": "qualified-identifier",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-freight-tower.flow",
+				"symbol": "tender::mail::extractPdf"
+			}
+		],
+		"reason": "The nested mail helper saves a tender attachment, extracts its PDF text and returns the page count."
+	},
+	{
+		"id": "app-quarantine-dependencies",
+		"query": "Prevent quarantine when critical dependent assets are present",
+		"category": "multi-step",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t3-ontology-action.flow",
+				"symbol": "blockingDependents"
+			},
+			{
+				"source_path": "tests/ast/handwritten/t3-ontology-action.flow",
+				"symbol": "onQuarantineRequest"
+			}
+		],
+		"reason": "blockingDependents queries incoming DEPENDS_ON edges with a criticality threshold; onQuarantineRequest rejects quarantine when that query returns blockers."
+	},
+	{
+		"id": "app-typo-helper",
+		"query": "lowBateryDigest",
+		"category": "typo",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t2-widget-action.flow",
+				"symbol": "lowBatteryDigest"
+			}
+		],
+		"reason": "The intended helper filters battery_percent below a threshold and writes a vehicle digest; the query omits one letter."
+	},
+	{
+		"id": "snapshot-index-mode",
+		"query": "FULL TEXT AUTO",
+		"category": "body-only",
+		"targets": [
+			{
+				"source_path": "tests/ast/ttwctnp08u18sg2z6nmcqqak.flow",
+				"symbol": "buildIndex"
+			}
+		],
+		"reason": "This event chooses the FULL TEXT or AUTO database index mode from the fts input."
+	},
+	{
+		"id": "snapshot-latest-briefing",
+		"query": "Open the latest briefing by descending creation date",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/bypaw6n2ksuvrw0kcaj14omz.flow",
+				"symbol": "clickLatestOverview"
+			},
+			{
+				"source_path": "tests/ast/widgets-pages/bypaw6n2ksuvrw0kcaj14omz.flow",
+				"symbol": "clickLatestOverview"
+			}
+		],
+		"reason": "Both snapshots contain an equivalent event that sorts reports by created descending, selects one row and navigates to its briefing."
+	},
+	{
+		"id": "docs-remote-secret",
+		"query": "Do locally stored secrets reach remotely executed flows?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/apps/runtime-variables.md",
+				"section_id": "runtime-configured-and-secret-are-different"
+			}
+		],
+		"reason": "This section explicitly explains that locally stored secret values are excluded from remote execution payloads."
+	},
+	{
+		"id": "docs-event-version",
+		"query": "Keep event behavior fixed while editing the flow draft",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/apps/events.md",
+				"section_id": "select-the-flow-implementation"
+			}
+		],
+		"reason": "The section distinguishes Latest from an immutable numbered Flow version and recommends pinning production-facing Events."
+	},
+	{
+		"id": "docs-route-parameters",
+		"query": "Can route query parameters change which event a URL opens?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/dev/a2ui/routes.md",
+				"section_id": "query-parameters"
+			}
+		],
+		"reason": "The section says query parameters provide navigation context while route identity remains the path-to-event mapping."
+	},
+	{
+		"id": "docs-anchor-identity",
+		"query": "How do node anchors preserve identity when editing FlowScript?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/studio/flowscript.md",
+				"section_id": "anchors-and-editing"
+			}
+		],
+		"reason": "The section explains statement node IDs, retaining anchors for edits and dropping anchors for deletions."
+	},
+	{
+		"id": "docs-widget-compatible-option",
+		"query": "Which widget version change is appropriate for a compatible new option?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/dev/a2ui/widgets.md",
+				"section_id": "versions"
+			}
+		],
+		"reason": "The Widget version table assigns compatible behavior or option additions to Minor versions."
+	},
+	{
+		"id": "absent-stripe",
+		"query": "Stripe subscription webhook idempotency",
+		"category": "absent",
+		"targets": [],
+		"reason": "The selected corpus contains no Stripe subscription webhook implementation; generic subscriptions and idempotency are distractors."
+	},
+	{
+		"id": "absent-kubernetes",
+		"query": "Kubernetes horizontal pod autoscaler",
+		"category": "absent",
+		"targets": [],
+		"reason": "The selected corpus contains no Kubernetes autoscaler implementation or documentation."
+	},
+	{
+		"id": "absent-saml",
+		"query": "SAML single sign on assertion validation",
+		"category": "absent",
+		"targets": [],
+		"reason": "The selected corpus contains no SAML assertion validation implementation; unrelated validation and authentication examples are distractors."
+	},
+	{
+		"id": "absent-redis",
+		"query": "Redis distributed lease renewal",
+		"category": "absent",
+		"targets": [],
+		"reason": "The selected corpus contains no Redis lease renewal implementation; the cache examples implement other behavior."
+	}
+]

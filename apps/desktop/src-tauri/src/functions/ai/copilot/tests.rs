@@ -277,6 +277,7 @@ fn board_edit_job_test_record(
                 replacement_mode: false,
                 destructive_effects: Vec::new(),
             },
+            persisted_board_fingerprint: None,
             result: None,
             error: None,
         },

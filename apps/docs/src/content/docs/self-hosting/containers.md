@@ -5,9 +5,11 @@ description: Build backend images, select release digests and configure them at 
 
 The [Backend containers workflow](https://github.com/Rheosoph/flow-like/blob/dev/.github/workflows/containers.yml)
 builds images from one source commit, checks each image before publishing it to
-GitHub Container Registry (GHCR), and assembles a manifest of immutable digests.
-Use that manifest to select an image for the deployment's CPU architecture and
-retain it with the deployment configuration.
+GitHub Container Registry (GHCR), assembles a manifest of immutable digests, and
+then publishes one multi-architecture index per self-hosted repository together
+with an immutable build tag and guarded channel tags such as `dev` and `latest`.
+Follow a channel tag for development hosts; pin a digest or build tag for
+production and retain it with the deployment configuration.
 
 ## Published image sets
 
@@ -30,10 +32,18 @@ workflow leaves PostgreSQL, Redis, RustFS and monitoring tools as upstream image
 See [the target matrix](https://github.com/Rheosoph/flow-like/blob/dev/.github/scripts/container_images.py)
 for exact Dockerfile paths and platforms.
 
-Every published digest identifies a single-platform image. AMD64 and ARM64 are
-separate records, such as `docker-compose-runtime-arm64`. For mixed-architecture
-Kubernetes nodes, constrain each workload to the selected architecture or supply
-a separately qualified multi-architecture index.
+Every build record identifies a single-platform image. AMD64 and ARM64 are
+separate records, such as `docker-compose-runtime-arm64`. After the complete
+set is published, the workflow combines both records of each self-hosted
+repository into one multi-architecture image index, so a Compose host or a
+mixed-architecture Kubernetes cluster pulls the index by tag or digest and
+receives the matching platform. Cloud repositories stay single-image manifests
+because Lambda rejects an index. See [Tags and visibility](#tags-and-visibility).
+
+The fifteen self-hosted packages are public: anyone can pull them without a
+registry login. Cloud packages (AWS, GCP, Azure) stay private to the owner
+organization. Nothing in the repository changes visibility; it is a package
+setting in the GitHub UI, and forks publish private packages by default.
 
 ## Build locally
 
@@ -150,44 +160,128 @@ still uses the hosted `flow-like.com/thirdparty/callback` relay and may select
 the stored profile's Hub. These runtime variables do not configure that separate
 relay or its provider registrations.
 
+## Tags and visibility
+
+Each repository receives three kinds of references. Every tag of one release
+resolves to the same digest, so a tag is only a name for a digest.
+
+| Reference | Example | Moves? |
+| --- | --- | --- |
+| Digest | `ghcr.io/rheosoph/flow-like-docker-compose-api@sha256:…` | Never; pin this in production |
+| Build tag | `sha-<40-char commit>-run-<run id>-<attempt>` | Never; one per workflow attempt |
+| Channel tag | `dev`, `main`, `alpha`, `beta`, `latest`, `1`, `1.2`, `1.2.3`, `1.2.3-beta` | Forward only, see the guard below |
+
+The build job also pushes a per-architecture tag,
+`sha-<commit>-<amd64|arm64>-run-<run id>-<attempt>`, for each scanned
+single-platform image. Those remain available for a platform-specific pull, but
+the references above are the ones to consume.
+
+For the fifteen self-hosted repositories the digest and every tag name a
+multi-architecture index containing the AMD64 and ARM64 images built from that
+commit. The workflow requests the index annotations
+`org.opencontainers.image.revision`, `org.opencontainers.image.source` and
+`org.opencontainers.image.version`; an OCI index keeps them, while a Docker
+manifest list (produced when the pushed images use Docker media types) cannot
+carry annotations. The twenty-five cloud repositories are single-platform: the
+tags point at the image manifest itself, never at an index, because Lambda
+requires a single-image manifest. The workflow asserts this after every copy.
+The image config labels carry the revision and source for both kinds and are the
+fallback the guard reads.
+
+Which channel tags a run applies depends on the Git ref that triggered it:
+
+| Ref | Channel tags | `version` annotation |
+| --- | --- | --- |
+| `dev`, `main`, `alpha` branch | `dev`, `main` or `alpha` | branch name |
+| `v1.2.3` | `1.2.3`, `1.2`, `1`, `latest` | `1.2.3` |
+| `v0.4.0` | `0.4.0`, `0.4`, `latest` (no `0` major tag) | `0.4.0` |
+| `v1.2.3-rc.1` | `1.2.3-rc.1` only | `1.2.3-rc.1` |
+| `beta-v0.4.0` (or any `<channel>-v…`) | `0.4.0-beta`, `beta` | `0.4.0` |
+| any other ref | none; the build tag only | none |
+
+The desktop release workflow creates `beta-v*` tags, so each desktop beta also
+publishes backend images under `<version>-beta` and `beta`. Semantic versions
+follow `MAJOR.MINOR.PATCH` with an optional `-prerelease` part; build metadata is
+not a valid Docker tag and is not accepted.
+`python3 .github/scripts/container_images.py tags --ref refs/tags/v1.2.3`
+prints the tags for a ref.
+
+Moving channel tags are guarded so a re-run of an old ref, or a release branch
+that lost commits, never makes a package point backwards:
+
+- `dev`, `main`, `alpha`, `beta` and other channel names move only when the
+  commit recorded on the existing tag is the same as, or an ancestor of, the
+  commit being published (`git merge-base --is-ancestor`).
+- `latest`, `<major>` and `<major>.<minor>` move only when the new semantic
+  version is greater than or equal to the version recorded on the existing tag.
+  When an index carries no version annotation (a Docker manifest list drops
+  annotations; single-image cloud manifests never have one), the guard reads the
+  `v*` tag on the recorded commit from Git history instead.
+- Exact version tags such as `1.2.3` and `1.2.3-beta` are not guarded.
+- Missing tags, unreadable metadata or a recorded commit that no longer exists in
+  the repository let the tag move; the job logs the reason.
+
+A skipped tag never fails the job. Each skip is logged as a workflow warning
+and recorded in `container-indexes.json` under `skipped_tags` with its reason.
+The build tag and the digest are always published, so a release whose channel
+tag was kept is still consumable by its immutable references.
+
+Self-hosted packages are public and need no `docker login`. Cloud packages are
+private; pulling them, or the packages of a private fork, needs a login with a
+token that has `read:packages`. The workflow never changes visibility.
+
 ## Publish and select a release
 
 The workflow needs `contents: read`, `packages: write` and permission to create
 organization packages. It authenticates with `GITHUB_TOKEN` after image checks
 pass. Existing GHCR packages must also grant this source repository Actions
 write access. It does not need deployment-cloud credentials or a custom registry token.
-Protect `dev`, `main`, `alpha` and `v*` tags because pushes to them publish images.
+Protect `dev`, `main`, `alpha`, `v*` and `beta-v*` because pushes to them publish
+images and move channel tags.
 
-1. Push the reviewed source commit, then select **Actions > Backend containers >
-   Run workflow** when a manual release is needed.
+1. Push the reviewed source commit or tag, or select **Actions > Backend
+   containers > Run workflow** when a manual release is needed. A manual run
+   from `dev`, `main` or `alpha` moves that branch's channel tag.
 2. Select `aws`, `gcp`, `azure`, `docker-compose`, `kubernetes`, `self-hosted` or
    `all`. `kubernetes` includes its shared Compose helpers; `self-hosted` selects
    all fifteen self-hosted repositories on both architectures.
-3. After the complete set succeeds, download
+3. After the complete set succeeds, the `manifest` job uploads
    `container-images-<commit>-<run>-<attempt>`. Its `container-images.json` maps
-   workloads and platforms to digest references.
-4. Set package visibility and consumer read access explicitly. The workflow
-   never changes visibility.
+   workloads and platforms to single-platform digest references.
+4. The `index` job then creates the per-repository index or manifest copy, applies
+   the build tag and the guarded channel tags, and uploads
+   `container-indexes-<commit>-<run>-<attempt>`. Its `container-indexes.json`
+   lists, per repository, the `kind` (`index` or `manifest`), the digest to pin,
+   the platforms, the applied `tags` and any `skipped_tags`.
+5. Set package visibility and consumer read access explicitly.
 
-Tags include the full source SHA, architecture, run ID and run attempt. There is
-no mutable `latest` tag. Records also bind the Dockerfile and relevant
-config/CA identity. The final job rejects missing, duplicate, wrong-platform and
-mixed-build records. A failed matrix can leave individually checked images in
-GHCR without a complete manifest. Use **Re-run all jobs** so every record comes
-from one attempt. Pin digests for deployments; save the manifest before its
-90-day artifact retention expires.
+Records bind the Dockerfile and relevant config/CA identity. The `manifest` job
+rejects missing, duplicate, wrong-platform and mixed-build records, and the
+`index` job re-validates the manifest before touching the registry. A failed
+matrix can leave individually checked images in GHCR without a complete manifest
+and without channel tags. Use **Re-run all jobs** so every record comes from one
+attempt. Pin digests for deployments; save both manifests before their 90-day
+artifact retention expires.
 
-Compose accepts `API_IMAGE`, `RUNTIME_IMAGE`, `EXECUTION_MANAGER_IMAGE`,
-`COMPILER_IMAGE`, `SINK_SERVICES_IMAGE`, `SIGNALING_IMAGE`, `DB_INIT_IMAGE`,
-`OBJECT_STORE_INIT_IMAGE` and `WEB_IMAGE`. Set them to selected digest references
-and use a validated deployment environment with `docker compose up --no-build`.
-The existing `prepare-images.py` helper still builds and pins local runner and
-manager image IDs; it does not consume the release manifest. Keep preflight and
-sandbox image pinning in the installation procedure.
+For production, pin the index digest from `container-indexes.json` or the build
+tag; both are immutable. Use a channel tag only where following a channel is the
+intent, such as a development host on `dev`, and keep `pullPolicy: Always` or an
+explicit re-pull step so that host receives the moved tag.
 
-Helm accepts registry images. The execution manager and sandbox have explicit
-digest inputs; other images use repository/tag fields. Generating complete,
-digest-aware Helm values from release manifests remains separate work.
+Compose reads `FLOW_LIKE_IMAGE_TAG` (default `dev`) and the per-workload
+`API_IMAGE`, `RUNTIME_IMAGE`, `EXECUTION_MANAGER_IMAGE`, `COMPILER_IMAGE`,
+`SINK_SERVICES_IMAGE`, `SIGNALING_IMAGE`, `DB_INIT_IMAGE`,
+`OBJECT_STORE_INIT_IMAGE` and `WEB_IMAGE` overrides. `scripts/pull-images.py`
+pulls one tag and rewrites the overrides, plus the sandbox pins, to
+`repository@sha256:…` digests; `scripts/prepare-images.py` builds the runtime and
+execution manager locally instead. See
+[Compose installation](/self-hosting/docker-compose/installation/).
+
+Helm defaults every first-party image to its published repository at tag `dev`
+and accepts a `digest` per image. `scripts/resolve-images.py` resolves one tag to
+digests for every image, including the execution manager and sandbox, and can add
+pull secrets and an architecture node selector. See
+[Kubernetes installation](/self-hosting/kubernetes/installation/).
 Database migration images require a reviewed migration operation after
 publication. In particular, the Kubernetes migration command uses
 `--accept-data-loss`; review schema changes and recovery before deploying it.

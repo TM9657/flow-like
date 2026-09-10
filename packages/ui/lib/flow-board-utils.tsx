@@ -13,9 +13,8 @@ import {
 } from "./command/generic-command";
 import { geometrySchemasCompatible } from "./geometry";
 import { detectFormat } from "./importer/detect";
-import { translateDify } from "./importer/dify-translator";
-import { translateN8n } from "./importer/n8n-translator";
-import type { DifyWorkflow, N8nWorkflow } from "./importer/types";
+import { buildImportCommands } from "./importer/import-commands";
+import { translateImport } from "./importer/translate";
 import { toastSuccess } from "./messages";
 import { isWebkitLite } from "./platform";
 import type { IGenericCommand, IValueType, IVariable } from "./schema";
@@ -1372,49 +1371,26 @@ export async function handlePaste(
 		return;
 	} catch (error) {}
 
-	// 2. Try n8n / Dify workflow paste
+	// 2. Try an exported workflow (BPMN, n8n, Dify)
 	try {
 		const clipboard = await navigator.clipboard.readText();
 		const detection = detectFormat(clipboard);
-		if (detection.format !== "unknown" && detection.parsed) {
-			const result =
-				detection.format === "n8n"
-					? translateN8n(detection.parsed as N8nWorkflow, catalog)
-					: translateDify(detection.parsed as DifyWorkflow);
+		const result = translateImport(detection, catalog);
 
-			const boardNodes = Object.values(result.board.nodes);
-			const boardComments = Object.values(result.board.comments);
-			const boardLayers = Object.values(result.board.layers);
-			const boardVariables = Object.values(result.board.variables);
-
-			if (boardNodes.length > 0) {
-				const command = copyPasteCommand({
-					original_nodes: boardNodes,
-					original_comments: boardComments,
-					original_layers: boardLayers,
-					original_variables: boardVariables,
-					original_refs: result.board.refs ?? {},
-					new_comments: [],
-					new_nodes: [],
-					new_layers: [],
-					current_layer: currentLayer,
-					old_mouse: [0, 0, 0],
-					offset: [cursorPosition.x, cursorPosition.y, 0],
-				});
-				await executeCommand(command);
-				if (result.status === "partial") {
-					toastSuccess(
-						`Imported ${result.stats.totalNodes} nodes from ${detection.format} (${result.stats.todo} need manual setup)`,
-						<Import className="w-4 h-4" />,
-					);
-				} else {
-					toastSuccess(
-						`Imported ${result.stats.totalNodes} nodes from ${detection.format}`,
-						<Import className="w-4 h-4" />,
-					);
-				}
-				return;
-			}
+		if (result && Object.keys(result.board.nodes).length > 0) {
+			const plan = buildImportCommands(
+				result,
+				{ kind: "layer", layerId: currentLayer },
+				[cursorPosition.x, cursorPosition.y, 0],
+			);
+			for (const command of plan.commands) await executeCommand(command);
+			toastSuccess(
+				result.stats.todo > 0
+					? `Imported ${result.stats.totalNodes} elements from ${detection.format} (${result.stats.todo} need modelling)`
+					: `Imported ${result.stats.totalNodes} elements from ${detection.format}`,
+				<Import className="w-4 h-4" />,
+			);
+			return;
 		}
 	} catch (error) {}
 

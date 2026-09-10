@@ -116,7 +116,7 @@ pub(super) fn workflow_tool_preflight_with_args(
         | "validate_flow_ir_draft"
         | "commit_flow_ir_draft" => Some(WorkflowMutationPath::TypedIr),
         "edit_flowscript" | "write_flowscript" | "patch_flowscript" | "check_flowscript"
-        | "commit_flowscript" => Some(WorkflowMutationPath::FlowScript),
+        | "test_flowscript" | "commit_flowscript" => Some(WorkflowMutationPath::FlowScript),
         "emit_commands" if emit_commands_representation_rejected(args) => None,
         "emit_commands" => Some(WorkflowMutationPath::DirectCommands),
         _ => None,
@@ -146,7 +146,9 @@ pub(super) fn workflow_tool_preflight_with_args(
         ));
     }
 
-    if is_flowscript_draft_operation_tool(tool_name) && state.flowscript_draft_retained {
+    let needs_retained_revision =
+        is_flowscript_draft_operation_tool(tool_name) || tool_name == "test_flowscript";
+    if needs_retained_revision && state.flowscript_draft_retained {
         let requested_draft_id = args.get("draft_id").and_then(serde_json::Value::as_str);
         let exact_draft_id = state.flowscript_draft_id.as_deref();
         let wrong_draft = requested_draft_id.is_some() && requested_draft_id != exact_draft_id;
@@ -156,7 +158,7 @@ pub(super) fn workflow_tool_preflight_with_args(
             .and_then(serde_json::Value::as_u64);
         let revision_required = matches!(
             tool_name,
-            "patch_flowscript" | "check_flowscript" | "commit_flowscript"
+            "patch_flowscript" | "check_flowscript" | "test_flowscript" | "commit_flowscript"
         );
         let wrong_revision =
             revision_required && !args.is_null() && expected_revision != state.flowscript_revision;
@@ -180,7 +182,7 @@ pub(super) fn workflow_tool_preflight_with_args(
         }
     }
 
-    if is_flowscript_draft_operation_tool(tool_name)
+    if needs_retained_revision
         && tool_name != "write_flowscript"
         && !state.flowscript_draft_retained
     {
@@ -196,7 +198,7 @@ pub(super) fn workflow_tool_preflight_with_args(
                 } else {
                     "write_flowscript"
                 },
-                "message": "No host-authorized FlowScript draft is retained for this run. Obtain live declaration coverage, call plan_board_scope exactly once unless a plan is already accepted, then call write_flowscript for its active segment; patch, check, and commit cannot create or guess a draft."
+                "message": "No host-authorized FlowScript draft is retained for this run. Obtain live declaration coverage, call plan_board_scope exactly once unless a plan is already accepted, then call write_flowscript for its active segment; patch, check, test, and commit require that retained draft."
             }),
             false,
         ));
@@ -322,6 +324,12 @@ pub(super) fn workflow_tool_preflight_with_args(
     }
 
     match tool_name {
+        "test_flowscript" => {
+            // Tests serialize with source edits without consuming an authoring attempt or
+            // changing the compiler verdict that authorizes a later commit.
+            state.edit_in_flight = true;
+            None
+        }
         "plan_flow_ir" => {
             state
                 .mutation_path

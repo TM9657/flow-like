@@ -8,8 +8,9 @@ use flow_like_types::{Value, async_trait};
 
 /// Gets a value from page-local state by key.
 ///
-/// Page state is scoped to the current page and cleared on navigation.
-/// The state is passed in the workflow payload as `_page_state`.
+/// Page state is scoped to the app and page and persisted by the frontend.
+/// Reads the `_page_state` snapshot sent when this workflow started. Values
+/// streamed by Set Page State are available to subsequent workflow runs.
 #[crate::register_node]
 #[derive(Default)]
 pub struct GetPageState;

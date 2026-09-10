@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Generate configuration, pin execution images and start Docker Compose
+description: Generate configuration, pin published images and start Docker Compose
 sidebar:
   order: 22
 ---
@@ -60,38 +60,73 @@ do not require rebuilding images. See
 [Configuration](/self-hosting/docker-compose/configuration/#hub-configuration-and-identity)
 for alternate config sources.
 
-## 3. Build and pin execution images
+## 3. Select images
+
+The Compose files reference the published self-hosted images
+`ghcr.io/rheosoph/flow-like-docker-compose-<workload>` at the tag in
+`FLOW_LIKE_IMAGE_TAG` (default `dev`). Every `*_IMAGE` variable starts empty,
+which selects that published image. The self-hosted packages are public; no
+registry login is required. Cloud-provider packages are not public and are not
+used by this deployment.
+
+Per-run execution requires immutable image references. Pin the published
+digests:
+
+```bash
+python3 scripts/pull-images.py
+```
+
+The script pulls the nine first-party images at `FLOW_LIKE_IMAGE_TAG`, writes
+`<WORKLOAD>_IMAGE=repository@sha256:...` for each, copies the runtime and
+execution-manager pins into `SANDBOX_IMAGE` and `SANDBOX_GATEWAY_IMAGE`, and
+preserves every other line and secret. Pass `--tag` to choose a release
+(`1.4.0`), a channel (`dev`, `beta`, `latest`) or an immutable
+`sha-<commit>-run-<run>-<attempt>` tag, and `--registry` for a fork or mirror.
+Forks and private mirrors need `docker login ghcr.io` beforehand; the script
+never handles tokens.
+
+The published tag is a multi-architecture index. `docker pull` selects the
+daemon's platform and the recorded digest refers to that index, so the same
+pinned `.env` works on AMD64 and ARM64 daemons. See
+[Containers](/self-hosting/containers/) for the tag scheme.
+
+### Build locally instead
+
+To run code that has not been published, or to build runner images with local
+modifications:
 
 ```bash
 python3 scripts/prepare-images.py
 ```
 
-This builds the runner and native Rust manager/gateway images, then records
-their immutable local image IDs in `SANDBOX_IMAGE` and
-`SANDBOX_GATEWAY_IMAGE`. It preserves the generated secrets. The daemon must
-already have both images; the manager does not pull mutable tags during
-execution.
+This resets `RUNTIME_IMAGE` and `EXECUTION_MANAGER_IMAGE` to local tags when
+they are empty or digest-pinned, builds the runner and native Rust
+manager/gateway images, then records their immutable local image IDs in
+`SANDBOX_IMAGE` and `SANDBOX_GATEWAY_IMAGE`. Other services still use the
+published images. To build everything locally, run `up.py --build`: it writes
+`flow-like-<workload>:local` into every empty `*_IMAGE` before building, so the
+local builds never replace the published names on the daemon.
 
 Local image IDs belong to this daemon. When moving hosts, build and pin again,
-or distribute images through a registry and use their `repository@sha256:...`
-digests.
-
-The [container release workflow](/self-hosting/containers/) also publishes AMD64
-and ARM64 images. Select the correct platform and configure the `*_IMAGE`
-variables with release digests. `prepare-images.py` still builds and pins local
-execution images; it does not resolve a release manifest for you.
+or use `pull-images.py` with published digests.
 
 ## 4. Validate and start
 
 ```bash
 python3 scripts/preflight.py
-python3 scripts/up.py --build
+python3 scripts/up.py
 ```
 
 Preflight checks the rendered Compose graph, secret and profile configuration,
-connection budgets, image pins and gVisor settings. `up.py` repeats validation
-before starting the selected services. Use `--config-only` with preflight when
-you need configuration checks without contacting the Docker daemon.
+connection budgets, image pins and gVisor settings. It also checks that the
+sandbox digest pins match `RUNTIME_IMAGE` and `EXECUTION_MANAGER_IMAGE`.
+`up.py` repeats validation before starting the selected services with
+`docker compose up -d --no-build`: Compose pulls images that are missing on
+the daemon and fails instead of silently building when a pull fails. Use
+`up.py --build` for the local build path; it assigns local tags to empty
+`*_IMAGE` values and refuses digest pins. Use `--config-only` with
+preflight when you need configuration checks without contacting the Docker
+daemon.
 
 Initial startup runs storage bootstrap and database initialization before
 starting the API. Bootstrap creates private metadata, content and log buckets
@@ -144,14 +179,19 @@ have produced external effects. For the `exec:jobs:v3` queue transition, drain
 or reconcile old queues and stop old managers before switching producers and
 consumers. Do not mix queue protocol versions.
 
-Merge new environment settings into the protected existing file. Build and pin
-updated execution images, run preflight and start the reviewed version:
+Merge new environment settings into the protected existing file, including
+`FLOW_LIKE_IMAGE_TAG` and the empty `*_IMAGE` lines when upgrading from a
+release that built every image locally. Pin the reviewed release, run preflight
+and start it:
 
 ```bash
-python3 scripts/prepare-images.py
+python3 scripts/pull-images.py --tag 1.4.0
 python3 scripts/preflight.py
-python3 scripts/up.py --build
+python3 scripts/up.py
 ```
+
+Installations that build locally run `prepare-images.py` and `up.py --build`
+instead.
 
 Preserve the manager's SQLite state volume across this cutover. It retains
 assignment and cancellation records used to reject replay. Verify schema,

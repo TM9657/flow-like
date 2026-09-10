@@ -76,7 +76,7 @@ use flow_like::flow::copilot::tool_spec::{
     data_studio_specialist_tool_specs, global_assistant_tool_specs, home_specialist_tool_specs,
     interact_app_page_tool_spec, missing_required_args, public_web_tool_specs,
     resolve_tool_approval, runtime_execution_tool_specs, scoped_call_app_chat_spec,
-    scout_specialist_tool_specs,
+    scout_specialist_tool_specs, workspace_research_tool_specs,
 };
 #[cfg(test)]
 use flow_like::flow::copilot::typed_ir_schema_hint;
@@ -89,9 +89,10 @@ use flow_like::flow::copilot::{
     GetDeclarationsTool, GetNodeDetailsTool, GetUnconfiguredNodesTool, GraphContext,
     ListBoardNodesTool, ModelFacingEmitCommandsTool, NodeMetadata, PatchFlowScriptArgs,
     PatchFlowScriptTool, PlanBoardScopeArgs, PlanBoardScopeTool, PlanFlowIrTool,
-    UpdateFlowIrDraftArgs, UpdateFlowIrDraftTool, UpsertFlowIrModuleArgs, UpsertFlowIrModuleTool,
-    ValidateFlowIrDraftArgs, ValidateFlowIrDraftTool, ValidationIssue, WriteFlowScriptArgs,
-    WriteFlowScriptTool, board_has_no_nodes, build_list_board_nodes_output,
+    TestFlowScriptArgs, TestFlowScriptTool, UpdateFlowIrDraftArgs, UpdateFlowIrDraftTool,
+    UpsertFlowIrModuleArgs, UpsertFlowIrModuleTool, ValidateFlowIrDraftArgs,
+    ValidateFlowIrDraftTool, ValidationIssue, WriteFlowScriptArgs, WriteFlowScriptTool,
+    board_fingerprint, board_has_no_nodes, build_list_board_nodes_output,
     build_node_details_output, build_unconfigured_nodes_output,
     emit_validation_requires_flowscript, flowscript_has_executable_node_call,
     flowscript_missing_function_helpers, is_blocking_flowscript_diagnostic,
@@ -357,6 +358,16 @@ pub(super) fn retained_flow_ir_draft_store_for_board(
     })
 }
 
+pub(super) fn release_benchmark_draft_store(board_id: &str, expected: &Arc<FlowIrDraftStore>) {
+    if let Ok(mut stores) = FLOW_IR_DRAFT_STORES.lock()
+        && stores
+            .get(board_id)
+            .is_some_and(|entry| Arc::ptr_eq(&entry.store, expected))
+    {
+        stores.remove(board_id);
+    }
+}
+
 fn persisted_flow_ir_draft_store(
     board_key: &str,
     observed_board: &Board,
@@ -417,7 +428,18 @@ fn touch_bound_flowscript_draft_store(
     board_key: &str,
     bound_store: Arc<FlowIrDraftStore>,
 ) -> Result<Arc<FlowIrDraftStore>, FlowIrDraftStoreAccessError> {
+    if super::copilot::workflow_benchmark::is_benchmark_board(board_key)
+        && !super::copilot::workflow_benchmark::benchmark_board_active(board_key)
+    {
+        return Err(FlowIrDraftStoreAccessError::EpochChanged);
+    }
     let active = touch_persisted_flow_ir_draft_store(board_key, bound_store.clone(), None)?;
+    if super::copilot::workflow_benchmark::is_benchmark_board(board_key)
+        && !super::copilot::workflow_benchmark::benchmark_board_active(board_key)
+    {
+        release_benchmark_draft_store(board_key, &active);
+        return Err(FlowIrDraftStoreAccessError::EpochChanged);
+    }
     if Arc::ptr_eq(&active, &bound_store) {
         Ok(active)
     } else {
@@ -517,7 +539,7 @@ pub(crate) fn flow_ir_draft_snapshot_dir() -> Option<PathBuf> {
 
 fn flow_ir_draft_snapshot_path(board_key: &str) -> Option<PathBuf> {
     let board_key = board_key.trim();
-    if board_key.is_empty() {
+    if board_key.is_empty() || super::copilot::workflow_benchmark::is_benchmark_board(board_key) {
         return None;
     }
     let sanitized = board_key
@@ -543,6 +565,9 @@ fn flow_ir_draft_snapshot_path(board_key: &str) -> Option<PathBuf> {
 /// Debounced crash-durability write for a board's retained drafts. Every draft-mutating tool call
 /// schedules one; only the newest generation writes, so a burst of tool calls produces one file.
 pub(super) fn schedule_flow_ir_draft_snapshot(board_key: &str, store: &Arc<FlowIrDraftStore>) {
+    if super::copilot::workflow_benchmark::is_benchmark_board(board_key) {
+        return;
+    }
     let board_key = board_key.trim().to_string();
     let Some(path) = flow_ir_draft_snapshot_path(&board_key) else {
         return;
@@ -621,8 +646,9 @@ fn with_current_board<T>(
 ///
 /// When a live `board` and immutable edit request are supplied, the code-first FlowScript surface
 /// is enabled: `write_flowscript` retains the complete source, `patch_flowscript` repairs an exact
-/// revision, `check_flowscript` retains the compiler-derived command batch, and
-/// `commit_flowscript` transfers only that exact batch into the normal Apply/Dismiss boundary.
+/// revision, and `check_flowscript` retains the compiler-derived command batch. `test_flowscript`
+/// runs a detached copy of an eligible revision. `commit_flowscript` transfers only the retained
+/// command batch into the normal Apply/Dismiss boundary.
 /// Legacy typed-JSON and one-shot `edit_flowscript` adapters remain implemented below for old
 /// callers, but are intentionally not advertised to model-facing SDK/MCP surfaces.
 pub(super) fn create_board_tools(
@@ -678,6 +704,13 @@ pub(super) fn create_board_tools(
                 acceptance_binding.clone(),
             ));
             tools.push(create_check_flowscript_tool(
+                board.clone(),
+                live_board.clone(),
+                provider.clone(),
+                flow_ir_drafts.clone(),
+                acceptance_binding.clone(),
+            ));
+            tools.push(create_test_flowscript_tool(
                 board.clone(),
                 live_board.clone(),
                 provider.clone(),
@@ -771,6 +804,11 @@ pub fn create_board_support_tools(bridge: FrontendToolBridge) -> Vec<(Tool, Tool
     // out of the orchestrator's context.
     tools.extend(
         cross_board_source_tool_specs()
+            .iter()
+            .map(|spec| sdk_tool_from_spec(spec, bridge.clone(), None, None)),
+    );
+    tools.extend(
+        workspace_research_tool_specs()
             .iter()
             .map(|spec| sdk_tool_from_spec(spec, bridge.clone(), None, None)),
     );
@@ -2174,6 +2212,7 @@ fn create_write_flowscript_tool(
                 &acceptance_binding,
             )
         });
+        super::copilot::workflow_benchmark::observe_source(&board_key, &result);
         schedule_flow_ir_draft_snapshot(&board_key, &store);
         ToolResultObject::text(result.model_envelope())
     });
@@ -2220,6 +2259,7 @@ fn create_patch_flowscript_tool(
             )
         });
         schedule_flow_ir_draft_snapshot(&board_key, &store);
+        super::copilot::workflow_benchmark::observe_source(&board_key, &result);
         // Patch is the one lifecycle result that must keep the full `source`: the merged document
         // is host-computed, and both the workflow loop state (`workflow_tool_record_with_outcome`
         // reads it into `last_flowscript`/continuation snapshots) and the workspace panel's
@@ -2271,6 +2311,75 @@ fn create_check_flowscript_tool(
         });
         schedule_flow_ir_draft_snapshot(&board_key, &store);
         ToolResultObject::text(result.model_envelope())
+    });
+    (tool, handler)
+}
+
+fn create_test_flowscript_tool(
+    board: Arc<Board>,
+    live_board: Option<Arc<AsyncMutex<Board>>>,
+    provider: Arc<dyn CatalogProvider>,
+    store: Arc<FlowIrDraftStore>,
+    acceptance_binding: FlowIrAcceptanceBinding,
+) -> (Tool, ToolHandler) {
+    let tool = tool_from_rig_definition(&TestFlowScriptTool {
+        board: board.clone(),
+        provider: provider.clone(),
+        store: store.clone(),
+        acceptance_binding: acceptance_binding.clone(),
+    });
+    let board_key = board.id.clone();
+    let handler: ToolHandler = Arc::new(move |_name, arguments| {
+        if super::frontend_tool_bridge::scoped_tool_execution_cancelled() {
+            return flowscript_tool_cancelled_result("test_flowscript", None, None);
+        }
+        let store = match touch_bound_flowscript_draft_store(&board_key, store.clone()) {
+            Ok(store) => store,
+            Err(error) => return error.tool_result(),
+        };
+        let args = match parse_flowscript_arguments::<TestFlowScriptArgs>(
+            arguments.clone(),
+            "test_flowscript",
+        ) {
+            Ok(args) => args,
+            Err(error) => return error,
+        };
+        // The test owns an immutable board snapshot. Its restricted runtime never writes the
+        // live board, and the receipt names the exact source revision it observed.
+        let current_board = with_current_board(&board, live_board.as_ref(), Board::clone);
+        let result = block_on_tool(
+            TestFlowScriptTool {
+                board: Arc::new(current_board),
+                provider: provider.clone(),
+                store,
+                acceptance_binding: acceptance_binding.clone(),
+            }
+            .run(args),
+        );
+        if super::frontend_tool_bridge::scoped_tool_execution_cancelled() {
+            return flowscript_tool_cancelled_result("test_flowscript", None, None);
+        }
+        match result {
+            Ok(result) => {
+                let Ok(mut receipt) = serde_json::from_str::<Value>(&result) else {
+                    return ToolResultObject::text(result);
+                };
+                if receipt["schema"] == "flowpilot.flowscript-draft-test/v1"
+                    && let Some(base) = receipt["base_fingerprint"].as_str()
+                    && !with_current_board(&board, live_board.as_ref(), |current| {
+                        board_fingerprint(current) == base
+                    })
+                {
+                    receipt["status"] = json!("stale");
+                    receipt["passed"] = json!(false);
+                    receipt["message"] = json!(
+                        "The live board changed during testing. This observation belongs to the captured board and source revision. Test a draft based on the current board."
+                    );
+                }
+                ToolResultObject::text(receipt.to_string())
+            }
+            Err(error) => ToolResultObject::error(error.to_string()),
+        }
     });
     (tool, handler)
 }
@@ -3294,10 +3403,12 @@ fn create_emit_ui_tool(
 ) -> (Tool, ToolHandler) {
     let tool = Tool::new("emit_ui")
         .description(
-            r#"Output A2UI components to render in the interface. This is NOT file editing - it generates JSON that renders directly in the app.
+            r#"Validate and stage A2UI components for the host to apply to the interface.
 
-emit_ui validates before rendering: an invalid component tree renders nothing and the errors are
-returned — fix them and call emit_ui again.
+emit_ui does not persist a page. In a delegated flowpilot_widget run the host saves the target page
+after you return; an open builder receives a pending review. A saved-page inspection during this
+run cannot verify the emitted tree. After a successful emission, return your summary and let the
+host report the persistence outcome. Invalid trees are rejected; fix the errors and call emit_ui again.
 
 OUTPUT FORMAT:
 {
@@ -3403,7 +3514,7 @@ EXAMPLE - Simple card:
                 "errors": validation_errors,
                 "rootComponentId": root_id,
                 "message": format!(
-                    "Nothing was rendered — {} validation error(s). Fix these and call emit_ui again with the full corrected tree:\n- {}",
+                    "No UI tree was staged. {} validation error(s). Fix these and call emit_ui again with the full corrected tree:\n- {}",
                     validation_errors.len(),
                     error_list
                 )
@@ -3430,17 +3541,21 @@ EXAMPLE - Simple card:
                 }
                 json!({
                     "status": "rendered",
+                    "delivery_status": "staged",
+                    "persisted": false,
                     "rootComponentId": root_id,
                     "component_count": component_count,
-                    "message": format!("Rendered {component_count} UI component(s) successfully.")
+                    "message": format!("Validated and staged {component_count} UI component(s). Return your summary so the host can apply them; the host will report whether the page was persisted or staged for review.")
                 })
             }
             None => json!({
                 "status": "rendered",
+                "delivery_status": "staged",
+                "persisted": false,
                 "rootComponentId": root_id,
                 "canvasSettings": canvas,
                 "components": validated_components,
-                "message": "UI components have been rendered successfully"
+                "message": "Validated UI output is ready for the host to apply. Page persistence is reported by the host after this run returns."
             }),
         };
 
@@ -5399,6 +5514,7 @@ mod tests {
             "write_flowscript",
             "patch_flowscript",
             "check_flowscript",
+            "test_flowscript",
             "commit_flowscript",
         ] {
             assert!(names.contains(expected), "missing {expected}: {names:?}");
@@ -5554,6 +5670,32 @@ mod tests {
         assert_eq!(checked["status"], "valid", "{checked:#}");
         assert!(checked.get("source").is_none(), "{checked:#}");
         assert_eq!(checked["source_bytes"].as_u64(), Some(source.len() as u64));
+
+        let tested = call(
+            "test_flowscript",
+            json!({
+                "draft_id": "source-sdk",
+                "expected_revision": 0,
+                "entry": "eventsSimple",
+                "expected_output": "hello",
+            }),
+        );
+        let tested: Value = serde_json::from_str(&tested.text_result_for_llm)
+            .expect("test returns a structured receipt");
+        assert_eq!(tested["status"], "blocked", "{tested:#}");
+        assert_eq!(tested["code"], "FLOWSCRIPT_TEST_UNAVAILABLE");
+        assert_eq!(tested["revision"], 0);
+        assert_eq!(tested["passed"], false);
+        assert_eq!(tested["applied"], false);
+        assert!(tested["source_fingerprint"].as_str().is_some());
+        assert!(tested.get("source").is_none());
+        let (commands, token) = queue.lock().expect("queue lock").take_delivery();
+        assert!(
+            commands.is_empty(),
+            "a draft test cannot stage board commands"
+        );
+        assert!(token.is_none());
+        assert!(workspace.lock().expect("workspace lock").is_none());
 
         let committed = call(
             "commit_flowscript",
@@ -5900,6 +6042,46 @@ mod tests {
         if let Ok(mut stores) = FLOW_IR_DRAFT_STORES.lock() {
             stores.remove(&board_key);
         }
+    }
+
+    #[test]
+    fn released_benchmark_store_cannot_be_revived_by_a_late_tool() {
+        let board_key = format!(
+            "workflow-benchmark-retired-{}",
+            flow_like_types::create_id()
+        );
+        let board = empty_board(&board_key);
+        let bound_store = persisted_flow_ir_draft_store(&board_key, &board)
+            .expect("host can create its disposable benchmark store");
+        let unrelated = Arc::new(FlowIrDraftStore::new());
+        release_benchmark_draft_store(&board_key, &unrelated);
+        assert!(Arc::ptr_eq(
+            &FLOW_IR_DRAFT_STORES.lock().unwrap()[&board_key].store,
+            &bound_store
+        ));
+
+        release_benchmark_draft_store(&board_key, &bound_store);
+        assert!(
+            !FLOW_IR_DRAFT_STORES
+                .lock()
+                .unwrap()
+                .contains_key(&board_key)
+        );
+        let late = touch_bound_flowscript_draft_store(&board_key, bound_store.clone());
+        let resurrected = FLOW_IR_DRAFT_STORES.lock().unwrap().remove(&board_key);
+        assert!(matches!(
+            late,
+            Err(FlowIrDraftStoreAccessError::EpochChanged)
+        ));
+        assert!(resurrected.is_none());
+        assert!(flow_ir_draft_snapshot_path(&board_key).is_none());
+        schedule_flow_ir_draft_snapshot(&board_key, &bound_store);
+        assert!(
+            !FLOW_IR_DRAFT_SNAPSHOT_GENERATIONS
+                .lock()
+                .unwrap()
+                .contains_key(&board_key)
+        );
     }
 
     #[test]
