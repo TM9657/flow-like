@@ -36,7 +36,8 @@ export interface FallbackNodeSpec {
 	pins: FallbackPinSpec[];
 }
 
-const exec = (
+/** An execution pin spec; also what a Function layer's boundary pins are made of. */
+export const execPinSpec = (
 	name: string,
 	friendly: string,
 	type: IPinType,
@@ -46,6 +47,7 @@ const exec = (
 	type,
 	data: IVariableType.Execution,
 });
+const exec = execPinSpec;
 const input = (
 	name: string,
 	friendly: string,
@@ -159,6 +161,17 @@ export const BPMN_NODE_SPECS: Record<string, FallbackNodeSpec> = {
 			exec("exec_done", "Done", IPinType.Output),
 		],
 	},
+	control_switch: {
+		friendly: "Switch",
+		category: "Control/Flow",
+		pins: [
+			exec("exec_in", "In", IPinType.Input),
+			input("value", "Value", IVariableType.Generic),
+			input("cases", "Cases", IVariableType.String, ""),
+			exec("default", "Default", IPinType.Output),
+			output("matched_case", "Matched Case", IVariableType.String),
+		],
+	},
 	control_gather: {
 		friendly: "Gather",
 		category: "Control/Parallel",
@@ -180,7 +193,13 @@ export const BPMN_NODE_SPECS: Record<string, FallbackNodeSpec> = {
 		category: "Control",
 		pins: [
 			EXEC_IN,
-			input("array", "Array", IVariableType.Generic, undefined, IValueType.Array),
+			input(
+				"array",
+				"Array",
+				IVariableType.Generic,
+				undefined,
+				IValueType.Array,
+			),
 			exec("exec_out", "For Each Element", IPinType.Output),
 			output("value", "Value", IVariableType.Generic),
 			output("index", "Index", IVariableType.Integer),
@@ -192,7 +211,13 @@ export const BPMN_NODE_SPECS: Record<string, FallbackNodeSpec> = {
 		category: "Control",
 		pins: [
 			EXEC_IN,
-			input("array", "Array", IVariableType.Generic, undefined, IValueType.Array),
+			input(
+				"array",
+				"Array",
+				IVariableType.Generic,
+				undefined,
+				IValueType.Array,
+			),
 			input("max_concurrent", "Max Concurrent", IVariableType.Integer, 30),
 			exec("exec_out", "For Each Element", IPinType.Output),
 			output("value", "Value", IVariableType.Generic),
@@ -339,18 +364,22 @@ export interface PlaceNodeOptions {
 	start?: boolean;
 }
 
-/** Whether the catalog (or the fallback table) knows this node at all. */
+/**
+ * Whether this node can be placed. A live catalog is authoritative — a
+ * deployment without the web or mail nodes must get placeholders, not nodes
+ * it cannot run — and the fallback table only stands in when there is none.
+ */
 export function catalogHas(
 	catalog: CatalogIndex | undefined,
 	name: string,
 ): boolean {
-	return Boolean(catalog?.has(name) || BPMN_NODE_SPECS[name]);
+	return catalog ? catalog.has(name) : Boolean(BPMN_NODE_SPECS[name]);
 }
 
 /**
- * Places a catalog node on the board: cloned from the live catalog when
- * available, otherwise minted from the fallback spec so the pin contract is
- * still right. Returns `undefined` when neither knows the node.
+ * Places a catalog node on the board: cloned from the live catalog when there
+ * is one, otherwise minted from the fallback spec so the pin contract is
+ * still right. Returns `undefined` when the node cannot be placed.
  */
 export function placeCatalogNode(
 	board: IBoard,
@@ -360,16 +389,18 @@ export function placeCatalogNode(
 ): INode | undefined {
 	const spec = BPMN_NODE_SPECS[name];
 	const friendlyName = opts.friendlyName ?? spec?.friendly ?? name;
-	let node = cloneNodeFromCatalog(catalog ?? new Map(), name, {
-		friendlyName,
-		x: opts.x,
-		y: opts.y,
-		layer: opts.layer ?? undefined,
-		comment: opts.comment,
-		start: opts.start,
-	});
+	let node = catalog
+		? cloneNodeFromCatalog(catalog, name, {
+				friendlyName,
+				x: opts.x,
+				y: opts.y,
+				layer: opts.layer ?? undefined,
+				comment: opts.comment,
+				start: opts.start,
+			})
+		: undefined;
 	if (!node) {
-		if (!spec) return undefined;
+		if (catalog || !spec) return undefined;
 		node = createNode({
 			name,
 			friendlyName,
@@ -388,11 +419,16 @@ export function placeCatalogNode(
 	return node;
 }
 
-/** Adds a pin with the next free index for its direction. */
-export function mintPin(node: INode, spec: FallbackPinSpec): IPin {
+/**
+ * Adds a pin with the next free index for its direction. Takes anything with a
+ * pin map, so a layer's boundary pins are minted the same way a node's are.
+ */
+export function mintPin(
+	node: { pins: Record<string, IPin> },
+	spec: FallbackPinSpec,
+): IPin {
 	const index =
-		Object.values(node.pins).filter((p) => p.pin_type === spec.type).length +
-		1;
+		Object.values(node.pins).filter((p) => p.pin_type === spec.type).length + 1;
 	const pin: IPin = {
 		id: createId(),
 		name: spec.name,
@@ -451,6 +487,31 @@ export function ensurePins(
 		});
 	}
 	return pinsNamed(node, name, type);
+}
+
+const CASE_PREFIX = "case_";
+
+/**
+ * The output pin names `control_switch` derives from its cases. Mirrors
+ * `case_pin_names` in the catalog: a pin the importer mints under a different
+ * name would be dropped, and its wire with it, the first time `on_update` runs.
+ */
+export function switchCasePinNames(cases: readonly string[]): string[] {
+	const names: string[] = [];
+	for (const value of cases) {
+		const sanitized = [...value]
+			.map((character) =>
+				/[a-zA-Z0-9]/.test(character) ? character.toLowerCase() : "_",
+			)
+			.join("");
+		const base = `${CASE_PREFIX}${sanitized.replace(/^_+|_+$/g, "")}`;
+		let name = base;
+		for (let suffix = 2; names.includes(name); suffix += 1) {
+			name = `${base}_${suffix}`;
+		}
+		names.push(name);
+	}
+	return names;
 }
 
 export function setDefault(node: INode, pinName: string, value: unknown): void {

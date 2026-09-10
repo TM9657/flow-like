@@ -86,3 +86,43 @@ line two</bpmn:documentation>
 		expect(childrenNamed(root, "x").map((e) => e.attrs.id)).toEqual(["1", "3"]);
 	});
 });
+
+describe("robustness", () => {
+	test("leaves an unusable character reference as written instead of throwing", () => {
+		expect(decodeXmlEntities("&#x110000;&#xD800;&#0;")).toBe(
+			"&#x110000;&#xD800;&#0;",
+		);
+		expect(() => parseXml("<a>&#x110000;</a>")).not.toThrow();
+	});
+
+	test("normalizes literal whitespace in attribute values but keeps references", () => {
+		const root = parseXml('<a name="one\n  two\ttip" keep="a&#10;b"/>');
+		expect(root.attrs.name).toBe("one   two tip");
+		expect(root.attrs.keep).toBe("a\nb");
+	});
+
+	test("normalizes CRLF line endings in text", () => {
+		expect(parseXml("<a>one\r\ntwo\rthree</a>").text).toBe("one\ntwo\nthree");
+	});
+
+	test("skips a DOCTYPE whose literal contains a closing angle bracket", () => {
+		const root = parseXml('<!DOCTYPE n SYSTEM "a>b[c]"><n>x</n>');
+		expect(root.name).toBe("n");
+		expect(root.text).toBe("x");
+	});
+
+	test("reports excessive nesting as a parse error rather than overflowing", () => {
+		const deep = `${"<a>".repeat(400)}${"</a>".repeat(400)}`;
+		expect(() => parseXml(deep)).toThrow(XmlParseError);
+		expect(() => parseXml(deep)).toThrow(/nested deeper/);
+	});
+
+	test("reads a document with no namespace prefix", () => {
+		const root = parseXml(
+			'<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p"/></definitions>',
+		);
+		expect(root.name).toBe("definitions");
+		expect(root.prefix).toBeNull();
+		expect(firstChild(root, "process")?.attrs.id).toBe("p");
+	});
+});

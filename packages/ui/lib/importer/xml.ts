@@ -42,18 +42,30 @@ const PREDEFINED_ENTITIES: Record<string, string> = {
 	apos: "'",
 };
 
+/** A code point `String.fromCodePoint` accepts and that is legal in XML text. */
+function isUsableCodePoint(code: number): boolean {
+	return (
+		Number.isInteger(code) &&
+		code > 0 &&
+		code <= 0x10ffff &&
+		!(code >= 0xd800 && code <= 0xdfff)
+	);
+}
+
 export function decodeXmlEntities(value: string): string {
 	if (!value.includes("&")) return value;
 	return value.replace(
 		/&(#x[0-9a-fA-F]+|#[0-9]+|[A-Za-z][A-Za-z0-9]*);/g,
 		(match, body: string) => {
+			// An unusable reference is left as written rather than throwing: it is a
+			// flaw in one label, not a reason to reject the document.
 			if (body.startsWith("#x") || body.startsWith("#X")) {
 				const code = Number.parseInt(body.slice(2), 16);
-				return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+				return isUsableCodePoint(code) ? String.fromCodePoint(code) : match;
 			}
 			if (body.startsWith("#")) {
 				const code = Number.parseInt(body.slice(1), 10);
-				return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+				return isUsableCodePoint(code) ? String.fromCodePoint(code) : match;
 			}
 			return PREDEFINED_ENTITIES[body] ?? match;
 		},
@@ -118,18 +130,30 @@ class Scanner {
 		}
 		this.pos += 1;
 		const raw = this.readUntil(quote, "attribute value");
-		return decodeXmlEntities(raw);
+		// Literal whitespace in an attribute value normalizes to a space (XML 1.0
+		// §3.3.3), so a wrapped attribute does not become a multi-line node name.
+		// Character references are decoded after, so `&#10;` still yields a newline.
+		return decodeXmlEntities(raw.replace(/[\t\n]/g, " "));
 	}
 }
 
 function skipDoctype(scanner: Scanner): void {
 	scanner.pos += "<!DOCTYPE".length;
 	let depth = 0;
+	let quote = "";
 	while (scanner.pos < scanner.src.length) {
 		const char = scanner.peek();
-		if (char === "[") depth += 1;
-		else if (char === "]") depth -= 1;
-		else if (char === ">" && depth <= 0) {
+		// A SYSTEM/PUBLIC literal may contain `>` and brackets, so nothing inside
+		// one counts towards the internal subset or ends the declaration.
+		if (quote) {
+			if (char === quote) quote = "";
+		} else if (char === '"' || char === "'") {
+			quote = char;
+		} else if (char === "[") {
+			depth += 1;
+		} else if (char === "]") {
+			depth -= 1;
+		} else if (char === ">" && depth <= 0) {
 			scanner.pos += 1;
 			return;
 		}
@@ -176,7 +200,16 @@ function readAttributes(scanner: Scanner): Record<string, string> {
 	}
 }
 
-function readElement(scanner: Scanner): XmlElement {
+/** Guards the recursive descent so a hostile document throws instead of overflowing. */
+const MAX_DEPTH = 256;
+
+function readElement(scanner: Scanner, depth = 0): XmlElement {
+	if (depth > MAX_DEPTH) {
+		throw new XmlParseError(
+			`Elements nested deeper than ${MAX_DEPTH}`,
+			scanner.pos,
+		);
+	}
 	if (scanner.peek() !== "<") {
 		throw new XmlParseError("Expected an element", scanner.pos);
 	}
@@ -236,7 +269,7 @@ function readElement(scanner: Scanner): XmlElement {
 			continue;
 		}
 		if (scanner.peek() === "<") {
-			element.children.push(readElement(scanner));
+			element.children.push(readElement(scanner, depth + 1));
 			continue;
 		}
 		const next = scanner.src.indexOf("<", scanner.pos);
@@ -248,7 +281,12 @@ function readElement(scanner: Scanner): XmlElement {
 
 /** Parses a whole document and returns its root element. */
 export function parseXml(input: string): XmlElement {
-	const src = input.charCodeAt(0) === 0xfeff ? input.slice(1) : input;
+	// A BOM is not content, and every line break normalizes to \n (XML 1.0
+	// §2.11) so CRLF documentation does not carry \r into node comments.
+	const src = (input.charCodeAt(0) === 0xfeff ? input.slice(1) : input).replace(
+		/\r\n?/g,
+		"\n",
+	);
 	const scanner = new Scanner(src);
 	skipMisc(scanner, true);
 	if (scanner.pos >= src.length) {

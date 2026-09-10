@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	findExtension,
+	iso8601CycleDurationToSeconds,
 	iso8601DurationToSeconds,
 	parseBpmn,
 	walkFlowNodes,
@@ -255,5 +256,96 @@ describe("iso8601DurationToSeconds", () => {
 		expect(iso8601DurationToSeconds("PT0.5S")).toBe(0.5);
 		expect(iso8601DurationToSeconds("R3/PT1H")).toBeUndefined();
 		expect(iso8601DurationToSeconds("nonsense")).toBeUndefined();
+	});
+});
+
+describe("edges and vendor bodies", () => {
+	test("derives incoming and outgoing from the flows when the file omits them", () => {
+		const defs =
+			parseBpmn(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+			<process id="p">
+				<startEvent id="s" />
+				<sequenceFlow id="f1" sourceRef="s" targetRef="t" />
+				<task id="t" />
+				<sequenceFlow id="f2" sourceRef="t" targetRef="e" />
+				<endEvent id="e" />
+			</process>
+		</definitions>`);
+		const byId = new Map(
+			[...walkFlowNodes(defs.processes[0])].map((n) => [n.id, n]),
+		);
+		expect(byId.get("s")?.outgoing).toEqual(["f1"]);
+		expect(byId.get("t")?.incoming).toEqual(["f1"]);
+		expect(byId.get("t")?.outgoing).toEqual(["f2"]);
+		expect(byId.get("e")?.incoming).toEqual(["f2"]);
+	});
+
+	test("does not duplicate edges the file already declared", () => {
+		const defs =
+			parseBpmn(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+			<process id="p">
+				<startEvent id="s"><outgoing>f1</outgoing></startEvent>
+				<sequenceFlow id="f1" sourceRef="s" targetRef="t" />
+				<task id="t"><incoming>f1</incoming></task>
+			</process>
+		</definitions>`);
+		const byId = new Map(
+			[...walkFlowNodes(defs.processes[0])].map((n) => [n.id, n]),
+		);
+		expect(byId.get("s")?.outgoing).toEqual(["f1"]);
+		expect(byId.get("t")?.incoming).toEqual(["f1"]);
+	});
+
+	test("reads a Camunda 7 connector's own input/output mapping", () => {
+		const defs =
+			parseBpmn(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+			xmlns:camunda="http://camunda.org/schema/1.0/bpmn">
+			<process id="p">
+				<serviceTask id="t" name="Call">
+					<extensionElements>
+						<camunda:connector>
+							<camunda:connectorId>http-connector</camunda:connectorId>
+							<camunda:inputOutput>
+								<camunda:inputParameter name="url">https://example.com/orders</camunda:inputParameter>
+								<camunda:inputParameter name="method">POST</camunda:inputParameter>
+								<camunda:inputParameter name="headers">
+									<camunda:map><camunda:entry key="Accept">application/json</camunda:entry></camunda:map>
+								</camunda:inputParameter>
+								<camunda:inputParameter name="tags">
+									<camunda:list><camunda:value>a</camunda:value><camunda:value>b</camunda:value></camunda:list>
+								</camunda:inputParameter>
+								<camunda:outputParameter name="result">\${response}</camunda:outputParameter>
+							</camunda:inputOutput>
+						</camunda:connector>
+					</extensionElements>
+				</serviceTask>
+			</process>
+		</definitions>`);
+		const task = defs.processes[0].flowNodes[0];
+		expect(task.ioMapping?.inputs).toEqual([
+			{ source: "https://example.com/orders", target: "url" },
+			{ source: "POST", target: "method" },
+			{ source: '{"Accept":"application/json"}', target: "headers" },
+			{ source: '["a","b"]', target: "tags" },
+		]);
+		expect(task.ioMapping?.outputs).toEqual([
+			{ source: "${response}", target: "result" },
+		]);
+	});
+});
+
+describe("iso8601CycleDurationToSeconds", () => {
+	test("reads the per-repetition duration of a repeating interval", () => {
+		expect(iso8601CycleDurationToSeconds("R3/PT1H")).toBe(3600);
+		expect(iso8601CycleDurationToSeconds("R/P1D")).toBe(86400);
+		expect(iso8601CycleDurationToSeconds("0 0 9 * * MON-FRI")).toBeUndefined();
+		expect(
+			iso8601CycleDurationToSeconds("R2/2019-10-01T12:00:00Z/PT1H"),
+		).toBeUndefined();
+	});
+
+	test("rejects a duration with no components", () => {
+		expect(iso8601DurationToSeconds("P")).toBeUndefined();
+		expect(iso8601DurationToSeconds("PT")).toBeUndefined();
 	});
 });

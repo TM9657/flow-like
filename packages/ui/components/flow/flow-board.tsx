@@ -4960,6 +4960,7 @@ export function FlowBoard({
 				onWidgetName={reportWidgetName}
 				onPageName={reportPageName}
 				executeCommand={executeCommand}
+				executeCommands={executeCommands}
 				readOnly={typeof version !== "undefined"}
 				reservedRoots={moduleReservedRoots}
 				presenceByFile={presenceFileMarks}

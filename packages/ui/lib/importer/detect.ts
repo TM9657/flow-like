@@ -1,15 +1,38 @@
-import type { DifyWorkflow, ImportFormat, N8nWorkflow } from "./types";
+import { isBpmnDocument, parseBpmn } from "./bpmn-model";
+import type { DifyWorkflow, ImportDetection, N8nWorkflow } from "./types";
+import { XmlParseError, looksLikeXml, parseXml } from "./xml";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function detectFormat(input: string): {
-	format: ImportFormat;
-	parsed: N8nWorkflow | DifyWorkflow | null;
-	error?: string;
-} {
+export function detectFormat(input: string): ImportDetection {
 	const trimmed = input.trim();
+
+	if (looksLikeXml(trimmed)) {
+		try {
+			const root = parseXml(trimmed);
+			if (isBpmnDocument(root)) {
+				return { format: "bpmn", parsed: parseBpmn(root) };
+			}
+			return {
+				format: "unknown",
+				parsed: null,
+				error: `XML root <${root.name}> is not a BPMN definitions element`,
+			};
+		} catch (error) {
+			return {
+				format: "unknown",
+				parsed: null,
+				error:
+					error instanceof XmlParseError
+						? `Invalid XML: ${error.message}`
+						: error instanceof Error
+							? error.message
+							: "Invalid XML",
+			};
+		}
+	}
 
 	// Try JSON first
 	if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
@@ -40,10 +63,7 @@ export function detectFormat(input: string): {
 	};
 }
 
-function classifyParsed(obj: Record<string, unknown>): {
-	format: ImportFormat;
-	parsed: N8nWorkflow | DifyWorkflow | null;
-} {
+function classifyParsed(obj: Record<string, unknown>): ImportDetection {
 	// n8n: has "nodes" array and "connections" object
 	if (
 		Array.isArray(obj.nodes) &&

@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:activiti="http://activiti.org/bpmn"
+                  xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0"
+                  id="Definitions_collab" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.20.0">
+  <bpmn:message id="Msg_Order" name="order-placed" />
+  <bpmn:message id="Msg_Confirm" name="order-confirmed">
+    <bpmn:extensionElements><zeebe:subscription correlationKey="=orderId" /></bpmn:extensionElements>
+  </bpmn:message>
+  <bpmn:signal id="Sig_Done" name="order-finished" />
+  <bpmn:dataStore id="DS_Orders" name="Orders DB" />
+  <bpmn:category id="Cat_1"><bpmn:categoryValue id="CatVal_1" value="Fulfilment" /></bpmn:category>
+  <bpmn:collaboration id="Collab_1">
+    <bpmn:participant id="Pool_Customer" name="Customer" processRef="Process_Customer" />
+    <bpmn:participant id="Pool_Shop" name="Shop" processRef="Process_Shop" />
+    <bpmn:participant id="Pool_Bank" name="Bank" />
+    <bpmn:messageFlow id="MF_Order" name="order" sourceRef="C_Send" targetRef="S_Start" messageRef="Msg_Order" />
+    <bpmn:messageFlow id="MF_Confirm" name="confirmation" sourceRef="S_Confirm" targetRef="C_Wait" messageRef="Msg_Confirm" />
+    <bpmn:messageFlow id="MF_Bank" sourceRef="S_Charge" targetRef="Pool_Bank" />
+    <bpmn:textAnnotation id="TA_1"><bpmn:text>Bank is external (black box pool)</bpmn:text></bpmn:textAnnotation>
+    <bpmn:association id="Assoc_TA" sourceRef="Pool_Bank" targetRef="TA_1" associationDirection="None" />
+    <bpmn:group id="Group_1" categoryValueRef="CatVal_1" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Customer" name="Customer" isExecutable="false">
+    <bpmn:startEvent id="C_Start" name="Wants to buy" camunda:initiator="starter" camunda:formKey="camunda-forms:deployment:start.form" />
+    <bpmn:sequenceFlow id="c1" sourceRef="C_Start" targetRef="C_Send" />
+    <bpmn:sendTask id="C_Send" name="Place order" camunda:class="com.acme.PlaceOrder">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="channel">web</camunda:inputParameter>
+          <camunda:outputParameter name="orderId">${response.id}</camunda:outputParameter>
+        </camunda:inputOutput>
+        <camunda:executionListener event="end" expression="${audit.log(execution)}" />
+        <camunda:properties><camunda:property name="sla" value="PT2H" /></camunda:properties>
+      </bpmn:extensionElements>
+    </bpmn:sendTask>
+    <bpmn:sequenceFlow id="c2" sourceRef="C_Send" targetRef="C_Wait" />
+    <bpmn:intermediateCatchEvent id="C_Wait" name="Confirmation">
+      <bpmn:messageEventDefinition messageRef="Msg_Confirm" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="c3" sourceRef="C_Wait" targetRef="C_End" />
+    <bpmn:endEvent id="C_End" name="Happy" />
+  </bpmn:process>
+  <bpmn:process id="Process_Shop" name="Shop" isExecutable="true">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_Sales" name="Sales">
+        <bpmn:flowNodeRef>S_Start</bpmn:flowNodeRef><bpmn:flowNodeRef>S_Review</bpmn:flowNodeRef><bpmn:flowNodeRef>S_Confirm</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Ops" name="Operations">
+        <bpmn:flowNodeRef>S_Charge</bpmn:flowNodeRef><bpmn:flowNodeRef>S_Pack</bpmn:flowNodeRef><bpmn:flowNodeRef>S_Cooldown</bpmn:flowNodeRef><bpmn:flowNodeRef>S_End</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:dataObject id="DO_Order" />
+    <bpmn:dataObjectReference id="DOR_Order" name="Order" dataObjectRef="DO_Order"><bpmn:dataState name="validated" /></bpmn:dataObjectReference>
+    <bpmn:dataStoreReference id="DSR_Orders" name="Orders DB" dataStoreRef="DS_Orders" />
+    <bpmn:startEvent id="S_Start" name="Order placed">
+      <bpmn:extensionElements><zeebe:formDefinition formId="order-form" /></bpmn:extensionElements>
+      <bpmn:messageEventDefinition messageRef="Msg_Order" />
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="s1" sourceRef="S_Start" targetRef="S_Review" />
+    <bpmn:userTask id="S_Review" name="Review order" activiti:assignee="kermit" activiti:candidateGroups="sales">
+      <bpmn:documentation>Check stock and address.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:assignmentDefinition candidateGroups="sales" />
+        <zeebe:formDefinition externalReference="review-form" />
+      </bpmn:extensionElements>
+      <bpmn:dataOutputAssociation id="DOA_1"><bpmn:targetRef>DOR_Order</bpmn:targetRef></bpmn:dataOutputAssociation>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="s2" sourceRef="S_Review" targetRef="S_Charge" />
+    <bpmn:serviceTask id="S_Charge" name="Charge customer">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="io.camunda:http-json:1" retries="3" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;https://bank.example/charge&#34;" target="url" />
+          <zeebe:input source="=&#34;POST&#34;" target="method" />
+          <zeebe:input source="={amount: total, currency: &#34;EUR&#34;}" target="body" />
+          <zeebe:output source="=response.body" target="chargeResult" />
+        </zeebe:ioMapping>
+        <zeebe:taskHeaders><zeebe:header key="resultVariable" value="chargeResult" /></zeebe:taskHeaders>
+      </bpmn:extensionElements>
+      <bpmn:dataInputAssociation id="DIA_1"><bpmn:sourceRef>DOR_Order</bpmn:sourceRef><bpmn:targetRef>S_Charge</bpmn:targetRef></bpmn:dataInputAssociation>
+      <bpmn:dataOutputAssociation id="DOA_2"><bpmn:targetRef>DSR_Orders</bpmn:targetRef></bpmn:dataOutputAssociation>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="s3" sourceRef="S_Charge" targetRef="S_Pack" />
+    <bpmn:serviceTask id="S_Pack" name="Pack item">
+      <bpmn:extensionElements><zeebe:taskDefinition type="pack-item" /></bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false">
+        <bpmn:extensionElements><zeebe:loopCharacteristics inputCollection="=items" inputElement="item" outputCollection="packed" outputElement="=result" /></bpmn:extensionElements>
+        <bpmn:completionCondition xsi:type="bpmn:tFormalExpression">=count(packed) = count(items)</bpmn:completionCondition>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="s4" sourceRef="S_Pack" targetRef="S_Cooldown" />
+    <bpmn:intermediateCatchEvent id="S_Cooldown" name="Wait 10 min">
+      <bpmn:timerEventDefinition><bpmn:timeDuration>PT10M</bpmn:timeDuration></bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="s5" sourceRef="S_Cooldown" targetRef="S_Confirm" />
+    <bpmn:sendTask id="S_Confirm" name="Confirm order">
+      <bpmn:extensionElements><zeebe:taskDefinition type="io.camunda:email:1" /></bpmn:extensionElements>
+    </bpmn:sendTask>
+    <bpmn:sequenceFlow id="s6" sourceRef="S_Confirm" targetRef="S_End" />
+    <bpmn:endEvent id="S_End" name="Finished"><bpmn:signalEventDefinition signalRef="Sig_Done" /></bpmn:endEvent>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collab_1">
+      <bpmndi:BPMNShape id="Pool_Customer_di" bpmnElement="Pool_Customer" isHorizontal="true"><dc:Bounds x="120" y="60" width="800" height="160" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_Start_di" bpmnElement="C_Start"><dc:Bounds x="182" y="122" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_Send_di" bpmnElement="C_Send"><dc:Bounds x="280" y="100" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_Wait_di" bpmnElement="C_Wait"><dc:Bounds x="702" y="122" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_End_di" bpmnElement="C_End"><dc:Bounds x="822" y="122" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Shop_di" bpmnElement="Pool_Shop" isHorizontal="true" bioc:stroke="#0d4372" bioc:fill="#bbdefb"><dc:Bounds x="120" y="280" width="800" height="330" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Sales_di" bpmnElement="Lane_Sales" isHorizontal="true"><dc:Bounds x="150" y="280" width="770" height="160" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Ops_di" bpmnElement="Lane_Ops" isHorizontal="true"><dc:Bounds x="150" y="440" width="770" height="170" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Start_di" bpmnElement="S_Start"><dc:Bounds x="182" y="342" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Review_di" bpmnElement="S_Review"><dc:Bounds x="280" y="320" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Charge_di" bpmnElement="S_Charge"><dc:Bounds x="280" y="490" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Pack_di" bpmnElement="S_Pack"><dc:Bounds x="440" y="490" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Cooldown_di" bpmnElement="S_Cooldown"><dc:Bounds x="602" y="512" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Confirm_di" bpmnElement="S_Confirm"><dc:Bounds x="670" y="320" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_End_di" bpmnElement="S_End"><dc:Bounds x="822" y="512" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DOR_Order_di" bpmnElement="DOR_Order"><dc:Bounds x="432" y="335" width="36" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DSR_Orders_di" bpmnElement="DSR_Orders"><dc:Bounds x="145" y="535" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Bank_di" bpmnElement="Pool_Bank" isHorizontal="true"><dc:Bounds x="120" y="660" width="800" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TA_1_di" bpmnElement="TA_1"><dc:Bounds x="960" y="660" width="150" height="40" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Group_1_di" bpmnElement="Group_1"><dc:Bounds x="420" y="470" width="240" height="120" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c1_di" bpmnElement="c1"><di:waypoint x="218" y="140" /><di:waypoint x="280" y="140" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c2_di" bpmnElement="c2"><di:waypoint x="380" y="140" /><di:waypoint x="702" y="140" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c3_di" bpmnElement="c3"><di:waypoint x="738" y="140" /><di:waypoint x="822" y="140" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s1_di" bpmnElement="s1"><di:waypoint x="218" y="360" /><di:waypoint x="280" y="360" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s2_di" bpmnElement="s2"><di:waypoint x="330" y="400" /><di:waypoint x="330" y="490" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s3_di" bpmnElement="s3"><di:waypoint x="380" y="530" /><di:waypoint x="440" y="530" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s4_di" bpmnElement="s4"><di:waypoint x="540" y="530" /><di:waypoint x="602" y="530" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s5_di" bpmnElement="s5"><di:waypoint x="638" y="530" /><di:waypoint x="720" y="530" /><di:waypoint x="720" y="400" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s6_di" bpmnElement="s6"><di:waypoint x="770" y="360" /><di:waypoint x="840" y="360" /><di:waypoint x="840" y="512" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Order_di" bpmnElement="MF_Order"><di:waypoint x="330" y="180" /><di:waypoint x="330" y="260" /><di:waypoint x="200" y="260" /><di:waypoint x="200" y="342" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Confirm_di" bpmnElement="MF_Confirm"><di:waypoint x="720" y="320" /><di:waypoint x="720" y="158" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Bank_di" bpmnElement="MF_Bank"><di:waypoint x="330" y="570" /><di:waypoint x="330" y="660" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DIA_1_di" bpmnElement="DIA_1"><di:waypoint x="432" y="370" /><di:waypoint x="380" y="510" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_1_di" bpmnElement="DOA_1"><di:waypoint x="380" y="360" /><di:waypoint x="432" y="360" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_2_di" bpmnElement="DOA_2"><di:waypoint x="280" y="550" /><di:waypoint x="195" y="560" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_TA_di" bpmnElement="Assoc_TA"><di:waypoint x="920" y="690" /><di:waypoint x="960" y="680" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

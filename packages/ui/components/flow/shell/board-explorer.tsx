@@ -8,6 +8,7 @@ import {
 	ExternalLinkIcon,
 	FileCode2Icon,
 	FolderInputIcon,
+	ImportIcon,
 	LayoutTemplateIcon,
 	LockIcon,
 	PencilLineIcon,
@@ -66,6 +67,7 @@ import {
 import { StorageRoot } from "./explorer/storage-root";
 import { TablesRoot } from "./explorer/tables-root";
 import { WidgetsRoot } from "./explorer/widgets-root";
+import { ImportFlowDialog } from "./import-flow-dialog";
 
 interface ModuleNode {
 	layer: ILayer;
@@ -129,6 +131,7 @@ export function BoardExplorer({
 	onWidgetName,
 	onPageName,
 	executeCommand,
+	executeCommands,
 	readOnly,
 	reservedRoots = FLOWSCRIPT_KEYWORDS,
 	presenceByFile,
@@ -153,6 +156,8 @@ export function BoardExplorer({
 		command: IGenericCommand,
 		append: boolean,
 	) => Promise<unknown>;
+	/** Runs a batch as one undo step; imports use it so a whole file is one action. */
+	executeCommands: (commands: IGenericCommand[]) => Promise<unknown>;
 	readOnly: boolean;
 	reservedRoots?: readonly string[];
 	/** Who has which file open in code, keyed by `main` or a module layer id. */
@@ -170,6 +175,7 @@ export function BoardExplorer({
 	const [renaming, setRenaming] = useState<string | null>(null);
 	const [draftParent, setDraftParent] = useState<string | null | undefined>();
 	const [draftingPage, setDraftingPage] = useState(false);
+	const [importing, setImporting] = useState(false);
 
 	const { roots, all } = useMemo(
 		() => buildModuleTree(board?.layers),
@@ -473,19 +479,45 @@ export function BoardExplorer({
 				label={t("flow", "Flow")}
 				action={
 					!readOnly && (
-						<Button
-							size="icon"
-							variant="ghost"
-							className="size-5 text-muted-foreground"
-							title={t("newModule", "New module")}
-							aria-label={t("newModule", "New module")}
-							onClick={() => setDraftParent(null)}
-						>
-							<PlusIcon className="size-3.5" />
-						</Button>
+						<span className="flex items-center gap-0.5">
+							<Button
+								size="icon"
+								variant="ghost"
+								className="size-5 text-muted-foreground"
+								title={t("importFlow", "Import flow")}
+								aria-label={t("importFlow", "Import flow")}
+								onClick={() => setImporting(true)}
+							>
+								<ImportIcon className="size-3.5" />
+							</Button>
+							<Button
+								size="icon"
+								variant="ghost"
+								className="size-5 text-muted-foreground"
+								title={t("newModule", "New module")}
+								aria-label={t("newModule", "New module")}
+								onClick={() => setDraftParent(null)}
+							>
+								<PlusIcon className="size-3.5" />
+							</Button>
+						</span>
 					)
 				}
 			/>
+			{!readOnly && (
+				<ImportFlowDialog
+					open={importing}
+					onOpenChange={setImporting}
+					appId={appId}
+					board={board}
+					currentFileId={currentFileId}
+					reservedRoots={reservedRoots}
+					executeCommands={executeCommands}
+					onImported={(moduleId) => {
+						if (moduleId) onSelectFile(moduleId);
+					}}
+				/>
+			)}
 
 			<TreeRow
 				depth={0}

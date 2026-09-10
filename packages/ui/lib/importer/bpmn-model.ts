@@ -302,8 +302,9 @@ export function isBpmnDocument(root: XmlElement): boolean {
 	);
 }
 
-export function parseBpmn(xml: string): BpmnDefinitions {
-	const root = parseXml(xml);
+/** Parses a BPMN document, or reads one that has already been parsed. */
+export function parseBpmn(source: string | XmlElement): BpmnDefinitions {
+	const root = typeof source === "string" ? parseXml(source) : source;
 	if (!isBpmnDocument(root)) {
 		throw new Error(
 			`Not a BPMN document: root element is <${root.prefix ? `${root.prefix}:` : ""}${root.name}>`,
@@ -457,6 +458,31 @@ function readContainer(el: XmlElement, refs: RootRefs): BpmnContainer {
 			}
 			default:
 				break;
+		}
+	}
+
+	// `<incoming>`/`<outgoing>` are optional in the schema; derive them from the
+	// flows so every node knows its edges regardless of the exporting tool.
+	const byId = new Map(flowNodes.map((node) => [node.id, node]));
+	const seenEdges = new Map(
+		flowNodes.map((node) => [
+			node.id,
+			{
+				incoming: new Set(node.incoming),
+				outgoing: new Set(node.outgoing),
+			},
+		]),
+	);
+	for (const flow of sequenceFlows) {
+		const source = byId.get(flow.sourceRef);
+		const target = byId.get(flow.targetRef);
+		if (source && !seenEdges.get(source.id)?.outgoing.has(flow.id)) {
+			seenEdges.get(source.id)?.outgoing.add(flow.id);
+			source.outgoing.push(flow.id);
+		}
+		if (target && !seenEdges.get(target.id)?.incoming.has(flow.id)) {
+			seenEdges.get(target.id)?.incoming.add(flow.id);
+			target.incoming.push(flow.id);
 		}
 	}
 
@@ -689,6 +715,39 @@ function readLoop(
 	return undefined;
 }
 
+/**
+ * A Camunda 7 input/output parameter body, which may be plain text, a map, a
+ * list or an inline script rather than a scalar. Structured bodies are
+ * rendered as JSON so the value reaches the node comment instead of vanishing.
+ */
+function camundaParameterValue(param: XmlElement): string {
+	const text = textOf(param);
+	if (text) return text;
+	const map = firstChild(param, "map");
+	if (map) {
+		return JSON.stringify(
+			Object.fromEntries(
+				childrenNamed(map, "entry").map((entry) => [
+					entry.attrs.key ?? "",
+					entry.text.trim(),
+				]),
+			),
+		);
+	}
+	const list = firstChild(param, "list");
+	if (list) {
+		return JSON.stringify(
+			childrenNamed(list, "value").map((value) => value.text.trim()),
+		);
+	}
+	const script = firstChild(param, "script");
+	if (script) {
+		const format = script.attrs.scriptFormat;
+		return `${format ? `${format}: ` : ""}${script.text.trim()}`;
+	}
+	return "";
+}
+
 function readIoMapping(extensions: BpmnExtension[]): BpmnIoMapping | undefined {
 	const pairs = (el: XmlElement, name: string) =>
 		childrenNamed(el, name)
@@ -709,17 +768,33 @@ function readIoMapping(extensions: BpmnExtension[]): BpmnIoMapping | undefined {
 			outputs: pairs(zeebe.element, "output"),
 		};
 	}
-	const camunda = extensions.find(
-		(ext) => ext.prefix === "camunda" && ext.name === "inputOutput",
-	);
+
+	// Camunda 7 connectors carry their own `inputOutput` inside `<camunda:connector>`,
+	// which is where an HTTP connector's url and method live.
+	const camunda =
+		extensions.find(
+			(ext) => ext.prefix === "camunda" && ext.name === "inputOutput",
+		)?.element ??
+		(() => {
+			const connector = extensions.find(
+				(ext) => ext.prefix === "camunda" && ext.name === "connector",
+			);
+			return connector
+				? firstChild(connector.element, "inputOutput")
+				: undefined;
+		})();
 	if (camunda) {
 		const param = (p: XmlElement) => ({
-			source: textOf(p) ?? "",
+			source: camundaParameterValue(p),
 			target: p.attrs.name ?? "",
 		});
 		return {
-			inputs: childrenNamed(camunda.element, "inputParameter").map(param),
-			outputs: childrenNamed(camunda.element, "outputParameter").map(param),
+			inputs: childrenNamed(camunda, "inputParameter")
+				.map(param)
+				.filter((io) => io.target || io.source),
+			outputs: childrenNamed(camunda, "outputParameter")
+				.map(param)
+				.filter((io) => io.target || io.source),
 		};
 	}
 	return undefined;
@@ -915,6 +990,9 @@ export function iso8601DurationToSeconds(value: string): number | undefined {
 		);
 	if (!match) return undefined;
 	const [, years, months, weeks, days, hours, minutes, seconds] = match;
+	// Every component is optional in the pattern, so a bare `P` or `PT` matches
+	// with nothing in it; that is a malformed duration, not zero.
+	if (match.slice(1).every((part) => part === undefined)) return undefined;
 	const num = (part: string | undefined) =>
 		part ? Number.parseFloat(part) : 0;
 	const total =
@@ -926,4 +1004,42 @@ export function iso8601DurationToSeconds(value: string): number | undefined {
 		num(minutes) * 60 +
 		num(seconds);
 	return Number.isFinite(total) ? total : undefined;
+}
+
+const DURATION_UNITS: Array<[RegExp, number]> = [
+	[/^(?:ms|millisecs?|milliseconds?)$/i, 0.001],
+	[/^(?:s|secs?|seconds?)$/i, 1],
+	[/^(?:m|mins?|minutes?)$/i, 60],
+	[/^(?:h|hrs?|hours?)$/i, 3600],
+	[/^(?:d|days?)$/i, 86400],
+	[/^(?:w|wks?|weeks?)$/i, 604800],
+];
+
+/**
+ * A duration written as a label rather than a value — "60 minutes", "after 2h".
+ * Descriptive BPMN routinely leaves `timerEventDefinition` empty and puts the
+ * wait in the event's name. Deliberately strict: a label that is not *only* a
+ * duration returns `undefined` rather than a guess.
+ */
+export function labelDurationToSeconds(label: string): number | undefined {
+	const match =
+		/^(?:after|in|wait(?:\s+for)?)?\s*(\d+(?:[.,]\d+)?)\s*([a-z]+)\.?$/i.exec(
+			label.trim(),
+		);
+	if (!match) return undefined;
+	const amount = Number.parseFloat(match[1].replace(",", "."));
+	if (!Number.isFinite(amount)) return undefined;
+	const unit = DURATION_UNITS.find(([pattern]) => pattern.test(match[2]));
+	return unit ? amount * unit[1] : undefined;
+}
+
+/**
+ * The per-repetition duration of an ISO 8601 repeating interval such as
+ * `R3/PT1H` or `R/P1D`; `undefined` for cron strings and dated cycles.
+ */
+export function iso8601CycleDurationToSeconds(
+	value: string,
+): number | undefined {
+	const match = /^R\d*\/(P.+)$/i.exec(value.trim());
+	return match ? iso8601DurationToSeconds(match[1]) : undefined;
 }
