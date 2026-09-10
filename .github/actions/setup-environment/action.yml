@@ -60,11 +60,16 @@ runs:
     - name: Cache Cargo registry, git checkouts, and build artifacts
       uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
       with:
-        # PR merge-ref caches cannot be reused by sibling PRs. Only successful
-        # dev builds publish archives; PRs restore those compatible dependencies.
+        # PR merge-ref caches cannot be reused by sibling PRs. Only dev builds
+        # publish archives; PRs restore those compatible dependencies.
         shared-key: workspace-v2-${{ runner.arch }}-${{ inputs.cache-key }}
         save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
-        cache-on-failure: false
+        # A red dev branch must still publish third-party artifacts. rust-cache
+        # prunes workspace crates before saving, so a first-party lint or test
+        # failure cannot poison the archive.
+        cache-on-failure: true
+        # Keeping registry/src avoids re-extracting ~1900 .crate archives per job.
+        cache-all-crates: true
         cache-bin: false
 
     - name: Install Protoc

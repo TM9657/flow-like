@@ -41,6 +41,8 @@ fn acquire_blocking(path: PathBuf) -> Result<File, AppBuildStoreError> {
         .create(true)
         .read(true)
         .write(true)
+        // A lock file carries holder metadata; opening must never discard it.
+        .truncate(false)
         .open(&path)
         .map_err(|error| AppBuildStoreError::Storage {
             operation: "open local lock",

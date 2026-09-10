@@ -28,19 +28,39 @@ VERSION_ANNOTATION = "org.opencontainers.image.version"
 SOURCE_ANNOTATION = "org.opencontainers.image.source"
 
 
+WHOLE_CONTEXT_COPY = re.compile(r"^COPY\s+(?:--\S+\s+)*\.\s+\.?/?$")
+EXPENSIVE_STEP = re.compile(r"\b(?:cargo build|cargo chef|cargo install|bun install|npm ci|go build)\b")
+
+
+def layer_cache_enabled(dockerfile):
+    """Report whether a recipe can ever restore its expensive step from a layer cache.
+
+    A whole-context `COPY . .` above that step changes digest on every commit, so
+    everything below it is a guaranteed miss and exporting it is a pure write.
+    """
+    lines = [line.strip() for line in (REPOSITORY_ROOT / dockerfile).read_text().splitlines()]
+    expensive = next((index for index, line in enumerate(lines) if EXPENSIVE_STEP.search(line)), None)
+    if expensive is None:
+        return True
+    whole_copy = next((index for index, line in enumerate(lines) if WHOLE_CONTEXT_COPY.match(line)), None)
+    return whole_copy is None or whole_copy > expensive
+
+
 def target(cloud, workload, platform="linux/amd64", recipe=None, context=".", architecture_id=False):
     target_id = f"{cloud}-{workload}"
     if architecture_id:
         target_id += f"-{platform.split('/')[1]}"
+    dockerfile = recipe or f"apps/backend/{cloud}/{workload}/Dockerfile"
     return {
         "id": target_id,
         "cloud": cloud,
         "workload": workload,
-        "dockerfile": recipe or f"apps/backend/{cloud}/{workload}/Dockerfile",
+        "dockerfile": dockerfile,
         "context": context,
         "platform": platform,
         "runner": "ubuntu-24.04-arm" if platform == "linux/arm64" else "ubuntu-24.04",
         "image_suffix": f"flow-like-{cloud}-{workload}",
+        "layer_cache": layer_cache_enabled(dockerfile),
     }
 
 

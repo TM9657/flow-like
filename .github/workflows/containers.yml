@@ -211,9 +211,12 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=BUSL-1.1
-          cache-from: type=gha,scope=container-v1-${{ matrix.id }}
+          # Recipes whose expensive step sits below a whole-context COPY can never
+          # restore it, so exporting their layers only consumes the repository
+          # cache quota and evicts the Rust workspace archives.
           # Never publish builder/source layers to a GHCR :buildcache package.
-          cache-to: type=gha,scope=container-v1-${{ matrix.id }},mode=max
+          cache-from: ${{ matrix.layer_cache && format('type=gha,scope=container-v1-{0}', matrix.id) || '' }}
+          cache-to: ${{ matrix.layer_cache && format('type=gha,scope=container-v1-{0},mode=max', matrix.id) || '' }}
       - name: Inspect final filesystem and extract compiled text for scanning
         env:
           IMAGE: ${{ steps.image.outputs.ref }}
