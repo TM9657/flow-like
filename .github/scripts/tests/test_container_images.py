@@ -52,6 +52,38 @@ class MatrixTests(unittest.TestCase):
                 self.assertEqual(entry["context"], ".")
                 self.assertEqual(entry["runner"].endswith("-arm"), entry["platform"] == "linux/arm64")
 
+    def test_layer_cache_tracks_whether_the_expensive_step_is_restorable(self):
+        entries = {entry["id"]: entry for entry in containers.matrix("all")["include"]}
+        # A whole-context COPY above `cargo build` makes every later layer a
+        # guaranteed miss, so those targets must not export a layer cache.
+        self.assertFalse(entries["gcp-api"]["layer_cache"])
+        self.assertFalse(entries["docker-compose-runtime-amd64"]["layer_cache"])
+        self.assertFalse(entries["docker-compose-web-amd64"]["layer_cache"])
+        # These copy manifests first, or have no expensive step at all.
+        self.assertTrue(entries["docker-compose-signaling-amd64"]["layer_cache"])
+        self.assertTrue(entries["gcp-migration"]["layer_cache"])
+        self.assertTrue(entries["azure-otel-collector"]["layer_cache"])
+        self.assertEqual(sum(entry["layer_cache"] for entry in entries.values()), 15)
+
+    def test_layer_cache_detection_reads_recipe_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "broken").mkdir()
+            (root / "broken" / "Dockerfile").write_text("FROM rust\nCOPY . .\nRUN cargo build --release\n")
+            (root / "good").mkdir()
+            (root / "good" / "Dockerfile").write_text(
+                "FROM rust\nCOPY Cargo.toml Cargo.lock ./\nRUN cargo build --release\nCOPY . .\n")
+            (root / "plain").mkdir()
+            (root / "plain" / "Dockerfile").write_text("FROM alpine\nCOPY . .\n")
+            original = containers.REPOSITORY_ROOT
+            containers.REPOSITORY_ROOT = root
+            try:
+                self.assertFalse(containers.layer_cache_enabled("broken/Dockerfile"))
+                self.assertTrue(containers.layer_cache_enabled("good/Dockerfile"))
+                self.assertTrue(containers.layer_cache_enabled("plain/Dockerfile"))
+            finally:
+                containers.REPOSITORY_ROOT = original
+
     def test_nonstandard_recipes_and_context_are_preserved(self):
         entries = {entry["id"]: entry for entry in containers.matrix("all")["include"]}
         self.assertEqual(entries["aws-executor-async"]["dockerfile"], "apps/backend/aws/executor-ecs/Dockerfile")

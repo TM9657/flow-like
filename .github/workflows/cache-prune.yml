@@ -1,0 +1,43 @@
+name: "Prune Actions caches"
+
+on:
+  schedule:
+    # Superseded generations are dead the moment a newer one is saved; hourly
+    # keeps peak residency near the working set rather than a week of pushes.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: Generations to retain per restore-key prefix
+        type: string
+        default: '1'
+      dry-run:
+        description: Report what would be deleted without deleting it
+        type: boolean
+        default: false
+
+concurrency:
+  group: cache-prune
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prune:
+    name: Delete superseded cache generations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Prune
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          KEEP: ${{ inputs.keep || '1' }}
+          DRY_RUN: ${{ inputs.dry-run && '--dry-run' || '' }}
+        run: python3 .github/scripts/prune_caches.py --keep "$KEEP" $DRY_RUN

@@ -151,7 +151,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y binutils clang libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils libclang-dev libxcb1-dev libxrandr-dev libdbus-1-dev libpipewire-0.3-dev libwayland-dev libegl-dev libgbm-dev ocl-icd-libopencl1 ocl-icd-opencl-dev libudev-dev
+          sudo apt-get install -y binutils clang lld libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils libclang-dev libxcb1-dev libxrandr-dev libdbus-1-dev libpipewire-0.3-dev libwayland-dev libegl-dev libgbm-dev ocl-icd-libopencl1 ocl-icd-opencl-dev libudev-dev
           # Ubuntu 22.04 defaults to GCC 11, but Lance's fp16 kernels require
           # Clang 6 or newer, or GCC 12 or newer.
           clang --version
@@ -180,6 +180,19 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: bash .github/scripts/prepare-ort-glibc-compat.sh
+
+      # An AArch64 BL reaches 128 MB. The desktop binary's .text has outgrown
+      # that and ld.bfd stops placing range-extension veneers, so calls into the
+      # allocator shim fail with "relocation truncated to fit: R_AARCH64_CALL26".
+      # LLD emits thunks for every overflowing branch. x86-64 keeps the system
+      # linker: its call displacement is 2 GB, so the limit is out of reach.
+      - name: Link the AArch64 desktop binary with LLD
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ld.lld --version
+          printf 'RUSTFLAGS=%s\n' "${RUSTFLAGS:+$RUSTFLAGS }-Clink-arg=-fuse-ld=lld" >> "$GITHUB_ENV"
 
       - name: Configure macOS signing and notarization recovery
         if: runner.os == 'macOS'

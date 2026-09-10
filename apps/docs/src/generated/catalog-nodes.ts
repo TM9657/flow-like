@@ -25346,7 +25346,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "prompt_preset",
         "friendlyName": "Prompt Preset",
-        "description": "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n• Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n• Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n• DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n• olmOCR — allenai/olmOCR-2, emits YAML front matter\n• Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2\n• dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode\n• Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags\n• PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL\n\nEvery preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1).",
+        "description": "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n• Default — a tuned general prompt for vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n• Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n• DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n• olmOCR — allenai/olmOCR-2, emits YAML front matter\n• Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2\n• dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode\n• Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags\n• PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL\n\nEvery preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1).",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",
@@ -25368,7 +25368,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "page_prompt",
         "friendlyName": "Page Prompt",
-        "description": "Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "description": "Prompt for converting a rendered document page to text. Switching the preset rewrites this unless you have typed your own. Leave empty to fall back to the preset.",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",
@@ -25378,7 +25378,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "image_prompt",
         "friendlyName": "Image Prompt",
-        "description": "Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "description": "Prompt for describing a standalone or embedded image. Switching the preset rewrites this unless you have typed your own. Leave empty to fall back to the preset.",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",
@@ -25388,7 +25388,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "batch_prompt",
         "friendlyName": "Batch Image Prompt",
-        "description": "Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default.",
+        "description": "Prompt used when Images Per Message is greater than 1. Only the Default preset fills this in — the OCR presets never batch. Leave empty to fall back to the preset.",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",
@@ -25548,7 +25548,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "prompt_preset",
         "friendlyName": "Prompt Preset",
-        "description": "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n• Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n• Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n• DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n• olmOCR — allenai/olmOCR-2, emits YAML front matter\n• Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2\n• dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode\n• Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags\n• PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL\n\nEvery preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1).",
+        "description": "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n• Default — a tuned general prompt for vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n• Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n• DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n• olmOCR — allenai/olmOCR-2, emits YAML front matter\n• Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2\n• dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode\n• Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags\n• PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL\n\nEvery preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1).",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",
@@ -25570,7 +25570,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "page_prompt",
         "friendlyName": "Page Prompt",
-        "description": "Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "description": "Prompt for converting a rendered document page to text. Switching the preset rewrites this unless you have typed your own. Leave empty to fall back to the preset.",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",
@@ -25580,7 +25580,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "image_prompt",
         "friendlyName": "Image Prompt",
-        "description": "Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "description": "Prompt for describing a standalone or embedded image. Switching the preset rewrites this unless you have typed your own. Leave empty to fall back to the preset.",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",
@@ -25590,7 +25590,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "batch_prompt",
         "friendlyName": "Batch Image Prompt",
-        "description": "Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default.",
+        "description": "Prompt used when Images Per Message is greater than 1. Only the Default preset fills this in — the OCR presets never batch. Leave empty to fall back to the preset.",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",

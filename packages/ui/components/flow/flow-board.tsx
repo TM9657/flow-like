@@ -5015,33 +5015,42 @@ export function FlowBoard({
 						{t("noCommentsYet", "No comments yet")}
 					</li>
 				)}
-				{boardComments.map((comment) => (
-					<li key={comment.id}>
-						<button
-							type="button"
-							onClick={() =>
-								comment.node_id
-									? openFlowScriptAtNode(comment.node_id)
-									: focusNode(comment.id)
-							}
-							className="flex w-full flex-col gap-0.5 rounded-sm px-2 py-1 text-left hover:bg-accent"
-						>
-							<span className="line-clamp-3 whitespace-pre-line text-xs">
-								{plainTextFromRichContent(comment.content) ||
-									t("emptyComment", "Empty comment")}
-							</span>
-							<span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-								{comment.author && <span>{comment.author}</span>}
-								{comment.node_id && (
-									<span className="text-primary">
-										{board.data?.nodes?.[comment.node_id]?.friendly_name ??
-											t("node", "Node:")}
-									</span>
-								)}
-							</span>
-						</button>
-					</li>
-				))}
+				{boardComments.map((comment) => {
+					const anchor = comment.node_id ?? undefined;
+					return (
+						<li key={comment.id} className="group/comment relative">
+							<button
+								type="button"
+								onClick={() => focusNode(comment.id)}
+								className="flex w-full flex-col gap-0.5 rounded-sm px-2 py-1 text-left hover:bg-accent"
+							>
+								<span className="line-clamp-3 whitespace-pre-line pr-5 text-xs">
+									{plainTextFromRichContent(comment.content) ||
+										t("emptyComment", "Empty comment")}
+								</span>
+								<span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+									{comment.author && <span>{comment.author}</span>}
+									{anchor && (
+										<span className="text-primary">
+											{board.data?.nodes?.[anchor]?.friendly_name ??
+												t("node", "Node:")}
+										</span>
+									)}
+								</span>
+							</button>
+							{anchor && (
+								<button
+									type="button"
+									title={t("flowscriptGoToCode", "Go to code")}
+									onClick={() => openFlowScriptAtNode(anchor)}
+									className="absolute right-1 top-1 rounded-sm p-1 text-muted-foreground opacity-60 transition-opacity hover:bg-accent hover:text-foreground hover:opacity-100 group-hover/comment:opacity-100"
+								>
+									<FileCode2Icon className="size-3" />
+								</button>
+							)}
+						</li>
+					);
+				})}
 			</ul>
 		) : null;
 
