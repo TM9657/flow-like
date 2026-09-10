@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { type ILayer, ILayerType } from "../lib/schema/flow/board";
+import {
+	type IComment,
+	type ILayer,
+	ILayerType,
+} from "../lib/schema/flow/board";
 import type { INode } from "../lib/schema/flow/node";
 import type { IPin } from "../lib/schema/flow/pin";
 import {
@@ -35,6 +39,10 @@ function layer(
 
 function node(id: string, layerId?: string): INode {
 	return { id, name: id, layer: layerId ?? null } as unknown as INode;
+}
+
+function comment(id: string, layerId?: string): IComment {
+	return { id, layer: layerId ?? null } as unknown as IComment;
 }
 
 function layerMap(...entries: ILayer[]): Record<string, ILayer> {
@@ -131,8 +139,27 @@ describe("resolveFocusTarget", () => {
 		});
 	});
 
+	const comments: Record<string, IComment> = {
+		root_comment: comment("root_comment"),
+		fn_comment: comment("fn_comment", "fn"),
+	};
+
 	it("returns undefined for an id that is neither node nor layer", () => {
 		expect(resolveFocusTarget(nodes, layers, "deleted")).toBeUndefined();
+		expect(resolveFocusTarget(nodes, layers, "root_comment")).toBeUndefined();
+	});
+
+	it("centres a comment in the layer that owns it", () => {
+		expect(resolveFocusTarget(nodes, layers, "root_comment", comments)).toEqual(
+			{
+				chain: [],
+				renderTargetId: "root_comment",
+			},
+		);
+		expect(resolveFocusTarget(nodes, layers, "fn_comment", comments)).toEqual({
+			chain: ["outer", "fn"],
+			renderTargetId: "fn_comment",
+		});
 	});
 
 	it("opens a module, which is a file rather than a node on any canvas", () => {

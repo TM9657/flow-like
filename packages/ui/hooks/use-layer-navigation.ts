@@ -1,7 +1,12 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReactFlowInstance } from "@xyflow/react";
 import { useCallback, useRef } from "react";
-import { type IBoard, type ILayer, ILayerType } from "../lib/schema/flow/board";
+import {
+	type IBoard,
+	type IComment,
+	type ILayer,
+	ILayerType,
+} from "../lib/schema/flow/board";
 import type { INode } from "../lib/schema/flow/node";
 import type { ViewportHold } from "./use-viewport-manager";
 
@@ -115,19 +120,30 @@ export interface FocusTarget {
 
 /**
  * Turns any board id into "which layer to open, and what to centre there". Accepts a node
- * id, a layer id or a function id — a go-to target can be any of the three, and every one
- * of them can sit arbitrarily deep inside layers and function bodies.
+ * id, a layer id, a function id or a comment id — a go-to target can be any of the four,
+ * and every one of them can sit arbitrarily deep inside layers and function bodies.
  */
 export function resolveFocusTarget(
 	nodes: Record<string, INode>,
 	layers: Record<string, ILayer>,
 	targetId: string,
+	comments: Record<string, IComment> = {},
 ): FocusTarget | undefined {
 	const node = nodes[targetId];
 	if (node) {
 		return {
 			chain: resolveLayerChain(layers, node.layer),
 			renderTargetId: node.id,
+		};
+	}
+
+	// Comments are drawn by `parseBoard` in whichever layer owns them, so one is centred
+	// exactly like a node once that layer is open.
+	const comment = comments[targetId];
+	if (comment) {
+		return {
+			chain: resolveLayerChain(layers, comment.layer ?? undefined),
+			renderTargetId: comment.id,
 		};
 	}
 
@@ -216,9 +232,9 @@ export function useLayerNavigation({
 
 	/**
 	 * Navigates to anything addressable on the canvas: a node (in whichever layer or
-	 * function body owns it), a layer, or a function. Every "go to" entry point — run
-	 * logs, traces, search, function references, deep links, the assistant — funnels
-	 * through here.
+	 * function body owns it), a layer, a function, or a comment. Every "go to" entry
+	 * point — run logs, traces, search, function references, the comments sidebar, deep
+	 * links, the assistant — funnels through here.
 	 */
 	const focusNode = useCallback(
 		(targetId: string) => {
@@ -229,9 +245,10 @@ export function useLayerNavigation({
 				boardData.nodes,
 				boardData.layers ?? {},
 				targetId,
+				boardData.comments ?? {},
 			);
 			if (!target) {
-				console.error("Node not found:", targetId);
+				console.error("Focus target not found:", targetId);
 				return;
 			}
 
