@@ -298,7 +298,11 @@ fn placeholder_pin_to_graph_pin(pin: &PlaceholderPinDef) -> GraphPin {
         friendly_name: pin.friendly_name.clone(),
         input: pin.pin_type.eq_ignore_ascii_case("input"),
         exec: pin.data_type == "Execution",
-        has_value: false,
+        has_value: pin.optional
+            || pin
+                .default_value
+                .as_ref()
+                .is_some_and(command_value_carries_data),
     }
 }
 
@@ -919,6 +923,7 @@ fn project_graph(
             | BoardCommand::MoveToLayer { .. }
             | BoardCommand::RenameLayer { .. }
             | BoardCommand::UpdateLayerCache { .. }
+            | BoardCommand::UpdateNodePinOptions { .. }
             | BoardCommand::SetNodeFunctionRefs { .. }
             | BoardCommand::AddComment { .. }
             | BoardCommand::RemoveComment { .. } => {}
@@ -1876,6 +1881,8 @@ mod tests {
                 value_type: None,
                 schema: None,
                 enforce_schema: false,
+                optional: false,
+                default_value: None,
             },
             PlaceholderPinDef {
                 name: "exec_out".to_string(),
@@ -1886,6 +1893,8 @@ mod tests {
                 value_type: None,
                 schema: None,
                 enforce_schema: false,
+                optional: false,
+                default_value: None,
             },
         ];
         let create_layer = BoardCommand::CreateLayer {
@@ -1934,6 +1943,8 @@ mod tests {
             value_type: None,
             schema: None,
             enforce_schema: false,
+            optional: false,
+            default_value: None,
         }
     }
 

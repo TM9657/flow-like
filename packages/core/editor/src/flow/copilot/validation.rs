@@ -47,6 +47,8 @@ struct KnownEntity {
 }
 
 const MAX_EMIT_COMMANDS: usize = 20;
+const GENERIC_EVENT_NODE_TYPE: &str = "events_generic";
+const GENERIC_EVENT_PAYLOAD_PIN: &str = "payload";
 
 const EXECUTABLE_COMMAND_REQUIRES_FLOWSCRIPT: &str = "executable-command-requires-flowscript";
 const VISUAL_LAYER_MEMBERSHIP_UNSAFE: &str = "visual-layer-membership-unsafe";
@@ -114,6 +116,7 @@ pub fn validate_model_facing_emit_commands_scope(args: &EmitCommandsArgs) -> Emi
                     BoardCommand::ConnectPins { .. } => "ConnectPins",
                     BoardCommand::DisconnectPins { .. } => "DisconnectPins",
                     BoardCommand::UpdateNodePin { .. } => "UpdateNodePin",
+                    BoardCommand::UpdateNodePinOptions { .. } => "UpdateNodePinOptions",
                     BoardCommand::RenameNode { .. } => "RenameNode",
                     BoardCommand::SetNodeFunctionRefs { .. } => "SetNodeFunctionRefs",
                     BoardCommand::MoveNode { .. } => "MoveNode(target_layer)",
@@ -207,6 +210,11 @@ pub async fn validate_emit_commands(
         .variables
         .iter()
         .map(|variable| variable.id.clone())
+        .collect();
+    let mut node_types: HashMap<String, String> = graph_context
+        .nodes
+        .iter()
+        .map(|node| (node.id.clone(), node.node_type.clone()))
         .collect();
     let existing_connections: HashSet<(String, String, String, String)> = graph_context
         .edges
@@ -322,6 +330,7 @@ pub async fn validate_emit_commands(
 
                 *layer_counts.entry(target_layer.clone()).or_default() += 1;
                 node_layer.insert(key.clone(), target_layer.clone());
+                node_types.insert(key.clone(), node_type.clone());
 
                 let Some(metadata) = provider.get_node_metadata(node_type).await else {
                     errors.push(issue(
@@ -679,6 +688,72 @@ pub async fn validate_emit_commands(
 
                 explicit_values.insert((entity.key.clone(), canonical_pin_ref(pin_id, pin)));
                 entities_to_check.insert(entity.key.clone());
+            }
+            BoardCommand::UpdateNodePinOptions {
+                node_id,
+                pin_name,
+                optional,
+                default_value,
+            } => {
+                let Some(entity) = entities.get(node_id) else {
+                    errors.push(issue(
+                        "error",
+                        "unknown-node",
+                        Some(index),
+                        format!("Cannot update pin options on unknown node '{}'", node_id),
+                    ));
+                    continue;
+                };
+
+                if node_types.get(node_id).map(String::as_str) != Some(GENERIC_EVENT_NODE_TYPE) {
+                    errors.push(issue(
+                        "error",
+                        "pin-options-unsupported-node",
+                        Some(index),
+                        format!(
+                            "Pin options can only be changed on events_generic outputs; '{}' is not a Generic Event entry",
+                            entity.display_name
+                        ),
+                    ));
+                    continue;
+                }
+
+                let Some(pin) = find_pin(entity, pin_name) else {
+                    errors.push(issue(
+                        "error",
+                        "unknown-pin",
+                        Some(index),
+                        pin_not_found_message(entity, pin_name, Some(PinDirection::Output)),
+                    ));
+                    continue;
+                };
+
+                if pin.direction != PinDirection::Output
+                    || pin.data_type == "Execution"
+                    || pin.name == GENERIC_EVENT_PAYLOAD_PIN
+                {
+                    errors.push(issue(
+                        "error",
+                        "invalid-pin-options-target",
+                        Some(index),
+                        format!(
+                            "Pin '{}.{}' cannot be optional: only custom non-execution outputs of events_generic can be, never 'payload'",
+                            entity.display_name, pin.name
+                        ),
+                    ));
+                    continue;
+                }
+
+                validate_optional_default(
+                    index,
+                    &pin.name,
+                    *optional,
+                    default_value.as_ref(),
+                    &pin.data_type,
+                    None,
+                    "pin-options-default-without-optional",
+                    &mut errors,
+                );
             }
             BoardCommand::RenameNode {
                 node_id,
@@ -1189,7 +1264,7 @@ fn validate_additional_node_pins(
         return;
     };
 
-    if !pins.is_empty() && node_type != "events_generic" {
+    if !pins.is_empty() && node_type != GENERIC_EVENT_NODE_TYPE {
         errors.push(issue(
             "error",
             "additional-pins-unsupported-node",
@@ -1225,6 +1300,89 @@ fn validate_additional_node_pins(
                 ),
             ));
         }
+        validate_optional_default(
+            command_index,
+            &pin.name,
+            pin.optional,
+            pin.default_value.as_ref(),
+            &pin.data_type,
+            pin.value_type.as_deref(),
+            "additional-pin-default-without-optional",
+            errors,
+        );
+    }
+}
+
+/// A stored default is only meaningful on an optional pin, and it must decode as the pin's type.
+#[allow(clippy::too_many_arguments)]
+fn validate_optional_default(
+    command_index: usize,
+    pin_name: &str,
+    optional: bool,
+    default_value: Option<&serde_json::Value>,
+    data_type: &str,
+    value_type: Option<&str>,
+    without_optional_code: &'static str,
+    errors: &mut Vec<ValidationIssue>,
+) {
+    let Some(value) = default_value else {
+        return;
+    };
+    if !optional {
+        errors.push(issue(
+            "error",
+            without_optional_code,
+            Some(command_index),
+            format!(
+                "Pin '{}' carries a default_value but is not optional; set optional: true or drop the default",
+                pin_name
+            ),
+        ));
+        return;
+    }
+    if !default_matches_pin_type(value, data_type, value_type) {
+        errors.push(issue(
+            "error",
+            "pin-default-type-mismatch",
+            Some(command_index),
+            format!(
+                "Default {} for pin '{}' does not match its {}{} type",
+                value,
+                pin_name,
+                data_type,
+                value_type
+                    .filter(|value_type| *value_type != "Normal")
+                    .map(|value_type| format!(" {value_type}"))
+                    .unwrap_or_default()
+            ),
+        ));
+    }
+}
+
+/// Cheap JSON-kind check. Containers pass when the value type is unknown (live pins only expose
+/// their data type here), so the check can reject a wrong scalar but never a valid container.
+fn default_matches_pin_type(
+    value: &serde_json::Value,
+    data_type: &str,
+    value_type: Option<&str>,
+) -> bool {
+    if value.is_null() {
+        return true;
+    }
+    match value_type {
+        Some("Array" | "HashSet") => return value.is_array(),
+        Some("HashMap") => return value.is_object(),
+        Some(_) => {}
+        None if value.is_array() || value.is_object() => return true,
+        None => {}
+    }
+    match data_type {
+        "String" | "PathBuf" | "Date" => value.is_string(),
+        "Integer" | "Byte" => value.is_i64() || value.is_u64(),
+        "Float" => value.is_number(),
+        "Boolean" => value.is_boolean(),
+        "Struct" | "Geometry" => value.is_object(),
+        _ => true,
     }
 }
 
@@ -1461,7 +1619,7 @@ fn known_pin_from_def(pin: &PlaceholderPinDef) -> KnownPin {
         } else {
             PinDirection::Output
         },
-        has_default_value: false,
+        has_default_value: pin.optional || pin.default_value.is_some(),
     }
 }
 
@@ -1805,6 +1963,285 @@ mod tests {
             EXECUTABLE_COMMAND_REQUIRES_FLOWSCRIPT
         );
         assert_eq!(outcome.errors[1].code, "visual-layer-membership-unsafe");
+    }
+
+    struct GenericEventCatalogProvider;
+
+    fn generic_event_metadata() -> super::super::types::NodeMetadata {
+        let output = |name: &str, data_type: &str| PinMetadata {
+            name: name.to_string(),
+            friendly_name: name.to_string(),
+            description: String::new(),
+            data_type: data_type.to_string(),
+            value_type: "Normal".to_string(),
+            default_value: None,
+            schema: None,
+            is_generic: false,
+            valid_values: None,
+            enforce_schema: false,
+        };
+        super::super::types::NodeMetadata {
+            name: GENERIC_EVENT_NODE_TYPE.to_string(),
+            friendly_name: "Generic Event".to_string(),
+            description: String::new(),
+            inputs: Vec::new(),
+            outputs: vec![output("exec_out", "Execution"), output("payload", "Struct")],
+            category: None,
+            required_inputs: Vec::new(),
+            companion_nodes: Vec::new(),
+            capability_tags: Vec::new(),
+            namespace: None,
+            alias: None,
+            receiver: None,
+        }
+    }
+
+    #[flow_like_types::async_trait]
+    impl CatalogProvider for GenericEventCatalogProvider {
+        async fn search(&self, _query: &str) -> Vec<super::super::types::NodeMetadata> {
+            Vec::new()
+        }
+
+        async fn search_by_pin_type(
+            &self,
+            _pin_type: &str,
+            _is_input: bool,
+        ) -> Vec<super::super::types::NodeMetadata> {
+            Vec::new()
+        }
+
+        async fn filter_by_category(
+            &self,
+            _category_prefix: &str,
+        ) -> Vec<super::super::types::NodeMetadata> {
+            Vec::new()
+        }
+
+        async fn get_node_metadata(
+            &self,
+            node_type: &str,
+        ) -> Option<super::super::types::NodeMetadata> {
+            (node_type == GENERIC_EVENT_NODE_TYPE).then(generic_event_metadata)
+        }
+
+        async fn get_all_nodes(&self) -> Vec<String> {
+            vec![GENERIC_EVENT_NODE_TYPE.to_string()]
+        }
+    }
+
+    fn empty_context() -> GraphContext {
+        GraphContext {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            layers: Vec::new(),
+            variables: Vec::new(),
+            selected_nodes: Vec::new(),
+        }
+    }
+
+    fn pin_context(name: &str, type_name: &str) -> super::super::context::PinContext {
+        super::super::context::PinContext {
+            name: name.to_string(),
+            type_name: type_name.to_string(),
+            default_value: None,
+        }
+    }
+
+    fn node_context(
+        id: &str,
+        node_type: &str,
+        outputs: Vec<super::super::context::PinContext>,
+    ) -> super::super::context::NodeContext {
+        super::super::context::NodeContext {
+            id: id.to_string(),
+            node_type: node_type.to_string(),
+            friendly_name: id.to_string(),
+            inputs: Vec::new(),
+            outputs,
+            position: (0, 0),
+            estimated_size: (0, 0),
+        }
+    }
+
+    fn additional_pin(
+        optional: bool,
+        default_value: Option<serde_json::Value>,
+    ) -> PlaceholderPinDef {
+        PlaceholderPinDef {
+            name: "limit".to_string(),
+            friendly_name: "limit".to_string(),
+            description: None,
+            pin_type: "Output".to_string(),
+            data_type: "Integer".to_string(),
+            value_type: Some("Normal".to_string()),
+            schema: None,
+            enforce_schema: false,
+            optional,
+            default_value,
+        }
+    }
+
+    fn add_generic_event(pin: PlaceholderPinDef) -> EmitCommandsArgs {
+        EmitCommandsArgs {
+            commands: vec![BoardCommand::AddNode {
+                node_type: GENERIC_EVENT_NODE_TYPE.to_string(),
+                ref_id: Some("$0".to_string()),
+                position: Some(super::super::types::NodePosition { x: 0.0, y: 0.0 }),
+                friendly_name: None,
+                additional_pins: Some(vec![pin]),
+                target_layer: None,
+                summary: Some("Add event".to_string()),
+            }],
+            explanation: "Add a generic event".to_string(),
+        }
+    }
+
+    fn pin_options_args(
+        node_id: &str,
+        pin_name: &str,
+        optional: bool,
+        default_value: Option<serde_json::Value>,
+    ) -> EmitCommandsArgs {
+        EmitCommandsArgs {
+            commands: vec![BoardCommand::UpdateNodePinOptions {
+                node_id: node_id.to_string(),
+                pin_name: pin_name.to_string(),
+                optional,
+                default_value,
+            }],
+            explanation: "Toggle an optional event parameter".to_string(),
+        }
+    }
+
+    fn codes(outcome: &EmitValidationOutcome) -> Vec<&'static str> {
+        outcome.errors.iter().map(|issue| issue.code).collect()
+    }
+
+    #[tokio::test]
+    async fn additional_pin_default_requires_optional_and_a_matching_type() {
+        let context = empty_context();
+        let provider = GenericEventCatalogProvider;
+
+        let rejected = validate_emit_commands(
+            &add_generic_event(additional_pin(false, Some(serde_json::json!(25)))),
+            &context,
+            &provider,
+        )
+        .await;
+        assert!(
+            codes(&rejected).contains(&"additional-pin-default-without-optional"),
+            "{:?}",
+            rejected.errors
+        );
+
+        let mismatched = validate_emit_commands(
+            &add_generic_event(additional_pin(true, Some(serde_json::json!("25")))),
+            &context,
+            &provider,
+        )
+        .await;
+        assert!(
+            codes(&mismatched).contains(&"pin-default-type-mismatch"),
+            "{:?}",
+            mismatched.errors
+        );
+
+        for pin in [
+            additional_pin(true, Some(serde_json::json!(25))),
+            additional_pin(true, None),
+            additional_pin(false, None),
+        ] {
+            let accepted =
+                validate_emit_commands(&add_generic_event(pin), &context, &provider).await;
+            assert!(accepted.errors.is_empty(), "{:?}", accepted.errors);
+        }
+    }
+
+    #[tokio::test]
+    async fn update_node_pin_options_preflight_rejects_invalid_targets() {
+        let context = GraphContext {
+            nodes: vec![
+                node_context(
+                    "event",
+                    GENERIC_EVENT_NODE_TYPE,
+                    vec![
+                        pin_context("exec_out", "Execution"),
+                        pin_context("payload", "Struct"),
+                        pin_context("ticketId", "String"),
+                    ],
+                ),
+                node_context(
+                    "log",
+                    "log_info",
+                    vec![
+                        pin_context("exec_out", "Execution"),
+                        pin_context("value", "String"),
+                    ],
+                ),
+            ],
+            edges: Vec::new(),
+            layers: Vec::new(),
+            variables: Vec::new(),
+            selected_nodes: Vec::new(),
+        };
+
+        for (args, code) in [
+            (
+                pin_options_args("missing", "ticketId", true, None),
+                "unknown-node",
+            ),
+            (
+                pin_options_args("log", "value", true, None),
+                "pin-options-unsupported-node",
+            ),
+            (pin_options_args("event", "nope", true, None), "unknown-pin"),
+            (
+                pin_options_args("event", "payload", true, None),
+                "invalid-pin-options-target",
+            ),
+            (
+                pin_options_args("event", "exec_out", true, None),
+                "invalid-pin-options-target",
+            ),
+            (
+                pin_options_args("event", "ticketId", false, Some(serde_json::json!("T-1"))),
+                "pin-options-default-without-optional",
+            ),
+            (
+                pin_options_args("event", "ticketId", true, Some(serde_json::json!(5))),
+                "pin-default-type-mismatch",
+            ),
+        ] {
+            let outcome = validate_emit_commands(&args, &context, &EmptyCatalogProvider).await;
+            assert!(
+                codes(&outcome).contains(&code),
+                "expected {code}: {:?}",
+                outcome.errors
+            );
+        }
+
+        for args in [
+            pin_options_args("event", "ticketId", true, None),
+            pin_options_args("event", "ticketId", true, Some(serde_json::json!("T-1"))),
+            pin_options_args("event", "ticketId", false, None),
+        ] {
+            let outcome = validate_emit_commands(&args, &context, &EmptyCatalogProvider).await;
+            assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
+        }
+    }
+
+    #[test]
+    fn model_facing_emit_scope_requires_flowscript_for_pin_options() {
+        let outcome = validate_model_facing_emit_commands_scope(&pin_options_args(
+            "event", "ticketId", true, None,
+        ));
+
+        assert_eq!(outcome.errors.len(), 1);
+        assert_eq!(
+            outcome.errors[0].code,
+            EXECUTABLE_COMMAND_REQUIRES_FLOWSCRIPT
+        );
+        assert!(outcome.errors[0].message.contains("UpdateNodePinOptions"));
     }
 
     #[test]

@@ -4,33 +4,43 @@ import { ChevronRightIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 import { cn } from "../../../lib/utils";
 
-/**
- * Where the canvas is, inside the open file.
- *
- * A layer used to announce itself with a label painted over the bottom-left of
- * the graph, which said where you were but offered no way out except Layer Up.
- * Here every ancestor is a target, so leaving a nested layer is one click at any
- * depth.
- *
- * It renders nothing at the file root: the tab strip already names the file, and
- * a row of chrome that says only what the row above says is not worth the pixels.
- */
+/** Ancestors within the open file. The tab strip already names the file at its root. */
 export const BoardBreadcrumb = memo(function BoardBreadcrumb({
 	fileLabel,
+	fileRootPath,
 	layerPath,
 	layerNames,
 	onJumpToLayer,
 }: Readonly<{
 	fileLabel: string;
-	/** Layer ids joined by `/`, deepest last. Undefined at the file root. */
+	/** Full layer path to the module root. Undefined or `root` means main. */
+	fileRootPath?: string;
+	/** Full layer path from the board root, deepest last. */
 	layerPath?: string;
 	layerNames: Map<string, string>;
 	onJumpToLayer: (path: string) => void;
 }>) {
-	const segments = useMemo(
-		() => (layerPath ? layerPath.split("/").filter(Boolean) : []),
-		[layerPath],
-	);
+	const { rootPath, segments } = useMemo(() => {
+		const fileSegments =
+			fileRootPath && fileRootPath !== "root"
+				? fileRootPath.split("/").filter(Boolean)
+				: [];
+		const pathSegments =
+			layerPath && layerPath !== "root"
+				? layerPath.split("/").filter(Boolean)
+				: [];
+		const rootPath = fileSegments.join("/") || "root";
+		if (!fileSegments.every((id, index) => pathSegments[index] === id)) {
+			return { rootPath, segments: [] };
+		}
+		return {
+			rootPath,
+			segments: pathSegments.slice(fileSegments.length).map((id, index) => ({
+				id,
+				path: pathSegments.slice(0, fileSegments.length + index + 1).join("/"),
+			})),
+		};
+	}, [fileRootPath, layerPath]);
 
 	if (segments.length === 0) return null;
 
@@ -41,16 +51,15 @@ export const BoardBreadcrumb = memo(function BoardBreadcrumb({
 		>
 			<button
 				type="button"
-				onClick={() => onJumpToLayer("root")}
+				onClick={() => onJumpToLayer(rootPath)}
 				className="shrink-0 rounded-sm px-1 font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
 			>
 				{fileLabel}
 			</button>
-			{segments.map((segment, index) => {
+			{segments.map(({ id, path }, index) => {
 				const last = index === segments.length - 1;
-				const path = segments.slice(0, index + 1).join("/");
 				return (
-					<span key={segment} className="flex shrink-0 items-center gap-0.5">
+					<span key={path} className="flex shrink-0 items-center gap-0.5">
 						<ChevronRightIcon className="size-3 text-muted-foreground/50" />
 						<button
 							type="button"
@@ -64,7 +73,7 @@ export const BoardBreadcrumb = memo(function BoardBreadcrumb({
 									: "text-muted-foreground hover:bg-accent hover:text-foreground",
 							)}
 						>
-							{layerNames.get(segment) ?? segment}
+							{layerNames.get(id) ?? id}
 						</button>
 					</span>
 				);

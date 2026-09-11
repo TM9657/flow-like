@@ -11060,6 +11060,15 @@
     "class": null,
     "category": "AI/Generative"
   },
+  "llm_extractor_struct_schema": {
+    "qualified": "ai::extractWithStructSchema",
+    "namespace": "ai",
+    "alias": "extractWithStructSchema",
+    "flat": "llmExtractorStructSchema",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Generative"
+  },
   "llm_find_element": {
     "qualified": "automation::llm::findElement",
     "namespace": "automation.llm",

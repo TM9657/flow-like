@@ -8,7 +8,8 @@ export type IBoardSidebarView =
 	| "search"
 	| "variables"
 	| "events"
-	| "comments";
+	| "comments"
+	| "quality";
 
 /** A tab of the bottom panel. */
 export type IBoardPanelTab = "problems" | "runs" | "traces" | "tests";

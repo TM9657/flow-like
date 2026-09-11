@@ -1,6 +1,7 @@
 use crate::alerting;
 use crate::error::ApiError;
 use crate::mail::{EmailMessage, templates};
+use crate::routes::app::meta::sanitize_ext;
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -443,14 +444,6 @@ pub async fn submit_solution(
         },
         checkout_url,
     }))
-}
-
-fn sanitize_ext(input: Option<&str>) -> Option<String> {
-    let mut s = input?.trim().trim_start_matches('.').to_ascii_lowercase();
-    if s.is_empty() || s.len() > 16 || !s.chars().all(|c| c.is_ascii_alphanumeric()) {
-        return None;
-    }
-    Some(std::mem::take(&mut s))
 }
 
 #[derive(Clone, Serialize, Debug, ToSchema)]

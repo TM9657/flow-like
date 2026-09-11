@@ -254,10 +254,9 @@ impl NodeLogic for BrowserSaveCookiesNode {
         // Save to file
         let runtime = file_path.to_runtime(context).await?;
         let store = runtime.store.as_generic();
-        let path = flow_like_storage::Path::from(runtime.path.to_string());
 
         store
-            .put(&path, cookie_json.into())
+            .put(&runtime.path, cookie_json.into())
             .await
             .map_err(|e| flow_like_types::anyhow!("Failed to save cookies: {}", e))?;
 
@@ -369,9 +368,8 @@ impl NodeLogic for BrowserLoadCookiesNode {
         // Load from file
         let runtime = file_path.to_runtime(context).await?;
         let store = runtime.store.as_generic();
-        let path = flow_like_storage::Path::from(runtime.path.to_string());
 
-        let result = store.get(&path).await;
+        let result = store.get(&runtime.path).await;
         let data = match result {
             Ok(data) => data
                 .bytes()

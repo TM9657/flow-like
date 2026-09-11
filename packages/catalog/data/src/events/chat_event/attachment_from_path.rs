@@ -177,7 +177,7 @@ impl NodeLogic for AttachmentFromPathNode {
             )
             .await?;
 
-        let filename = runtime_path.path.filename().map(|s| s.to_string());
+        let filename = flow_like_storage::display_file_name(&runtime_path.path);
 
         let extension = runtime_path.path.extension().map(|s| s.to_lowercase());
 
@@ -244,5 +244,22 @@ mod tests {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         );
         assert_eq!(mime_from_extension("unknown"), "application/octet-stream");
+    }
+
+    #[test]
+    fn attachment_name_is_the_decoded_file_name_of_the_runtime_path() {
+        let raw = "uploads/Übersicht (2)#1.pdf";
+        let listed = "uploads/%C3%9Cbersicht (2)%231.pdf";
+        let runtime_path = flow_like_storage::normalize_object_path(raw);
+        assert_eq!(runtime_path.as_ref(), listed);
+        assert_eq!(
+            flow_like_storage::normalize_object_path(listed),
+            runtime_path
+        );
+        assert_eq!(
+            flow_like_storage::display_file_name(&runtime_path).as_deref(),
+            Some("Übersicht (2)#1.pdf")
+        );
+        assert_eq!(runtime_path.extension(), Some("pdf"));
     }
 }

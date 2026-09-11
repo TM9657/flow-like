@@ -873,6 +873,7 @@ mod lower_tests {
     use crate::flow::board::{Board, ExecutionMode, ExecutionStage, Layer, LayerType};
     use crate::flow::execution::LogLevel;
     use crate::flow::node::Node;
+    use crate::flow::pin::PinOptions;
     use crate::flow::variable::{VariableType, infer_schema_from_json};
     use flow_like_ast::model::Stmt;
     use flow_like_storage::Path;
@@ -1486,6 +1487,38 @@ mod lower_tests {
         assert!(
             !text_out.contains("now.title"),
             "body must not leak qualified payload ref:\n{text_out}"
+        );
+    }
+
+    /// An optional payload pin renders `name?: Type = literal`; a stored `null` default carries
+    /// nothing the `?` does not already say and is left out.
+    #[test]
+    fn optional_event_param_renders_marker_and_default() {
+        let mut board = empty_board();
+
+        let mut event = Node::new("events_generic", "Now", "", "events");
+        event.id = "event".to_string();
+        event.set_start(true);
+        event.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+        event
+            .add_output_pin("title", "Title", "", VariableType::String)
+            .set_default_value(Some(flow_like_types::json::json!("anonymous")))
+            .set_options(PinOptions::new().set_optional(true).build());
+        event
+            .add_output_pin("note", "Note", "", VariableType::String)
+            .set_default_value(Some(Value::Null))
+            .set_options(PinOptions::new().set_optional(true).build());
+        event
+            .add_output_pin("kept", "Kept", "", VariableType::String)
+            .set_default_value(Some(flow_like_types::json::json!("ignored")));
+        board.nodes.insert(event.id.clone(), event);
+
+        let text_out = board_to_flowscript(&board, &RenderOptions::default());
+        assert!(
+            text_out.contains(
+                "eventsGeneric now(title?: string = \"anonymous\", note?: string, kept: string)"
+            ),
+            "optional pins render their marker and stored default:\n{text_out}"
         );
     }
 

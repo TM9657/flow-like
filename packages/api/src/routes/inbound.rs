@@ -17,17 +17,14 @@
 //! middleware).
 
 use flow_like_storage::object_store::ObjectStoreExt;
-use std::{collections::HashMap, convert::Infallible, str::FromStr, time::Duration};
+use std::{collections::HashMap, str::FromStr, time::Duration};
 
 use axum::{
     Json, Router,
     body::Bytes,
     extract::{Path, RawQuery, State},
     http::{HeaderMap, StatusCode},
-    response::{
-        IntoResponse, Response,
-        sse::{Event as SseEvent, KeepAlive, Sse},
-    },
+    response::{IntoResponse, Response},
     routing::any,
 };
 use flow_like::flow::{
@@ -1055,16 +1052,7 @@ pub(crate) async fn dispatch_mcp_for_event(
     } else if method == axum::http::Method::DELETE {
         Ok(mcp_handle_delete(raw_query, &registration_headers, &session_scope).await)
     } else if method == axum::http::Method::GET {
-        Ok(mcp_handle_get(
-            &event_row.id,
-            &served.name,
-            &endpoint_path,
-            &resource_url,
-            raw_query,
-            &registration_headers,
-            &session_scope,
-        )
-        .await)
+        Ok(mcp_handle_get(&endpoint_path, &registration_headers).await)
     } else {
         let mut resp = (
             StatusCode::METHOD_NOT_ALLOWED,
@@ -1658,13 +1646,10 @@ fn app_scoped_content_path(
 }
 
 fn append_object_path_segments(
-    mut path: flow_like_storage::Path,
+    path: flow_like_storage::Path,
     value: &str,
 ) -> flow_like_storage::Path {
-    for segment in value.split('/').filter(|segment| !segment.is_empty()) {
-        path = path.join(segment);
-    }
-    path
+    flow_like_storage::join_object_path(&path, value)
 }
 
 async fn match_registration(
@@ -2054,19 +2039,27 @@ async fn resolve_jwks_url(cfg: &Value) -> Result<String, ApiError> {
     ))
 }
 
+fn jwks_object_path(cfg: &Value) -> Result<Option<flow_like_storage::Path>, ApiError> {
+    let Some(flow_path) = cfg.get("jwks_flow_path").filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    flow_path
+        .get("path")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(flow_like_storage::normalize_object_path)
+        .map(Some)
+        .ok_or_else(|| ApiError::internal("jwks_flow_path missing path"))
+}
+
 async fn oauth_jwks(state: &AppState, cfg: &Value) -> Result<jsonwebtoken::jwk::JwkSet, ApiError> {
     if let Some(inline) = cfg.get("jwks_json") {
         return serde_json::from_value(inline.clone())
             .map_err(|e| ApiError::internal(format!("jwks_json parse failed: {e}")));
     }
 
-    if let Some(flow_path) = cfg.get("jwks_flow_path").filter(|v| !v.is_null()) {
-        let object_path = flow_path
-            .get("path")
-            .and_then(|v| v.as_str())
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .ok_or_else(|| ApiError::internal("jwks_flow_path missing path"))?;
+    if let Some(object_path) = jwks_object_path(cfg)? {
         let credentials = state
             .master_credentials()
             .await
@@ -2077,7 +2070,7 @@ async fn oauth_jwks(state: &AppState, cfg: &Value) -> Result<jsonwebtoken::jwk::
             .map_err(ApiError::internal_error)?;
         let file = store
             .as_generic()
-            .get(&flow_like_storage::Path::from(object_path.to_string()))
+            .get(&object_path)
             .await
             .map_err(|e| ApiError::internal(format!("jwks_flow_path fetch failed: {e}")))?;
         let bytes = file
@@ -2932,7 +2925,6 @@ struct InboundMcpSession {
     protocol_version: String,
     initialized: bool,
     created_at: std::time::Instant,
-    sse_tx: flow_like_types::tokio::sync::broadcast::Sender<String>,
 }
 
 static MCP_SESSIONS: std::sync::LazyLock<
@@ -3125,21 +3117,13 @@ fn new_mcp_session(
     event_id: &str,
     protocol_version: String,
     initialized: bool,
-) -> (
-    InboundMcpSession,
-    flow_like_types::tokio::sync::broadcast::Receiver<String>,
-) {
-    let (sse_tx, rx) = flow_like_types::tokio::sync::broadcast::channel::<String>(64);
-    (
-        InboundMcpSession {
-            event_id: event_id.to_string(),
-            protocol_version,
-            initialized,
-            created_at: std::time::Instant::now(),
-            sse_tx,
-        },
-        rx,
-    )
+) -> InboundMcpSession {
+    InboundMcpSession {
+        event_id: event_id.to_string(),
+        protocol_version,
+        initialized,
+        created_at: std::time::Instant::now(),
+    }
 }
 
 async fn prune_expired_mcp_sessions() {
@@ -3173,8 +3157,6 @@ async fn mcp_handle_post(
         .iter()
         .any(|item| item.get("method").and_then(|v| v.as_str()) == Some("initialize"));
     let supplied_session_id = mcp_session_id(raw_query, headers);
-    let is_legacy_sse_post = !headers.contains_key("mcp-session-id")
-        && parse_query_single(raw_query).contains_key("sessionId");
     let mut assigned_session_id = supplied_session_id.clone();
     prune_expired_mcp_sessions().await;
 
@@ -3235,12 +3217,12 @@ async fn mcp_handle_post(
                     headers,
                 ));
             }
-            let (session, _) = new_mcp_session(
+            let session = new_mcp_session(
                 &event_row.id,
                 mcp_protocol_version_from_headers(headers),
                 true,
             );
-            tracing::warn!(
+            tracing::debug!(
                 session_id = %session_id,
                 event_id = %event_row.id,
                 "MCP session not found locally; recreated session for stateless request"
@@ -3303,26 +3285,6 @@ async fn mcp_handle_post(
         ));
     }
 
-    if is_legacy_sse_post && let Some(session_id) = assigned_session_id.as_ref() {
-        let tx = {
-            let sessions = MCP_SESSIONS.lock().await;
-            sessions
-                .get(&mcp_session_key(session_scope, session_id))
-                .map(|session| session.sse_tx.clone())
-        };
-        if let Some(tx) = tx {
-            for response in &responses {
-                let data = serde_json::to_string(response).unwrap_or_else(|_| "{}".to_string());
-                let _ = tx.send(data);
-            }
-            return Ok(mcp_empty_response(
-                StatusCode::ACCEPTED,
-                assigned_session_id,
-                headers,
-            ));
-        }
-    }
-
     let body_value = if is_batch {
         Value::Array(responses)
     } else {
@@ -3367,20 +3329,7 @@ async fn handle_mcp_initialize(
     let session_id = existing_session_id.unwrap_or_else(|| mint_mcp_session_id(served_variant));
     let session_key = mcp_session_key(session_scope, &session_id);
     let mut sessions = MCP_SESSIONS.lock().await;
-    let sse_tx = sessions
-        .get(&session_key)
-        .map(|session| session.sse_tx.clone())
-        .unwrap_or_else(|| {
-            let (tx, _rx) = flow_like_types::tokio::sync::broadcast::channel::<String>(64);
-            tx
-        });
-    let session = InboundMcpSession {
-        event_id: event_id.to_string(),
-        protocol_version: protocol_version.clone(),
-        initialized: false,
-        created_at: std::time::Instant::now(),
-        sse_tx,
-    };
+    let session = new_mcp_session(event_id, protocol_version.clone(), false);
     sessions.insert(session_key, session);
     let result = json!({
         "protocolVersion": protocol_version,
@@ -3423,15 +3372,14 @@ async fn mcp_handle_delete(raw_query: &str, headers: &HeaderMap, session_scope: 
     }
 }
 
-async fn mcp_handle_get(
-    event_id: &str,
-    served_variant: &str,
-    endpoint_path: &str,
-    resource_url: &str,
-    raw_query: &str,
-    headers: &HeaderMap,
-    session_scope: &str,
-) -> Response {
+/// Streamable HTTP makes the server-to-client stream optional: a server that does
+/// not send server-initiated messages answers GET with 405 instead. Flow Like
+/// serves tool calls on POST only and returns every response inline on the
+/// request that asked for it, so there is nothing for a stream to carry.
+///
+/// Holding one open per client also costs a whole container for the lifetime of
+/// the connection on serverless targets, which is what this endpoint used to do.
+async fn mcp_handle_get(endpoint_path: &str, headers: &HeaderMap) -> Response {
     let accept = headers
         .get(axum::http::header::ACCEPT)
         .and_then(|v| v.to_str().ok())
@@ -3440,83 +3388,15 @@ async fn mcp_handle_get(
         return mcp_browser_inspector_response(endpoint_path, headers);
     }
 
-    let (_, wants_sse) = parse_accept_types(accept);
-    if !wants_sse {
-        return mcp_text_response(
-            StatusCode::NOT_ACCEPTABLE,
-            "Not Acceptable: GET requires Accept: text/event-stream",
-            headers,
-        );
-    }
-
-    prune_expired_mcp_sessions().await;
-    let supplied_session_id = mcp_session_id(raw_query, headers);
-    let (session_id, mut rx, legacy_endpoint) = {
-        let mut sessions = MCP_SESSIONS.lock().await;
-        if let Some(session_id) = supplied_session_id {
-            let session_key = mcp_session_key(session_scope, &session_id);
-            if let Some(session) = sessions.get(&session_key) {
-                if session.event_id != event_id {
-                    return mcp_text_response(StatusCode::NOT_FOUND, "Session not found", headers);
-                }
-                (session_id, session.sse_tx.subscribe(), None)
-            } else {
-                let (session, rx) =
-                    new_mcp_session(event_id, mcp_protocol_version_from_headers(headers), true);
-                tracing::warn!(
-                    session_id = %session_id,
-                    event_id,
-                    "MCP SSE session not found locally; recreated session"
-                );
-                sessions.insert(session_key, session);
-                (session_id, rx, None)
-            }
-        } else {
-            let session_id = mint_mcp_session_id(served_variant);
-            let (session, rx) =
-                new_mcp_session(event_id, MCP_DEFAULT_PROTOCOL_VERSION.to_string(), false);
-            sessions.insert(mcp_session_key(session_scope, &session_id), session);
-            let endpoint = format!("{resource_url}?sessionId={session_id}");
-            (session_id, rx, Some(endpoint))
-        }
-    };
-
-    let stream = async_stream::stream! {
-        if let Some(endpoint) = legacy_endpoint {
-            yield Ok::<SseEvent, Infallible>(SseEvent::default().event("endpoint").data(endpoint));
-        }
-        loop {
-            match rx.recv().await {
-                Ok(data) => {
-                    let event_id = uuid::Uuid::new_v4().simple().to_string();
-                    yield Ok::<SseEvent, Infallible>(
-                        SseEvent::default()
-                            .id(event_id)
-                            .event("message")
-                            .data(data),
-                    );
-                }
-                Err(flow_like_types::tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                    continue;
-                }
-                Err(flow_like_types::tokio::sync::broadcast::error::RecvError::Closed) => {
-                    break;
-                }
-            }
-        }
-    };
-
-    let mut resp = Sse::new(stream)
-        .keep_alive(
-            KeepAlive::new()
-                .interval(Duration::from_secs(15))
-                .text("keepalive"),
-        )
-        .into_response();
-    if let Ok(value) = axum::http::HeaderValue::from_str(&session_id) {
-        resp.headers_mut().insert("mcp-session-id", value);
-    }
-    apply_mcp_cors(resp.headers_mut(), headers);
+    let mut resp = mcp_text_response(
+        StatusCode::METHOD_NOT_ALLOWED,
+        "Method Not Allowed: this server does not offer an SSE stream. Send JSON-RPC requests as POST; responses are returned on the POST itself.",
+        headers,
+    );
+    resp.headers_mut().insert(
+        axum::http::header::ALLOW,
+        axum::http::HeaderValue::from_static("POST, DELETE, OPTIONS"),
+    );
     resp
 }
 
@@ -3779,6 +3659,7 @@ fn tool_metadata(
     let name = sanitize_identifier(name_source);
     let description = resolved_mcp_description(&node.description, board_refs);
     let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
     let mut argument_aliases = HashMap::new();
     let mut used_argument_names = std::collections::HashSet::new();
     for pin in node.pins.values() {
@@ -3791,7 +3672,7 @@ fn tool_metadata(
         let argument_name = unique_tool_argument_name(pin, &used_argument_names);
         used_argument_names.insert(argument_name.clone());
         register_tool_argument_aliases(&mut argument_aliases, &argument_name, pin);
-        let schema = pin_schema(
+        let mut schema = pin_schema(
             &pin.data_type,
             &pin.value_type,
             pin.schema
@@ -3802,19 +3683,32 @@ fn tool_metadata(
                 .unwrap_or_default()
                 .as_str(),
         );
+        if pin.is_optional() {
+            let default = pin.effective_default(board_refs);
+            if !default.is_null()
+                && let Some(obj) = schema.as_object_mut()
+            {
+                obj.insert("default".to_string(), default);
+            }
+        } else {
+            required.push(argument_name.clone());
+        }
         properties.insert(argument_name, schema);
     }
 
-    (
-        name,
-        description,
-        json!({
-            "type": "object",
-            "properties": properties,
-            "additionalProperties": true
-        }),
-        argument_aliases,
-    )
+    let mut schema = json!({
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": true
+    });
+    if !required.is_empty()
+        && let Some(obj) = schema.as_object_mut()
+    {
+        required.sort_unstable();
+        obj.insert("required".to_string(), json!(required));
+    }
+
+    (name, description, schema, argument_aliases)
 }
 
 fn sanitize_identifier(input: &str) -> String {
@@ -4395,15 +4289,43 @@ fn body_response(status: StatusCode, mut headers: HeaderMap, body: Value) -> Res
 
 #[cfg(test)]
 mod tests {
+    use flow_like::flow::pin::PinOptions;
     use jsonwebtoken::{Algorithm, jwk::Jwk};
     use serde_json::json;
 
     use super::{
         PROXY_EVENT_AUTHORIZATION_HEADER, ProxyCallerContext, canonical_auth_kind, client_metadata,
-        inbound_base_path, is_asymmetric_jwt_algorithm, jwk_matches_oauth_header, mcp_resource_url,
-        parse_query_single, registration_auth_headers, rest_args_from_body_and_query,
-        with_inbound_openapi_server,
+        inbound_base_path, is_asymmetric_jwt_algorithm, jwk_matches_oauth_header, jwks_object_path,
+        mcp_resource_url, parse_query_single, registration_auth_headers,
+        rest_args_from_body_and_query, with_inbound_openapi_server,
     };
+
+    #[test]
+    fn jwks_object_path_resolves_raw_and_encoded_flow_paths_to_one_key() {
+        let raw = "apps/x/upload/Übersicht (2)#1.json";
+        let expected = flow_like_storage::Path::from(raw);
+        assert_eq!(
+            expected.as_ref(),
+            "apps/x/upload/%C3%9Cbersicht (2)%231.json"
+        );
+
+        let from_raw = jwks_object_path(&json!({ "jwks_flow_path": { "path": raw } }))
+            .unwrap()
+            .unwrap();
+        let from_encoded =
+            jwks_object_path(&json!({ "jwks_flow_path": { "path": expected.as_ref() } }))
+                .unwrap()
+                .unwrap();
+
+        assert_eq!(from_raw, expected);
+        assert_eq!(from_encoded, expected);
+        assert_eq!(
+            flow_like_storage::display_file_name(&from_encoded).as_deref(),
+            Some("Übersicht (2)#1.json")
+        );
+        assert!(jwks_object_path(&json!({})).unwrap().is_none());
+        assert!(jwks_object_path(&json!({ "jwks_flow_path": { "path": "  " } })).is_err());
+    }
 
     #[test]
     fn mcp_platform_identity_is_opt_in_and_public_only() {
@@ -4475,43 +4397,38 @@ mod tests {
         }
     }
 
+    /// The server offers no server-to-client stream, so GET must answer 405 per
+    /// the Streamable HTTP transport. A stream here would pin one container per
+    /// connected client for the life of the connection on serverless targets.
     #[tokio::test]
-    async fn mcp_legacy_sse_advertises_trusted_resource_instead_of_request_host() {
-        use futures_util::StreamExt;
-        let event_id = uuid::Uuid::new_v4().to_string();
-        let scope = super::mcp_session_scope(&event_id, &json!({}), &ProxyCallerContext::default());
+    async fn mcp_get_refuses_to_open_a_listening_stream() {
         let mut headers = axum::http::HeaderMap::new();
-        headers.insert("host", "untrusted.example".parse().unwrap());
-        headers.insert("x-forwarded-proto", "http".parse().unwrap());
         headers.insert("accept", "text/event-stream".parse().unwrap());
-        let response = super::mcp_handle_get(
-            &event_id,
-            "stable",
-            "/m/tools",
-            "https://api.example.com/m/tools",
-            "",
-            &headers,
-            &scope,
-        )
-        .await;
-        headers.insert(
-            "mcp-session-id",
-            response.headers()["mcp-session-id"].clone(),
-        );
-        let mut stream = response.into_body().into_data_stream();
-        let first = tokio::time::timeout(std::time::Duration::from_secs(1), stream.next())
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        let first = std::str::from_utf8(&first).unwrap();
-        assert!(first.contains("https://api.example.com/m/tools?sessionId="));
-        assert!(!first.contains("untrusted.example"));
+        let response = super::mcp_handle_get("/m/tools", &headers).await;
         assert_eq!(
-            super::mcp_handle_delete("", &headers, &scope)
-                .await
-                .status(),
-            axum::http::StatusCode::NO_CONTENT
+            response.status(),
+            axum::http::StatusCode::METHOD_NOT_ALLOWED
+        );
+        assert_eq!(
+            response.headers()[axum::http::header::ALLOW],
+            "POST, DELETE, OPTIONS"
+        );
+        assert!(!response.headers().contains_key("mcp-session-id"));
+
+        // A legacy client supplying ?sessionId= gets the same refusal rather than
+        // a stream it would wait on forever.
+        let response = super::mcp_handle_get("/m/tools", &headers).await;
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::METHOD_NOT_ALLOWED
+        );
+
+        // The browser inspector is still served to humans opening the URL.
+        let mut html = axum::http::HeaderMap::new();
+        html.insert("accept", "text/html".parse().unwrap());
+        assert_eq!(
+            super::mcp_handle_get("/m/tools", &html).await.status(),
+            axum::http::StatusCode::OK
         );
     }
 
@@ -4642,7 +4559,7 @@ mod tests {
         }
         let session_id = "stable~same-client-supplied-session";
         let key = super::mcp_session_key(&alice, session_id);
-        let (session, mut rx) = super::new_mcp_session(&event_id, "2025-06-18".into(), true);
+        let session = super::new_mcp_session(&event_id, "2025-06-18".into(), true);
         super::MCP_SESSIONS
             .lock()
             .await
@@ -4655,7 +4572,8 @@ mod tests {
                 axum::http::StatusCode::NOT_FOUND
             );
         }
-        // Initialize and GET under another identity cannot reuse Alice's stream.
+        // Initializing under another identity with the same client-supplied id
+        // lands in a separate entry rather than adopting Alice's.
         let (_, bob_id) = super::handle_mcp_initialize(
             &event_id,
             "stable",
@@ -4668,30 +4586,9 @@ mod tests {
         )
         .await;
         assert_eq!(bob_id, session_id);
-        headers.insert("accept", "text/event-stream".parse().unwrap());
-        let bob_stream = super::mcp_handle_get(
-            &event_id,
-            "stable",
-            "/m/tools",
-            "https://api.example/m/tools",
-            "",
-            &headers,
-            &bob,
-        )
-        .await;
         let bob_key = super::mcp_session_key(&bob, session_id);
-        super::MCP_SESSIONS
-            .lock()
-            .await
-            .get(&bob_key)
-            .unwrap()
-            .sse_tx
-            .send("bob-only".into())
-            .unwrap();
-        assert!(matches!(
-            rx.try_recv(),
-            Err(flow_like_types::tokio::sync::broadcast::error::TryRecvError::Empty)
-        ));
+        assert_ne!(bob_key, key);
+        assert!(super::MCP_SESSIONS.lock().await.contains_key(&key));
         assert_eq!(
             super::mcp_handle_delete("", &headers, &alice)
                 .await
@@ -4702,7 +4599,6 @@ mod tests {
             super::mcp_handle_delete("", &headers, &bob).await.status(),
             axum::http::StatusCode::NO_CONTENT
         );
-        drop(bob_stream);
     }
 
     #[test]
@@ -4796,6 +4692,7 @@ mod tests {
         let (_, _, schema, aliases) = super::tool_metadata(&node, &refs);
         assert_eq!(schema["type"], json!("object"));
         assert_eq!(schema["properties"], json!({}));
+        assert!(schema.get("required").is_none());
         assert!(aliases.is_empty());
 
         node.add_output_pin(
@@ -4809,9 +4706,64 @@ mod tests {
             schema["properties"],
             json!({"limit": {"type": "integer", "description": "Maximum notes"}})
         );
+        assert_eq!(schema["required"], json!(["limit"]));
         assert_eq!(aliases.get("limit").map(String::as_str), Some("note_limit"));
         assert!(!aliases.contains_key("payload"));
         assert!(!aliases.contains_key("_client"));
+    }
+
+    #[test]
+    fn mcp_tool_schema_requires_non_optional_pins_and_defaults_optional_ones() {
+        let mut node = super::Node::new("search_notes", "Search Notes", "Search", "Tests");
+        node.add_output_pin(
+            "query",
+            "Query",
+            "Search query",
+            super::VariableType::String,
+        );
+        node.add_output_pin(
+            "note_limit",
+            "Limit",
+            "Maximum notes",
+            super::VariableType::Integer,
+        )
+        .set_options(PinOptions::new().set_optional(true).build())
+        .set_default_value(Some(json!(20)));
+        let refs = super::HashMap::new();
+
+        let (_, _, schema, _) = super::tool_metadata(&node, &refs);
+        assert_eq!(schema["required"], json!(["query"]));
+        assert_eq!(
+            schema["properties"]["limit"],
+            json!({"type": "integer", "description": "Maximum notes", "default": 20})
+        );
+        assert!(schema["properties"]["query"].get("default").is_none());
+    }
+
+    #[test]
+    fn mcp_tool_schema_omits_required_when_every_pin_is_optional() {
+        let mut node = super::Node::new("search_notes", "Search Notes", "Search", "Tests");
+        node.add_output_pin(
+            "query",
+            "Query",
+            "Search query",
+            super::VariableType::String,
+        )
+        .set_options(PinOptions::new().set_optional(true).build());
+        node.add_output_pin(
+            "cursor",
+            "Cursor",
+            "Page cursor",
+            super::VariableType::String,
+        )
+        .set_options(PinOptions::new().set_optional(true).build())
+        .set_default_value(Some(json!(null)));
+        let refs = super::HashMap::new();
+
+        let (_, _, schema, _) = super::tool_metadata(&node, &refs);
+        assert!(schema.get("required").is_none());
+        assert_eq!(schema["properties"]["query"]["default"], json!(""));
+        assert_eq!(schema["properties"]["cursor"]["default"], json!(""));
     }
 
     #[test]

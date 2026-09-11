@@ -29,6 +29,8 @@ export function TreeRow({
 	depth,
 	icon,
 	label,
+	description,
+	labelClassName,
 	active,
 	muted,
 	trailing,
@@ -41,6 +43,8 @@ export function TreeRow({
 	depth: number;
 	icon: React.ReactNode;
 	label: string;
+	description?: string;
+	labelClassName?: string;
 	active?: boolean;
 	muted?: boolean;
 	trailing?: React.ReactNode;
@@ -52,8 +56,10 @@ export function TreeRow({
 		<div
 			{...rest}
 			className={cn(
-				"group/row flex items-center gap-1 rounded-sm pr-1 text-xs",
-				active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
+				"group/row flex min-h-8 items-center gap-1 rounded-md border border-transparent pr-1.5 text-xs transition-colors focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring",
+				active
+					? "border-primary/15 bg-primary/10 text-foreground"
+					: "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
 				className,
 			)}
 			// Merged rather than overwritten: dnd-kit applies its drag transform through
@@ -66,21 +72,38 @@ export function TreeRow({
 			<button
 				type="button"
 				onClick={onSelect}
-				className="flex min-w-0 flex-1 items-center gap-1 py-1 text-left"
+				aria-pressed={active}
+				title={label}
+				className="flex min-w-0 flex-1 items-center gap-2 rounded-sm py-1.5 text-left focus-visible:outline-none"
 			>
 				<span
 					className={cn(
-						"shrink-0 [&>svg]:size-3.5",
+						"flex size-6 shrink-0 items-center justify-center rounded-md [&>svg]:size-3.5",
 						active
-							? "text-accent-foreground"
+							? "bg-primary/15 text-primary"
 							: muted
-								? "text-muted-foreground"
-								: "text-primary",
+								? "bg-muted text-muted-foreground"
+								: "bg-primary/8 text-primary",
 					)}
 				>
 					{icon}
 				</span>
-				<span className="truncate font-mono">{label}</span>
+				<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+					<span
+						className={cn(
+							"truncate font-mono",
+							active && "font-medium",
+							labelClassName,
+						)}
+					>
+						{label}
+					</span>
+					{description && (
+						<span className="truncate text-[10px] leading-4 text-muted-foreground">
+							{description}
+						</span>
+					)}
+				</span>
 			</button>
 			{trailing}
 		</div>
@@ -193,11 +216,11 @@ export function SectionHeader({
 	action,
 }: Readonly<{ label: string; action?: React.ReactNode }>) {
 	return (
-		<div className="flex items-center gap-1 px-1 pb-0.5 pt-2">
-			<h3 className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+		<div className="mt-2 flex min-h-7 items-center gap-2 px-2 pb-1 pt-1 first:mt-0">
+			<h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
 				{label}
 			</h3>
-			<span className="flex-1" />
+			<span className="h-px flex-1 bg-border/60" />
 			{action}
 		</div>
 	);
@@ -249,7 +272,7 @@ export function EmptyRow({
 }: Readonly<{ label: string; depth?: number }>) {
 	return (
 		<p
-			className="py-1 text-[11px] text-muted-foreground"
+			className="py-2 text-[11px] text-muted-foreground"
 			style={{ paddingLeft: `${depth * TREE_INDENT + 24}px` }}
 		>
 			{label}

@@ -17,6 +17,7 @@ message PinOptions {
   bool enforce_schema = 5;
   bool enforce_generic_value_type = 6;
   optional bool sensitive = 7;
+  optional bool optional = 8;
 }
 
 message Pin {

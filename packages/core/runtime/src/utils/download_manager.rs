@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use flow_like_types::reqwest;
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,21 @@ use crate::bit::Bit;
 use super::cache::get_cache_dir;
 
 const DOWNLOAD_MANAGER_FILE: &str = "download-manager.json";
+
+/// Client for artifact transfers.
+///
+/// Model weights take minutes to arrive, so the budget covers establishing the
+/// connection and the gap between chunks rather than the transfer as a whole.
+/// Without either, a connection that is silently dropped, which is how most
+/// filtering middleboxes refuse traffic, never returns at all.
+fn download_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent(concat!("flow-like/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(Duration::from_secs(20))
+        .read_timeout(Duration::from_secs(120))
+        .build()
+        .unwrap_or_default()
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Download {
@@ -45,7 +61,7 @@ impl DownloadManager {
         DownloadManager {
             download_list: HashMap::new(),
             resume: false,
-            client: reqwest::Client::new(),
+            client: download_client(),
         }
     }
 

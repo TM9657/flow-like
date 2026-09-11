@@ -10,8 +10,6 @@ use flow_like::{
 };
 use flow_like_catalog_core::{FlowPath, NodeImage};
 #[cfg(feature = "execute")]
-use flow_like_storage::Path;
-#[cfg(feature = "execute")]
 use flow_like_types::Bytes;
 #[cfg(feature = "execute")]
 use flow_like_types::image::ImageReader;
@@ -561,7 +559,7 @@ impl NodeLogic for ExtractDocumentNode {
         let file: FlowPath = context.evaluate_pin("file").await?;
         let extract_images: bool = context.evaluate_pin("extract_images").await?;
 
-        let file_path = Path::from(file.path.clone());
+        let file_path = file.object_path();
         let extension = file_path
             .extension()
             .map(|e| format!(".{}", e))
@@ -729,7 +727,7 @@ impl NodeLogic for ExtractDocumentAiNode {
         let temperature: f64 = context.evaluate_pin("temperature").await?;
         let max_tokens: i64 = context.evaluate_pin("max_tokens").await?;
 
-        let file_path = Path::from(file.path.clone());
+        let file_path = file.object_path();
         let extension = file_path
             .extension()
             .map(|e| format!(".{}", e))
@@ -890,7 +888,7 @@ impl NodeLogic for ExtractDocumentsNode {
         let mut all_results: Vec<Vec<DocumentPage>> = Vec::with_capacity(files.len());
 
         for file in files {
-            let file_path = Path::from(file.path.clone());
+            let file_path = file.object_path();
             let extension = file_path
                 .extension()
                 .map(|e| format!(".{}", e))
@@ -1096,7 +1094,7 @@ impl NodeLogic for ExtractDocumentsAiNode {
         let mut all_results: Vec<Vec<DocumentPage>> = Vec::with_capacity(files.len());
 
         for file in files {
-            let file_path = Path::from(file.path.clone());
+            let file_path = file.object_path();
             let extension = file_path
                 .extension()
                 .map(|e| format!(".{}", e))

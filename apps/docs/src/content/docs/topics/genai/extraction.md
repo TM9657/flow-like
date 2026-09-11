@@ -12,6 +12,7 @@ Flow-Like's AI extractors use a configured model and a runtime schema to turn fr
 | Input | Node |
 |-------|------|
 | Free-form text | [AI Extractor](/nodes/ai/generative/llm-extractor/) |
+| Free-form text with a schema borrowed from a typed struct | [AI Extractor with Struct Schema](/nodes/ai/generative/llm-extractor-struct-schema/) |
 | Model-compatible conversation history | [AI Extractor from History](/nodes/ai/generative/llm-extractor-history/) |
 | One document requiring text and image-aware extraction | [AI Extract Document](/nodes/ai/processing/ai-processing-extract-document-ai/) |
 | Several documents | [AI Extract Documents](/nodes/ai/processing/ai-processing-extract-documents-ai/) |
@@ -20,11 +21,13 @@ Flow-Like's AI extractors use a configured model and a runtime schema to turn fr
 The AI Extractor nodes accept:
 
 - a configured model;
-- a JSON Schema or example JSON;
+- a JSON Schema, example JSON, or typed struct schema reference;
 - the text or history;
 - an optional extraction hint.
 
 They return the validated JSON value plus model usage statistics. The configured model must support the required tool or function call behavior.
+
+Use **AI Extractor with Struct Schema** when another pin already carries the output shape you need. Connect that pin to **Schema Reference**. The extractor reads its schema metadata without evaluating the referenced value, then attaches the same schema to its response. This keeps one type definition as the contract for extraction and downstream struct nodes.
 
 ## Choose the extraction boundary
 

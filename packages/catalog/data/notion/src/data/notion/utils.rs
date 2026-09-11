@@ -124,12 +124,6 @@ pub fn file_object_from_upload_id(file_upload_id: &str) -> Value {
     })
 }
 
-pub fn filename_from_path(path: &str) -> Option<String> {
-    path.rsplit('/')
-        .find(|part| !part.is_empty())
-        .map(str::to_string)
-}
-
 pub fn content_type_from_filename(filename: &str) -> String {
     let extension = filename.rsplit_once('.').map(|(_, ext)| ext.to_lowercase());
     match extension.as_deref() {

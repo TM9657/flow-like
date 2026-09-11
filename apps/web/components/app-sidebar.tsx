@@ -28,7 +28,6 @@ import {
 	DialogTrigger,
 	DropdownMenu,
 	DropdownMenuContent,
-	DropdownMenuGroup,
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
@@ -64,31 +63,24 @@ import {
 	useInvoke,
 	useSidebar,
 	userDisplayName,
-	userInitials,
 } from "@flow-like/flow-like-ui";
+import { AccountMenu } from "@flow-like/flow-like-ui/components/account/account-menu";
+import { AccountMenuProvider } from "@flow-like/flow-like-ui/components/account/account-menu-context";
 import { ownsWindowChrome } from "@flow-like/flow-like-ui/lib/chrome-route";
 import { useTranslation } from "@flow-like/locales";
 import { createId } from "@paralleldrive/cuid2";
 import { motion } from "framer-motion";
 import {
-	BadgeCheck,
-	BellIcon,
 	Check,
 	ChevronRight,
 	ChevronsUpDown,
-	CreditCard,
 	Edit3Icon,
-	KeyIcon,
-	LogInIcon,
-	LogOut,
 	type LucideIcon,
 	Plus,
-	ZapIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { getPublicApiUrl } from "../lib/public-config";
 import {
 	type ComponentType,
 	useCallback,
@@ -100,6 +92,7 @@ import {
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { fetcher } from "../lib/api";
+import { getPublicApiUrl } from "../lib/public-config";
 import { currentRelativeUrl } from "../lib/return-url";
 import { Shortcuts } from "./shortcuts";
 
@@ -182,12 +175,6 @@ function useNavData() {
 	);
 }
 
-interface IUser {
-	name: string;
-	email: string;
-	avatar: string;
-}
-
 export function AppSidebar({
 	children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -199,35 +186,37 @@ export function AppSidebar({
 	const chromeless = ownsWindowChrome(usePathname());
 
 	return (
-		<SidebarProvider defaultOpen={defaultOpen} enableShortcut={!chromeless}>
-			<GlobalChrome chromeless={chromeless} />
-			<main
-				className="w-full h-dvh flex flex-col overflow-hidden"
-				style={{
-					paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))",
-				}}
-			>
-				<MobileHeaderProvider>
-					<MobileHeader />
-					<SidebarInset
-						className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden"
-						style={{
-							paddingBottom:
-								"var(--fl-safe-bottom, env(safe-area-inset-bottom, 0px))",
-						}}
-					>
-						<FlowBackground
-							intensity="subtle"
-							interactive
-							active={!chromeless}
-							className="flex flex-col flex-1 min-h-0"
+		<AccountMenuProvider value={NavUser}>
+			<SidebarProvider defaultOpen={defaultOpen} enableShortcut={!chromeless}>
+				<GlobalChrome chromeless={chromeless} />
+				<main
+					className="w-full h-dvh flex flex-col overflow-hidden"
+					style={{
+						paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))",
+					}}
+				>
+					<MobileHeaderProvider>
+						<MobileHeader />
+						<SidebarInset
+							className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden"
+							style={{
+								paddingBottom:
+									"var(--fl-safe-bottom, env(safe-area-inset-bottom, 0px))",
+							}}
 						>
-							{children}
-						</FlowBackground>
-					</SidebarInset>
-				</MobileHeaderProvider>
-			</main>
-		</SidebarProvider>
+							<FlowBackground
+								intensity="subtle"
+								interactive
+								active={!chromeless}
+								className="flex flex-col flex-1 min-h-0"
+							>
+								{children}
+							</FlowBackground>
+						</SidebarInset>
+					</MobileHeaderProvider>
+				</main>
+			</SidebarProvider>
+		</AccountMenuProvider>
 	);
 }
 
@@ -255,7 +244,6 @@ function GlobalChrome({ chromeless }: Readonly<{ chromeless: boolean }>) {
 
 function InnerSidebar() {
 	const router = useRouter();
-	const [user] = useState<IUser | undefined>();
 	const { open, toggleSidebar } = useSidebar();
 	const { setTheme } = useTheme();
 	const { t } = useTranslation(["common", "settings"]);
@@ -327,7 +315,11 @@ function InnerSidebar() {
 						</span>
 					</MotionSidebarMenuButton>
 				</div>
-				<NavUser user={user} />
+				<SidebarMenu>
+					<SidebarMenuItem>
+						<NavUser />
+					</SidebarMenuItem>
+				</SidebarMenu>
 			</SidebarFooter>
 			<SidebarRail />
 		</Sidebar>
@@ -715,12 +707,13 @@ function NavFlatItem({
 	const active = isItemActive(item, pathname);
 	return (
 		<SidebarMenuItem>
-			<SidebarMenuButton
-				asChild
-				variant={active ? "outline" : "default"}
-				tooltip={item.title}
-			>
-				<MotionLink href={item.url} initial="initial" whileHover="hover">
+			<SidebarMenuButton asChild isActive={active} tooltip={item.title}>
+				<MotionLink
+					href={item.url}
+					aria-current={active ? "page" : undefined}
+					initial="initial"
+					whileHover="hover"
+				>
 					{item.icon && (
 						<motion.div variants={iconVariants}>
 							<item.icon className="size-4" />
@@ -763,7 +756,7 @@ function NavCollapsible({
 			<SidebarMenuItem>
 				<CollapsibleTrigger asChild>
 					<MotionSidebarMenuButton
-						variant={active ? "outline" : "default"}
+						isActive={active}
 						tooltip={item.title}
 						initial="initial"
 						whileHover="hover"
@@ -790,7 +783,13 @@ function NavCollapsible({
 					<SidebarMenuSub>
 						{item.items?.map((subItem) => (
 							<SidebarMenuSubItem key={subItem.title}>
-								<SidebarMenuSubButton asChild>
+								<SidebarMenuSubButton
+									asChild
+									isActive={
+										pathname === subItem.url ||
+										pathname.startsWith(`${subItem.url}/`)
+									}
+								>
 									{subItem.external ? (
 										<a
 											href={subItem.url}
@@ -800,17 +799,16 @@ function NavCollapsible({
 											<span>{subItem.title}</span>
 										</a>
 									) : (
-										<Link href={subItem.url}>
-											<span
-												className={
-													pathname === subItem.url ||
-													pathname.startsWith(`${subItem.url}/`)
-														? "font-bold text-primary"
-														: ""
-												}
-											>
-												{subItem.title}
-											</span>
+										<Link
+											href={subItem.url}
+											aria-current={
+												pathname === subItem.url ||
+												pathname.startsWith(`${subItem.url}/`)
+													? "page"
+													: undefined
+											}
+										>
+											<span>{subItem.title}</span>
 										</Link>
 									)}
 								</SidebarMenuSubButton>
@@ -949,11 +947,9 @@ function NavMain({
 }
 
 export function NavUser({
-	user,
-}: Readonly<{
-	user?: IUser;
-}>) {
-	const { t } = useTranslation("common");
+	compact = false,
+}: Readonly<{ compact?: boolean }> = {}) {
+	const { t } = useTranslation(["common", "flow"]);
 	const { isMobile } = useSidebar();
 	const auth = useAuth();
 	const backend = useBackend();
@@ -975,18 +971,19 @@ export function NavUser({
 	);
 
 	const displayName: string = useMemo(
-		() => userDisplayName(info.data, "Offline"),
-		[info.data],
-	);
-
-	const initials: string = useMemo(
-		() => userInitials(displayName, "?"),
-		[displayName],
+		() =>
+			userDisplayName(
+				auth?.isAuthenticated ? info.data : undefined,
+				t("offline", "Offline"),
+			),
+		[info.data, auth?.isAuthenticated, t],
 	);
 
 	const email: string = useMemo(() => {
-		return info.data?.email ?? "Anonymous";
-	}, [info.data]);
+		return auth?.isAuthenticated
+			? (info.data?.email ?? "")
+			: t("flow:signedOut", "Signed out");
+	}, [info.data, auth?.isAuthenticated, t]);
 
 	const notifications = useInvoke(
 		backend.userState.getNotifications,
@@ -1002,173 +999,47 @@ export function NavUser({
 		(notifications.data?.invites_count ?? 0);
 
 	return (
-		<SidebarMenu>
-			<SidebarMenuItem>
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<MotionSidebarMenuButton
-							size="lg"
-							className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-							initial="initial"
-							whileHover="hover"
-						>
-							<Avatar className="h-8 w-8 rounded-lg">
-								<AvatarImage src={info.data?.avatar} alt={displayName} />
-								<AvatarFallback className="rounded-lg">
-									{initials}
-								</AvatarFallback>
-							</Avatar>
-							{notificationCount > 0 && (
-								<div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs rounded-full min-w-4 h-4 flex items-center justify-center px-1">
-									{notificationCount > 5 ? "5+" : notificationCount}
-								</div>
-							)}
-							<div className="grid flex-1 text-left text-sm leading-tight">
-								<span className="truncate font-semibold">{displayName}</span>
-								<span className="truncate text-xs">{email}</span>
-							</div>
-							<motion.div variants={iconVariants}>
-								<ChevronsUpDown className="ml-auto size-4" />
-							</motion.div>
-						</MotionSidebarMenuButton>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent
-						className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
-						side={isMobile ? "bottom" : "right"}
-						align="end"
-						sideOffset={4}
-					>
-						<DropdownMenuLabel className="p-0 font-normal">
-							<div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-								<Avatar className="h-8 w-8 rounded-lg">
-									<AvatarImage src={info.data?.avatar} alt={displayName} />
-									<AvatarFallback className="rounded-lg">
-										{initials}
-									</AvatarFallback>
-								</Avatar>
-								<div className="grid flex-1 text-left text-sm leading-tight">
-									<span className="truncate font-semibold">{displayName}</span>
-									<span className="truncate text-xs">{email}</span>
-								</div>
-							</div>
-						</DropdownMenuLabel>
-						<DropdownMenuSeparator />
-						{auth?.isAuthenticated && (
-							<>
-								{(!info.data?.tier ||
-									info.data?.tier.toUpperCase() === "FREE") && (
-									<>
-										<DropdownMenuGroup>
-											<a href="/subscription">
-												<DropdownMenuItem className="gap-2">
-													<AnimatedSparklesIcon />
-													{t("upgradeToPro", "Upgrade to Pro")}
-												</DropdownMenuItem>
-											</a>
-										</DropdownMenuGroup>
-										<DropdownMenuSeparator />
-									</>
-								)}
-								<DropdownMenuGroup>
-									<a href="/account">
-										<DropdownMenuItem className="gap-2">
-											<BadgeCheck className="size-4" />
-											{t("account", "Account")}
-										</DropdownMenuItem>
-									</a>
-									{profile.data && (
-										<DropdownMenuItem
-											className="gap-2"
-											onClick={async () => {
-												const urlRequest = await fetcher<{ url: string }>(
-													profile.data,
-													"user/billing",
-													{ method: "GET" },
-													auth,
-												);
-
-												window.open(
-													urlRequest.url,
-													"_blank",
-													"noopener,noreferrer",
-												);
-											}}
-										>
-											<CreditCard className="size-4" />
-											{t("billing", "Billing")}
-										</DropdownMenuItem>
-									)}
-									<a href="/notifications">
-										<DropdownMenuItem className="gap-2 p-2">
-											<div className="flex size-4relative">
-												<BellIcon className="size-4" />
-												{/* Add notification indicator */}
-												{notificationCount > 0 && (
-													<div className="absolute top-0 left-0 bg-primary text-primary-foreground text-xs rounded-full min-w-4 h-4 flex items-center justify-center px-1">
-														{notificationCount > 5 ? "5+" : notificationCount}
-													</div>
-												)}
-											</div>
-											{t("notifications", "Notifications")}
-										</DropdownMenuItem>
-									</a>
-									{developerMode && (
-										<>
-											<a href="/account/pat">
-												<DropdownMenuItem className="gap-2 p-2">
-													<KeyIcon className="size-4" />
-													{t("token", "Token")}
-												</DropdownMenuItem>
-											</a>
-											<a href="/settings/sinks">
-												<DropdownMenuItem className="gap-2 p-2">
-													<ZapIcon className="size-4" />
-													{t("activeSinks", "Active Sinks")}
-												</DropdownMenuItem>
-											</a>
-										</>
-									)}
-								</DropdownMenuGroup>
-								<DropdownMenuSeparator />
-								<DropdownMenuItem
-									className="gap-2"
-									onClick={async () => {
-										await auth?.signoutRedirect();
-									}}
-								>
-									<LogOut className="size-4" />
-									{t("logOut", "Log out")}
-								</DropdownMenuItem>
-							</>
-						)}
-						{!auth?.isAuthenticated && (
-							<DropdownMenuItem
-								className="gap-2"
-								onClick={async () => {
-									if (!auth) {
-										toast.error("Authentication is not configured.");
-										return;
-									}
-									try {
-										console.log("[Login] Starting signinRedirect...");
-										await auth.signinRedirect({
-											url_state: currentRelativeUrl(),
-										});
-										console.log("[Login] signinRedirect completed");
-									} catch (error) {
-										console.error("[Login] signinRedirect failed:", error);
-										toast.error(`Login failed: ${error}`);
-									}
-								}}
-							>
-								<LogInIcon className="size-4" />
-								{t("logIn", "Log in")}
-							</DropdownMenuItem>
-						)}
-					</DropdownMenuContent>
-				</DropdownMenu>
-			</SidebarMenuItem>
-		</SidebarMenu>
+		<AccountMenu
+			compact={compact}
+			isMobile={isMobile}
+			displayName={displayName}
+			email={email}
+			avatar={auth?.isAuthenticated ? info.data?.avatar : undefined}
+			signedIn={Boolean(auth?.isAuthenticated)}
+			notificationCount={notificationCount}
+			showUpgrade={!info.data?.tier || info.data.tier.toUpperCase() === "FREE"}
+			developerMode={developerMode}
+			showStatistics={false}
+			onOpenBilling={
+				profile.data
+					? async () => {
+							if (!profile.data) return;
+							const urlRequest = await fetcher<{ url: string }>(
+								profile.data,
+								"user/billing",
+								{ method: "GET" },
+								auth,
+							);
+							window.open(urlRequest.url, "_blank", "noopener,noreferrer");
+						}
+					: undefined
+			}
+			onSignOut={async () => {
+				await auth?.signoutRedirect();
+			}}
+			onSignIn={async () => {
+				if (!auth) {
+					toast.error("Authentication is not configured.");
+					return;
+				}
+				try {
+					await auth.signinRedirect({ url_state: currentRelativeUrl() });
+				} catch (error) {
+					console.error("[Login] signinRedirect failed:", error);
+					toast.error(`Login failed: ${error}`);
+				}
+			}}
+		/>
 	);
 }
 
@@ -1201,7 +1072,7 @@ function Flows() {
 					<SidebarMenuItem>
 						<CollapsibleTrigger asChild>
 							<MotionSidebarMenuButton
-								variant={pathname.startsWith("/flow") ? "outline" : "default"}
+								isActive={pathname.startsWith("/flow")}
 								tooltip={t("flows", "Flows")}
 								initial="initial"
 								whileHover="hover"
@@ -1224,17 +1095,21 @@ function Flows() {
 							<SidebarMenuSub>
 								{openBoards.data?.map(([appId, boardId, boardName]) => (
 									<SidebarMenuSubItem key={boardId}>
-										<SidebarMenuSubButton asChild>
-											<Link href={`/flow?id=${boardId}&app=${appId}`}>
-												<span
-													className={
-														params.get("id") === boardId
-															? "font-bold text-primary"
-															: ""
-													}
-												>
-													{boardName}
-												</span>
+										<SidebarMenuSubButton
+											asChild
+											isActive={
+												pathname === "/flow" && params.get("id") === boardId
+											}
+										>
+											<Link
+												href={`/flow?id=${boardId}&app=${appId}`}
+												aria-current={
+													pathname === "/flow" && params.get("id") === boardId
+														? "page"
+														: undefined
+												}
+											>
+												<span>{boardName}</span>
 											</Link>
 										</SidebarMenuSubButton>
 									</SidebarMenuSubItem>

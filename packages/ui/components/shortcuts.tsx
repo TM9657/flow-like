@@ -2,6 +2,7 @@
 import {
 	DndContext,
 	type DragEndEvent,
+	KeyboardSensor,
 	PointerSensor,
 	closestCenter,
 	useSensor,
@@ -9,6 +10,7 @@ import {
 } from "@dnd-kit/core";
 import {
 	SortableContext,
+	sortableKeyboardCoordinates,
 	useSortable,
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -90,6 +92,7 @@ interface ShortcutsProps<TBackend, TAppMetadata> {
 
 	// Navigation
 	pathname: string;
+	search?: string;
 	onNavigate: (path: string) => void;
 
 	// Backend integration
@@ -127,6 +130,7 @@ export function Shortcuts<TBackend, TAppMetadata>({
 	shortcuts,
 	currentProfileId,
 	pathname,
+	search = "",
 	onNavigate,
 	backend,
 	appMetadata,
@@ -299,6 +303,9 @@ export function Shortcuts<TBackend, TAppMetadata>({
 				distance: 8,
 			},
 		}),
+		useSensor(KeyboardSensor, {
+			coordinateGetter: sortableKeyboardCoordinates,
+		}),
 	);
 
 	const handleDragEnd = useCallback(
@@ -383,6 +390,8 @@ export function Shortcuts<TBackend, TAppMetadata>({
 									key={shortcut.id}
 									shortcut={shortcut}
 									pathname={pathname}
+									search={search}
+									onNavigate={onNavigate}
 									sidebarState={sidebarState}
 									db={db}
 									toast={toast}
@@ -397,6 +406,7 @@ export function Shortcuts<TBackend, TAppMetadata>({
 					<SidebarMenuItem>
 						<MotionSidebarMenuButton
 							onClick={handleAddCurrentLocation}
+							className="text-sidebar-foreground/50"
 							tooltip={t("addCurrentLocation", "Add Current Location")}
 							initial="initial"
 							whileHover="hover"
@@ -427,6 +437,8 @@ export function Shortcuts<TBackend, TAppMetadata>({
 interface SortableShortcutItemProps {
 	shortcut: IShortcut;
 	pathname: string;
+	search: string;
+	onNavigate: (path: string) => void;
 	sidebarState: "expanded" | "collapsed";
 	db: Dexie & { shortcuts: EntityTable<IShortcut, "id"> };
 	toast: {
@@ -441,6 +453,8 @@ interface SortableShortcutItemProps {
 function SortableShortcutItem({
 	shortcut,
 	pathname,
+	search,
+	onNavigate,
 	sidebarState,
 	db,
 	toast,
@@ -448,10 +462,12 @@ function SortableShortcutItem({
 	getPageType,
 	onShortcutDeleted,
 }: SortableShortcutItemProps) {
+	const { t } = useTranslation("common");
 	const {
 		attributes,
 		listeners,
 		setNodeRef,
+		setActivatorNodeRef,
 		transform,
 		transition,
 		isDragging,
@@ -468,34 +484,48 @@ function SortableShortcutItem({
 	const metadata = shortcut.appId ? getAppMetadata(shortcut.appId) : null;
 	const pageType = getPageType(shortcut.path);
 	const PageIcon = pageType?.icon;
+	const [shortcutPathname, shortcutSearch = ""] = shortcut.path.split("?");
+	const currentParams = new URLSearchParams(search);
+	const shortcutParams = new URLSearchParams(shortcutSearch);
+	const isActive =
+		pathname === shortcutPathname &&
+		Array.from(shortcutParams).every(
+			([key, value]) => currentParams.get(key) === value,
+		);
 
 	return (
 		<SidebarMenuItem ref={setNodeRef} style={style}>
-			<div className="group flex items-center w-full gap-1">
-				{sidebarState === "expanded" && (
-					<div
-						{...attributes}
-						{...listeners}
-						className="cursor-grab active:cursor-grabbing p-1 hover:bg-accent rounded"
-					>
-						<GripVertical className="h-4 w-4 text-muted-foreground" />
-					</div>
-				)}
+			<div className="group/shortcut relative w-full">
 				<MotionSidebarMenuButton
 					asChild
-					className="flex-1 flex-row items-center"
+					className="h-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-1! data-[expanded=true]:pr-20 md:data-[expanded=true]:pr-16"
+					data-expanded={sidebarState === "expanded"}
 					tooltip={shortcut.label}
-					variant={pathname === shortcut.path ? "outline" : "default"}
+					isActive={isActive}
 				>
 					<motion.a
 						href={shortcut.path}
-						className="flex items-center gap-2"
+						aria-current={isActive ? "page" : undefined}
+						onClick={(event) => {
+							if (
+								event.defaultPrevented ||
+								event.button !== 0 ||
+								event.metaKey ||
+								event.ctrlKey ||
+								event.shiftKey ||
+								event.altKey
+							) {
+								return;
+							}
+							event.preventDefault();
+							onNavigate(shortcut.path);
+						}}
 						initial="initial"
 						whileHover="hover"
 					>
 						{metadata ? (
 							<motion.div variants={iconVariants} className="relative shrink-0">
-								<Avatar className="h-6 w-6 -left-1">
+								<Avatar className="size-6 rounded-md border border-sidebar-border/70 group-data-[collapsible=icon]:size-5">
 									<AvatarImage
 										src={metadata.icon ?? "/app-logo.webp"}
 										alt={metadata.name ?? "App"}
@@ -506,39 +536,68 @@ function SortableShortcutItem({
 									</AvatarFallback>
 								</Avatar>
 								{PageIcon && (
-									<div className="absolute -top-0.5 -right-0.5 bg-background rounded-full p-0.5">
+									<div className="absolute -bottom-1 -right-1 rounded border border-sidebar-border/70 bg-sidebar p-0.5 group-data-[collapsible=icon]:hidden">
 										<PageIcon className="h-2.5 w-2.5 text-muted-foreground" />
 									</div>
 								)}
 							</motion.div>
 						) : (
-							<motion.div variants={iconVariants}>
-								<Bookmark className="h-4 w-4" />
+							<motion.div
+								variants={iconVariants}
+								className="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-accent/70 text-sidebar-foreground/60 group-data-[collapsible=icon]:size-5"
+							>
+								{PageIcon ? (
+									<PageIcon className="size-3.5" />
+								) : (
+									<Bookmark className="size-3.5" />
+								)}
 							</motion.div>
 						)}
-						<span>{shortcut.label}</span>
+						<span className="group-data-[collapsible=icon]:hidden">
+							{shortcut.label}
+						</span>
 					</motion.a>
 				</MotionSidebarMenuButton>
 				{sidebarState === "expanded" && (
-					<Button
-						variant="ghost"
-						size="icon"
-						className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-						onClick={async (e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							try {
-								await db.shortcuts.delete(shortcut.id);
-								await onShortcutDeleted?.();
-								toast.success("Shortcut removed");
-							} catch (error) {
-								console.error("Failed to delete shortcut:", error);
-								toast.error("Failed to remove shortcut");
-							}
-						}}
-					>
-						<Trash2 className="h-4 w-4" />
-					</Button>
+					<div className="absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-100 transition-opacity md:opacity-0 md:group-hover/shortcut:opacity-100 md:group-focus-within/shortcut:opacity-100">
+						<Button
+							ref={setActivatorNodeRef}
+							type="button"
+							variant="ghost"
+							size="icon"
+							{...attributes}
+							{...listeners}
+							aria-label={t("reorderShortcut", "Reorder {{label}}", {
+								label: shortcut.label,
+							})}
+							className="size-8 touch-none cursor-grab rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing md:size-6"
+						>
+							<GripVertical className="size-3.5" />
+						</Button>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							aria-label={t("removeShortcut", "Remove {{label}}", {
+								label: shortcut.label,
+							})}
+							className="size-8 rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive md:size-6"
+							onClick={async (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								try {
+									await db.shortcuts.delete(shortcut.id);
+									await onShortcutDeleted?.();
+									toast.success("Shortcut removed");
+								} catch (error) {
+									console.error("Failed to delete shortcut:", error);
+									toast.error("Failed to remove shortcut");
+								}
+							}}
+						>
+							<Trash2 className="size-3.5" />
+						</Button>
+					</div>
 				)}
 			</div>
 		</SidebarMenuItem>

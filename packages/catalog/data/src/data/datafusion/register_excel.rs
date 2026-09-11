@@ -99,7 +99,10 @@ struct ExcelWorkbookMount {
 #[async_trait]
 impl DeferredMount for ExcelWorkbookMount {
     fn describe(&self) -> String {
-        format!("Excel workbook '{}'", self.flow_path.path)
+        format!(
+            "Excel workbook '{}'",
+            flow_like_storage::display_object_path(&self.flow_path.object_path())
+        )
     }
 
     fn dedupe_key(&self) -> Option<String> {

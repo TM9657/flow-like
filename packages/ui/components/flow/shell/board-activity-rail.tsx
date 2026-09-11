@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { cn } from "../../../lib/utils";
@@ -14,6 +15,7 @@ export interface IBoardRailItem {
 	badge?: number;
 	badgeTone?: "default" | "warning" | "danger";
 	shortcut?: string;
+	href?: string;
 	onSelect: () => void;
 }
 
@@ -26,38 +28,46 @@ const BADGE_TONE: Record<string, string> = {
 const RailButton = memo(function RailButton({
 	item,
 }: Readonly<{ item: IBoardRailItem }>) {
+	const className = cn(
+		"relative flex size-9 shrink-0 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors",
+		"hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
+		item.active && "border-primary/15 bg-primary/10 text-primary shadow-xs",
+		item.href && "mb-1",
+	);
+	const content = (
+		<>
+			<span className="[&>svg]:size-4.5">{item.icon}</span>
+			{typeof item.badge === "number" && item.badge > 0 && (
+				<span
+					className={cn(
+						"absolute -right-0.5 -top-0.5 min-w-3.5 rounded-full px-1 text-[9px] font-semibold leading-3.5 tabular-nums ring-2 ring-sidebar",
+						BADGE_TONE[item.badgeTone ?? "default"],
+					)}
+				>
+					{item.badge > 99 ? "99+" : item.badge}
+				</span>
+			)}
+		</>
+	);
+
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<button
-					type="button"
-					aria-label={item.title}
-					aria-pressed={Boolean(item.active)}
-					onClick={item.onSelect}
-					className={cn(
-						"relative flex h-10 w-11 shrink-0 items-center justify-center text-muted-foreground transition-colors",
-						"hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-						item.active && "text-foreground",
-					)}
-				>
-					<span
-						className={cn(
-							"absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-primary opacity-0 transition-opacity",
-							item.active && "opacity-100",
-						)}
-					/>
-					<span className="[&>svg]:size-4.5">{item.icon}</span>
-					{typeof item.badge === "number" && item.badge > 0 && (
-						<span
-							className={cn(
-								"absolute right-1 top-1 min-w-3.5 rounded-full px-1 text-[9px] font-semibold leading-3.5 tabular-nums",
-								BADGE_TONE[item.badgeTone ?? "default"],
-							)}
-						>
-							{item.badge > 99 ? "99+" : item.badge}
-						</span>
-					)}
-				</button>
+				{item.href ? (
+					<Link href={item.href} aria-label={item.title} className={className}>
+						{content}
+					</Link>
+				) : (
+					<button
+						type="button"
+						aria-label={item.title}
+						aria-pressed={Boolean(item.active)}
+						onClick={item.onSelect}
+						className={className}
+					>
+						{content}
+					</button>
+				)}
 			</TooltipTrigger>
 			<TooltipContent side="right" className="flex items-center gap-2">
 				{item.title}
@@ -93,11 +103,11 @@ export const BoardActivityRail = memo(function BoardActivityRail({
 	return (
 		<nav
 			aria-label="Board surfaces"
-			className="flex w-11 shrink-0 flex-col items-center border-r bg-muted/20 py-1"
+			className="flex w-11 shrink-0 flex-col items-center gap-1 border-r border-sidebar-border bg-sidebar py-2"
 		>
 			{/* Only the view list scrolls. A short viewport must not be able to push
 			    the account or the pinned commands off the bottom of the window. */}
-			<div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto no-scrollbar">
+			<div className="no-scrollbar flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto py-0.5">
 				{top.map((item) => (
 					<RailButton key={item.id} item={item} />
 				))}
@@ -106,7 +116,7 @@ export const BoardActivityRail = memo(function BoardActivityRail({
 				<RailButton key={item.id} item={item} />
 			))}
 			{footer && (
-				<div className="mt-1 flex w-full shrink-0 flex-col items-center border-t pt-1">
+				<div className="mt-1 flex w-full shrink-0 flex-col items-center border-t border-sidebar-border pt-2">
 					{footer}
 				</div>
 			)}

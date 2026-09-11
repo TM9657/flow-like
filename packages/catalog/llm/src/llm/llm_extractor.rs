@@ -93,7 +93,7 @@ enum ExtractionMode {
 }
 
 #[cfg(feature = "execute")]
-struct PreparedSchema {
+pub(super) struct PreparedSchema {
     tool_parameters: Value,
     output_schema: Value,
     mode: ExtractionMode,
@@ -133,7 +133,7 @@ fn looks_like_schema(value: &Value) -> bool {
 }
 
 #[cfg(feature = "execute")]
-fn prepare_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
+pub(super) fn prepare_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(anyhow!("Schema input cannot be empty"));
@@ -176,6 +176,163 @@ fn prepare_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
         mode,
         was_inferred,
     })
+}
+
+#[cfg(feature = "execute")]
+pub(super) fn prepare_reference_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("Reference struct schema cannot be empty"));
+    }
+
+    let schema = json::from_str::<Value>(trimmed)
+        .map_err(|e| anyhow!("Reference struct schema must be valid JSON: {e}"))?;
+
+    if schema.get("type").and_then(Value::as_str) != Some("object")
+        || !looks_like_schema(&schema)
+        || !jsonschema::meta::is_valid(&schema)
+    {
+        return Err(anyhow!(
+            "Reference struct must carry a valid object JSON Schema"
+        ));
+    }
+
+    Ok(PreparedSchema {
+        tool_parameters: schema.clone(),
+        output_schema: schema,
+        mode: ExtractionMode::Direct,
+        was_inferred: false,
+    })
+}
+
+#[cfg(feature = "execute")]
+fn validate_extracted_value(
+    prepared_schema: &PreparedSchema,
+    args: Value,
+) -> flow_like_types::Result<Value> {
+    let extracted = match prepared_schema.mode {
+        ExtractionMode::Direct => args,
+        ExtractionMode::Wrapped => args
+            .get("value")
+            .cloned()
+            .ok_or_else(|| anyhow!("Tool call missing 'value' field in wrapped mode"))?,
+    };
+
+    jsonschema::validate(&prepared_schema.output_schema, &extracted)
+        .map_err(|error| anyhow!("Extracted data does not match the schema: {error}"))?;
+    Ok(extracted)
+}
+
+#[cfg(feature = "execute")]
+pub(super) async fn run_text_extraction(
+    context: &mut ExecutionContext,
+    prepared_schema: PreparedSchema,
+) -> flow_like_types::Result<()> {
+    let model_bit = context.evaluate_pin::<Bit>("model").await?;
+    let text: String = context.evaluate_pin::<String>("text").await?;
+    let hint: String = context.evaluate_pin("hint").await.unwrap_or_default();
+
+    context.log_message(
+        &format!("Using extraction mode: {:?}", prepared_schema.mode),
+        LogLevel::Debug,
+    );
+
+    let llm_input = if hint.trim().is_empty() {
+        format!(
+            "Extract structured data from the following text according to the schema.\n\nText:\n{}",
+            text
+        )
+    } else {
+        format!(
+            "Extract structured data from the following text according to the schema.\n\nExtraction hint: {}\n\nText:\n{}",
+            hint, text
+        )
+    };
+
+    let preamble = "You are a knowledge extraction assistant. Extract data by calling the 'submit' tool with structured data matching the provided schema.";
+
+    let agent_builder = model_bit
+        .agent(context, &None)
+        .await?
+        .preamble(preamble)
+        .tool(DynamicSubmitTool {
+            parameters: prepared_schema.tool_parameters.clone(),
+            output_schema: prepared_schema.output_schema.clone(),
+        })
+        .tool_choice(ToolChoice::Required);
+
+    let agent = agent_builder.build();
+
+    let start = Instant::now();
+    let response = agent
+        .completion(llm_input, Vec::<rig::completion::Message>::new())
+        .await
+        .map_err(|e| anyhow!("Model completion failed: {}", e))?
+        .send()
+        .await
+        .map_err(|e| anyhow!("Failed to send completion request: {}", e))?;
+    let duration_ms = start.elapsed().as_millis() as u64;
+
+    let stats = LLMUsageStats {
+        usage: Usage::from_rig(response.usage),
+        model: model_bit.meta.get("en").map(|m| m.name.clone()),
+        duration_ms: Some(duration_ms),
+        iterations: None,
+        calls: vec![],
+    };
+
+    let mut last_args: Option<Value> = None;
+    for content in response.choice {
+        if let AssistantContent::ToolCall(ToolCall {
+            function: ToolFunction {
+                name, arguments, ..
+            },
+            ..
+        }) = content
+            && name == "submit"
+        {
+            last_args = Some(arguments);
+        }
+    }
+
+    let args = last_args.ok_or_else(|| {
+        anyhow!(
+            "Model did not return a 'submit' tool call. Ensure the model supports function calling."
+        )
+    })?;
+
+    let extracted = validate_extracted_value(&prepared_schema, args)?;
+
+    context.log_message("Successfully extracted structured data", LogLevel::Debug);
+
+    context.set_pin_value("response", extracted).await?;
+    context.set_pin_value("stats", json::json!(stats)).await?;
+    context.activate_exec_pin("exec_out").await?;
+    Ok(())
+}
+
+#[cfg(all(test, feature = "execute"))]
+mod extraction_tests {
+    use super::*;
+
+    #[test]
+    fn reference_extraction_validates_returned_arguments() {
+        let prepared = prepare_reference_schema(
+            r#"{"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}"#,
+        )
+        .unwrap();
+
+        assert!(validate_extracted_value(&prepared, json::json!({"name": "Ada"})).is_ok());
+        assert!(validate_extracted_value(&prepared, json::json!({"name": 42})).is_err());
+    }
+
+    #[test]
+    fn wrapped_extraction_validates_the_unwrapped_value() {
+        let prepared = prepare_schema(r#"[1, 2]"#).unwrap();
+
+        assert!(validate_extracted_value(&prepared, json::json!({"value": [3, 4]})).is_ok());
+        assert!(validate_extracted_value(&prepared, json::json!({"value": ["wrong"]})).is_err());
+    }
 }
 
 #[async_trait]
@@ -271,94 +428,9 @@ impl NodeLogic for LLMExtractNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
-        let model_bit = context.evaluate_pin::<Bit>("model").await?;
         let schema_str: String = context.evaluate_pin("schema").await?;
-        let text: String = context.evaluate_pin::<String>("text").await?;
-        let hint: String = context.evaluate_pin("hint").await.unwrap_or_default();
-
         let prepared_schema = prepare_schema(&schema_str)?;
-
-        context.log_message(
-            &format!("Using extraction mode: {:?}", prepared_schema.mode),
-            LogLevel::Debug,
-        );
-
-        let llm_input = if hint.trim().is_empty() {
-            format!(
-                "Extract structured data from the following text according to the schema.\n\nText:\n{}",
-                text
-            )
-        } else {
-            format!(
-                "Extract structured data from the following text according to the schema.\n\nExtraction hint: {}\n\nText:\n{}",
-                hint, text
-            )
-        };
-
-        let preamble = "You are a knowledge extraction assistant. Extract data by calling the 'submit' tool with structured data matching the provided schema.";
-
-        let agent_builder = model_bit
-            .agent(context, &None)
-            .await?
-            .preamble(preamble)
-            .tool(DynamicSubmitTool {
-                parameters: prepared_schema.tool_parameters,
-                output_schema: prepared_schema.output_schema.clone(),
-            })
-            .tool_choice(ToolChoice::Required);
-
-        let agent = agent_builder.build();
-
-        let start = Instant::now();
-        let response = agent
-            .completion(llm_input, Vec::<rig::completion::Message>::new())
-            .await
-            .map_err(|e| anyhow!("Model completion failed: {}", e))?
-            .send()
-            .await
-            .map_err(|e| anyhow!("Failed to send completion request: {}", e))?;
-        let duration_ms = start.elapsed().as_millis() as u64;
-
-        let stats = LLMUsageStats {
-            usage: Usage::from_rig(response.usage),
-            model: model_bit.meta.get("en").map(|m| m.name.clone()),
-            duration_ms: Some(duration_ms),
-            iterations: None,
-            calls: vec![],
-        };
-
-        let mut last_args: Option<Value> = None;
-        for content in response.choice {
-            if let AssistantContent::ToolCall(ToolCall {
-                function: ToolFunction {
-                    name, arguments, ..
-                },
-                ..
-            }) = content
-                && name == "submit"
-            {
-                last_args = Some(arguments);
-            }
-        }
-
-        let args = last_args.ok_or_else(|| {
-            anyhow!("Model did not return a 'submit' tool call. Ensure the model supports function calling.")
-        })?;
-
-        let extracted = match prepared_schema.mode {
-            ExtractionMode::Direct => args,
-            ExtractionMode::Wrapped => args
-                .get("value")
-                .cloned()
-                .ok_or_else(|| anyhow!("Tool call missing 'value' field in wrapped mode"))?,
-        };
-
-        context.log_message("Successfully extracted structured data", LogLevel::Debug);
-
-        context.set_pin_value("response", extracted).await?;
-        context.set_pin_value("stats", json::json!(stats)).await?;
-        context.activate_exec_pin("exec_out").await?;
-        Ok(())
+        run_text_extraction(context, prepared_schema).await
     }
 
     #[cfg(not(feature = "execute"))]

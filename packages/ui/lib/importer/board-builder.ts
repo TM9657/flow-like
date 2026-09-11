@@ -180,6 +180,7 @@ export function createPin(opts: {
 					...opts.options,
 					enforce_generic_value_type: null,
 					enforce_schema: null,
+					optional: null,
 					range: null,
 					sensitive: null,
 					step: null,

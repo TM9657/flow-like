@@ -1,3 +1,4 @@
+use crate::object_path::join_object_path;
 use anyhow::{Result, anyhow, bail};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use flow_like_types_contracts::Cacheable;
@@ -13,7 +14,7 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
-use urlencoding::{decode, encode};
+use urlencoding::encode;
 mod helper;
 pub mod local_store;
 pub mod read_only_store;
@@ -254,16 +255,7 @@ impl FlowLikeStore {
     pub async fn construct_upload(&self, app_id: &str, prefix: &str) -> Result<Path> {
         let base_path = Path::from("apps").join(app_id).join("upload");
 
-        let final_path = prefix
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .fold(base_path, |acc, seg| {
-                // Decode URL-encoded segments (e.g., %CC%88 -> combining umlaut)
-                let decoded = decode(seg).unwrap_or(std::borrow::Cow::Borrowed(seg));
-                acc.join(decoded.as_ref())
-            });
-
-        Ok(final_path)
+        Ok(join_object_path(&base_path, prefix))
     }
 
     pub async fn construct_user_upload(
@@ -274,15 +266,7 @@ impl FlowLikeStore {
     ) -> Result<Path> {
         let base_path = Path::from("users").join(sub).join("apps").join(app_id);
 
-        let final_path = prefix
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .fold(base_path, |acc, seg| {
-                let decoded = decode(seg).unwrap_or(std::borrow::Cow::Borrowed(seg));
-                acc.join(decoded.as_ref())
-            });
-
-        Ok(final_path)
+        Ok(join_object_path(&base_path, prefix))
     }
 
     pub async fn sign(&self, method: &str, path: &Path, expires_after: Duration) -> Result<Url> {
@@ -320,8 +304,7 @@ impl FlowLikeStore {
             FlowLikeStore::Azure(store) => store.signed_url(method, path, expires_after).await?,
             FlowLikeStore::Memory(store) => {
                 let mime = mime_guess::from_path(path.to_string()).first_or_octet_stream();
-                let path = Path::from(path.to_string());
-                let data = store.get(&path).await?;
+                let data = store.get(path).await?;
                 let data = data.bytes().await?;
                 let base64 = STANDARD.encode(data);
                 let data_url = format!("data:{};base64,{}", mime, base64);

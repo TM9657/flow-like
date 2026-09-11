@@ -516,6 +516,14 @@ fn assign_sanitized_argument_names(names: Vec<(u16, String)>) -> HashMap<String,
     sanitized_names
 }
 
+#[cfg(feature = "execute")]
+fn optional_pin_default(pin: &Pin, refs: &HashMap<String, String>) -> Option<Value> {
+    if !pin.is_optional() {
+        return None;
+    }
+    Some(pin.effective_default(refs)).filter(|value| !value.is_null())
+}
+
 /// Generate OpenAI function call schema from a referenced function node.
 /// Returns a Tool definition with function name, description, and parameter schema.
 #[cfg(feature = "execute")]
@@ -654,6 +662,7 @@ pub async fn generate_tool_from_function(
             HistoryJSONSchemaDefine {
                 schema_type: Some(prop_type),
                 description: prop_desc,
+                default: None,
                 enum_values: prop_enum,
                 properties: nested_props,
                 required: nested_required,
@@ -679,6 +688,7 @@ pub async fn generate_tool_from_function(
             } else {
                 Some(sanitize_tool_description(description))
             },
+            default: None,
             enum_values: None,
             properties: Some(nested_props),
             required: schema_value
@@ -706,6 +716,7 @@ pub async fn generate_tool_from_function(
                 } else {
                     Some(description.to_string())
                 },
+                default: None,
                 enum_values: None,
                 properties: None,
                 required: None,
@@ -718,6 +729,7 @@ pub async fn generate_tool_from_function(
                 } else {
                     Some(description.to_string())
                 },
+                default: None,
                 enum_values: None,
                 properties: None,
                 required: None,
@@ -728,8 +740,17 @@ pub async fn generate_tool_from_function(
     }
 
     /// Convert a Pin to HistoryJSONSchemaDefine, handling ValueType (Array/HashSet/HashMap),
-    /// pin schemas for Struct/Generic, and enum values from pin options.
+    /// pin schemas for Struct/Generic, enum values from pin options, and the default of optional pins.
     fn pin_to_schema_define(pin: &Pin, refs: &HashMap<String, String>) -> HistoryJSONSchemaDefine {
+        let mut define = pin_type_schema_define(pin, refs);
+        define.default = optional_pin_default(pin, refs);
+        define
+    }
+
+    fn pin_type_schema_define(
+        pin: &Pin,
+        refs: &HashMap<String, String>,
+    ) -> HistoryJSONSchemaDefine {
         let pin_description = sanitize_tool_description(&resolve_ref(&pin.description, refs));
 
         // Map base VariableType to schema type
@@ -789,6 +810,7 @@ pub async fn generate_tool_from_function(
             } else {
                 Some(pin_description.clone())
             },
+            default: None,
             enum_values,
             properties: base_properties,
             required: None,
@@ -813,6 +835,7 @@ pub async fn generate_tool_from_function(
 
     // Collect all non-execution output pins to build parameter schema
     let mut properties: HashMap<String, Box<HistoryJSONSchemaDefine>> = HashMap::new();
+    let mut required: Vec<(u16, String)> = Vec::new();
     let mut has_data_pins = false;
     let mut payload_pin: Option<&Pin> = None;
 
@@ -833,6 +856,9 @@ pub async fn generate_tool_from_function(
             .get(&pin.name)
             .cloned()
             .unwrap_or_else(|| sanitize_tool_identifier(&pin.name));
+        if !pin.is_optional() {
+            required.push((pin.index, argument_name.clone()));
+        }
         properties.insert(argument_name, Box::new(pin_to_schema_define(pin, refs)));
     }
 
@@ -842,8 +868,14 @@ pub async fn generate_tool_from_function(
             .get(&payload.name)
             .cloned()
             .unwrap_or_else(|| sanitize_tool_identifier(&payload.name));
+        if !payload.is_optional() {
+            required.push((payload.index, payload_name.clone()));
+        }
         properties.insert(payload_name, Box::new(pin_to_schema_define(payload, refs)));
     }
+
+    required.sort();
+    let required: Vec<String> = required.into_iter().map(|(_, name)| name).collect();
 
     let parameters = HistoryFunctionParameters {
         schema_type: HistoryJSONSchemaType::Object,
@@ -852,7 +884,11 @@ pub async fn generate_tool_from_function(
         } else {
             Some(properties)
         },
-        required: None,
+        required: if required.is_empty() {
+            None
+        } else {
+            Some(required)
+        },
     };
 
     let function = HistoryFunction {
@@ -2959,4 +2995,117 @@ async fn embed_memory_document(
     }
 
     Ok(embeddings[0].clone())
+}
+
+#[cfg(all(test, feature = "execute"))]
+mod tests {
+    use super::*;
+    use ahash::AHashMap;
+    use flow_like::flow::{
+        execution::internal_pin::InternalPin,
+        node::{Node, NodeLogic},
+        pin::PinOptions,
+    };
+
+    struct NoopLogic;
+
+    #[async_trait]
+    impl NodeLogic for NoopLogic {
+        fn get_node(&self) -> Node {
+            Node::new("test_noop", "Test Noop", "No-op test node", "Tests")
+        }
+
+        async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn internal_node(node: Node) -> Arc<InternalNode> {
+        let mut pins = AHashMap::new();
+        let mut name_cache: AHashMap<String, Vec<Arc<InternalPin>>> = AHashMap::new();
+        for pin in node.pins.values() {
+            let internal_pin = Arc::new(InternalPin::new(pin, false));
+            name_cache
+                .entry(pin.name.clone())
+                .or_default()
+                .push(internal_pin.clone());
+            pins.insert(pin.id.clone(), internal_pin);
+        }
+        Arc::new(InternalNode::new(
+            node,
+            pins,
+            Arc::new(NoopLogic),
+            name_cache,
+        ))
+    }
+
+    fn optional() -> PinOptions {
+        let mut options = PinOptions::new();
+        options.set_optional(true);
+        options
+    }
+
+    #[tokio::test]
+    async fn optional_pins_are_not_required_and_expose_their_default() {
+        let mut node = Node::new(
+            "events_generic",
+            "Lookup Order",
+            "Looks up an order",
+            "Events",
+        );
+        node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+        node.add_output_pin(
+            "order_id",
+            "Order Id",
+            "Order identifier",
+            VariableType::String,
+        );
+        node.add_output_pin("limit", "Limit", "Maximum rows", VariableType::Integer)
+            .set_default_value(Some(json::json!(25)))
+            .set_options(optional());
+        node.add_output_pin("note", "Note", "", VariableType::String)
+            .set_options(optional());
+        node.add_output_pin("verbose", "Verbose", "", VariableType::Boolean)
+            .set_default_value(Some(json::json!(true)));
+        node.add_output_pin("payload", "Payload", "", VariableType::Struct);
+
+        let tool = generate_tool_from_function(&internal_node(node), &HashMap::new())
+            .await
+            .unwrap();
+        let parameters = tool.function.parameters;
+
+        assert_eq!(
+            parameters.required,
+            Some(vec!["order_id".to_string(), "verbose".to_string()])
+        );
+        let properties = parameters.properties.unwrap();
+        assert!(!properties.contains_key("payload"));
+        assert_eq!(properties["limit"].default, Some(json::json!(25)));
+        assert_eq!(properties["note"].default, Some(json::json!("")));
+        assert_eq!(properties["order_id"].default, None);
+        assert_eq!(properties["verbose"].default, None);
+    }
+
+    #[tokio::test]
+    async fn payload_only_tool_requires_payload_unless_optional() {
+        let mut node = Node::new("events_generic", "Ingest", "Ingests a payload", "Events");
+        node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+        node.add_output_pin("payload", "Payload", "", VariableType::Struct);
+        let tool = generate_tool_from_function(&internal_node(node), &HashMap::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            tool.function.parameters.required,
+            Some(vec!["payload".to_string()])
+        );
+
+        let mut node = Node::new("events_generic", "Ingest", "Ingests a payload", "Events");
+        node.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+        node.add_output_pin("payload", "Payload", "", VariableType::Struct)
+            .set_options(optional());
+        let tool = generate_tool_from_function(&internal_node(node), &HashMap::new())
+            .await
+            .unwrap();
+        assert_eq!(tool.function.parameters.required, None);
+    }
 }

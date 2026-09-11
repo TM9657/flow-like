@@ -6,6 +6,7 @@ use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     Path,
     files::store::{FlowLikeStore, local_store::LocalObjectStore},
+    normalize_object_path,
     object_store::{GetResult, PutPayload},
 };
 use flow_like_types::{
@@ -32,10 +33,15 @@ pub struct FlowPath {
 impl FlowPath {
     pub fn new(path: String, store_ref: String, cache_store_ref: Option<String>) -> Self {
         Self {
-            path,
+            path: normalize_object_path(&path).as_ref().to_string(),
             store_ref,
             cache_store_ref,
         }
+    }
+
+    /// The canonical object key, whether `path` was stored raw or encoded.
+    pub fn object_path(&self) -> Path {
+        normalize_object_path(&self.path)
     }
 
     pub async fn get(
@@ -99,7 +105,7 @@ impl FlowPath {
 
         let result = store
             .as_generic()
-            .put(&Path::from(self.path.clone()), payload.clone())
+            .put(&self.object_path(), payload.clone())
             .await?;
 
         if bypass_cache {
@@ -162,9 +168,8 @@ impl FlowPath {
     ) -> flow_like_types::Result<FlowPathRuntime> {
         let store = self.to_store(context).await?;
         let cache = self.to_cache_layer(context).await?;
-        let path = Path::from(self.path.clone());
         Ok(FlowPathRuntime {
-            path,
+            path: self.object_path(),
             store: Arc::new(store),
             hash: self.store_ref.clone(),
             cache_store: cache,
@@ -178,7 +183,7 @@ impl FlowPath {
     }
 
     fn get_etag_path(&self, base_path: &str) -> Path {
-        Path::from(format!("{}.s3flowEtag", base_path))
+        normalize_object_path(&format!("{base_path}.s3flowEtag"))
     }
 
     pub async fn set_extension(
@@ -190,10 +195,10 @@ impl FlowPath {
 
         let runtime = self.to_runtime(context).await?;
         let base_path = self.get_base_path_without_extension(&runtime);
-        let new_path = format!("{}.{}", base_path, extension);
+        let new_path = format!("{base_path}.{extension}");
 
         let mut updated_runtime = runtime;
-        updated_runtime.path = Path::from(new_path);
+        updated_runtime.path = normalize_object_path(&new_path);
         let path = updated_runtime.serialize().await;
         Ok(path)
     }
@@ -209,10 +214,9 @@ impl FlowPath {
             None => return Err(anyhow!("No cache layer available for writing")),
         };
 
-        let current_path = Path::from(self.path.clone());
         cache_layer
             .as_generic()
-            .put(&current_path, payload.clone())
+            .put(&self.object_path(), payload.clone())
             .await?;
 
         if let Some(etag) = etag {
@@ -252,15 +256,13 @@ impl FlowPath {
         };
 
         let store = self.to_store(context).await?;
-        let current_path = Path::from(runtime.path.as_ref());
-        let meta = store.as_generic().head(&current_path).await?;
+        let meta = store.as_generic().head(&runtime.path).await?;
 
         Ok(meta.e_tag != Some(cached_etag))
     }
 
     async fn get_file(&self, store: &FlowLikeStore) -> flow_like_types::Result<Option<GetResult>> {
-        let current_path = Path::from(self.path.as_ref());
-        match store.as_generic().get(&current_path).await {
+        match store.as_generic().get(&self.object_path()).await {
             Ok(data) => Ok(Some(data)),
             Err(_) => Ok(None),
         }
@@ -304,8 +306,7 @@ impl FlowPath {
             "Cache is clean for path: {}, retrieving from cache",
             self.path
         );
-        let current_path = Path::from(self.path.as_ref());
-        match cache_layer.as_generic().get(&current_path).await {
+        match cache_layer.as_generic().get(&self.object_path()).await {
             Ok(data) => Ok((Some(data), false)),
             Err(_) => {
                 println!(
@@ -488,7 +489,18 @@ pub struct FlowPathStore;
 
 #[cfg(test)]
 mod tests {
-    use super::path_without_final_extension;
+    use super::*;
+    use flow_like_storage::object_store::memory::InMemory;
+
+    const RAW_NAME: &str = "Übersicht (2)#1.pdf";
+
+    fn flow_path(path: &str) -> FlowPath {
+        FlowPath {
+            path: path.to_string(),
+            store_ref: "store".to_string(),
+            cache_store_ref: None,
+        }
+    }
 
     #[test]
     fn only_the_final_extension_is_removed() {
@@ -499,6 +511,68 @@ mod tests {
         assert_eq!(
             path_without_final_extension("models/face", ""),
             "models/face"
+        );
+    }
+
+    #[test]
+    fn object_path_resolves_raw_and_encoded_names_to_the_same_key() {
+        let raw = format!("upload/{RAW_NAME}");
+        let once = Path::from("upload").join(RAW_NAME);
+        assert_ne!(once.as_ref(), raw);
+
+        assert_eq!(flow_path(&raw).object_path(), once);
+        assert_eq!(flow_path(once.as_ref()).object_path(), once);
+        assert_eq!(
+            flow_path(once.as_ref()).object_path().as_ref(),
+            once.as_ref()
+        );
+    }
+
+    #[test]
+    fn new_stores_the_encoded_key() {
+        let once = Path::from("upload").join(RAW_NAME);
+        let raw = format!("upload/{RAW_NAME}");
+
+        let from_raw = FlowPath::new(raw, "store".to_string(), None);
+        let from_encoded = FlowPath::new(once.as_ref().to_string(), "store".to_string(), None);
+
+        assert_eq!(from_raw.path, once.as_ref());
+        assert_eq!(from_encoded.path, once.as_ref());
+        assert_eq!(
+            flow_like_storage::display_file_name(&from_raw.object_path()).as_deref(),
+            Some(RAW_NAME)
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_serialize_round_trips_the_key() {
+        let once = Path::from("upload").join(RAW_NAME);
+        let runtime = FlowPathRuntime {
+            path: once.clone(),
+            store: Arc::new(FlowLikeStore::Memory(Arc::new(InMemory::new()))),
+            cache_store: None,
+            hash: "store".to_string(),
+            cache_hash: None,
+        };
+
+        let serialized = runtime.serialize().await;
+        assert_eq!(serialized.path, once.as_ref());
+        assert_eq!(serialized.object_path(), once);
+        assert_eq!(
+            FlowPath::new(serialized.path.clone(), serialized.store_ref, None).path,
+            serialized.path
+        );
+    }
+
+    #[test]
+    fn etag_path_is_built_from_the_encoded_base_without_re_encoding() {
+        let once = Path::from("upload").join(RAW_NAME);
+        let base = path_without_final_extension(once.as_ref(), "pdf");
+        let etag = flow_path(once.as_ref()).get_etag_path(&base);
+
+        assert_eq!(
+            etag,
+            Path::from("upload").join("Übersicht (2)#1.s3flowEtag")
         );
     }
 }

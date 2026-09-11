@@ -496,6 +496,7 @@ fn compile_pin_options(options: &PinOptions) -> CompiledPinOptions {
         step: options.step,
         enforce_schema: options.enforce_schema,
         enforce_generic_value_type: options.enforce_generic_value_type,
+        optional: options.optional,
     }
 }
 

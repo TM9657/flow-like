@@ -43,8 +43,29 @@ export function normalizeStorageLocation(
 	return resolveAssetPath(prefix, location);
 }
 
+/**
+ * Listings report the percent-encoded object key (`%C3%9Cbersicht%231.pdf`), which
+ * stays the addressing form. Decoding is for what a person reads or a file name on
+ * disk only; a malformed escape is shown as it is rather than throwing.
+ */
+export function decodeStorageSegment(segment: string): string {
+	try {
+		return decodeURIComponent(segment);
+	} catch {
+		return segment;
+	}
+}
+
+export function storageDisplayName(location: string): string {
+	return decodeStorageSegment(basename(location));
+}
+
+export function storageDisplayPath(location: string): string {
+	return location.split("/").map(decodeStorageSegment).join("/");
+}
+
 export function storageItemName(item: Pick<IStorageItem, "location">): string {
-	return basename(item.location);
+	return storageDisplayName(item.location);
 }
 
 export function childPrefix(parent: string, name: string): string {
@@ -93,7 +114,7 @@ export function storageTreeEntry(
 	const path = normalizeStorageLocation(item.location, prefix);
 	return {
 		item,
-		name: basename(path),
+		name: storageDisplayName(path),
 		path,
 		isFolder: isStorageFolder(item),
 		nodeId: storageNodeId(scope, path),

@@ -343,10 +343,10 @@ fn renders_return_statement() {
             name: "writeReport".to_string(),
             node_type: "events_generic".to_string(),
             event_name: None,
-            params: vec![Param {
-                name: "title".to_string(),
-                ty: TypeRef::new("string", Container::Normal),
-            }],
+            params: vec![Param::new(
+                "title",
+                TypeRef::new("string", Container::Normal),
+            )],
             anchor: None,
             body: Block {
                 stmts: vec![Stmt::Return {
@@ -380,14 +380,8 @@ fn renders_event_with_multiple_params() {
             node_type: "events_generic".to_string(),
             event_name: None,
             params: vec![
-                Param {
-                    name: "date".to_string(),
-                    ty: TypeRef::new("Date", Container::Normal),
-                },
-                Param {
-                    name: "items".to_string(),
-                    ty: TypeRef::new("Struct", Container::Array),
-                },
+                Param::new("date", TypeRef::new("Date", Container::Normal)),
+                Param::new("items", TypeRef::new("Struct", Container::Array)),
             ],
             anchor: None,
             body: Block { stmts: vec![] },
@@ -398,6 +392,54 @@ fn renders_event_with_multiple_params() {
     let text = render(&ast, &RenderOptions::default());
     let expected = "\
 now(date: Date, items: Struct[]) {
+}
+";
+    assert_eq!(text, expected);
+}
+
+#[test]
+fn renders_optional_event_params() {
+    let optional = |name: &str, ty: TypeRef, default: Option<Literal>| Param {
+        optional: true,
+        default,
+        ..Param::new(name, ty)
+    };
+    let string = || TypeRef::new("string", Container::Normal);
+    let int = || TypeRef::new("int", Container::Normal);
+    let ast = BoardAst {
+        board_id: "t".to_string(),
+        uses: vec![],
+        interfaces: vec![],
+        variables: vec![],
+        functions: vec![],
+        events: vec![EventBlock {
+            name: "eventsGeneric".to_string(),
+            node_type: "events_generic".to_string(),
+            event_name: Some("addTargetAction".to_string()),
+            params: vec![
+                Param::new("actionId", string()),
+                optional("label", string(), Some(Literal::String("x".to_string()))),
+                optional("count", int(), None),
+                optional("skipped", int(), Some(Literal::Null)),
+                optional(
+                    "tags",
+                    TypeRef::new("string", Container::Array),
+                    Some(Literal::Json("[]".to_string())),
+                ),
+                Param {
+                    default: Some(Literal::Int(1)),
+                    ..Param::new("required", int())
+                },
+            ],
+            anchor: None,
+            body: Block { stmts: vec![] },
+        }],
+        detached: vec![],
+        modules: vec![],
+    };
+    let text = render(&ast, &RenderOptions::default());
+    let expected = "\
+eventsGeneric addTargetAction(actionId: string, label?: string = \"x\", count?: int, skipped?: int, tags?: string[] = [], required: int) {
 }
 ";
     assert_eq!(text, expected);

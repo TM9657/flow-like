@@ -690,7 +690,7 @@ fn model_materialization_lock(
         OnceLock::new();
 
     let mut hasher = Sha256::new();
-    let normalized_path = flow_like_storage::Path::from(cache_path.path.clone());
+    let normalized_path = cache_path.object_path();
     hash_field(&mut hasher, cache_path.store_ref.as_bytes());
     hash_field(&mut hasher, normalized_path.as_ref().as_bytes());
     let key = hex::encode(hasher.finalize());
@@ -714,7 +714,7 @@ fn model_cache_write_lock(
     static LOCKS: OnceLock<Mutex<HashMap<String, Weak<flow_like_types::tokio::sync::Mutex<()>>>>> =
         OnceLock::new();
 
-    let normalized_path = flow_like_storage::Path::from(cache_path.path.clone());
+    let normalized_path = cache_path.object_path();
     let parent = normalized_path
         .as_ref()
         .rsplit_once('/')
@@ -952,12 +952,7 @@ async fn enforce_model_cache_quota(
         ));
     }
 
-    let destination = runtime.path.as_ref();
-    let parent = destination
-        .rsplit_once('/')
-        .map(|(parent, _)| parent)
-        .unwrap_or("");
-    let prefix = flow_like_storage::Path::from(format!("{parent}/"));
+    let (parent, prefix) = model_cache_directory(&runtime.path);
     let primary_store = runtime.store.as_generic();
     let mut listing = primary_store.list(Some(&prefix));
     let mut cached_models = Vec::new();
@@ -1006,6 +1001,16 @@ async fn enforce_model_cache_quota(
         ));
     }
     Ok(())
+}
+
+#[cfg(feature = "execute")]
+fn model_cache_directory(path: &flow_like_storage::Path) -> (&str, flow_like_storage::Path) {
+    let parent = path
+        .as_ref()
+        .rsplit_once('/')
+        .map(|(parent, _)| parent)
+        .unwrap_or("");
+    (parent, flow_like_storage::normalize_object_path(parent))
 }
 
 #[cfg(feature = "execute")]
@@ -1198,7 +1203,7 @@ fn model_cache_etag_path(path: &flow_like_storage::Path) -> flow_like_storage::P
     } else {
         raw_path.strip_suffix(&suffix).unwrap_or(raw_path)
     };
-    flow_like_storage::Path::from(format!("{base_path}.s3flowEtag"))
+    flow_like_storage::normalize_object_path(&format!("{base_path}.s3flowEtag"))
 }
 
 #[cfg(feature = "execute")]
@@ -1277,9 +1282,7 @@ async fn build_face_analyzer(
             .len(),
     ])?;
     let protected_cache_paths: [flow_like_storage::Path; 3] = std::array::from_fn(|index| {
-        flow_like_storage::Path::from(
-            child_flow_path(cache_dir, &specs[index].cache_file_name()).path,
-        )
+        child_flow_path(cache_dir, &specs[index].cache_file_name()).object_path()
     });
 
     let build_detector_path = detector_path.clone();
@@ -2369,6 +2372,27 @@ mod tests {
             &model_cache_write_lock(&canonical).unwrap(),
             &model_cache_write_lock(&aliased).unwrap(),
         ));
+
+        let raw = FlowPath {
+            path: "Übersicht (2)#1/face.onnx".to_string(),
+            store_ref: "store".to_string(),
+            cache_store_ref: None,
+        };
+        let listed = FlowPath::new(raw.path.clone(), "store".to_string(), None);
+        assert_eq!(listed.path, "%C3%9Cbersicht (2)%231/face.onnx");
+        assert_eq!(raw.object_path(), listed.object_path());
+        assert!(Arc::ptr_eq(
+            &model_materialization_lock(&raw).unwrap(),
+            &model_materialization_lock(&listed).unwrap(),
+        ));
+        assert!(Arc::ptr_eq(
+            &model_cache_write_lock(&raw).unwrap(),
+            &model_cache_write_lock(&listed).unwrap(),
+        ));
+        assert_eq!(
+            child_flow_path(&raw, "model.onnx").object_path(),
+            child_flow_path(&listed, "model.onnx").object_path()
+        );
     }
 
     #[cfg(feature = "execute")]
@@ -2403,6 +2427,46 @@ mod tests {
         assert_eq!(
             model_cache_etag_path(&path),
             flow_like_storage::Path::from("models.onnx/face-id-detector-a.s3flowEtag")
+        );
+    }
+
+    #[cfg(feature = "execute")]
+    #[test]
+    fn cache_keys_stay_single_encoded_for_non_ascii_directories() {
+        let hash = fake_sha('a');
+        let raw_dir = "Übersicht (2)#1";
+        let raw = format!("{raw_dir}/face-id-detector-{hash}.onnx");
+        let path = flow_like_storage::normalize_object_path(&raw);
+        let listed = flow_like_storage::Path::parse(path.as_ref()).unwrap();
+        assert_eq!(listed, path);
+        assert_eq!(
+            path.as_ref(),
+            format!("%C3%9Cbersicht (2)%231/face-id-detector-{hash}.onnx")
+        );
+
+        let (parent, prefix) = model_cache_directory(&path);
+        assert_eq!(parent, "%C3%9Cbersicht (2)%231");
+        assert_eq!(prefix.as_ref(), parent);
+        assert_eq!(prefix, flow_like_storage::normalize_object_path(raw_dir));
+        assert_eq!(model_cache_directory(&listed), (parent, prefix.clone()));
+        assert!(is_managed_face_model_path(&listed, parent));
+
+        let etag = model_cache_etag_path(&path);
+        assert_eq!(model_cache_etag_path(&listed), etag);
+        assert_eq!(
+            etag,
+            flow_like_storage::normalize_object_path(&format!(
+                "{raw_dir}/face-id-detector-{hash}.s3flowEtag"
+            ))
+        );
+        assert!(!etag.as_ref().contains("%25"));
+        assert_eq!(
+            flow_like_storage::display_object_path(&etag),
+            format!("{raw_dir}/face-id-detector-{hash}.s3flowEtag")
+        );
+        assert_eq!(
+            flow_like_storage::display_file_name(&path).as_deref(),
+            Some(format!("face-id-detector-{hash}.onnx").as_str())
         );
     }
 

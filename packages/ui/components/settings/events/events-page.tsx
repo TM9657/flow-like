@@ -1204,6 +1204,28 @@ function EventConfiguration({
 					newValue: pinDataType,
 				});
 			}
+			const pinOptional = pin.options?.optional === true;
+			const inputOptional = input.optional === true;
+			if (pinOptional !== inputOptional) {
+				changed.push({
+					id: input.id,
+					name: input.name,
+					field: "optional",
+					oldValue: String(inputOptional),
+					newValue: String(pinOptional),
+				});
+			}
+			const pinDefault = JSON.stringify(pin.default_value ?? null);
+			const inputDefault = JSON.stringify(input.default_value ?? null);
+			if (pinDefault !== inputDefault) {
+				changed.push({
+					id: input.id,
+					name: input.name,
+					field: "default_value",
+					oldValue: inputDefault,
+					newValue: pinDefault,
+				});
+			}
 		}
 
 		const hasDrift =
@@ -2189,6 +2211,11 @@ function EventConfiguration({
 																{input.value_type !== "Normal" && (
 																	<Badge variant="outline" className="text-xs">
 																		{input.value_type}
+																	</Badge>
+																)}
+																{input.optional && (
+																	<Badge variant="outline" className="text-xs">
+																		{t("optional", "Optional")}
 																	</Badge>
 																)}
 															</div>

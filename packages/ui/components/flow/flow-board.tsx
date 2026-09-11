@@ -51,6 +51,7 @@ import {
 	PencilLineIcon,
 	PlayCircleIcon,
 	ScrollIcon,
+	SearchCheckIcon,
 	SearchIcon,
 	ShareIcon,
 	SlidersHorizontalIcon,
@@ -67,6 +68,7 @@ import {
 	ZapIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
 	type ComponentProps,
@@ -153,10 +155,10 @@ import {
 	serializeTabs,
 	tabAfterClose,
 	tabByKey,
+	withBoardTabPosition,
 	withDocumentOpened,
 	withMissingTabsDropped,
 	withTabClosed,
-	withTabLayerPath,
 } from "../../components/flow/shell/editor-documents";
 import type { IBoardCommand } from "../../components/flow/shell/use-board-commands";
 import {
@@ -169,6 +171,7 @@ import { Traces } from "../../components/flow/traces";
 import { UploadPlaceholderNode } from "../../components/flow/upload-placeholder-node";
 import { typeToColor } from "../../components/flow/utils";
 import { VariablesMenu } from "../../components/flow/variables/variables-menu";
+import { useBoardQualityAnalysis } from "../../hooks/use-board-quality";
 import { useCommandExecution } from "../../hooks/use-command-execution";
 import { useCopilotCommands } from "../../hooks/use-copilot-commands";
 import { useExecutionPresence } from "../../hooks/use-execution-presence";
@@ -178,7 +181,10 @@ import {
 } from "../../hooks/use-follow-mode";
 import { useInvoke } from "../../hooks/use-invoke";
 import { useKeyboardShortcuts } from "../../hooks/use-keyboard-shortcuts";
-import { useLayerNavigation } from "../../hooks/use-layer-navigation";
+import {
+	resolveLayerChain,
+	useLayerNavigation,
+} from "../../hooks/use-layer-navigation";
 import { useMediaUpload } from "../../hooks/use-media-upload";
 import { usePeerUserInfo } from "../../hooks/use-peer-users";
 import { usePresenceCommands } from "../../hooks/use-presence-commands";
@@ -270,6 +276,7 @@ import { type INode, IVariableType } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import type { ILayer } from "../../lib/schema/flow/run";
 import { buildStoragePathNodes } from "../../lib/storage-path-nodes";
+import { storageDisplayName } from "../../lib/storage-tree";
 import { buildTemplateCopyPasteCommand } from "../../lib/template-copy-paste";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import { cn } from "../../lib/utils";
@@ -278,6 +285,7 @@ import {
 	useAssistantSurface,
 } from "../../state/assistant-surface";
 import { useBackend } from "../../state/backend-state";
+import { useBoardQualityStore } from "../../state/board-quality-state";
 import {
 	boardTestSummary,
 	useBoardTestsStore,
@@ -308,6 +316,7 @@ import { FlowLayerIndicators } from "./flow-layer-indicators";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowPingsLayer } from "./flow-pings";
 import { FlowPresenceBar } from "./flow-presence-bar";
+import { FlowQuality } from "./flow-quality";
 import { FlowRuns } from "./flow-runs";
 import { FlowSearch } from "./flow-search";
 import {
@@ -858,10 +867,33 @@ export function FlowBoard({
 	const [pinCache, setPinCache] = useState<
 		Map<string, [IPin, INode | ILayer, boolean]>
 	>(new Map());
+	// What the editor has open. The strip lists this; the explorer lists what exists.
+	// A `.flow` tab is a position as much as a file — `layerPath` on the tab is where it
+	// is parked, which is how one file can be open twice at different depths.
+	const [openTabs, setOpenTabs] = useState<IEditorTab[]>(() => [
+		{ key: documentKey(MAIN_DOCUMENT), doc: MAIN_DOCUMENT },
+	]);
+	const [activeTabKey, setActiveTabKey] = useState<string>(MAIN_TAB_KEY);
+	const openTabsRef = useRef(openTabs);
+	openTabsRef.current = openTabs;
+	const activeTabKeyRef = useRef(activeTabKey);
+	activeTabKeyRef.current = activeTabKey;
+	const navigationScope = `${appId}:${boardId}`;
+	const pendingTabRestoreRef = useRef<
+		{ scope: string; key: string; copyKey?: string } | undefined
+	>(undefined);
+	const hasBoardData = Boolean(board.data);
+
+	const activeTab = useMemo(
+		() => tabByKey(openTabs, activeTabKey) ?? openTabs[0],
+		[activeTabKey, openTabs],
+	);
+	const activeDocument: IEditorDocument = activeTab?.doc ?? MAIN_DOCUMENT;
+	/** Anything that is not the graph renders over the canvas, which stays mounted. */
+	const documentTab = activeDocument.kind === "board" ? undefined : activeTab;
+
 	const [currentLayer, setCurrentLayer] = useState<string | undefined>();
 	const [layerPath, setLayerPath] = useState<string | undefined>();
-	const layerPathRef = useRef(layerPath);
-	layerPathRef.current = layerPath;
 	// The file the canvas is in: a module open on screen, or the module owning whatever layer
 	// is. Null is main — the board root, which is not a layer.
 	const currentModuleId = useMemo(
@@ -886,30 +918,20 @@ export function FlowBoard({
 	const currentModuleIdRef = useRef(currentModuleId);
 	currentModuleIdRef.current = currentModuleId;
 
-	// Reaching a module any other way — entering it on canvas, following a peer, a deep
-	// link — moves the active tab onto it, or the strip would disagree with the canvas
-	// about what is open. Only the graph can do this, so a document tab is left alone.
+	// Mirror one canvas position onto the tab that displayed it. Capture the key before
+	// React processes the update so a later tab selection cannot receive an older path.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: tab activation restores its position separately; only a changed canvas position should be mirrored.
 	useEffect(() => {
-		if (activeDocumentKindRef.current !== "board") return;
+		if (
+			!hasBoardData ||
+			pendingTabRestoreRef.current ||
+			activeDocument.kind !== "board"
+		)
+			return;
+		const key = activeTabKey;
 		const fileId = moduleFileId(currentModuleId);
-		setOpenTabs((old) => {
-			const active = tabByKey(old, activeTabKeyRef.current);
-			if (!active || active.doc.kind !== "board") return old;
-			if (active.doc.fileId === fileId) return old;
-			return old.map((tab) =>
-				tab.key === active.key ? { ...tab, doc: { ...tab.doc, fileId } } : tab,
-			);
-		});
-	}, [currentModuleId]);
-
-	// Where the canvas is, mirrored onto the tab showing it, so switching away and back
-	// returns to the same layer rather than the file root.
-	useEffect(() => {
-		if (activeDocumentKindRef.current !== "board") return;
-		setOpenTabs((old) =>
-			withTabLayerPath(old, activeTabKeyRef.current, layerPath),
-		);
-	}, [layerPath]);
+		setOpenTabs((old) => withBoardTabPosition(old, key, fileId, layerPath));
+	}, [currentModuleId, layerPath, hasBoardData]);
 
 	// A module deleted anywhere — here, by a peer, by the assistant — cannot keep a tab.
 	// Only `.flow` files can be checked from the board; the other kinds are owned by
@@ -977,6 +999,16 @@ export function FlowBoard({
 		() => boardTestSummary(boardTestEntries, boardTestNodeIds).failed,
 		[boardTestEntries, boardTestNodeIds],
 	);
+	useBoardQualityAnalysis(boardId, board.data);
+	// Primitive selectors: a report object arrives after every settled edit, and
+	// the rail should only re-render when the numbers on its badge change.
+	const qualityAttention = useBoardQualityStore((state) => {
+		const counts = state.reports[boardId]?.counts;
+		return counts ? counts.error + counts.warning : 0;
+	});
+	const qualityHasErrors = useBoardQualityStore(
+		(state) => (state.reports[boardId]?.counts.error ?? 0) > 0,
+	);
 	const colorMode = useMemo(
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
@@ -990,15 +1022,15 @@ export function FlowBoard({
 
 		if (canNavigateOut) {
 			left.push(
-				<Button
-					variant={"default"}
-					size={"icon"}
-					aria-label={
-						boardParent ? t("backToApp", "Back to app") : t("home", "Home")
-					}
-					onClick={() => router.push(boardParent ?? appHref)}
-				>
-					{boardParent ? <ArrowBigLeftDashIcon /> : <HouseIcon />}
+				<Button asChild variant={"default"} size={"icon"}>
+					<Link
+						href={boardParent ?? appHref}
+						aria-label={
+							boardParent ? t("backToApp", "Back to app") : t("home", "Home")
+						}
+					>
+						{boardParent ? <ArrowBigLeftDashIcon /> : <HouseIcon />}
+					</Link>
 				</Button>,
 			);
 		}
@@ -1116,68 +1148,28 @@ export function FlowBoard({
 		nodesLength: nodes.length,
 	});
 
-	const { focusNode, pushLayer, popLayer } = useLayerNavigation({
-		board,
-		layerPath,
-		setCurrentLayer,
-		setLayerPath,
-		saveViewport,
-		holdViewport,
-		fitView,
-		getNodes,
-	});
+	const { focusNode, pushLayer, popLayer, navigateToLayer, forgetNavigation } =
+		useLayerNavigation({
+			board,
+			layerPath,
+			navigationKey: `${appId}:${boardId}:${activeTabKey}`,
+			setCurrentLayer,
+			setLayerPath,
+			saveViewport,
+			holdViewport,
+			fitView,
+			getNodes,
+		});
 
-	// Opening a module file is nothing but making it the current layer, so it inherits the
-	// per-layer viewport and the layer trail. The tab is only a no-op when the canvas already
-	// shows that exact file — from a layer *inside* a module it walks back out to it.
-	const selectModule = useCallback(
-		async (moduleId: string | null) => {
-			if ((currentLayer ?? null) === moduleId) return;
-			if (!moduleId) {
-				await saveViewport();
-				setCurrentLayer(undefined);
-				setLayerPath(undefined);
-				return;
-			}
-			const layer = board.data?.layers?.[moduleId];
-			if (layer) await pushLayer(layer);
-		},
-		[board.data?.layers, currentLayer, pushLayer, saveViewport],
-	);
-
-	// What the editor has open. The strip lists this; the explorer lists what exists.
-	// A `.flow` tab is a position as much as a file — `layerPath` on the tab is where it
-	// is parked, which is how one file can be open twice at different depths.
-	const [openTabs, setOpenTabs] = useState<IEditorTab[]>(() => [
-		{ key: documentKey(MAIN_DOCUMENT), doc: MAIN_DOCUMENT },
-	]);
-	const [activeTabKey, setActiveTabKey] = useState<string>(MAIN_TAB_KEY);
-	const openTabsRef = useRef(openTabs);
-	openTabsRef.current = openTabs;
-	const activeTabKeyRef = useRef(activeTabKey);
-	activeTabKeyRef.current = activeTabKey;
-
-	const activeTab = useMemo(
-		() => tabByKey(openTabs, activeTabKey) ?? openTabs[0],
-		[activeTabKey, openTabs],
-	);
-	const activeDocument: IEditorDocument = activeTab?.doc ?? MAIN_DOCUMENT;
-	/** Anything that is not the graph renders over the canvas, which stays mounted. */
-	const documentTab = activeDocument.kind === "board" ? undefined : activeTab;
-
-	// Restoring a parked path needs `jumpToLayer`, which is defined further down; the refs
-	// keep every tab handler stable rather than re-creating them on each board edit.
-	const restoreTabPositionRef = useRef<(tab: IEditorTab | undefined) => void>(
-		() => {},
-	);
-	const jumpToLayerRef = useRef<(layerPath: string) => void>(() => {});
-	const selectModuleRef = useRef(selectModule);
-	selectModuleRef.current = selectModule;
+	const restoreTabPositionRef = useRef<
+		(tab: IEditorTab | undefined, copyKey?: string) => void
+	>(() => {});
 
 	const selectTab = useCallback((key: string) => {
 		if (key === activeTabKeyRef.current) return;
 		const tab = tabByKey(openTabsRef.current, key);
 		if (!tab) return;
+		activeTabKeyRef.current = key;
 		setActiveTabKey(key);
 		restoreTabPositionRef.current(tab);
 	}, []);
@@ -1188,6 +1180,8 @@ export function FlowBoard({
 				newTab: options?.newTab,
 				after: activeTabKeyRef.current,
 			});
+			openTabsRef.current = result.tabs;
+			activeTabKeyRef.current = result.key;
 			setOpenTabs(result.tabs);
 			setActiveTabKey(result.key);
 			restoreTabPositionRef.current(tabByKey(result.tabs, result.key));
@@ -1203,17 +1197,23 @@ export function FlowBoard({
 		[openDocument],
 	);
 
-	const handleCloseTab = useCallback((key: string) => {
-		const tabs = openTabsRef.current;
-		if (activeTabKeyRef.current === key) {
-			const next = tabAfterClose(tabs, key);
-			if (next) {
-				setActiveTabKey(next);
-				restoreTabPositionRef.current(tabByKey(tabs, next));
+	const handleCloseTab = useCallback(
+		(key: string) => {
+			const tabs = openTabsRef.current;
+			if (activeTabKeyRef.current === key) {
+				const next = tabAfterClose(tabs, key);
+				if (next) {
+					activeTabKeyRef.current = next;
+					setActiveTabKey(next);
+					restoreTabPositionRef.current(tabByKey(tabs, next));
+				}
 			}
-		}
-		setOpenTabs(withTabClosed(tabs, key));
-	}, []);
+			forgetNavigation(`${navigationScope}:${key}`);
+			openTabsRef.current = withTabClosed(tabs, key);
+			setOpenTabs(openTabsRef.current);
+		},
+		[forgetNavigation, navigationScope],
+	);
 
 	/** A second view of one file, so a function body and its caller can sit side by side. */
 	const handleSplitTab = useCallback((key: string) => {
@@ -1224,8 +1224,11 @@ export function FlowBoard({
 			layerPath: tab.layerPath,
 			after: key,
 		});
+		openTabsRef.current = result.tabs;
+		activeTabKeyRef.current = result.key;
 		setOpenTabs(result.tabs);
 		setActiveTabKey(result.key);
+		restoreTabPositionRef.current(tabByKey(result.tabs, result.key), key);
 	}, []);
 
 	const activeDocumentKindRef = useRef(activeDocument.kind);
@@ -1256,10 +1259,7 @@ export function FlowBoard({
 			if (known) return known;
 			switch (tab.doc.kind) {
 				case "storage":
-					return (
-						tab.doc.location.split("/").filter(Boolean).pop() ??
-						tab.doc.location
-					);
+					return storageDisplayName(tab.doc.location) || tab.doc.location;
 				case "table":
 					return tab.doc.table;
 				case "page":
@@ -1271,23 +1271,35 @@ export function FlowBoard({
 		[board.data, documentTitles, t],
 	);
 
-	// A tab remembers a path; putting the canvas back on it goes through the same two
-	// entry points every other navigation uses, so the viewport and the layer trail are
-	// handled exactly once, here as everywhere else.
-	restoreTabPositionRef.current = (tab: IEditorTab | undefined) => {
+	// Restore a tab through navigation so each view keeps its own caller history.
+	restoreTabPositionRef.current = (tab, copyKey) => {
+		pendingTabRestoreRef.current = undefined;
 		if (!tab || tab.doc.kind !== "board") return;
-		if (tab.layerPath) {
-			jumpToLayerRef.current(tab.layerPath);
+		if (!board.data) {
+			pendingTabRestoreRef.current = {
+				scope: navigationScope,
+				key: tab.key,
+				copyKey,
+			};
 			return;
 		}
-		void selectModuleRef.current(fileModuleId(tab.doc.fileId) ?? null);
+		const moduleId = fileModuleId(tab.doc.fileId);
+		const path =
+			tab.layerPath ?? resolveLayerChain(board.data.layers, moduleId).join("/");
+		navigateToLayer(path, {
+			navigationKey: `${navigationScope}:${tab.key}`,
+			copyNavigationKey: copyKey ? `${navigationScope}:${copyKey}` : undefined,
+		});
 	};
 
 	// The active tab going away leaves the strip with nothing selected; fall back to the
 	// board rather than rendering an empty editor.
 	useEffect(() => {
 		if (openTabs.some((tab) => tab.key === activeTabKey)) return;
-		setActiveTabKey(openTabs[0]?.key ?? MAIN_TAB_KEY);
+		const next = openTabs[0];
+		activeTabKeyRef.current = next?.key ?? MAIN_TAB_KEY;
+		setActiveTabKey(activeTabKeyRef.current);
+		restoreTabPositionRef.current(next);
 	}, [activeTabKey, openTabs]);
 
 	// Open tabs outlive a reload, per board. A restored tab is only a claim that its
@@ -1305,12 +1317,29 @@ export function FlowBoard({
 		const withMain = restored.tabs.some((tab) => tab.key === MAIN_TAB_KEY)
 			? restored.tabs
 			: [{ key: MAIN_TAB_KEY, doc: MAIN_DOCUMENT }, ...restored.tabs];
+		openTabsRef.current = withMain;
 		setOpenTabs(withMain);
 		const active = restored.activeKey ?? MAIN_TAB_KEY;
+		activeTabKeyRef.current = active;
 		setActiveTabKey(active);
 		tabsHydratedRef.current = true;
 		restoreTabPositionRef.current(tabByKey(withMain, active));
 	}, [tabsStorageKey]);
+
+	useEffect(() => {
+		const pending = pendingTabRestoreRef.current;
+		if (!board.data || !pending) return;
+		pendingTabRestoreRef.current = undefined;
+		if (
+			pending.scope !== navigationScope ||
+			pending.key !== activeTabKeyRef.current
+		)
+			return;
+		restoreTabPositionRef.current(
+			tabByKey(openTabsRef.current, pending.key),
+			pending.copyKey,
+		);
+	}, [board.data, navigationScope]);
 
 	useEffect(() => {
 		if (!tabsHydratedRef.current) return;
@@ -1446,14 +1475,7 @@ export function FlowBoard({
 			// per-layer viewport restore does not overwrite the peer's viewport below.
 			if (peerLayer !== myLayer) {
 				const release = holdViewport();
-				if (peerLayer === "root" || !peerLayer) {
-					setLayerPath(undefined);
-					setCurrentLayer(undefined);
-				} else {
-					setLayerPath(peerLayer);
-					const segments = peerLayer.split("/");
-					setCurrentLayer(segments[segments.length - 1]);
-				}
+				navigateToLayer(peerLayer);
 				setTimeout(release, 600);
 			}
 
@@ -1483,8 +1505,7 @@ export function FlowBoard({
 			setViewport,
 			getViewport,
 			holdViewport,
-			setLayerPath,
-			setCurrentLayer,
+			navigateToLayer,
 		],
 	);
 
@@ -1495,24 +1516,10 @@ export function FlowBoard({
 		[],
 	);
 
-	// Jump to a specific layer path. Leaving a layer discards what is on screen, so its
-	// viewport is banked first — `pushLayer` and `focusNode` both do this, and skipping it
-	// here is what dropped the outgoing layer's viewport on every jump. No hold is taken:
-	// unlike a go-to-node, arriving here *wants* the destination's saved viewport back.
 	const jumpToLayer = useCallback(
-		(targetLayerPath: string) => {
-			const target =
-				targetLayerPath === "root" || !targetLayerPath
-					? undefined
-					: targetLayerPath;
-			if (target === layerPathRef.current) return;
-			void saveViewport();
-			setLayerPath(target);
-			setCurrentLayer(target?.split("/").pop());
-		},
-		[saveViewport, setLayerPath, setCurrentLayer],
+		(targetLayerPath: string) => navigateToLayer(targetLayerPath),
+		[navigateToLayer],
 	);
-	jumpToLayerRef.current = jumpToLayer;
 
 	// Undelivered board edits: the only exit when the outbox cannot drain.
 	const [syncRecoveryOpen, setSyncRecoveryOpen] = useState(false);
@@ -4654,6 +4661,14 @@ export function FlowBoard({
 				run: () => surfaceActions.toggleSidebar("comments"),
 			},
 			{
+				id: "quality",
+				surface: "rail",
+				title: t("quality", "Quality"),
+				icon: SearchCheckIcon,
+				keywords: ["lint", "linter", "problems", "dead code", "secrets"],
+				run: () => surfaceActions.toggleSidebar("quality"),
+			},
+			{
 				id: "flowscript",
 				surface: "editor",
 				title: t("flowscript", "FlowScript"),
@@ -4781,14 +4796,31 @@ export function FlowBoard({
 						? formatShortcut(command.shortcut)
 						: undefined,
 					active: isCommandActive(command.id),
+					href: command.id === "back" ? (boardParent ?? appHref) : undefined,
 					badge:
 						command.id === "comments"
 							? Object.keys(board.data?.comments ?? {}).length
+							: command.id === "quality"
+								? qualityAttention
+								: undefined,
+					badgeTone:
+						command.id === "quality"
+							? qualityHasErrors
+								? "danger"
+								: "warning"
 							: undefined,
 					onSelect: command.run,
 				};
 			}),
-		[boardCommands, isCommandActive, board.data?.comments],
+		[
+			boardCommands,
+			isCommandActive,
+			boardParent,
+			appHref,
+			board.data?.comments,
+			qualityAttention,
+			qualityHasErrors,
+		],
 	);
 
 	// Actions on the open document, beside the file tabs.
@@ -5008,6 +5040,13 @@ export function FlowBoard({
 					</li>
 				))}
 			</ul>
+		) : shell.sidebar === "quality" ? (
+			<FlowQuality
+				boardId={boardId}
+				board={board.data}
+				onFocusNode={focusNode}
+				onOpenVariables={() => surfaceActions.openSidebar("variables")}
+			/>
 		) : shell.sidebar === "comments" ? (
 			<ul className="flex flex-col p-1">
 				{boardComments.length === 0 && (
@@ -5060,6 +5099,7 @@ export function FlowBoard({
 		variables: t("variablesFunctions", "Variables & Functions"),
 		events: t("entryPoints", "Entry points"),
 		comments: t("comments", "Comments"),
+		quality: t("quality", "Quality"),
 	};
 
 	const MOBILE_TITLES: Record<string, string> = {
@@ -5244,14 +5284,8 @@ export function FlowBoard({
 	// remove. Memoised, or a fresh element every board render would defeat
 	// `BoardActivityRail`'s memo on every canvas drag frame.
 	const railFooter = useMemo(
-		() =>
-			ownsWindow ? (
-				<BoardAccountItem
-					onOpenSettings={() => router.push("/settings")}
-					onOpenNotifications={() => router.push("/notifications")}
-				/>
-			) : undefined,
-		[ownsWindow, router],
+		() => (ownsWindow ? <BoardAccountItem /> : undefined),
+		[ownsWindow],
 	);
 
 	return (
@@ -5270,7 +5304,9 @@ export function FlowBoard({
 							title={SIDEBAR_TITLES[shell.sidebar] ?? ""}
 							onClose={surfaceActions.closeSidebar}
 							bodyClassName={
-								shell.sidebar === "variables" || shell.sidebar === "search"
+								shell.sidebar === "variables" ||
+								shell.sidebar === "search" ||
+								shell.sidebar === "quality"
 									? "overflow-hidden"
 									: undefined
 							}
@@ -5305,6 +5341,11 @@ export function FlowBoard({
 								: MAIN_FILE_LABEL
 						}
 						layerPath={layerPath}
+						fileRootPath={
+							resolveLayerChain(board.data?.layers ?? {}, currentModuleId).join(
+								"/",
+							) || undefined
+						}
 						layerNames={layerNames}
 						onJumpToLayer={jumpToLayer}
 					/>
@@ -5357,7 +5398,6 @@ export function FlowBoard({
 												appHref={appHref}
 												boardParent={boardParent}
 												boardId={boardId}
-												onNavigate={(href) => router.push(href)}
 											/>
 										}
 									>

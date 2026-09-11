@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote
 
 if TYPE_CHECKING:
     from flow_like_wasm_sdk.context import Context
@@ -87,6 +88,7 @@ class FlowPath:
     # ── Path manipulation (pure, no host calls) ─────────────────────
 
     def child(self, name: str) -> FlowPath:
+        """Append *name* verbatim; the host accepts a raw name or a key from a list response."""
         sep = "" if self.path.endswith("/") or not self.path else "/"
         return FlowPath(f"{self.path}{sep}{name}", self.store_ref, self.cache_store_ref)
 
@@ -98,11 +100,14 @@ class FlowPath:
         return FlowPath(trimmed[:idx], self.store_ref, self.cache_store_ref)
 
     def file_name(self) -> str | None:
-        trimmed = self.path.rstrip("/")
-        idx = trimmed.rfind("/")
-        if idx >= 0:
-            return trimmed[idx + 1:]
-        return trimmed or None
+        """The decoded last segment; keys from the host are percent-encoded."""
+        name = self.path.rstrip("/").rsplit("/", 1)[-1]
+        if not name:
+            return None
+        try:
+            return unquote(name, errors="strict")
+        except UnicodeDecodeError:
+            return name
 
     def extension(self) -> str | None:
         name = self.file_name()

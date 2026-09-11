@@ -1,4 +1,5 @@
 use crate::error::ApiError;
+use crate::routes::app::meta::sanitize_ext;
 use crate::state::AppState;
 use crate::{auth::AppUser, ensure_permission, permission::role_permission::RolePermissions};
 use axum::{
@@ -336,14 +337,6 @@ fn filename_extension(filename: Option<&str>) -> Option<&str> {
     let name = filename?.trim().rsplit(['/', '\\']).next()?;
     let (stem, extension) = name.rsplit_once('.')?;
     (!stem.is_empty()).then_some(extension)
-}
-
-fn sanitize_ext(input: Option<&str>) -> Option<String> {
-    let mut s = input?.trim().trim_start_matches('.').to_ascii_lowercase();
-    if s.is_empty() || s.len() > 16 || !s.chars().all(|c| c.is_ascii_alphanumeric()) {
-        return None;
-    }
-    Some(std::mem::take(&mut s))
 }
 
 fn sanitize_path_segment(input: &str, fallback: &str) -> String {

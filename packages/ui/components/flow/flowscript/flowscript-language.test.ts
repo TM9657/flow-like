@@ -682,6 +682,29 @@ describe("FlowScript tokenizer", () => {
 		);
 		expect(tokens("n += 1")).toContain("+==operator");
 	});
+
+	test("colours optional parameters and interface fields as parameters", () => {
+		expect(
+			tokens("eventsGeneric fetchPage(url: string, retries?: int = 3)"),
+		).toEqual([
+			"eventsGeneric=identifier",
+			"fetchPage=entity.name.function",
+			"(=delimiter.parenthesis",
+			"url=variable.parameter",
+			":=",
+			"string=type",
+			",=delimiter",
+			"retries=variable.parameter",
+			"?:=",
+			"int=type",
+			"==operator",
+			"3=number",
+			")=delimiter.parenthesis",
+		]);
+		expect(tokens("title?: string;")).toContain("title=variable.parameter");
+		// A ternary condition is still an identifier, not a parameter label.
+		expect(tokens("flag ? a : b")).toContain("flag=identifier");
+	});
 });
 
 describe("parseUseDeclarations", () => {
@@ -1506,6 +1529,22 @@ eventsGeneric onLoad(payload: Struct) {
 		expect(onLoad?.children.map((child) => child.name)).toEqual(["nested"]);
 		expect(onLoad?.selectionRange.startLineNumber).toBe(16);
 		expect(onLoad?.range.endLineNumber).toBe(19);
+	});
+
+	test("keeps optional event parameters in the outline without their defaults", () => {
+		const text = `eventsGeneric fetchPage(url: string, retries?: int = 3, label?: string = "a, b", tags?: string[] = [], opts?: Struct = { depth: 1 }, payload: Struct) {
+}
+
+function double(n: int): (out: int) {
+	return n * 2
+}`;
+		const symbols = documentSymbols(text);
+		const fetchPage = symbols.find((symbol) => symbol.name === "fetchPage");
+		expect(fetchPage?.detail).toBe(
+			"eventsGeneric (url: string, retries?: int, label?: string, tags?: string[], opts?: Struct, payload: Struct)",
+		);
+		const double = symbols.find((symbol) => symbol.name === "double");
+		expect(double?.detail).toBe("(n: int): (out: int)");
 	});
 });
 

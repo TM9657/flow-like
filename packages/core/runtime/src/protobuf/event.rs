@@ -72,6 +72,7 @@ impl ToProto<flow_like_types::proto::EventInput> for EventInput {
             schema: self.schema.clone(),
             default_value: self.default_value.clone(),
             index: self.index as u32,
+            optional: self.optional,
         }
     }
 }
@@ -87,6 +88,7 @@ impl FromProto<flow_like_types::proto::EventInput> for EventInput {
             value_type: proto.value_type,
             schema: proto.schema,
             default_value: proto.default_value,
+            optional: proto.optional,
             index: proto.index as u16,
         }
     }

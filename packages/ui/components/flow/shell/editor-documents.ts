@@ -191,6 +191,29 @@ export function withTabLayerPath(
 	});
 }
 
+/** Keep a board tab's file and canvas position in the same update. */
+export function withBoardTabPosition(
+	tabs: IEditorTab[],
+	key: string,
+	fileId: string,
+	layerPath: string | undefined,
+): IEditorTab[] {
+	const index = tabs.findIndex((tab) => tab.key === key);
+	const tab = tabs[index];
+	if (!tab || tab.doc.kind !== "board") return tabs;
+	if (tab.doc.fileId === fileId && tab.layerPath === layerPath) return tabs;
+
+	const { layerPath: _previousPath, ...rest } = tab;
+	const doc = tab.doc.fileId === fileId ? tab.doc : { ...tab.doc, fileId };
+	const next = [...tabs];
+	next[index] = {
+		...rest,
+		doc,
+		...(layerPath === undefined ? {} : { layerPath }),
+	};
+	return next;
+}
+
 /**
  * Board tabs on `fileId`, in strip order. Layer paths are per-tab, so navigating on the
  * canvas has to know which tab it is moving.

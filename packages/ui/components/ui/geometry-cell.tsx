@@ -32,7 +32,7 @@ type GeometryProps = Readonly<{
 	metadata?: Record<string, unknown>;
 }>;
 
-function GeometrySketch({
+export function GeometrySketch({
 	display,
 	className,
 }: {

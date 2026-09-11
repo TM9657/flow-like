@@ -39,11 +39,7 @@ async fn flow_path_to_attachment(
     let bytes = flow_path.get(context, false).await?;
     let name = filename
         .map(|s| s.to_string())
-        .or_else(|| {
-            std::path::Path::new(&flow_path.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-        })
+        .or_else(|| flow_like::flow_like_storage::display_file_name(&flow_path.object_path()))
         .unwrap_or_else(|| "file".to_string());
 
     Ok(CreateAttachment::bytes(bytes, name))
@@ -288,11 +284,7 @@ impl NodeLogic for SendImageNode {
 
         let bytes = flow_path.get(context, false).await?;
         let name = filename
-            .or_else(|| {
-                std::path::Path::new(&flow_path.path)
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-            })
+            .or_else(|| flow_like::flow_like_storage::display_file_name(&flow_path.object_path()))
             .unwrap_or_else(|| "image.png".to_string());
 
         let final_name = if spoiler && !name.starts_with("SPOILER_") {

@@ -5,6 +5,10 @@ import { DownloadIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { isExpiredAssetUrl } from "../../../../lib/stable-asset-url";
+import {
+	storageDisplayName,
+	storageDisplayPath,
+} from "../../../../lib/storage-tree";
 import { cn } from "../../../../lib/utils";
 import { useBackend } from "../../../../state/backend-state";
 import type { IStorageItemActionResult } from "../../../../state/backend-state/types";
@@ -39,9 +43,10 @@ export function StorageDocument({
 	const [loading, setLoading] = useState(true);
 
 	const filename = useMemo(
-		() => location.split("/").filter(Boolean).pop() ?? location,
+		() => storageDisplayName(location) || location,
 		[location],
 	);
+	const displayPath = useMemo(() => storageDisplayPath(location), [location]);
 	const folder = useMemo(
 		() => location.split("/").slice(0, -1).join("/"),
 		[location],
@@ -126,8 +131,8 @@ export function StorageDocument({
 			className={cn("flex h-full min-h-0 flex-col bg-background", className)}
 		>
 			<div className="flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
-				<span className="truncate font-mono text-xs" title={location}>
-					{location}
+				<span className="truncate font-mono text-xs" title={displayPath}>
+					{displayPath}
 				</span>
 				<Badge variant="outline" className="shrink-0 text-[10px]">
 					{scope === "user"

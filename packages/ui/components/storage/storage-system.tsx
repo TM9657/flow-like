@@ -23,6 +23,7 @@ import {
 	type IBulkUploadProgress,
 	type IStorageItem,
 	type IStorageUploadOptions,
+	storageDisplayName,
 	useBackend,
 	useInvoke,
 } from "../..";
@@ -306,7 +307,7 @@ export function StorageSystem({
 			const existingFolderNames = new Set(
 				(files.data ?? [])
 					.filter((f) => f.is_dir)
-					.map((f) => (f.location.split("/").pop() ?? "").toLowerCase()),
+					.map((f) => storageDisplayName(f.location).toLowerCase()),
 			);
 			for (const v of virtualFoldersHere)
 				existingFolderNames.add(v.toLowerCase());
@@ -330,12 +331,12 @@ export function StorageSystem({
 	// Merge backend items with virtual folders for current prefix
 	const filesWithVirtual = useMemo<IStorageItem[]>(() => {
 		const base = (files.data ?? []).slice();
-		const have = new Set(base.map((f) => f.location));
+		const have = new Set(base.map((f) => storageDisplayName(f.location)));
 		const basePrefixNorm = normalizePrefix(prefix);
 		const locFor = (name: string) =>
 			basePrefixNorm ? `${basePrefixNorm}/${name}` : name;
 		const virtualItems: IStorageItem[] = virtualFoldersHere
-			.filter((name) => !have.has(locFor(name)))
+			.filter((name) => !have.has(name))
 			.map(
 				(name) =>
 					({
@@ -469,7 +470,7 @@ export function StorageSystem({
 
 			try {
 				const blob = new Blob([fileContent], { type: "text/plain" });
-				const fileName = preview.file.split("/").pop() || "file";
+				const fileName = storageDisplayName(preview.file) || "file";
 				const file = new File([blob], fileName, { type: "text/plain" });
 
 				await storageApi.uploadStorageItems(appId, prefix, [file], undefined);
@@ -486,6 +487,11 @@ export function StorageSystem({
 	const isFileEditable = useCallback((fileUrl: string, fileName?: string) => {
 		return isCode(fileUrl, fileName) || isText(fileUrl, fileName);
 	}, []);
+
+	const previewName = useMemo(
+		() => storageDisplayName(preview.file),
+		[preview.file],
+	);
 
 	const downloadFile = useCallback(
 		async (file: string) => {
@@ -507,8 +513,7 @@ export function StorageSystem({
 			}
 
 			const fileUrl = signedUrl[0].url;
-			const fileName =
-				fileUrl.split("/").pop()?.split("?")[0] || "downloaded_file";
+			const fileName = storageDisplayName(file) || "downloaded_file";
 			const fileContent = await fetch(fileUrl).then((res) => res.blob());
 			const blob = new Blob([fileContent], {
 				type: "application/octet-stream",
@@ -528,10 +533,8 @@ export function StorageSystem({
 	const filteredFiles = useMemo(
 		() =>
 			filesWithVirtual?.filter((file) =>
-				file.location
-					.split("/")
-					.pop()
-					?.toLowerCase()
+				storageDisplayName(file.location)
+					.toLowerCase()
 					.includes(searchQuery.toLowerCase()),
 			) ?? [],
 		[filesWithVirtual, searchQuery],
@@ -541,7 +544,7 @@ export function StorageSystem({
 		() =>
 			[...filteredFiles].sort((a, b) => {
 				const getName = (file: IStorageItem) =>
-					file.location.split("/").pop() ?? "";
+					storageDisplayName(file.location);
 				const isFolder = (file: IStorageItem) => file.is_dir;
 
 				// Always sort folders first
@@ -992,7 +995,7 @@ export function StorageSystem({
 									<div className="flex flex-col h-full w-full">
 										<div className="p-4 border-b bg-background flex items-center justify-between shrink-0">
 											<h3 className="font-medium text-lg">
-												Preview - {preview.file.split("/").pop()}
+												Preview - {previewName}
 											</h3>
 											<Button
 												variant="ghost"
@@ -1016,7 +1019,7 @@ export function StorageSystem({
 										<div className="flex-1 min-h-0 overflow-auto">
 											<FilePreviewer
 												url={preview.url}
-												filename={preview.file.split("/").pop()}
+												filename={previewName}
 												editable={isFileEditable(preview.url, preview.file)}
 												onSave={saveFile}
 											/>
@@ -1076,7 +1079,7 @@ export function StorageSystem({
 											<div className="flex-1 min-h-0 overflow-auto">
 												<FilePreviewer
 													url={preview.url}
-													filename={preview.file.split("/").pop()}
+													filename={previewName}
 													editable={isFileEditable(preview.url, preview.file)}
 													onSave={saveFile}
 												/>

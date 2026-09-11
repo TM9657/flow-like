@@ -29,6 +29,7 @@ import {
 } from "../../../components/ui";
 import { useBoardFormat } from "../../../hooks/use-board-format";
 import { GEOMETRY_BOARD_FORMAT_VERSION } from "../../../lib/board-format";
+import { defaultValueFromType } from "../../../lib/flow-defaults";
 import type { IVariable } from "../../../lib/schema/flow/board";
 import { IVariableType } from "../../../lib/schema/flow/node";
 import { IValueType } from "../../../lib/schema/flow/pin";
@@ -67,32 +68,7 @@ const VALUE_TYPES = [
 	IValueType.HashMap,
 ];
 
-export function defaultValueFromType(
-	valueType: IValueType,
-	variableType: IVariableType,
-) {
-	if (valueType === IValueType.Array) return [];
-	if (valueType === IValueType.HashSet) return [];
-	if (valueType === IValueType.HashMap) return {};
-	switch (variableType) {
-		case IVariableType.Boolean:
-			return false;
-		case IVariableType.Date:
-			return new Date().toISOString();
-		case IVariableType.Float:
-			return 0.0;
-		case IVariableType.Integer:
-			return 0;
-		case IVariableType.PathBuf:
-			return "";
-		case IVariableType.String:
-			return "";
-		case IVariableType.Struct:
-			return {};
-		default:
-			return null;
-	}
-}
+export { defaultValueFromType };
 
 export interface IVariableOverlayProps {
 	appId?: string;

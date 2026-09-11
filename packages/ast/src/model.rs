@@ -270,10 +270,29 @@ impl FunctionCacheScope {
 }
 
 /// A named, typed function parameter or return value.
+///
+/// `optional` and `default` are event-parameter surface only (`name?: Type = literal`): they map
+/// to an optional payload pin and its stored default. Function parameters and returns never carry
+/// them; reconcile diagnoses either when authored there.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Param {
     pub name: String,
     pub ty: TypeRef,
+    #[serde(default)]
+    pub optional: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<Literal>,
+}
+
+impl Param {
+    pub fn new(name: impl Into<String>, ty: TypeRef) -> Self {
+        Self {
+            name: name.into(),
+            ty,
+            optional: false,
+            default: None,
+        }
+    }
 }
 
 /// An exec entrypoint block (`onStart { … }`).
@@ -287,8 +306,9 @@ pub struct EventBlock {
     /// its friendly name. `None` keeps the catalog default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event_name: Option<String>,
-    /// The event's payload outputs, surfaced as a typed parameter list (`name: Type`). These are
-    /// the entry node's data output pins (often user-configured) that the body consumes.
+    /// The event's payload outputs, surfaced as a typed parameter list (`name: Type`, or
+    /// `name?: Type = literal` for an optional pin with a stored default). These are the entry
+    /// node's data output pins (often user-configured) that the body consumes.
     #[serde(default)]
     pub params: Vec<Param>,
     pub body: Block,

@@ -778,6 +778,10 @@ impl Node {
                 if let Some(enforce_generic_value_type) = &options.enforce_generic_value_type {
                     hasher.append(&[*enforce_generic_value_type as u8]);
                 }
+
+                if let Some(optional) = &options.optional {
+                    hasher.append(&[*optional as u8]);
+                }
             }
 
             for dep in pin.depends_on.iter() {

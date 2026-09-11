@@ -5,7 +5,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_storage::Path;
+use flow_like_storage::normalize_object_path;
 use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]
@@ -65,13 +65,13 @@ impl NodeLogic for ParentNode {
         let path: FlowPath = context.evaluate_pin("path").await?;
 
         let mut path = path.to_runtime(context).await?;
-        let mut parts = path.path.parts().collect::<Vec<_>>();
-        parts.pop();
-        let mut new_path = Path::from("");
-        for part in &parts {
-            new_path = new_path.join(part.as_ref());
-        }
-        path.path = new_path;
+        let parent = path
+            .path
+            .as_ref()
+            .rsplit_once('/')
+            .map(|(parent, _)| parent)
+            .unwrap_or("");
+        path.path = normalize_object_path(parent);
         let path = path.serialize().await;
 
         context.set_pin_value("parent_path", json!(path)).await?;

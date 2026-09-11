@@ -2,8 +2,10 @@
 //! namespace.
 //!
 //! Client input is never taken as a key. The authorized base is always
-//! prepended, and `object_store` encodes `.`, `..` and `/` inside every segment
-//! it is handed, so no input can walk out of the app's namespace.
+//! prepended, and every segment is percent-decoded and encoded exactly once,
+//! so a raw file name and the encoded `location` a listing returned resolve to
+//! the same object, while `.`, `..` and `/` inside a segment can never walk
+//! out of the app's namespace.
 //!
 //! Older clients stored the raw object-store key in widget definitions, and a
 //! fork copies those values verbatim, so a key naming *another* app still has to
@@ -11,7 +13,7 @@
 //! that way — `apps/<id>/upload[/rest]` and `users/<sub>/apps/<id>[/rest]` —
 //! so a folder a user happens to name `apps` stays a plain relative prefix.
 
-use flow_like_storage::Path;
+use flow_like_storage::{Path, join_object_path};
 
 pub fn app_upload_base(app_id: &str) -> Path {
     Path::from("apps").join(app_id).join("upload")
@@ -23,19 +25,12 @@ pub fn user_upload_base(sub: &str, app_id: &str) -> Path {
 
 pub fn resolve_app_upload(app_id: &str, prefix: &str) -> Path {
     let relative = strip_app_layout(prefix).unwrap_or(prefix);
-    append(app_upload_base(app_id), relative)
+    join_object_path(&app_upload_base(app_id), relative)
 }
 
 pub fn resolve_user_upload(sub: &str, app_id: &str, prefix: &str) -> Path {
     let relative = strip_user_layout(prefix).unwrap_or(prefix);
-    append(user_upload_base(sub, app_id), relative)
-}
-
-fn append(base: Path, relative: &str) -> Path {
-    relative
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .fold(base, |path, segment| path.join(segment))
+    join_object_path(&user_upload_base(sub, app_id), relative)
 }
 
 fn strip_app_layout(prefix: &str) -> Option<&str> {
@@ -62,6 +57,7 @@ fn strip_segment<'a>(rest: &'a str, segment: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flow_like_storage::display_file_name;
 
     const APP: &str = "app-1";
     const SUB: &str = "sub-1";
@@ -127,11 +123,44 @@ mod tests {
             resolve_app_upload(APP, "apps/other/upload/../../../etc/passwd").as_ref(),
             "apps/app-1/upload/%2E%2E/%2E%2E/%2E%2E/etc/passwd"
         );
-        // An encoded delimiter cannot inject a new path segment either.
+        assert_eq!(
+            resolve_app_upload(APP, "%2E%2E/secrets.env").as_ref(),
+            "apps/app-1/upload/%2E%2E/secrets.env"
+        );
+        // An encoded delimiter is decoded and re-encoded inside its segment,
+        // so it cannot inject a new path segment either.
         assert_eq!(
             resolve_app_upload(APP, "a%2Fb").as_ref(),
-            "apps/app-1/upload/a%252Fb"
+            "apps/app-1/upload/a%2Fb"
         );
+        assert_eq!(resolve_app_upload(APP, "a%2Fb").parts().count(), 4);
+    }
+
+    #[test]
+    fn raw_and_listed_names_resolve_to_the_same_key() {
+        const NAME: &str = "Übersicht (2)#1.pdf";
+        const ENCODED: &str = "%C3%9Cbersicht (2)%231.pdf";
+        let listed = Path::from(NAME);
+        assert_eq!(listed.as_ref(), ENCODED);
+
+        let app_key = resolve_app_upload(APP, NAME);
+        assert_eq!(app_key.as_ref(), format!("apps/app-1/upload/{ENCODED}"));
+        assert_eq!(resolve_app_upload(APP, listed.as_ref()), app_key);
+        assert_eq!(resolve_app_upload(APP, app_key.as_ref()), app_key);
+        assert_eq!(
+            resolve_app_upload(APP, &format!("media/{NAME}")),
+            resolve_app_upload(APP, &format!("media/{ENCODED}"))
+        );
+        assert_eq!(display_file_name(&app_key).as_deref(), Some(NAME));
+
+        let user_key = resolve_user_upload(SUB, APP, NAME);
+        assert_eq!(
+            user_key.as_ref(),
+            format!("users/sub-1/apps/app-1/{ENCODED}")
+        );
+        assert_eq!(resolve_user_upload(SUB, APP, listed.as_ref()), user_key);
+        assert_eq!(resolve_user_upload(SUB, APP, user_key.as_ref()), user_key);
+        assert_eq!(display_file_name(&user_key).as_deref(), Some(NAME));
     }
 
     #[test]

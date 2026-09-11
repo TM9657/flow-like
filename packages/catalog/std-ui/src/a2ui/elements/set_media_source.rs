@@ -167,7 +167,7 @@ impl NodeLogic for SetMediaSource {
             )
             .await?;
 
-        let filename = runtime_path.path.filename().map(|name| name.to_string());
+        let filename = flow_like_storage::display_file_name(&runtime_path.path);
         let extension = runtime_path
             .path
             .extension()

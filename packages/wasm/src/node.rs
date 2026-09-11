@@ -184,6 +184,7 @@ impl WasmNodeLogic {
                     sensitive: wasm_pin.sensitive,
                     enforce_schema: wasm_pin.enforce_schema,
                     enforce_generic_value_type: wasm_pin.enforce_generic_value_type,
+                    optional: None,
                 })
             } else {
                 None

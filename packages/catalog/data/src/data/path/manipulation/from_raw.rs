@@ -41,7 +41,7 @@ impl NodeLogic for FromRawPathNode {
         node.add_input_pin(
             "raw_path",
             "Raw Path",
-            "The raw path string to reconstruct",
+            "The path string to reconstruct, either human-readable or percent-encoded as listed by the store",
             VariableType::String,
         );
 

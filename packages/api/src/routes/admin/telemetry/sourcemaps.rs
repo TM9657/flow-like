@@ -343,7 +343,7 @@ pub(crate) fn source_map_reference_path(reference: &str) -> Path {
                 .and_then(|rest| rest.split_once('/').map(|(_, path)| path))
         })
         .unwrap_or(reference);
-    Path::from(path)
+    flow_like_storage::normalize_object_path(path)
 }
 
 /// Write the map to the meta store and return the reference the row keeps.
@@ -650,6 +650,11 @@ mod tests {
         assert_eq!(
             source_map_reference_path("s3://bucket/telemetry/sourcemaps/a/b-c.map").as_ref(),
             "telemetry/sourcemaps/a/b-c.map"
+        );
+        assert_eq!(
+            source_map_reference_path("store://telemetry/sourcemaps/a/%C3%9Cbersicht (2)%231.map")
+                .as_ref(),
+            "telemetry/sourcemaps/a/%C3%9Cbersicht (2)%231.map"
         );
     }
 }

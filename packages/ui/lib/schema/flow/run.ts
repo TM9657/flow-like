@@ -139,6 +139,7 @@ export enum IVariableType {
 export interface IPinOptions {
 	enforce_generic_value_type?: boolean | null;
 	enforce_schema?: boolean | null;
+	optional?: boolean | null;
 	range?: number[] | null;
 	step?: number | null;
 	valid_values?: string[] | null;

@@ -355,6 +355,9 @@
 				},
 				"enforce_generic_value_type": {
 					"type": ["boolean", "null"]
+				},
+				"optional": {
+					"type": ["boolean", "null"]
 				}
 			}
 		},

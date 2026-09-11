@@ -5,6 +5,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+use flow_like_storage::{decode_path_segment, normalize_object_path};
 use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]
@@ -62,7 +63,7 @@ impl NodeLogic for ReplaceSegmentNode {
             let mut segments = path
                 .path
                 .split('/')
-                .map(|segment| segment.to_string())
+                .map(|segment| decode_path_segment(segment).into_owned())
                 .collect::<Vec<_>>();
 
             let mut replaced_any = false;
@@ -77,7 +78,9 @@ impl NodeLogic for ReplaceSegmentNode {
             }
 
             if replaced_any {
-                path.path = segments.join("/");
+                path.path = normalize_object_path(&segments.join("/"))
+                    .as_ref()
+                    .to_string();
             }
         }
 

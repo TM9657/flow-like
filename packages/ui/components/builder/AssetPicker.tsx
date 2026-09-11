@@ -5,6 +5,10 @@ import { AlertCircle, FolderOpen, ImageIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInvoke } from "../../hooks/use-invoke";
 import type { IStorageItem } from "../../lib/schema/storage/storage-item";
+import {
+	decodeStorageSegment,
+	storageDisplayName,
+} from "../../lib/storage-tree";
 import { useBackend } from "../../state/backend-state";
 import {
 	Button,
@@ -52,7 +56,7 @@ function FileItem({
 	accept: string;
 }) {
 	const isDir = item.is_dir;
-	const name = basename(item.location);
+	const name = storageDisplayName(item.location);
 	const isSelectable = !isDir && matchesAccept(item.location, accept);
 	const ext = getExtension(item.location);
 
@@ -159,7 +163,9 @@ export function AssetPicker({
 				.sort((a, b) => {
 					if (a.is_dir && !b.is_dir) return -1;
 					if (!a.is_dir && b.is_dir) return 1;
-					return a.location.localeCompare(b.location);
+					return storageDisplayName(a.location).localeCompare(
+						storageDisplayName(b.location),
+					);
 				}),
 		[items.data],
 	);
@@ -237,7 +243,7 @@ export function AssetPicker({
 									}
 									className="text-muted-foreground hover:text-foreground"
 								>
-									{part}
+									{decodeStorageSegment(part)}
 								</button>
 							</div>
 						))}

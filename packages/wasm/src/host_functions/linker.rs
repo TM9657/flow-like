@@ -7,8 +7,8 @@ use crate::host_functions::HostState;
 use crate::limits::WasmCapabilities;
 use crate::llm_message::sdk_message_content;
 use crate::memory::WasmAllocator;
-use flow_like_storage::object_store::path::Path;
 use flow_like_storage::object_store::ObjectStoreExt;
+use flow_like_storage::object_store::path::Path;
 use std::sync::Arc;
 use wasmtime::{Caller, Linker, Memory, Ref, Val};
 
@@ -841,7 +841,7 @@ fn register_storage_functions(linker: &mut Linker<StoreData>) -> WasmResult<()> 
                         None => return 0,
                     };
 
-                    let path = Path::from(flow_path.path);
+                    let path = flow_path.object_path();
                     match store.as_generic().get(&path).await {
                         Ok(result) => match result.bytes().await {
                             Ok(bytes) => {
@@ -992,11 +992,7 @@ fn register_storage_functions(linker: &mut Linker<StoreData>) -> WasmResult<()> 
                         &write_id,
                         &data,
                     );
-                    if ok {
-                        0
-                    } else {
-                        -1
-                    }
+                    if ok { 0 } else { -1 }
                 })
             },
         )
@@ -1097,7 +1093,7 @@ fn register_storage_functions(linker: &mut Linker<StoreData>) -> WasmResult<()> 
                     };
 
                     use futures::StreamExt;
-                    let prefix = Path::from(flow_path.path.clone());
+                    let prefix = flow_path.object_path();
                     let entries: Vec<_> = store
                         .as_generic()
                         .list(Some(&prefix))
@@ -3166,11 +3162,13 @@ mod websocket_tests {
             .await
             .unwrap();
         assert!(offset >= 0);
-        assert!(String::from_utf8(
-            store.data().host_state.result_buffer.read()[offset as usize..].to_vec()
-        )
-        .unwrap()
-        .contains("reply"));
+        assert!(
+            String::from_utf8(
+                store.data().host_state.result_buffer.read()[offset as usize..].to_vec()
+            )
+            .unwrap()
+            .contains("reply")
+        );
         assert_eq!(close.call_async(&mut store, handle).await.unwrap(), 0);
         assert_eq!(
             send.call_async(&mut store, (handle, 256, 6, 0))

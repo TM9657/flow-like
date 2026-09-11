@@ -543,7 +543,7 @@ fn staged_reference_path(reference: &str) -> Path {
                 .and_then(|rest| rest.split_once('/').map(|(_, path)| path))
         })
         .unwrap_or(reference);
-    Path::from(path)
+    flow_like_storage::normalize_object_path(path)
 }
 
 /// A store that reports the object as missing is answering about the object;
@@ -1793,6 +1793,10 @@ mod payload_offload_tests {
         assert_eq!(
             staged_reference_path("s3://bucket/tmp/polling/run/event.json"),
             Path::from("tmp/polling/run/event.json")
+        );
+        assert_eq!(
+            staged_reference_path("store://tmp/polling/run/%C3%9Cbersicht (2)%231.json"),
+            Path::from("tmp/polling/run").join("Übersicht (2)#1.json")
         );
     }
 }

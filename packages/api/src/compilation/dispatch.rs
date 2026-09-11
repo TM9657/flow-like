@@ -890,7 +890,7 @@ pub async fn build_compilation_job(
     let wasm_download_url = content_bucket
         .sign(
             "GET",
-            &Path::from(params.wasm_path.as_str()),
+            &flow_like_storage::normalize_object_path(&params.wasm_path),
             Duration::from_secs(URL_TTL_SECS),
         )
         .await

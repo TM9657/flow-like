@@ -36,7 +36,7 @@ use crate::flow::copilot::{
     BoardCommand, NodeMetadata, NodePosition, PinMetadata, PlaceholderPinDef, node_to_metadata,
 };
 use crate::flow::node::Node;
-use crate::flow::pin::{Pin, PinType};
+use crate::flow::pin::{Pin, PinType, resolve_schema};
 use crate::flow::variable::{Variable, VariableType};
 
 /// Outcome of reconciling a parsed `BoardAst` against a live board.
@@ -2836,6 +2836,35 @@ fn literal_to_value(lit: &Literal) -> flow_like_types::Value {
     }
 }
 
+/// The default an authored event parameter carries. Only an optional parameter may declare one,
+/// and `= null` says nothing the `?` does not already say.
+fn authored_param_default(param: &Param) -> Option<flow_like_types::Value> {
+    if !param.optional {
+        return None;
+    }
+    param
+        .default
+        .as_ref()
+        .filter(|default| !matches!(default, Literal::Null))
+        .map(literal_to_value)
+}
+
+fn param_carries_pin_options(param: &Param) -> bool {
+    param.optional || param.default.is_some()
+}
+
+/// `name: Type = literal` without the `?` is not a pin configuration the board can store.
+fn param_default_requires_optional_diagnostic(param: &Param) -> Option<String> {
+    (!param.optional && param.default.is_some()).then(|| {
+        format!(
+            "event parameter `{}` declares a default but is not optional; write `{}?: {} = …` to make it optional",
+            param.name,
+            param.name,
+            flow_like_ast::render_type_ref(&param.ty)
+        )
+    })
+}
+
 /// Carry the board's own variable declarations (with their `//@v` anchors) into a document that
 /// declares none of its own, so `myVar` in a module file still resolves to the board global.
 /// Declarations the document DID write win — they are the create/update the author asked for.
@@ -3449,7 +3478,7 @@ fn param_pin_metadata(param: &Param, interface_schemas: &HashMap<String, String>
         description: String::new(),
         data_type: data_type.clone(),
         value_type: type_ref_value_type(&param.ty).to_string(),
-        default_value: None,
+        default_value: authored_param_default(param).map(|value| value.to_string()),
         schema: schema.clone(),
         is_generic: data_type == "Generic",
         valid_values: None,
@@ -3495,6 +3524,8 @@ fn param_output_pin_def(
         value_type: Some(type_ref_value_type(&param.ty).to_string()),
         schema: schema.clone(),
         enforce_schema: schema.is_some(),
+        optional: param.optional,
+        default_value: authored_param_default(param),
     }
 }
 
@@ -7382,6 +7413,17 @@ impl<'a> StructuralPlanner<'a> {
         }
         let ast = &doc.ast;
         for (index, func) in ast.functions.iter().enumerate() {
+            if func
+                .params
+                .iter()
+                .chain(&func.returns)
+                .any(param_carries_pin_options)
+            {
+                self.result.diagnostics.push(format!(
+                    "function `{}`: optional parameters and defaults are only supported on event parameters",
+                    func.name
+                ));
+            }
             let key = self.declared_function_key(doc, index);
             self.current_module = key.module.clone();
             let mut seen = HashSet::new();
@@ -8325,6 +8367,64 @@ impl<'a> StructuralPlanner<'a> {
         recreated
     }
 
+    /// Optional markers and defaults are pin configuration, not part of the parameter contract:
+    /// an anchored eventsGeneric whose authored `name?: Type = literal` differs from the live pin
+    /// queues an `UpdateNodePinOptions` edit instead of reporting drift. Both sides compare by
+    /// the value the runtime would actually resolve, so `name?: Type` and `name?: Type = ""` on a
+    /// string pin are the same configuration. The parameter contract already matched, so the
+    /// live outputs and the authored params pair up positionally.
+    fn reconcile_event_pin_options(&mut self, event: &EventBlock, node: &Node) {
+        let mut live = node
+            .pins
+            .values()
+            .filter(|pin| pin.pin_type == PinType::Output && pin.data_type != VariableType::Execution)
+            .collect::<Vec<_>>();
+        live.sort_by_key(|pin| (pin.index, pin.id.clone()));
+        let refs = &self.existing.refs;
+        for (pin, param) in live.into_iter().zip(&event.params) {
+            if let Some(diagnostic) = param_default_requires_optional_diagnostic(param) {
+                self.result.diagnostics.push(diagnostic);
+                continue;
+            }
+            let authored_default = authored_param_default(param);
+            let optional_unchanged = pin.is_optional() == param.optional;
+            let default_unchanged = !param.optional || {
+                let schema = pin
+                    .schema
+                    .as_deref()
+                    .and_then(|schema| resolve_schema(schema, refs).ok());
+                crate::flow::variable::effective_default(
+                    authored_default.as_ref(),
+                    &pin.data_type,
+                    &pin.value_type,
+                    schema,
+                ) == pin.effective_default(refs)
+            };
+            if optional_unchanged && default_unchanged {
+                continue;
+            }
+            if node.name != "events_generic" {
+                self.result.diagnostics.push(format!(
+                    "event `{}`: optional parameters and defaults are only supported on eventsGeneric parameters; `{}` is a catalog pin of `{}`",
+                    event.name, param.name, node.name
+                ));
+                continue;
+            }
+            if pin.name == "payload" {
+                self.result.diagnostics.push(
+                    "payload is a catalog pin and cannot be optional or carry a default".to_string(),
+                );
+                continue;
+            }
+            self.update_commands.push(BoardCommand::UpdateNodePinOptions {
+                node_id: node.id.clone(),
+                pin_name: pin.name.clone(),
+                optional: param.optional,
+                default_value: authored_default,
+            });
+        }
+    }
+
     fn plan_event(&mut self, event: &EventBlock, target_layer: Option<String>) {
         let unavailable_anchor = event
             .anchor
@@ -8419,6 +8519,7 @@ impl<'a> StructuralPlanner<'a> {
                                 summary: Some(format!("Rename event to {event_name}")),
                             });
                         }
+                        self.reconcile_event_pin_options(event, node);
                         // The module the event is WRITTEN in is authoritative: an anchored event
                         // in a different module block moves there — entry and body together. Only
                         // a top-level section can move (a handler nested in a function body plans
@@ -9610,6 +9711,8 @@ impl<'a> StructuralPlanner<'a> {
                         value_type: Some(pin.value_type.clone()),
                         schema: pin.schema.clone(),
                         enforce_schema: pin.enforce_schema,
+                        optional: false,
+                        default_value: None,
                     })
                     .collect(),
             ),
@@ -10295,6 +10398,12 @@ impl<'a> StructuralPlanner<'a> {
 
         for param in params {
             if metadata_output_pin(&meta, &param.name).is_some() {
+                if param_carries_pin_options(param) {
+                    self.result.diagnostics.push(format!(
+                        "{} is a catalog pin and cannot be optional or carry a default",
+                        param.name
+                    ));
+                }
                 continue;
             }
 
@@ -10312,6 +10421,10 @@ impl<'a> StructuralPlanner<'a> {
                     "could not choose an output pin for event parameter `{}`: custom Generic Event parameters must be data values, not Execution",
                     param.name
                 ));
+                continue;
+            }
+            if let Some(diagnostic) = param_default_requires_optional_diagnostic(param) {
+                self.result.diagnostics.push(diagnostic);
                 continue;
             }
 
@@ -21325,6 +21438,253 @@ eventsSimple() {
                         && to_pin == "text"
             )
         }));
+    }
+
+    #[test]
+    fn new_generic_event_optional_parameter_carries_its_pin_options() {
+        let board = empty_board();
+        let catalog = vec![catalog_meta(
+            "events_generic",
+            "Generic Event",
+            Vec::new(),
+            vec![
+                pin_meta("exec_out", "Execution", PinType::Output),
+                pin_meta("payload", "Struct", PinType::Output),
+            ],
+        )];
+
+        let result = reconcile_text_with_catalog(
+            &board,
+            "eventsGeneric(payload: Struct, ticketId?: string = \"x\", note?: string) {\n}\n",
+            &catalog,
+        );
+
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let additional_pins = result
+            .commands
+            .iter()
+            .find_map(|command| match command {
+                BoardCommand::AddNode {
+                    node_type,
+                    additional_pins,
+                    ..
+                } if node_type == "events_generic" => additional_pins.as_ref(),
+                _ => None,
+            })
+            .expect("generic event carries additional pins");
+        assert_eq!(additional_pins.len(), 2);
+        assert_eq!(additional_pins[0].name, "ticketId");
+        assert!(additional_pins[0].optional);
+        assert_eq!(
+            additional_pins[0].default_value,
+            Some(flow_like_types::Value::String("x".to_string()))
+        );
+        assert_eq!(additional_pins[1].name, "note");
+        assert!(additional_pins[1].optional);
+        assert_eq!(additional_pins[1].default_value, None);
+    }
+
+    #[test]
+    fn optional_payload_parameter_is_rejected_on_a_new_generic_event() {
+        let board = empty_board();
+        let catalog = vec![catalog_meta(
+            "events_generic",
+            "Generic Event",
+            Vec::new(),
+            vec![
+                pin_meta("exec_out", "Execution", PinType::Output),
+                pin_meta("payload", "Struct", PinType::Output),
+            ],
+        )];
+
+        let result = reconcile_text_with_catalog(
+            &board,
+            "eventsGeneric(payload?: Struct) {\n}\n",
+            &catalog,
+        );
+
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.contains("payload is a catalog pin and cannot be optional or carry a default")
+        }));
+        assert!(result.commands.is_empty(), "{:?}", result.commands);
+    }
+
+    #[test]
+    fn event_parameter_default_requires_the_optional_marker() {
+        let board = empty_board();
+        let catalog = vec![catalog_meta(
+            "events_generic",
+            "Generic Event",
+            Vec::new(),
+            vec![
+                pin_meta("exec_out", "Execution", PinType::Output),
+                pin_meta("payload", "Struct", PinType::Output),
+            ],
+        )];
+
+        let result = reconcile_text_with_catalog(
+            &board,
+            "eventsGeneric(payload: Struct, ticketId: string = \"x\") {\n}\n",
+            &catalog,
+        );
+
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.contains("event parameter `ticketId` declares a default but is not optional")
+        }));
+    }
+
+    #[test]
+    fn function_parameters_never_carry_optional_markers_or_defaults() {
+        let result = reconcile_text(
+            &empty_board(),
+            "function helper(a?: int = 1): (b: int) {\n    return a\n}\n",
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.contains(
+                "optional parameters and defaults are only supported on event parameters",
+            )
+        }));
+
+        let result = reconcile_text(
+            &empty_board(),
+            "function helper(a: int): (b?: int) {\n    return a\n}\n",
+        );
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.contains(
+                "optional parameters and defaults are only supported on event parameters",
+            )
+        }));
+    }
+
+    /// A generic event whose `title` output is optional (with the given stored default) or a
+    /// plain required output when `optional_title` is `None`.
+    fn generic_event_board(optional_title: Option<flow_like_types::Value>) -> Board {
+        let mut board = empty_board();
+        let mut event = Node::new("events_generic", "Now", "", "events");
+        event.id = "event".to_string();
+        event.set_start(true);
+        event.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+        event.add_output_pin("payload", "Payload", "", VariableType::Struct);
+        let title = event.add_output_pin("title", "Title", "", VariableType::String);
+        if let Some(default) = optional_title {
+            title
+                .set_default_value(Some(default))
+                .set_options(PinOptions::new().set_optional(true).build());
+        }
+        board.nodes.insert(event.id.clone(), event);
+        board
+    }
+
+    fn pin_option_commands(result: &ReconcileResult) -> Vec<(String, String, bool, Option<flow_like_types::Value>)> {
+        result
+            .commands
+            .iter()
+            .filter_map(|command| match command {
+                BoardCommand::UpdateNodePinOptions {
+                    node_id,
+                    pin_name,
+                    optional,
+                    default_value,
+                } => Some((
+                    node_id.clone(),
+                    pin_name.clone(),
+                    *optional,
+                    default_value.clone(),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn unchanged_optional_event_param_roundtrip_emits_nothing() {
+        let board = generic_event_board(Some(flow_like_types::json::json!("anonymous")));
+        let text = anchored_text(&board);
+        assert!(
+            text.contains("eventsGeneric now(payload: Struct, title?: string = \"anonymous\")"),
+            "{text}"
+        );
+
+        let result = reconcile_text(&board, &text);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(result.commands.is_empty(), "{:?}", result.commands);
+    }
+
+    #[test]
+    fn dropping_the_optional_marker_clears_the_pin_options() {
+        let board = generic_event_board(Some(flow_like_types::json::json!("anonymous")));
+        let text = anchored_text(&board).replace("title?: string = \"anonymous\"", "title: string");
+
+        let result = reconcile_text(&board, &text);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(result.commands.len(), 1, "{:?}", result.commands);
+        assert_eq!(
+            pin_option_commands(&result),
+            vec![("event".to_string(), "title".to_string(), false, None)]
+        );
+    }
+
+    #[test]
+    fn marking_a_required_event_param_optional_stores_its_default() {
+        let board = generic_event_board(None);
+        let text = anchored_text(&board).replace("title: string", "title?: string = \"x\"");
+
+        let result = reconcile_text(&board, &text);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(result.commands.len(), 1, "{:?}", result.commands);
+        assert_eq!(
+            pin_option_commands(&result),
+            vec![(
+                "event".to_string(),
+                "title".to_string(),
+                true,
+                Some(flow_like_types::Value::String("x".to_string()))
+            )]
+        );
+    }
+
+    #[test]
+    fn changing_an_optional_event_param_default_updates_the_pin_options() {
+        let board = generic_event_board(Some(flow_like_types::json::json!("anonymous")));
+        let text = anchored_text(&board).replace("= \"anonymous\"", "= \"guest\"");
+
+        let result = reconcile_text(&board, &text);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(
+            pin_option_commands(&result),
+            vec![(
+                "event".to_string(),
+                "title".to_string(),
+                true,
+                Some(flow_like_types::Value::String("guest".to_string()))
+            )]
+        );
+    }
+
+    /// `title?: string` and `title?: string = ""` resolve to the same runtime value on a string
+    /// pin, so writing the bare marker over a seeded type default is not an edit.
+    #[test]
+    fn bare_optional_marker_over_the_seeded_type_default_is_a_no_op() {
+        let board = generic_event_board(Some(flow_like_types::json::json!("")));
+        let text = anchored_text(&board);
+        assert!(text.contains("title?: string = \"\""), "{text}");
+        let text = text.replace("title?: string = \"\"", "title?: string");
+
+        let result = reconcile_text(&board, &text);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(result.commands.is_empty(), "{:?}", result.commands);
+    }
+
+    #[test]
+    fn anchored_payload_parameter_cannot_become_optional() {
+        let board = generic_event_board(None);
+        let text = anchored_text(&board).replace("payload: Struct", "payload?: Struct");
+
+        let result = reconcile_text(&board, &text);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.contains("payload is a catalog pin and cannot be optional or carry a default")
+        }));
+        assert!(pin_option_commands(&result).is_empty());
     }
 
     #[test]

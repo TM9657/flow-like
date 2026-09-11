@@ -6,9 +6,8 @@ use flow_like_types::{
     json::json,
 };
 use geo::{
-    Area, BooleanOps, BoundingRect, Centroid, Contains, ConvexHull, CoordsIter, Distance,
-    Euclidean, Geodesic, GeodesicArea, Geometry, Intersects, Length, LineString, MultiPolygon,
-    Simplify, Validation,
+    Area, BoundingRect, Centroid, Contains, ConvexHull, CoordsIter, Distance, Euclidean, Geodesic,
+    GeodesicArea, Geometry, Intersects, Length, LineString, Simplify, Validation,
 };
 
 macro_rules! ensure {
@@ -133,11 +132,49 @@ fn geometry_length(geometry: &Geometry<f64>, geodesic: bool) -> Result<f64> {
         _ => bail!("Unsupported geometry for length"),
     })
 }
-fn polygon_set(geometry: Geometry<f64>) -> Result<MultiPolygon<f64>> {
-    match geometry {
-        Geometry::Polygon(polygon) => Ok(MultiPolygon(vec![polygon])),
-        Geometry::MultiPolygon(polygons) => Ok(polygons),
-        _ => bail!("This operation requires Polygon or MultiPolygon"),
+fn geometry_area(geometry: &Geometry<f64>, geodesic: bool) -> Result<f64> {
+    Ok(match geometry {
+        Geometry::Polygon(polygon) => {
+            if geodesic {
+                polygon.geodesic_area_signed().abs()
+            } else {
+                polygon.unsigned_area()
+            }
+        }
+        Geometry::MultiPolygon(polygons) => polygons
+            .0
+            .iter()
+            .map(|polygon| geometry_area(&Geometry::Polygon(polygon.clone()), geodesic))
+            .collect::<Result<Vec<_>>>()?
+            .iter()
+            .sum(),
+        Geometry::GeometryCollection(collection) => collection
+            .0
+            .iter()
+            .map(|geometry| geometry_area(geometry, geodesic))
+            .collect::<Result<Vec<_>>>()?
+            .iter()
+            .sum(),
+        Geometry::Point(_)
+        | Geometry::Line(_)
+        | Geometry::LineString(_)
+        | Geometry::MultiPoint(_)
+        | Geometry::MultiLineString(_) => 0.0,
+        Geometry::Rect(rect) => geometry_area(&Geometry::Polygon(rect.to_polygon()), geodesic)?,
+        Geometry::Triangle(triangle) => {
+            geometry_area(&Geometry::Polygon(triangle.to_polygon()), geodesic)?
+        }
+    })
+}
+
+fn natural_convex_hull(geometry: &Geometry<f64>) -> Result<Geometry<f64>> {
+    let hull = geometry.convex_hull();
+    let coordinates = &hull.exterior().0;
+    match coordinates.as_slice() {
+        [] => bail!("Empty geometry has no convex hull"),
+        [point] | [point, _] => Ok(geo::Point(*point).into()),
+        [start, end, _] => Ok(LineString(vec![*start, *end]).into()),
+        _ => Ok(hull.into()),
     }
 }
 fn simplify(geometry: Geometry<f64>, tolerance: f64) -> Result<Geometry<f64>> {
@@ -170,10 +207,11 @@ pub(super) fn execute(operation: Operation, inputs: &Value) -> Result<Vec<(&'sta
         MakePoint => geometry_output(
             json!({"type":"Point", "coordinates":[number(inputs, "longitude")?, number(inputs, "latitude")?]}),
         ),
-        Cast(kind) => Ok(vec![(
-            "geometry_out",
-            canonicalize_geometry(input(inputs, "geometry")?, Some(kind))?,
-        )]),
+        Cast(kind) => {
+            let value = canonicalize_geometry(input(inputs, "geometry")?, Some(kind))?;
+            checked_geometry(&value)?;
+            Ok(vec![("geometry_out", value)])
+        }
         FromGeoJson => {
             let source = text(inputs, "text")?;
             ensure!(
@@ -303,9 +341,10 @@ pub(super) fn execute(operation: Operation, inputs: &Value) -> Result<Vec<(&'sta
             )])
         }
         Intersection => {
-            let a = polygon_set(checked_geometry(input(inputs, "a")?)?)?;
-            let b = polygon_set(checked_geometry(input(inputs, "b")?)?)?;
-            encoded_geometry(a.intersection(&b).into()).and_then(geometry_output)
+            let a = checked_geometry(input(inputs, "a")?)?;
+            let b = checked_geometry(input(inputs, "b")?)?;
+            encoded_geometry(super::advanced::mixed_dimension_intersection(a, b)?)
+                .and_then(geometry_output)
         }
         Centroid => {
             let centroid = checked_geometry(input(inputs, "geometry")?)?
@@ -313,12 +352,10 @@ pub(super) fn execute(operation: Operation, inputs: &Value) -> Result<Vec<(&'sta
                 .ok_or_else(|| anyhow!("Empty geometry has no centroid"))?;
             encoded_geometry(centroid.into()).and_then(geometry_output)
         }
-        ConvexHull => encoded_geometry(
-            checked_geometry(input(inputs, "geometry")?)?
-                .convex_hull()
-                .into(),
-        )
-        .and_then(geometry_output),
+        ConvexHull => {
+            let geometry = checked_geometry(input(inputs, "geometry")?)?;
+            encoded_geometry(natural_convex_hull(&geometry)?).and_then(geometry_output)
+        }
         Simplify => {
             let tolerance = number(inputs, "tolerance")?;
             ensure!(
@@ -356,16 +393,8 @@ pub(super) fn execute(operation: Operation, inputs: &Value) -> Result<Vec<(&'sta
             )])
         }
         PlanarArea | GeodesicArea => {
-            let polygons = polygon_set(checked_geometry(input(inputs, "geometry")?)?)?;
-            let area = if matches!(operation, GeodesicArea) {
-                polygons
-                    .0
-                    .iter()
-                    .map(|polygon| polygon.geodesic_area_signed().abs())
-                    .sum()
-            } else {
-                polygons.unsigned_area()
-            };
+            let geometry = checked_geometry(input(inputs, "geometry")?)?;
+            let area = geometry_area(&geometry, matches!(operation, GeodesicArea))?;
             Ok(vec![("area", finite_number(area)?)])
         }
     }
@@ -421,6 +450,14 @@ mod tests {
                 "geometry_out"
             ),
             point(1.0, 2.0)
+        );
+        let bowtie = json!({"type":"Polygon","coordinates":[[[0,0],[2,2],[0,2],[2,0],[0,0]]]});
+        assert!(
+            execute(
+                Operation::Cast(GeometryKind::Polygon),
+                &json!({"geometry":bowtie})
+            )
+            .is_err()
         );
         assert!(
             execute(
@@ -564,9 +601,36 @@ mod tests {
         );
         let bowtie = json!({"type":"Polygon","coordinates":[[[0,0],[2,2],[0,2],[2,0],[0,0]]]});
         assert!(execute(Operation::Contains, &json!({"a":bowtie,"b":point(1.0,1.0)})).is_err());
-        assert!(execute(Operation::ConvexHull, &json!({"geometry":point(1.0,1.0)})).is_err());
+        assert_eq!(
+            result(
+                Operation::ConvexHull,
+                json!({"geometry":point(1.0,1.0)}),
+                "geometry_out"
+            ),
+            point(1.0, 1.0)
+        );
         let empty = json!({"type":"GeometryCollection","geometries":[]});
         assert!(execute(Operation::Centroid, &json!({"geometry":empty})).is_err());
+    }
+
+    #[test]
+    fn intersection_preserves_lower_dimensional_results() {
+        let polygon = square();
+        let line = json!({"type":"LineString","coordinates":[[-1,0.5],[2,0.5]]});
+        let intersection = result(
+            Operation::Intersection,
+            json!({"a":polygon,"b":line}),
+            "geometry_out",
+        );
+        assert_eq!(intersection["type"], "LineString");
+        assert_eq!(intersection["coordinates"], json!([[0.0, 0.5], [1.0, 0.5]]));
+
+        let intersection_point = result(
+            Operation::Intersection,
+            json!({"a":square(),"b":point(0.25,0.25)}),
+            "geometry_out",
+        );
+        assert_eq!(intersection_point, point(0.25, 0.25));
     }
 
     #[test]
@@ -601,6 +665,10 @@ mod tests {
         assert_eq!(
             result(Operation::PlanarArea, json!({"geometry":square()}), "area"),
             1.0
+        );
+        assert_eq!(
+            result(Operation::PlanarArea, json!({"geometry":line}), "area"),
+            0.0
         );
         let area = result(
             Operation::GeodesicArea,

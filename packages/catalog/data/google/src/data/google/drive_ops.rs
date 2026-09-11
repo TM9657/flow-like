@@ -6,7 +6,6 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
-use flow_like_storage::Path;
 use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::{JsonSchema, Value, async_trait, json::json, reqwest};
 use serde::{Deserialize, Serialize};
@@ -66,15 +65,8 @@ async fn drive_error_message(resp: reqwest::Response) -> String {
     }
 }
 
-fn filename_from_path(path: &str) -> Option<String> {
-    std::path::Path::new(path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(String::from)
-}
-
 fn flow_path_filename(flow_path: &FlowPath) -> flow_like_types::Result<String> {
-    filename_from_path(&flow_path.path).ok_or_else(|| {
+    flow_like_storage::display_file_name(&flow_path.object_path()).ok_or_else(|| {
         flow_like_types::anyhow!(
             "Destination name is empty and FlowPath has no filename: {}",
             flow_path.path
@@ -87,11 +79,7 @@ async fn flow_path_size(
     flow_path: &FlowPath,
 ) -> flow_like_types::Result<u64> {
     let runtime = flow_path.to_runtime(context).await?;
-    let meta = runtime
-        .store
-        .as_generic()
-        .head(&Path::from(runtime.path.as_ref()))
-        .await?;
+    let meta = runtime.store.as_generic().head(&runtime.path).await?;
     Ok(meta.size)
 }
 
@@ -202,13 +190,13 @@ async fn upload_with_resumable(
 
     let runtime = source_file.to_runtime(context).await?;
     let store = runtime.store.as_generic();
-    let source_path = Path::from(runtime.path.as_ref());
+    let source_path = &runtime.path;
     let mut start = 0_u64;
 
     while start < size {
         let end_exclusive = std::cmp::min(start + RESUMABLE_UPLOAD_CHUNK_SIZE_BYTES, size);
         let end_inclusive = end_exclusive.saturating_sub(1);
-        let bytes = store.get_range(&source_path, start..end_exclusive).await?;
+        let bytes = store.get_range(source_path, start..end_exclusive).await?;
 
         let resp = client
             .put(&upload_url)
@@ -1368,5 +1356,29 @@ impl NodeLogic for DownloadGoogleDriveFileNode {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upload_name_is_the_decoded_file_name_for_raw_and_listed_paths() {
+        let raw = "uploads/Übersicht (2)#1.pdf";
+        let from_raw = FlowPath {
+            path: raw.to_string(),
+            store_ref: "store".to_string(),
+            cache_store_ref: None,
+        };
+        let from_listed = FlowPath::new(raw.to_string(), "store".to_string(), None);
+        assert_eq!(from_listed.path, "uploads/%C3%9Cbersicht (2)%231.pdf");
+        assert_eq!(from_raw.object_path(), from_listed.object_path());
+        for flow_path in [from_raw, from_listed] {
+            assert_eq!(
+                flow_path_filename(&flow_path).unwrap(),
+                "Übersicht (2)#1.pdf"
+            );
+        }
     }
 }

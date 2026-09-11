@@ -339,6 +339,35 @@ describe("FlowPilot workspace content collection", () => {
 		expect(result.documents[0].content).not.toContain("SHOULD_NOT_BE_INDEXED");
 	});
 
+	it("projects the optional flag of Event inputs but never their default values", async () => {
+		const { backend, scope, event } = fixture();
+		event.inputs.push({
+			...event.inputs[0],
+			id: "amount-pin",
+			name: "amount",
+			friendly_name: "Amount",
+			description: "Invoice amount",
+			data_type: "Float",
+			default_value: "EVENT_AMOUNT_DEFAULT_SHOULD_NOT_BE_INDEXED",
+		});
+		Object.assign(event.inputs[0], { optional: true });
+		const result = await collectWorkspaceDocuments(
+			backend,
+			{ kinds: ["event"] },
+			scope,
+		);
+		expect(result.coverage.complete).toBe(true);
+		const contract = JSON.parse(result.documents[0].content);
+		expect(contract.inputs).toEqual([
+			expect.objectContaining({ name: "customer_id", optional: true }),
+			expect.objectContaining({ name: "amount", data_type: "Float" }),
+		]);
+		expect(contract.inputs[1]).not.toHaveProperty("optional");
+		for (const input of contract.inputs)
+			expect(input).not.toHaveProperty("default_value");
+		expect(result.documents[0].content).not.toContain("SHOULD_NOT_BE_INDEXED");
+	});
+
 	it("does not treat object-valued action context as a routing identifier", async () => {
 		const { backend, scope, page } = fixture();
 		const action = page.components[0].component.eventHandlers?.onClick[0];

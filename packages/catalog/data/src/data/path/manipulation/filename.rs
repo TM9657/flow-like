@@ -5,6 +5,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+use flow_like_storage::{display_file_name, normalize_object_path};
 use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]
@@ -42,7 +43,12 @@ impl NodeLogic for FilenameNode {
         )
         .set_default_value(Some(json!(false)));
 
-        node.add_output_pin("filename", "Filename", "Filename", VariableType::String);
+        node.add_output_pin(
+            "filename",
+            "Filename",
+            "Human-readable filename with percent-encoding removed (e.g. 'Übersicht (2)#1.pdf')",
+            VariableType::String,
+        );
 
         node
     }
@@ -51,16 +57,14 @@ impl NodeLogic for FilenameNode {
         let path: FlowPath = context.evaluate_pin("path").await?;
         let remove_extension: bool = context.evaluate_pin("remove_extension").await?;
 
-        let pb = std::path::PathBuf::from(&path.path);
-
+        let filename = display_file_name(&path.object_path()).unwrap_or_default();
         let filename = if remove_extension {
-            pb.file_stem()
+            std::path::Path::new(&filename)
+                .file_stem()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default()
         } else {
-            pb.file_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_default()
+            filename
         };
 
         context.set_pin_value("filename", json!(filename)).await?;
@@ -130,7 +134,9 @@ impl NodeLogic for SetFilenameNode {
         };
 
         pb.set_file_name(new_name);
-        path.path = pb.to_string_lossy().into_owned();
+        path.path = normalize_object_path(&pb.to_string_lossy())
+            .as_ref()
+            .to_string();
 
         context.set_pin_value("out_path", json!(path)).await?;
         Ok(())

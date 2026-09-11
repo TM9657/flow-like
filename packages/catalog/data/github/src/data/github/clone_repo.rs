@@ -151,7 +151,7 @@ impl NodeLogic for CloneGitHubRepoNode {
         let local_target = if is_local {
             if let FlowLikeStore::Local(local) = &store {
                 let base_path = local
-                    .path_to_filesystem(&flow_like_storage::Path::from(target_dir.path.clone()))
+                    .path_to_filesystem(&target_dir.object_path())
                     .map_err(|e| flow_like_types::anyhow!("Failed to get local path: {}", e))?;
                 Some(base_path.join(&repo))
             } else {

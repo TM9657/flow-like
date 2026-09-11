@@ -764,10 +764,7 @@ impl Writer<'_> {
     }
 
     fn params(&mut self, params: &[Param]) {
-        let rendered: Vec<String> = params
-            .iter()
-            .map(|p| format!("{}: {}", p.name, render_type(&p.ty)))
-            .collect();
+        let rendered: Vec<String> = params.iter().map(render_param).collect();
         self.out.push_str(&rendered.join(", "));
     }
 
@@ -873,6 +870,28 @@ pub fn render_interface_type(ty: &InterfaceType) -> String {
 
 fn render_type(ty: &TypeRef) -> String {
     render_type_ref(ty)
+}
+
+/// `name: Type`, or `name?: Type = literal` for an optional parameter. A default only renders on
+/// an optional parameter and only when it is a real value: `= null` carries nothing the `?` does
+/// not already say.
+fn render_param(param: &Param) -> String {
+    let mut out = param.name.clone();
+    if param.optional {
+        out.push('?');
+    }
+    out.push_str(": ");
+    out.push_str(&render_type(&param.ty));
+    if param.optional
+        && let Some(default) = param
+            .default
+            .as_ref()
+            .filter(|default| !matches!(default, Literal::Null))
+    {
+        out.push_str(" = ");
+        out.push_str(&render_literal(default));
+    }
+    out
 }
 
 fn render_literal(lit: &Literal) -> String {

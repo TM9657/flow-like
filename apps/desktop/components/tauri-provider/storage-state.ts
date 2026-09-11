@@ -8,6 +8,7 @@ import {
 	assertBulkUploadSucceeded,
 	requestPrefixesInBatches,
 	runBulkUpload,
+	storageDisplayName,
 	toUploadTasks,
 	uploadToSignedUrl,
 } from "@flow-like/flow-like-ui";
@@ -496,10 +497,11 @@ export class StorageState implements IStorageState {
 
 	async writeStorageItems(items: IStorageItemActionResult[]) {
 		for (const file of items) {
+			const fileName = storageDisplayName(file.prefix);
 			const path = await save({
 				canCreateDirectories: true,
-				title: file.prefix.split("/").pop() || "Download File",
-				defaultPath: file.prefix.split("/").pop(),
+				title: fileName || "Download File",
+				defaultPath: fileName || undefined,
 			});
 
 			if (path && file.url) {

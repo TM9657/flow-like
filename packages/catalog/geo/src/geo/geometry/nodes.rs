@@ -215,7 +215,7 @@ fn definition(operation: Operation) -> Node {
             "geometry_intersection",
             "intersection",
             "Geometry Intersection (Planar)",
-            "Intersects Polygon or MultiPolygon inputs in the longitude/latitude coordinate plane. Returns a MultiPolygon, which can be empty.",
+            "Constructs the intersection of any Geometry inputs in the longitude/latitude coordinate plane. Preserves point, line and polygon results; mixed results use a GeometryCollection.",
         ),
         Centroid => (
             "geometry_centroid",
@@ -227,7 +227,7 @@ fn definition(operation: Operation) -> Node {
             "geometry_convex_hull",
             "convexHull",
             "Geometry Convex Hull (Planar)",
-            "Computes a polygon hull in the longitude/latitude coordinate plane. Fails when the input cannot form a valid polygon with at least three non-collinear positions.",
+            "Computes the smallest convex geometry containing the input in the longitude/latitude coordinate plane. A lower-dimensional input produces a Point or LineString.",
         ),
         Simplify => (
             "geometry_simplify",
@@ -263,13 +263,13 @@ fn definition(operation: Operation) -> Node {
             "geometry_planar_area",
             "planarArea",
             "Geometry Area (Square Degrees)",
-            "Computes Polygon or MultiPolygon area in square coordinate degrees, subtracting holes. This is a planar measurement.",
+            "Computes area in square coordinate degrees, subtracting polygon holes and summing collection members. Points and lines contribute zero.",
         ),
         GeodesicArea => (
             "geometry_geodesic_area",
             "geodesicArea",
             "Geometry Area (Square Meters)",
-            "Computes WGS 84 ellipsoidal Polygon or MultiPolygon area in square meters, subtracting holes. Each polygon must describe a region smaller than half the Earth.",
+            "Computes WGS 84 ellipsoidal area in square meters, subtracting polygon holes and summing collection members. Points and lines contribute zero. Each polygon must describe a region smaller than half the Earth.",
         ),
         Cast(GeometryKind::Point) => (
             "geometry_cast_point",
@@ -456,7 +456,7 @@ fn definition(operation: Operation) -> Node {
         Intersection => {
             geometry_input(&mut node, "a", None);
             geometry_input(&mut node, "b", None);
-            geometry_output(&mut node, Some(GeometryKind::MultiPolygon));
+            geometry_output(&mut node, None);
         }
         Centroid => {
             geometry_input(&mut node, "geometry", None);
@@ -464,7 +464,7 @@ fn definition(operation: Operation) -> Node {
         }
         ConvexHull => {
             geometry_input(&mut node, "geometry", None);
-            geometry_output(&mut node, Some(GeometryKind::Polygon));
+            geometry_output(&mut node, None);
         }
         Simplify => {
             geometry_input(&mut node, "geometry", None);

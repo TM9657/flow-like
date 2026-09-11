@@ -93,6 +93,7 @@ import {
 	resolveNodeEditTarget,
 } from "./flow-node/flow-node-edit-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
+import { FlowNodeQualityBadge } from "./flow-node/flow-node-quality-badge";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowNodeToolbar } from "./flow-node/flow-node-toolbar";
 import { FlowPin } from "./flow-pin";
@@ -985,6 +986,13 @@ const FlowNodeInner = memo(
 					>
 						<BoxIcon className="w-2 h-2 text-amber-500" />
 					</div>
+				)}
+				{!props.data.isUnavailable && !isReroute && (
+					<FlowNodeQualityBadge
+						boardId={props.data.boardId}
+						targetId={props.data.node.id}
+						className="left-1/2 top-0 -translate-x-1/2 -translate-y-1/2"
+					/>
 				)}
 				{props.data.isUnavailable && !isReroute && (
 					<div

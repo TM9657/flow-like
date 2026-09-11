@@ -5,6 +5,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+use flow_like_storage::display_file_name;
 use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]
@@ -37,7 +38,7 @@ impl NodeLogic for ExtensionNode {
         node.add_output_pin(
             "extension",
             "Extension",
-            "File Extension",
+            "File extension with percent-encoding removed (e.g. 'doküment')",
             VariableType::String,
         );
 
@@ -47,8 +48,12 @@ impl NodeLogic for ExtensionNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let path: FlowPath = context.evaluate_pin("path").await?;
 
-        let path = path.to_runtime(context).await?;
-        let extension = path.path.extension().unwrap_or_default().to_string();
+        let extension = display_file_name(&path.object_path())
+            .and_then(|name| {
+                name.rsplit_once('.')
+                    .map(|(_, extension)| extension.to_string())
+            })
+            .unwrap_or_default();
 
         context.set_pin_value("extension", json!(extension)).await?;
         Ok(())

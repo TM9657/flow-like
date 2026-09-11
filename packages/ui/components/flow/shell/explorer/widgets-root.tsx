@@ -132,6 +132,7 @@ export function WidgetsRoot({
 								depth={0}
 								icon={<SquareDashedBottomCodeIcon />}
 								label={name}
+								labelClassName="font-sans font-medium text-foreground"
 								onSelect={() => onOpenWidget(widgetId)}
 							/>
 						</ContextMenuTrigger>

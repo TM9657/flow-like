@@ -19,7 +19,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 /// Bump on ANY change to the structs in this file. A mismatch invalidates
 /// every persisted artifact; loaders fall back to compiling from the proto.
-pub const FORMAT_VERSION: u16 = 3;
+pub const FORMAT_VERSION: u16 = 4;
 
 pub const MAGIC: [u8; 4] = *b"FLCB";
 
@@ -161,6 +161,7 @@ pub struct CompiledPinOptions {
     pub step: Option<f64>,
     pub enforce_schema: Option<bool>,
     pub enforce_generic_value_type: Option<bool>,
+    pub optional: Option<bool>,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]

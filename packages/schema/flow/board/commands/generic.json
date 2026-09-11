@@ -569,6 +569,9 @@
 				"enforce_schema": {
 					"type": ["boolean", "null"]
 				},
+				"optional": {
+					"type": ["boolean", "null"]
+				},
 				"range": {
 					"type": ["array", "null"],
 					"items": [

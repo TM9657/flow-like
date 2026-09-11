@@ -5,7 +5,7 @@ use crate::{
     entity::meta,
     error::ApiError,
     middleware::jwt::AppUser,
-    routes::app::meta::{MediaItem, MediaQuery, MetaMode},
+    routes::app::meta::{MediaItem, MediaQuery, MetaMode, media_item_name},
     state::AppState,
 };
 use axum::{
@@ -60,7 +60,7 @@ pub async fn push_media(
     let language = query.language.clone().unwrap_or_else(|| "en".to_string());
     let media_prefix = mode.media_prefix(&app_id);
     let item_id = create_id();
-    let item_name = format!("{}.{}", item_id, query.extension);
+    let item_name = media_item_name(&item_id, &query.extension)?;
     let mode = Arc::new(mode);
     let query = Arc::new(query);
 

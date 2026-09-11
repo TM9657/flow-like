@@ -72,6 +72,7 @@ impl FlowPath {
 
     // ── Path manipulation (pure, no host calls) ────────────────────────
 
+    /// Appends `name` verbatim; the host accepts a raw name or a key from a list response.
     pub fn child(&self, name: &str) -> FlowPath {
         let sep = if self.path.ends_with('/') || self.path.is_empty() {
             ""
@@ -94,18 +95,14 @@ impl FlowPath {
         })
     }
 
+    /// The decoded last segment; keys from the host are percent-encoded.
     pub fn file_name(&self) -> Option<String> {
-        let trimmed = self.path.trim_end_matches('/');
-        trimmed
-            .rfind('/')
-            .map(|idx| trimmed[idx + 1..].to_string())
-            .or_else(|| {
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed.to_string())
-                }
-            })
+        self.path
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .filter(|name| !name.is_empty())
+            .map(percent_decode)
     }
 
     pub fn extension(&self) -> Option<String> {
@@ -137,6 +134,34 @@ impl FlowPath {
     pub fn schema() -> String {
         crate::host::get_type_schema("FlowPath").unwrap_or_default()
     }
+}
+
+/// Decodes `%XX` sequences. A malformed sequence is kept literally and a
+/// segment that does not decode to UTF-8 is returned unchanged.
+fn percent_decode(segment: &str) -> String {
+    let bytes = segment.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let decoded = (bytes[i] == b'%' && i + 2 < bytes.len())
+            .then(|| hex_value(bytes[i + 1]).zip(hex_value(bytes[i + 2])))
+            .flatten();
+        match decoded {
+            Some((hi, lo)) => {
+                out.push((hi << 4) | lo);
+                i += 3;
+            }
+            None => {
+                out.push(bytes[i]);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|_| segment.to_string())
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    (byte as char).to_digit(16).map(|v| v as u8)
 }
 
 // =============================================================================
@@ -742,6 +767,36 @@ mod tests {
     fn test_flow_path_file_name_empty() {
         let fp = FlowPath::new(String::new(), "s".into(), None);
         assert!(fp.file_name().is_none());
+    }
+
+    #[test]
+    fn test_flow_path_file_name_decodes_listed_key() {
+        let fp = FlowPath::new("dir/%C3%9Cbersicht (2)%231.pdf".into(), "s".into(), None);
+        assert_eq!(fp.file_name().as_deref(), Some("Übersicht (2)#1.pdf"));
+        assert_eq!(fp.extension().as_deref(), Some("pdf"));
+    }
+
+    #[test]
+    fn test_flow_path_file_name_keeps_raw_and_malformed() {
+        let raw = FlowPath::new("dir/Übersicht (2)#1.pdf".into(), "s".into(), None);
+        assert_eq!(raw.file_name().as_deref(), Some("Übersicht (2)#1.pdf"));
+        let malformed = FlowPath::new("100%.txt".into(), "s".into(), None);
+        assert_eq!(malformed.file_name().as_deref(), Some("100%.txt"));
+        let bad_utf8 = FlowPath::new("bad%FF.txt".into(), "s".into(), None);
+        assert_eq!(bad_utf8.file_name().as_deref(), Some("bad%FF.txt"));
+    }
+
+    #[test]
+    fn test_flow_path_child_keeps_segment_verbatim() {
+        let fp = FlowPath::new("dir".into(), "s".into(), None);
+        assert_eq!(
+            fp.child("Übersicht (2)#1.pdf").path,
+            "dir/Übersicht (2)#1.pdf"
+        );
+        assert_eq!(
+            fp.join(&["%C3%9Cbersicht (2)%231.pdf"]).path,
+            "dir/%C3%9Cbersicht (2)%231.pdf"
+        );
     }
 
     #[test]

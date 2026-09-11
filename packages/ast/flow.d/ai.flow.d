@@ -207,6 +207,19 @@ declare namespace ai {
     function extractFromHistory({ model: Struct, schema: string, history: Struct, hint?: string }): { response: any, stats: Struct };
 
     /**
+     * Uses an LLM and a reference struct's schema to extract structured data from free-form text
+     * @node llm_extractor_struct_schema @alias llmExtractorStructSchema
+     * @param model — Bit pointing to the LLM that will perform the extraction
+     * @param structShape — A reference struct whose schema defines the extracted data. Its value is never evaluated
+     * @param text — Raw text that should be structured via the reference schema
+     * @param hint (optional) — Optional hint to guide the extraction, such as selecting line items instead of totals
+     * @returns response — Structured JSON value that matches the reference schema
+     * @returns stats — Token usage, cost, and model statistics
+     * @impure has side effects / drives control flow
+     */
+    function extractWithStructSchema({ model: Struct, structShape: Struct, text: string, hint?: string }): { response: Struct, stats: Struct };
+
+    /**
      * Finds the best model based on certain selection criteria
      * @node ai_generative_find_model @alias aiGenerativeFindModel
      * @param preferences (optional) — Weights and requirements that guide model selection

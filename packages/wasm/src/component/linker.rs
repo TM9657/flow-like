@@ -2,7 +2,7 @@ use crate::error::{WasmError, WasmResult};
 use crate::host_functions::HostState;
 use crate::limits::{WasmCapabilities, WasmSecurityConfig};
 use crate::llm_message::sdk_message_content;
-use crate::wasi::{isolated_wasi_ctx_builder, IsolatedWasiCtxBuilder};
+use crate::wasi::{IsolatedWasiCtxBuilder, isolated_wasi_ctx_builder};
 use flow_like_storage::object_store::ObjectStoreExt;
 use serde_json::Value;
 use std::future::Future;
@@ -677,7 +677,7 @@ fn register_storage(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                         Some(s) => s,
                         None => return Ok((None,)),
                     };
-                    let path = flow_like_storage::object_store::path::Path::from(flow_path.path);
+                    let path = flow_path.object_path();
                     match obj_store.as_generic().get(&path).await {
                         Ok(result) => match result.bytes().await {
                             Ok(bytes) => Ok((Some(bytes.to_vec()),)),
@@ -868,8 +868,7 @@ fn register_storage(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                         None => return Ok((None,)),
                     };
                     use futures::StreamExt;
-                    let prefix =
-                        flow_like_storage::object_store::path::Path::from(flow_path.path.clone());
+                    let prefix = flow_path.object_path();
                     let entries: Vec<_> = obj_store
                         .as_generic()
                         .list(Some(&prefix))

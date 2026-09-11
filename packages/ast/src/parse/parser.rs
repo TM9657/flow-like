@@ -896,13 +896,28 @@ impl Parser<'_> {
     }
 
     /// Parse a comma-separated `name: Type` parameter list up to (not including) `end`.
+    ///
+    /// Each entry may be written `name?: Type = literal` — the optional marker and default are
+    /// accepted syntactically everywhere a parameter list appears; whether they are meaningful in
+    /// that position (event params only) is reconcile's diagnostic.
     fn params(&mut self, end: &Tok) -> Result<Vec<Param>, ParseError> {
         let mut params = Vec::new();
         while self.cur() != end {
             let name = self.ident()?;
+            let optional = self.eat(&Tok::Question);
             self.expect(&Tok::Colon)?;
             let ty = self.type_ref()?;
-            params.push(Param { name, ty });
+            let default = if self.eat(&Tok::Assign) {
+                Some(self.literal()?)
+            } else {
+                None
+            };
+            params.push(Param {
+                name,
+                ty,
+                optional,
+                default,
+            });
             if !self.eat(&Tok::Comma) {
                 break;
             }

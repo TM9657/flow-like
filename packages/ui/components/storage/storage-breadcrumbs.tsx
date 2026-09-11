@@ -1,3 +1,4 @@
+import { decodeStorageSegment } from "../../lib/storage-tree";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -45,7 +46,7 @@ export function StorageBreadcrumbs({
 									updatePrefix(newPrefix);
 								}}
 							>
-								{part}
+								{decodeStorageSegment(part)}
 							</BreadcrumbLink>
 						</BreadcrumbItem>
 					</>
@@ -54,7 +55,9 @@ export function StorageBreadcrumbs({
 					<>
 						<BreadcrumbSeparator />
 						<BreadcrumbItem>
-							<BreadcrumbPage>{segments[segments.length - 1]}</BreadcrumbPage>
+							<BreadcrumbPage>
+								{decodeStorageSegment(segments[segments.length - 1])}
+							</BreadcrumbPage>
 						</BreadcrumbItem>
 					</>
 				)}

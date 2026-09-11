@@ -7,6 +7,7 @@ pub mod invoke_simple;
 pub mod invoke_with_tools;
 pub mod llm_extractor;
 pub mod llm_extractor_history;
+pub mod llm_extractor_struct_schema;
 pub mod preferences;
 pub mod provider;
 pub mod response;

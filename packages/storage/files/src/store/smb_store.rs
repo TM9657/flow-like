@@ -174,7 +174,9 @@ impl SmbObjectStore {
     async fn list_recursive_from(&self, prefix: &str) -> Result<Vec<ObjectMeta>> {
         if !prefix.is_empty() {
             match self.stat_info(prefix).await {
-                Ok(info) if !info.is_directory => return Ok(vec![meta_from_info(prefix, &info)]),
+                Ok(info) if !info.is_directory => {
+                    return Ok(vec![meta_from_info(Path::parse(prefix)?, &info)]);
+                }
                 Ok(_) => {}
                 Err(object_store::Error::NotFound { .. }) => return Ok(Vec::new()),
                 Err(err) => return Err(err),
@@ -198,10 +200,13 @@ impl SmbObjectStore {
                 .filter(|entry| is_real_entry(&entry.name))
             {
                 let path = join_path(&dir, &entry.name);
+                let Some(location) = listed_location(&path) else {
+                    continue;
+                };
                 if entry.is_directory {
                     dirs.push(path);
                 } else {
-                    objects.push(meta_from_entry(&path, &entry));
+                    objects.push(meta_from_entry(location, &entry));
                 }
             }
         }
@@ -430,7 +435,7 @@ impl SmbObjectStore {
             });
         }
 
-        Ok(meta_from_info(location.as_ref(), &info))
+        Ok(meta_from_info(location.clone(), &info))
     }
 
     async fn delete_object(&self, location: &Path) -> Result<()> {
@@ -615,7 +620,7 @@ impl ObjectStore for SmbObjectStore {
                 Ok(info) if !info.is_directory => {
                     return Ok(ListResult {
                         common_prefixes: Vec::new(),
-                        objects: vec![meta_from_info(&prefix, &info)],
+                        objects: vec![meta_from_info(Path::parse(&prefix)?, &info)],
                     });
                 }
                 Ok(_) => {}
@@ -644,11 +649,13 @@ impl ObjectStore for SmbObjectStore {
             .into_iter()
             .filter(|entry| is_real_entry(&entry.name))
         {
-            let path = join_path(&prefix, &entry.name);
+            let Some(location) = listed_location(&join_path(&prefix, &entry.name)) else {
+                continue;
+            };
             if entry.is_directory {
-                common_prefixes.push(Path::from(path));
+                common_prefixes.push(location);
             } else {
-                objects.push(meta_from_entry(&path, &entry));
+                objects.push(meta_from_entry(location, &entry));
             }
         }
 
@@ -758,10 +765,22 @@ fn is_real_entry(name: &str) -> bool {
     name != "." && name != ".." && !name.is_empty()
 }
 
-fn meta_from_info(path: &str, info: &FileInfo) -> ObjectMeta {
+/// Share entries are stored under their object-store key, so a listed name is
+/// taken verbatim instead of being encoded a second time.
+fn listed_location(path: &str) -> Option<Path> {
+    match Path::parse(path) {
+        Ok(location) => Some(location),
+        Err(err) => {
+            tracing::warn!("Skipping SMB entry {path:?}: not a valid object path ({err})");
+            None
+        }
+    }
+}
+
+fn meta_from_info(location: Path, info: &FileInfo) -> ObjectMeta {
     let last_modified = filetime_to_datetime(info.modified);
     ObjectMeta {
-        location: Path::from(path),
+        location,
         last_modified,
         size: info.size,
         e_tag: Some(etag(info.size, last_modified)),
@@ -769,10 +788,10 @@ fn meta_from_info(path: &str, info: &FileInfo) -> ObjectMeta {
     }
 }
 
-fn meta_from_entry(path: &str, entry: &DirectoryEntry) -> ObjectMeta {
+fn meta_from_entry(location: Path, entry: &DirectoryEntry) -> ObjectMeta {
     let last_modified = filetime_to_datetime(entry.modified);
     ObjectMeta {
-        location: Path::from(path),
+        location,
         last_modified,
         size: entry.size,
         e_tag: Some(etag(entry.size, last_modified)),
@@ -860,6 +879,24 @@ mod tests {
     fn test_object_path_normalizes_for_object_store_keys() {
         assert_eq!(object_path(&Path::from("/dir/file.txt")), "dir/file.txt");
         assert_eq!(object_path(&Path::from("dir/file.txt")), "dir/file.txt");
+    }
+
+    #[test]
+    fn test_listed_location_keeps_share_names_verbatim() {
+        let encoded = listed_location("%C3%9Cbersicht (2)%231.pdf").expect("valid entry");
+        assert_eq!(encoded, Path::from("Übersicht (2)#1.pdf"));
+        assert_eq!(object_path(&encoded), "%C3%9Cbersicht (2)%231.pdf");
+
+        let nested =
+            listed_location(&join_path("dir", "%C3%9Cbersicht (2)%231.pdf")).expect("valid entry");
+        assert_eq!(nested, Path::from("dir").join("Übersicht (2)#1.pdf"));
+
+        let raw = listed_location("Übersicht.pdf").expect("valid entry");
+        assert_eq!(raw.as_ref(), "Übersicht.pdf");
+        assert_eq!(object_path(&raw), "Übersicht.pdf");
+
+        assert!(listed_location("dir/..").is_none());
+        assert!(listed_location("bad\u{1}name").is_none());
     }
 
     #[test]

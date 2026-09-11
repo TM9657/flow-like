@@ -2,10 +2,13 @@ import { describe, expect, test } from "bun:test";
 import type { IStorageItem } from "./schema/storage/storage-item";
 import {
 	childPrefix,
+	decodeStorageSegment,
 	normalizeStorageLocation,
 	parentPrefix,
 	parseStorageNodeId,
 	sortStorageEntries,
+	storageDisplayName,
+	storageDisplayPath,
 	storageItemName,
 	storageNodeId,
 	storagePrefixTrail,
@@ -14,6 +17,8 @@ import {
 
 const APP_BASE = "apps/app-1/upload";
 const USER_BASE = "users/sub-1/apps/app-1";
+const RAW_NAME = "Übersicht (2)#1.pdf";
+const ENCODED_NAME = "%C3%9Cbersicht (2)%231.pdf";
 
 const item = (location: string, isDir = false): IStorageItem => ({
 	location,
@@ -104,6 +109,49 @@ describe("storageItemName", () => {
 		expect(storageItemName(item(`${APP_BASE}/docs/`, true))).toBe("docs");
 		expect(storageItemName(item("docs/", true))).toBe("docs");
 		expect(storageItemName(item(""))).toBe("");
+	});
+});
+
+describe("decodeStorageSegment", () => {
+	test("gives the raw name back for a listed key", () => {
+		expect(decodeStorageSegment(ENCODED_NAME)).toBe(RAW_NAME);
+		expect(decodeStorageSegment("100%25.txt")).toBe("100%.txt");
+	});
+
+	test("passes a raw name through unchanged", () => {
+		expect(decodeStorageSegment(RAW_NAME)).toBe(RAW_NAME);
+		expect(decodeStorageSegment("a.pdf")).toBe("a.pdf");
+	});
+
+	test("keeps a malformed escape as it is", () => {
+		expect(decodeStorageSegment("%zz.txt")).toBe("%zz.txt");
+		expect(decodeStorageSegment("trailing%")).toBe("trailing%");
+	});
+});
+
+describe("storageDisplayName and storageDisplayPath", () => {
+	test("show the same name for a raw and a listed location", () => {
+		expect(storageDisplayName(`${APP_BASE}/docs/${ENCODED_NAME}`)).toBe(
+			RAW_NAME,
+		);
+		expect(storageDisplayName(`docs/${RAW_NAME}`)).toBe(RAW_NAME);
+		expect(storageDisplayName(`docs/${ENCODED_NAME}`)).toBe(
+			storageDisplayName(`docs/${RAW_NAME}`),
+		);
+	});
+
+	test("decode every segment while keeping the separators", () => {
+		expect(storageDisplayPath(`%C3%9Cbersicht/2026%231/${ENCODED_NAME}`)).toBe(
+			`Übersicht/2026#1/${RAW_NAME}`,
+		);
+		expect(storageDisplayPath("docs/a.pdf")).toBe("docs/a.pdf");
+		expect(storageDisplayPath("")).toBe("");
+	});
+
+	test("do not fold an encoded slash into a separator", () => {
+		expect(storageDisplayPath("docs/a%2Fb.pdf")).toBe("docs/a/b.pdf");
+		expect(storageDisplayPath("docs/a%2Fb.pdf").split("/")).toHaveLength(3);
+		expect(storageDisplayName("docs/a%2Fb.pdf")).toBe("a/b.pdf");
 	});
 });
 
@@ -199,6 +247,24 @@ describe("storageTreeEntry", () => {
 			"user",
 		);
 		expect(entry.isFolder).toBe(false);
+	});
+
+	test("keeps the listed key for addressing and decodes only the name", () => {
+		const cloud = storageTreeEntry(
+			item(`${APP_BASE}/docs/${ENCODED_NAME}`),
+			"docs",
+			"app",
+		);
+		const desktop = storageTreeEntry(
+			item(`docs/${ENCODED_NAME}`),
+			"docs",
+			"app",
+		);
+		expect(cloud.path).toBe(`docs/${ENCODED_NAME}`);
+		expect(desktop.path).toBe(cloud.path);
+		expect(desktop.nodeId).toBe(cloud.nodeId);
+		expect(cloud.name).toBe(RAW_NAME);
+		expect(storageItemName(cloud.item)).toBe(RAW_NAME);
 	});
 });
 

@@ -26,15 +26,16 @@ pub async fn get_path_meta(path: String) -> Result<Vec<StorageItem>, TauriFuncti
 
     let mut items = Vec::new();
     while let Some(meta) = list_stream.next().await.transpose().unwrap() {
-        let mut item = StorageItem::from(meta);
-        item.location = object_store
-            .path_to_filesystem(&Path::from(item.location.clone()))
+        let location = object_store
+            .path_to_filesystem(&meta.location)
             .map_err(|e| {
                 eprintln!("Error converting path to filesystem: {}", e);
                 anyhow!("Failed to convert path to filesystem")
             })?
             .to_string_lossy()
             .into_owned();
+        let mut item = StorageItem::from(meta);
+        item.location = location;
         items.push(item);
     }
 

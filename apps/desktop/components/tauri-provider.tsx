@@ -763,7 +763,26 @@ export function TauriProvider({
 
 					if (items.length) {
 						console.time("Resuming download requests");
-						await Promise.allSettled(items.map((item) => download(item)));
+						// A registry entry that outlived its download would
+						// otherwise re-announce a finished artifact as a fresh
+						// download on every launch.
+						const pending = await Promise.all(
+							items.map(async (item) => {
+								try {
+									const installed = await invoke<boolean>("is_bit_installed", {
+										bit: item,
+									});
+									return installed ? undefined : item;
+								} catch {
+									return item;
+								}
+							}),
+						);
+						await Promise.allSettled(
+							pending
+								.filter((item): item is IBit => item !== undefined)
+								.map((item) => download(item)),
+						);
 						console.timeEnd("Resuming download requests");
 					}
 					globalThis.__FL_DL_RESUMED__ = true;

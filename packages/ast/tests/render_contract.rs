@@ -250,9 +250,18 @@ const POSITIONS: &[Position] = &[
         id: "event-param-name",
         camelized: true,
         build: |s| {
+            let params = vec![Param::new(s, string_ty())];
+            doc(vec![event("onTick", params, Vec::new())])
+        },
+    },
+    Position {
+        id: "event-param-default",
+        camelized: false,
+        build: |s| {
             let params = vec![Param {
-                name: s.to_string(),
-                ty: string_ty(),
+                optional: true,
+                default: Some(Literal::String(s.to_string())),
+                ..Param::new("label", string_ty())
             }];
             doc(vec![event("onTick", params, Vec::new())])
         },
@@ -361,10 +370,7 @@ const POSITIONS: &[Position] = &[
         build: |s| BoardAst {
             functions: vec![FnDecl {
                 name: "helper".to_string(),
-                params: vec![Param {
-                    name: s.to_string(),
-                    ty: string_ty(),
-                }],
+                params: vec![Param::new(s, string_ty())],
                 returns: Vec::new(),
                 body: Block::default(),
                 cache: None,
@@ -380,10 +386,7 @@ const POSITIONS: &[Position] = &[
             functions: vec![FnDecl {
                 name: "helper".to_string(),
                 params: Vec::new(),
-                returns: vec![Param {
-                    name: s.to_string(),
-                    ty: string_ty(),
-                }],
+                returns: vec![Param::new(s, string_ty())],
                 body: Block::default(),
                 cache: None,
                 anchor: Some("fn-layer".to_string()),
@@ -751,7 +754,7 @@ fn shape(ast: &BoardAst) -> String {
         ast.detached.len(),
     ));
     for event in &ast.events {
-        out.push_str(&format!(" [event params={} ", event.params.len()));
+        out.push_str(&format!(" [event params={} ", params_shape(&event.params)));
         block_shape(&event.body, &mut out);
         out.push(']');
     }
@@ -775,6 +778,22 @@ fn shape(ast: &BoardAst) -> String {
         out.push_str(&format!(" [iface fields={}]", interface.fields.len()));
     }
     out
+}
+
+/// One marker per parameter: `?` for optional, `=` for a carried default. An optional parameter
+/// whose `?` fails to render comes back required-with-default, which is a different pin.
+fn params_shape(params: &[Param]) -> String {
+    params
+        .iter()
+        .map(|param| {
+            format!(
+                "{}{}",
+                if param.optional { "?" } else { "" },
+                if param.default.is_some() { "=" } else { "" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn block_shape(block: &Block, out: &mut String) {
