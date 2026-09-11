@@ -263,6 +263,8 @@ pub enum BoardCommand {
         optional: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         default_value: Option<serde_json::Value>,
+        #[serde(default)]
+        summary: Option<String>,
     },
     /// Rename an existing node's friendly (display) name without touching its behavior. Used by
     /// FlowScript named events (`eventsSimple dashboardLoad() { }`) when only the name changed.
@@ -488,6 +490,7 @@ mod pin_options_tests {
             pin_name: "ticketId".to_string(),
             optional: true,
             default_value: None,
+            summary: None,
         };
 
         let value = serde_json::to_value(&command).expect("serialize pin options command");

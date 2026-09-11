@@ -694,6 +694,7 @@ pub async fn validate_emit_commands(
                 pin_name,
                 optional,
                 default_value,
+                ..
             } => {
                 let Some(entity) = entities.get(node_id) else {
                     errors.push(issue(
@@ -2108,6 +2109,7 @@ mod tests {
                 pin_name: pin_name.to_string(),
                 optional,
                 default_value,
+                summary: None,
             }],
             explanation: "Toggle an optional event parameter".to_string(),
         }
