@@ -13,6 +13,7 @@ use flow_like_types::{anyhow, bail, reqwest};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -23,6 +24,13 @@ pub struct BitDownloadEvent {
     pub downloaded: u64,
     pub path: String,
     pub hash: String,
+}
+
+/// Filesystem targets for a single artifact.
+struct ArtifactPaths {
+    store: Path,
+    file: PathBuf,
+    temp: PathBuf,
 }
 
 // Global concurrency limit for active downloads.
@@ -38,7 +46,24 @@ fn global_download_semaphore() -> &'static Semaphore {
     })
 }
 
+/// Announced length of the remote artifact.
+///
+/// HEAD is the cheap probe, but gateways and proxies regularly reject the
+/// method or answer it with an interstitial, so a failed HEAD is retried as a
+/// single-byte ranged GET before the artifact is declared unreachable.
 async fn get_remote_size(client: &Client, url: &str) -> flow_like_types::Result<u64> {
+    let head_error = match head_remote_size(client, url).await {
+        Ok(size) => return Ok(size),
+        Err(err) => err,
+    };
+
+    match range_probe_remote_size(client, url).await {
+        Ok(size) => Ok(size),
+        Err(range_error) => bail!("HEAD probe: {head_error}; ranged GET probe: {range_error}"),
+    }
+}
+
+async fn head_remote_size(client: &Client, url: &str) -> flow_like_types::Result<u64> {
     // Transfer compression hides the real artifact length: a Brotli/gzip
     // response carries no content-length, and byte ranges would refer to the
     // encoded stream instead of the stored file.
@@ -48,19 +73,99 @@ async fn get_remote_size(client: &Client, url: &str) -> flow_like_types::Result<
         .send()
         .await
         .map_err(reqwest::Error::without_url)?;
-    if res.status().is_server_error() {
-        bail!("Server responded with {} to HEAD request", res.status());
+
+    // Block pages, captive portals and auth challenges are well-formed
+    // responses; only a success status describes the artifact itself.
+    if !res.status().is_success() {
+        bail!("server responded with {}", res.status());
     }
+
     let total_size = res
         .headers()
-        .get("content-length")
-        .ok_or(anyhow!("No content length"))?;
+        .get(reqwest::header::CONTENT_LENGTH)
+        .ok_or(anyhow!("response carried no content-length"))?
+        .to_str()?
+        .trim()
+        .parse::<u64>()?;
 
-    println!("Remote file size: {:?}", total_size);
+    Ok(total_size)
+}
 
-    let total_size = total_size.to_str()?;
-    let size = total_size.parse::<u64>()?;
-    Ok(size)
+async fn range_probe_remote_size(client: &Client, url: &str) -> flow_like_types::Result<u64> {
+    let res = client
+        .get(url)
+        .header(reqwest::header::ACCEPT_ENCODING, "identity")
+        .header(reqwest::header::RANGE, "bytes=0-0")
+        .send()
+        .await
+        .map_err(reqwest::Error::without_url)?;
+
+    if !res.status().is_success() {
+        bail!("server responded with {}", res.status());
+    }
+
+    let content_range = res
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)
+        .ok_or(anyhow!("response carried no content-range"))?
+        .to_str()?
+        .to_string();
+
+    parse_total_from_content_range(&content_range)
+}
+
+/// Total artifact length out of a `bytes 0-0/1234` content-range header.
+fn parse_total_from_content_range(content_range: &str) -> flow_like_types::Result<u64> {
+    let total = content_range
+        .rsplit('/')
+        .next()
+        .map(str::trim)
+        .filter(|total| !total.is_empty() && *total != "*")
+        .ok_or(anyhow!(
+            "content-range {content_range} carries no total length"
+        ))?;
+
+    Ok(total.parse::<u64>()?)
+}
+
+/// Reject a response whose announced length cannot be the artifact.
+///
+/// The declared size is the only description of the artifact available before
+/// the first byte is fetched, which makes it the one check that separates the
+/// real file from an error page served with a success status.
+fn validate_announced_size(expected: Option<u64>, announced: u64) -> flow_like_types::Result<()> {
+    let Some(expected) = expected.filter(|size| *size > 0) else {
+        return Ok(());
+    };
+
+    if announced != expected {
+        bail!("server announced {announced} bytes, expected {expected}");
+    }
+
+    Ok(())
+}
+
+/// Whether the artifact can be checked against a known content hash.
+///
+/// User-created custom bits don't know their artifact hash upfront. Legacy
+/// roots use `hash == id`; newer GGUF roots use a source-derived identity so
+/// edits to pinned URLs select a fresh cache target. Both are trust-on-first-use.
+fn hash_is_verifiable(bit: &crate::bit::Bit) -> bool {
+    !(bit.hash == bit.id || bit.has_matching_user_source_artifact_identity())
+}
+
+fn verify_hash(bit: &crate::bit::Bit, hasher: &blake3::Hasher) -> flow_like_types::Result<()> {
+    if !hash_is_verifiable(bit) {
+        return Ok(());
+    }
+
+    let file_hash = hasher.finalize().to_hex().to_string().to_lowercase();
+    let expected = bit.hash.to_lowercase();
+    if file_hash != expected {
+        bail!("content hash {file_hash} does not match {expected}");
+    }
+
+    Ok(())
 }
 
 async fn publish_progress(
@@ -80,7 +185,7 @@ async fn publish_progress(
     );
 
     if let Err(err) = event.call(callback).await {
-        println!("Error publishing progress: {}", err);
+        tracing::warn!("Error publishing progress: {}", err);
     }
 
     Ok(())
@@ -139,219 +244,335 @@ pub async fn download_bit(
         .map_err(|err| anyhow!("Download worker dropped: {}", err))?
 }
 
+/// Wait out a download of the same artifact started by someone else.
+///
+/// Two packs can name the same tokenizer or config file, so a request for an
+/// artifact that is already in flight belongs to the first caller. The second
+/// one waits for it instead of reporting a failure, and the progress events the
+/// owner publishes are keyed by hash, so both packs still see them.
+async fn await_concurrent_download(
+    bit: &crate::bit::Bit,
+    app_state: &Arc<FlowLikeState>,
+    file_path: &std::path::Path,
+) -> flow_like_types::Result<()> {
+    const POLL_INTERVAL: Duration = Duration::from_millis(250);
+    const MAX_WAIT: Duration = Duration::from_secs(60 * 60);
+
+    tracing::debug!(
+        "Waiting for an in-flight download of the artifact of bit {}",
+        bit.id
+    );
+
+    let started = Instant::now();
+    loop {
+        if started.elapsed() > MAX_WAIT {
+            bail!(
+                "Timed out waiting for the in-flight download of bit {}",
+                bit.id
+            );
+        }
+
+        flow_like_types::tokio::time::sleep(POLL_INTERVAL).await;
+
+        let in_flight = {
+            let manager = app_state.download_manager();
+            let manager = manager.lock().await;
+            manager.download_exists(bit)
+        };
+
+        if !in_flight {
+            break;
+        }
+    }
+
+    let installed = async_fs::metadata(file_path)
+        .await
+        .is_ok_and(|meta| bit.size.is_none_or(|size| size == meta.len()));
+
+    if !installed {
+        bail!(
+            "The concurrent download of bit {} did not produce the artifact",
+            bit.id
+        );
+    }
+
+    Ok(())
+}
+
 async fn process_download_bit(
     bit: &crate::bit::Bit,
     app_state: Arc<FlowLikeState>,
     retries: usize,
     callback: &InterComCallback,
 ) -> flow_like_types::Result<Path> {
-    println!("Processing download for: {}", bit.hash);
-    let file_store = FlowLikeState::bit_store(&app_state).await?;
-
-    let file_store = match file_store {
+    tracing::debug!("Processing download for: {}", bit.hash);
+    let file_store = match FlowLikeState::bit_store(&app_state).await? {
         FlowLikeStore::Local(store) => store,
         _ => bail!("Only local store supported"),
     };
 
-    let store_path =
-        Path::from(bit.hash.clone()).join(bit.file_name.clone().ok_or(anyhow!("No file name"))?);
-    let path_name = file_store.path_to_filesystem(&store_path)?;
-    let temp_extension = path_name
+    let file_name = bit.file_name.clone().ok_or(anyhow!("No file name"))?;
+    let store_path = Path::from(bit.hash.clone()).join(file_name);
+    let file_path = file_store.path_to_filesystem(&store_path)?;
+    let temp_extension = file_path
         .extension()
         .map(|ext| format!("{}.download", ext.to_string_lossy()))
         .unwrap_or_else(|| "download".to_string());
-    let temp_path = path_name.with_extension(temp_extension);
-    let had_existing_file = async_fs::try_exists(&path_name).await.unwrap_or(false);
+    let paths = ArtifactPaths {
+        store: store_path,
+        temp: file_path.with_extension(temp_extension),
+        file: file_path,
+    };
     let url = bit
         .download_link
         .clone()
         .ok_or(anyhow!("No download link"))?;
 
-    // Another download of that type already exists
-    let exists = {
-        let manager = app_state.download_manager();
-        let manager = manager.lock().await;
-        manager.download_exists(bit)
-    };
-
-    if exists {
-        bail!("Download already exists");
-    }
-
+    // Registering under one lock keeps two callers from both believing they own
+    // the artifact. A caller that loses the race must not unregister the winner.
     let client = {
         let manager = app_state.download_manager();
         let mut manager = manager.lock().await;
-        manager.add_download(bit)
+        if manager.download_exists(bit) {
+            None
+        } else {
+            manager.add_download(bit)
+        }
     };
 
-    if client.is_none() {
-        let _rem = remove_download(bit, &app_state).await;
-        bail!("Download already exists");
-    }
-
-    let client = client.ok_or(anyhow!("No client for download"))?;
-    let remote_size = get_remote_size(&client, &url).await;
-
-    if let Err(err) = &remote_size {
-        println!(
-            "Error getting remote size: {}. Falling back to cached files if available.",
-            err
-        );
-        let _rem = remove_download(bit, &app_state).await;
-        let _ = async_fs::remove_file(&temp_path).await;
-
-        if had_existing_file {
-            let local_len = async_fs::metadata(&path_name)
-                .await
-                .ok()
-                .map(|m| m.len())
-                .unwrap_or(0);
-            let _ = publish_progress(bit, callback, local_len, &store_path).await;
-        } else {
-            println!(
-                "No cached file found for {}. Continuing without fresh download; downstream operations may fail if weights are required.",
-                bit.id
-            );
-        }
-
-        return Ok(store_path);
-    }
-
-    let remote_size = remote_size?;
-
-    if had_existing_file {
-        let existing_size = async_fs::metadata(&path_name)
+    let Some(client) = client else {
+        return await_concurrent_download(bit, &app_state, &paths.file)
             .await
-            .ok()
-            .map(|m| m.len())
-            .unwrap_or(0);
-        if existing_size == remote_size {
-            let _rem = remove_download(bit, &app_state).await;
-            let _ = publish_progress(bit, callback, remote_size, &store_path).await;
-            return Ok(store_path);
-        }
-    }
+            .map(|()| paths.store.clone());
+    };
 
-    let mut resume = false;
-    let mut downloaded: u64 = 0;
-    let mut hasher = blake3::Hasher::new();
+    // Every exit from here has to unregister: a leaked entry makes every later
+    // attempt in this process bail out instead of downloading anything.
+    let result = download_artifact(bit, &url, &paths, &client, retries, callback).await;
+    remove_download(bit, &app_state).await;
+    result
+}
 
-    if async_fs::try_exists(&temp_path).await.unwrap_or(false) {
-        let partial_size = async_fs::metadata(&temp_path)
-            .await
-            .ok()
-            .map(|m| m.len())
-            .unwrap_or(0);
+async fn download_artifact(
+    bit: &crate::bit::Bit,
+    url: &str,
+    paths: &ArtifactPaths,
+    client: &Client,
+    retries: usize,
+    callback: &InterComCallback,
+) -> flow_like_types::Result<Path> {
+    let cached_size = async_fs::metadata(&paths.file)
+        .await
+        .ok()
+        .map(|meta| meta.len());
 
-        if partial_size == remote_size {
-            let mut resume_hasher = blake3::Hasher::new();
-            feed_hasher_with_existing(&temp_path, &mut resume_hasher).await?;
-            let partial_hash = resume_hasher.finalize().to_hex().to_string().to_lowercase();
-            if partial_hash == bit.hash.to_lowercase() {
-                if async_fs::try_exists(&path_name).await.unwrap_or(false) {
-                    let _ = async_fs::remove_file(&path_name).await;
-                }
-                async_fs::rename(&temp_path, &path_name).await?;
-                let _rem = remove_download(bit, &app_state).await;
-                let _ = publish_progress(bit, callback, remote_size, &store_path).await;
-                return Ok(store_path);
+    let remote_size = match get_remote_size(client, url).await {
+        Ok(size) => size,
+        Err(err) => {
+            // A complete cached copy is the only thing that may stand in for a
+            // download. Without one this is a failure and has to read as one.
+            let cached_is_complete = cached_size
+                .is_some_and(|cached| cached > 0 && bit.size.is_none_or(|size| size == cached));
+
+            if cached_is_complete {
+                tracing::warn!(
+                    "Could not reach {} for bit {}: {}. Using the cached artifact instead.",
+                    url,
+                    bit.id,
+                    err
+                );
+                let _ =
+                    publish_progress(bit, callback, cached_size.unwrap_or_default(), &paths.store)
+                        .await;
+                return Ok(paths.store.clone());
             }
-        }
 
-        if partial_size > 0 {
-            resume = true;
-            downloaded = partial_size;
-            feed_hasher_with_existing(&temp_path, &mut hasher).await?;
-            println!(
-                "Resuming download to {} ({} bytes already present)",
-                temp_path.display(),
-                partial_size
+            bail!(
+                "Could not determine the remote size of bit {} and no cached copy exists: {}",
+                bit.id,
+                err
             );
         }
-    } else {
-        let _ = async_fs::remove_file(&temp_path).await;
+    };
+
+    validate_announced_size(bit.size, remote_size).map_err(|err| {
+        anyhow!(
+            "Refusing to download bit {}, the response does not describe the artifact: {}",
+            bit.id,
+            err
+        )
+    })?;
+
+    if cached_size == Some(remote_size) {
+        let _ = publish_progress(bit, callback, remote_size, &paths.store).await;
+        return Ok(paths.store.clone());
     }
 
-    println!("Downloading to {}", store_path);
+    tracing::debug!("Downloading bit {} to {}", bit.id, paths.store);
 
-    // now use range header to resume download
+    let mut attempt = 0usize;
+    loop {
+        match fetch_artifact(bit, url, paths, client, remote_size, callback).await {
+            Ok(()) => break,
+            Err(err) if attempt < retries => {
+                attempt += 1;
+                tracing::warn!(
+                    "Download attempt {} for bit {} failed, retrying: {}",
+                    attempt,
+                    bit.id,
+                    err
+                );
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    if async_fs::try_exists(&paths.file).await.unwrap_or(false) {
+        let _ = async_fs::remove_file(&paths.file).await;
+    }
+
+    async_fs::rename(&paths.temp, &paths.file)
+        .await
+        .map_err(|err| {
+            anyhow!(
+                "Could not install bit {} at {}: {}",
+                bit.id,
+                paths.file.display(),
+                err
+            )
+        })?;
+
+    let _ = publish_progress(bit, callback, remote_size, &paths.store).await;
+    Ok(paths.store.clone())
+}
+
+/// A single attempt at fetching the artifact.
+///
+/// Returns once the temporary file holds the complete, verified artifact; the
+/// caller moves it into place.
+async fn fetch_artifact(
+    bit: &crate::bit::Bit,
+    url: &str,
+    paths: &ArtifactPaths,
+    client: &Client,
+    remote_size: u64,
+    callback: &InterComCallback,
+) -> flow_like_types::Result<()> {
+    let mut hasher = blake3::Hasher::new();
+    let mut downloaded = 0u64;
+    let mut resume = false;
+
+    let partial_size = async_fs::metadata(&paths.temp)
+        .await
+        .ok()
+        .map(|meta| meta.len())
+        .unwrap_or(0);
+
+    if partial_size > 0 && partial_size == remote_size {
+        let mut complete = blake3::Hasher::new();
+        feed_hasher_with_existing(&paths.temp, &mut complete).await?;
+        if verify_hash(bit, &complete).is_ok() {
+            return Ok(());
+        }
+        let _ = async_fs::remove_file(&paths.temp).await;
+    } else if partial_size > 0 && partial_size < remote_size {
+        feed_hasher_with_existing(&paths.temp, &mut hasher).await?;
+        downloaded = partial_size;
+        resume = true;
+        tracing::debug!(
+            "Resuming download to {} ({} bytes already present)",
+            paths.temp.display(),
+            partial_size
+        );
+    } else if partial_size > 0 {
+        let _ = async_fs::remove_file(&paths.temp).await;
+    }
+
     let mut headers = reqwest::header::HeaderMap::new();
     // Keep the response identical to the stored artifact so byte offsets,
     // resume ranges and the size check all describe the same stream.
     headers.insert(reqwest::header::ACCEPT_ENCODING, "identity".parse()?);
-
     if resume {
-        headers.insert("Range", format!("bytes={}-", downloaded).parse()?);
+        headers.insert(
+            reqwest::header::RANGE,
+            format!("bytes={}-", downloaded).parse()?,
+        );
     }
 
-    let res = match client.get(&url).headers(headers).send().await {
-        Ok(res) => {
-            if res.status().is_server_error() {
-                let _ = remove_download(bit, &app_state).await;
-                if had_existing_file {
-                    let _ = async_fs::remove_file(&temp_path).await;
-                    println!(
-                        "Server error {} when downloading; using cached file instead",
-                        res.status()
-                    );
-                    return Ok(store_path);
-                }
-                bail!("Server responded with {} when downloading", res.status());
-            }
-            res
-        }
-        Err(e) => {
-            let _rem = remove_download(bit, &app_state).await;
-            bail!("Error downloading file: {}", e.without_url());
-        }
-    };
+    let res = client
+        .get(url)
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|err| anyhow!("Request for bit {} failed: {}", bit.id, err.without_url()))?;
 
-    if let Some(parent) = path_name.parent() {
+    if !res.status().is_success() {
+        bail!(
+            "Server responded with {} when downloading bit {}",
+            res.status(),
+            bit.id
+        );
+    }
+
+    // A server that ignores the range restarts the stream, and appending that
+    // to the partial file would silently concatenate two copies.
+    if resume && res.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+        resume = false;
+        downloaded = 0;
+        hasher = blake3::Hasher::new();
+    }
+
+    if let Some(announced) = res.content_length() {
+        let expected = remote_size.saturating_sub(downloaded);
+        if announced != expected {
+            bail!(
+                "Server offered {} bytes of bit {}, expected {}",
+                announced,
+                bit.id,
+                expected
+            );
+        }
+    }
+
+    if let Some(parent) = paths.file.parent() {
         async_fs::create_dir_all(parent).await?;
     }
 
-    let file = match OpenOptions::new()
+    let file = OpenOptions::new()
         .write(true)
         .append(resume)
         .truncate(!resume)
         .create(true)
-        .open(&temp_path)
+        .open(&paths.temp)
         .await
-    {
-        Ok(file) => file,
-        Err(e) => {
-            let _rem = remove_download(bit, &app_state).await;
-            println!("Error opening file: {:?}", e);
-            bail!("Error opening file {}", e);
-        }
-    };
+        .map_err(|err| anyhow!("Could not open {}: {}", paths.temp.display(), err))?;
 
     let mut file = BufWriter::with_capacity(1 << 20, file);
-
     let mut stream = res.bytes_stream();
     let mut in_buffer = 0;
     let mut since_yield = 0usize;
     let mut last_emit = Instant::now();
 
     while let Some(item) = stream.next().await {
-        let chunk = match item {
-            Ok(chunk) => chunk,
-            Err(_) => {
-                continue;
-            }
-        };
+        let chunk = item.map_err(|err| {
+            anyhow!(
+                "Transfer of bit {} failed after {} bytes: {}",
+                bit.id,
+                downloaded,
+                err.without_url()
+            )
+        })?;
 
+        // Written before hashed, so the digest describes the bytes that reached
+        // the disk rather than the ones that arrived from the network.
+        file.write_all(&chunk)
+            .await
+            .map_err(|err| anyhow!("Could not write to {}: {}", paths.temp.display(), err))?;
         hasher.update(&chunk);
-
-        if file.write_all(&chunk).await.is_err() {
-            continue;
-        }
 
         in_buffer += chunk.len();
         since_yield += chunk.len();
-
-        let new = min(downloaded + (chunk.len() as u64), remote_size);
-        downloaded = new;
+        downloaded = min(downloaded + (chunk.len() as u64), remote_size);
 
         // if buffer is bigger than 20 mb flush
         if in_buffer > 20_000_000 && file.flush().await.is_ok() {
@@ -359,7 +580,7 @@ async fn process_download_bit(
         }
 
         if last_emit.elapsed() >= Duration::from_millis(150) {
-            let _ = publish_progress(bit, callback, new, &store_path).await;
+            let _ = publish_progress(bit, callback, downloaded, &paths.store).await;
             last_emit = Instant::now();
         }
 
@@ -369,51 +590,62 @@ async fn process_download_bit(
         }
     }
 
-    let _ = file.flush().await;
-    let inner = file.get_mut();
-    let _ = inner.sync_all().await;
+    file.flush()
+        .await
+        .map_err(|err| anyhow!("Could not flush {}: {}", paths.temp.display(), err))?;
+    file.get_mut()
+        .sync_all()
+        .await
+        .map_err(|err| anyhow!("Could not sync {}: {}", paths.temp.display(), err))?;
+    // Windows refuses to rename or delete a file that is still open.
+    drop(file);
 
-    let _rem = remove_download(bit, &app_state).await;
-
-    let file_hash = hasher.finalize().to_hex().to_string().to_lowercase();
-    // User-created custom bits don't know their artifact hash upfront. Legacy
-    // roots use `hash == id`; newer GGUF roots use a source-derived identity so
-    // edits to pinned URLs select a fresh cache target. Recompute the latter
-    // from the Bit before accepting it as trust-on-first-use.
-    let unverified_user_bit =
-        bit.hash == bit.id || bit.has_matching_user_source_artifact_identity();
-    if unverified_user_bit {
-        println!(
-            "Skipping hash verification for user bit {} (computed blake3: {})",
-            bit.id, file_hash
+    let written = async_fs::metadata(&paths.temp).await?.len();
+    if written != remote_size {
+        bail!(
+            "Transfer of bit {} ended after {} of {} bytes",
+            bit.id,
+            written,
+            remote_size
         );
     }
-    if !unverified_user_bit && file_hash != bit.hash.to_lowercase() {
-        println!(
-            "Error downloading file, hash does not match, deleting __ {} != {}",
-            file_hash, bit.hash
+
+    if let Err(err) = verify_hash(bit, &hasher) {
+        let _ = async_fs::remove_file(&paths.temp).await;
+        bail!(
+            "Downloaded content of bit {} is not the artifact: {}",
+            bit.id,
+            err
         );
-        let _ = async_fs::remove_file(&temp_path).await;
-        if retries > 0 {
-            println!("Retrying download: {}", bit.hash);
-            let result = Box::pin(process_download_bit(bit, app_state, retries - 1, callback));
-            return result.await;
-        }
-        if had_existing_file {
-            println!(
-                "Falling back to previously cached file for {} despite download hash mismatch",
-                bit.id
-            );
-            return Ok(store_path);
-        }
-        bail!("Error downloading file, hash does not match");
     }
 
-    if async_fs::try_exists(&path_name).await.unwrap_or(false) {
-        let _ = async_fs::remove_file(&path_name).await;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn announced_size_must_match_the_declared_artifact_size() {
+        assert!(validate_announced_size(Some(340_318_797), 340_318_797).is_ok());
+        // A gateway block page served with a success status.
+        assert!(validate_announced_size(Some(340_318_797), 20).is_err());
     }
 
-    async_fs::rename(&temp_path, &path_name).await?;
+    #[test]
+    fn announced_size_without_a_declared_size_is_accepted() {
+        assert!(validate_announced_size(None, 20).is_ok());
+        assert!(validate_announced_size(Some(0), 20).is_ok());
+    }
 
-    Ok(store_path)
+    #[test]
+    fn content_range_yields_the_total_length() {
+        assert_eq!(
+            parse_total_from_content_range("bytes 0-0/340318797").unwrap(),
+            340_318_797
+        );
+        assert!(parse_total_from_content_range("bytes 0-0/*").is_err());
+        assert!(parse_total_from_content_range("bytes 0-0").is_err());
+    }
 }

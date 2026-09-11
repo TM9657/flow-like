@@ -544,7 +544,9 @@ impl ServerRegistry {
             .one(&self.db)
             .await?
         {
-            return Ok(Path::from(version_record.wasm_path.as_str()));
+            return Ok(flow_like_storage::normalize_object_path(
+                &version_record.wasm_path,
+            ));
         }
 
         if let Some(package_record) = wasm_package::Entity::find_by_id(package_id)
@@ -552,7 +554,9 @@ impl ServerRegistry {
             .one(&self.db)
             .await?
         {
-            return Ok(Path::from(package_record.wasm_path.as_str()));
+            return Ok(flow_like_storage::normalize_object_path(
+                &package_record.wasm_path,
+            ));
         }
 
         Ok(Self::wasm_path(package_id, version))

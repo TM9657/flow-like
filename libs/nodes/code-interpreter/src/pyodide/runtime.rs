@@ -56,8 +56,8 @@ use wasmtime_wasi::{
 };
 
 use flow_like_storage::{
-    Path as ObjPath,
-    object_store::{ObjectStore, PutPayload},
+    Path as ObjPath, join_object_path, normalize_object_path,
+    object_store::{ObjectStore, ObjectStoreExt, PutPayload},
 };
 use flow_like_types::Bytes;
 use flow_like_wasm::{AotCache, WasmConfig, WasmEngine, isolated_wasi_ctx_builder};
@@ -294,13 +294,7 @@ pub async fn workspace_file_server(
                 continue;
             }
 
-            // Build the full object-store path.
-            let store_path_str = if prefix.is_empty() {
-                safe_relative.clone()
-            } else {
-                format!("{}/{}", prefix.trim_end_matches('/'), safe_relative)
-            };
-            let obj_path = ObjPath::from(store_path_str.as_str());
+            let obj_path = workspace_object_path(&prefix, &safe_relative);
 
             match store.get(&obj_path).await {
                 Ok(result) => {
@@ -371,12 +365,7 @@ pub async fn upload_ws_puts(ws_puts_dir: &PathBuf, store: &Arc<dyn ObjectStore>,
                 .map(|p| p.to_string_lossy().replace('\\', "/"))
                 .unwrap_or_default();
 
-            let store_path_str = if prefix.is_empty() {
-                relative.clone()
-            } else {
-                format!("{}/{}", prefix.trim_end_matches('/'), relative)
-            };
-            let obj_path = ObjPath::from(store_path_str.as_str());
+            let obj_path = workspace_object_path(prefix, &relative);
             let payload = PutPayload::from_bytes(Bytes::from(data));
 
             match store.put(&obj_path, payload).await {
@@ -880,10 +869,18 @@ mod tests {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/// Canonical object key for `relative` under the workspace `prefix`. Both may
+/// be raw names or keys that came out of a list response.
+fn workspace_object_path(prefix: &str, relative: &str) -> ObjPath {
+    join_object_path(&normalize_object_path(prefix), relative)
+}
+
 /// List all object paths under `prefix` and return them as relative strings.
-/// Returns an empty list on error (workspace simply appears empty to Python).
+/// The entries are canonical (percent-encoded) keys, which `Workspace.get()`
+/// sends back verbatim. Returns an empty list on error (workspace simply
+/// appears empty to Python).
 pub async fn list_workspace_files(store: &Arc<dyn ObjectStore>, prefix: &str) -> Vec<String> {
-    let obj_prefix = ObjPath::from(prefix.trim_end_matches('/'));
+    let obj_prefix = normalize_object_path(prefix);
     let mut stream = store.list(Some(&obj_prefix));
     let mut manifest = Vec::new();
 
@@ -892,7 +889,7 @@ pub async fn list_workspace_files(store: &Arc<dyn ObjectStore>, prefix: &str) ->
             Ok(meta) => {
                 let full = meta.location.as_ref();
                 let relative = full
-                    .strip_prefix(prefix.trim_end_matches('/'))
+                    .strip_prefix(obj_prefix.as_ref())
                     .unwrap_or(full)
                     .trim_start_matches('/');
                 if !relative.is_empty() {

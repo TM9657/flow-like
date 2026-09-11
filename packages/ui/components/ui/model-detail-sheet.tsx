@@ -236,13 +236,21 @@ export function ModelDetailSheet({
 			await refetchIsInstalled();
 			return;
 		}
-		await downloadBit(displayBit);
+		try {
+			await downloadBit(displayBit);
+		} catch (error) {
+			console.error("Failed to download bit:", error);
+			toast.error(t("downloadFailed", "Download failed"), {
+				description: error instanceof Error ? error.message : undefined,
+			});
+		}
 	}, [
 		displayBit,
 		isInstalled.data,
 		backend.bitState,
 		downloadBit,
 		refetchIsInstalled,
+		t,
 	]);
 
 	const refetchCurrentProfile = currentProfile.refetch;

@@ -8,14 +8,15 @@ import type { INode } from "../lib/schema/flow/node";
 import type { IPin } from "../lib/schema/flow/pin";
 import {
 	type LayerVisit,
-	dropVisitsTo,
 	focusSentinelId,
 	isFocusRendered,
 	parentPath,
+	reconcileLayerTrail,
 	recordVisit,
 	resolveExit,
 	resolveFocusTarget,
 	resolveLayerChain,
+	resolveLayerPath,
 } from "./use-layer-navigation";
 
 function layer(
@@ -341,19 +342,27 @@ describe("layer trail", () => {
 		expect(exit.trail).toEqual([]);
 	});
 
-	it("forgets the steps into a layer that was jumped to", () => {
+	it("does not resurrect an old visit after the canvas jumps elsewhere", () => {
 		const trail: LayerVisit[] = [
-			{ from: undefined, to: "a" },
-			{ from: "a", to: "fn" },
+			{ from: "module_a", to: "fn" },
+			{ from: "fn", to: "module_b" },
 		];
-		const jumped = dropVisitsTo(trail, "fn");
-		expect(jumped).toEqual([{ from: undefined, to: "a" }]);
-		expect(resolveExit(jumped, "fn").path).toBeUndefined();
+		expect(resolveExit(trail, "fn")).toEqual({ path: undefined, trail: [] });
 	});
 
-	it("keeps an unrelated trail intact on a jump", () => {
-		const trail: LayerVisit[] = [{ from: undefined, to: "a" }];
-		expect(dropVisitsTo(trail, "other")).toEqual(trail);
+	it("discards an unrelated trail before entering a module function", () => {
+		const trail = recordVisit([{ from: undefined, to: "fn" }], {
+			from: "module",
+			to: "module/function",
+		});
+		expect(trail).toEqual([{ from: "module", to: "module/function" }]);
+		expect(resolveExit(trail, "module/function").path).toBe("module");
+	});
+
+	it("keeps the module caller when a function in another file is entered", () => {
+		expect(walk(["module", "module/layer", "other/function", "up"]).path).toBe(
+			"module/layer",
+		);
 	});
 
 	it("bounds the trail", () => {
@@ -363,5 +372,77 @@ describe("layer trail", () => {
 		}
 		expect(trail).toHaveLength(64);
 		expect(trail[trail.length - 1].to).toBe("l200");
+	});
+});
+
+describe("resolveLayerPath", () => {
+	const layers = layerMap(
+		layer("module", undefined, ILayerType.Module),
+		layer("nested", "module", ILayerType.Module),
+		layer("fn", "nested", ILayerType.Function),
+	);
+
+	it("recovers module ancestors from a short or stale saved path", () => {
+		expect(resolveLayerPath(layers, "fn")).toBe("module/nested/fn");
+		expect(resolveLayerPath(layers, "old/fn")).toBe("module/nested/fn");
+	});
+
+	it("returns to a surviving ancestor after the destination was deleted", () => {
+		expect(resolveLayerPath(layers, "module/nested/deleted")).toBe(
+			"module/nested",
+		);
+	});
+
+	it("keeps a requested path while the board is loading", () => {
+		expect(resolveLayerPath(undefined, "module/fn")).toBe("module/fn");
+	});
+
+	it("normalizes root and empty paths", () => {
+		expect(resolveLayerPath(layers, "root")).toBeUndefined();
+		expect(resolveLayerPath(layers, "")).toBeUndefined();
+		expect(resolveLayerPath(layers, undefined)).toBeUndefined();
+	});
+});
+
+describe("reconcileLayerTrail", () => {
+	const trail: LayerVisit[] = [
+		{ from: "module", to: "fn" },
+		{ from: "fn", to: "fn/layer" },
+		{ from: "fn/layer", to: "fn/layer/inner" },
+	];
+
+	it("preserves a function caller after an ancestor breadcrumb jump", () => {
+		const next = reconcileLayerTrail(trail, "fn/layer/inner", "fn");
+		expect(next).toEqual([{ from: "module", to: "fn" }]);
+		expect(resolveExit(next, "fn").path).toBe("module");
+	});
+
+	it("keeps the caller when a go-to opens deeper layers", () => {
+		let next = reconcileLayerTrail(trail.slice(0, 1), "fn", "fn/layer/inner");
+		let path: string | undefined = "fn/layer/inner";
+		for (const expected of ["fn/layer", "fn", "module"]) {
+			const exit = resolveExit(next, path ?? "");
+			expect(exit.path).toBe(expected);
+			path = exit.path;
+			next = exit.trail;
+		}
+	});
+
+	it("keeps the common function caller when a go-to opens a sibling layer", () => {
+		const next = reconcileLayerTrail(trail, "fn/layer/inner", "fn/other");
+		const parent = resolveExit(next, "fn/other");
+		expect(parent.path).toBe("fn");
+		expect(resolveExit(parent.trail, "fn").path).toBe("module");
+	});
+
+	it("clears visits when jumping to a different file or main", () => {
+		expect(reconcileLayerTrail(trail, "fn/layer/inner", "other")).toEqual([]);
+		expect(reconcileLayerTrail(trail, "fn/layer/inner", undefined)).toEqual([]);
+	});
+
+	it("keeps the caller when focusing content in the current layer", () => {
+		expect(
+			reconcileLayerTrail(trail, "fn/layer/inner", "fn/layer/inner"),
+		).toEqual(trail);
 	});
 });

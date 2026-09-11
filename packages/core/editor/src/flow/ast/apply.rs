@@ -34,13 +34,15 @@ use crate::{
         },
         copilot::{BoardCommand, NodeMetadata, NodePosition, PlaceholderPinDef, node_to_metadata},
         node::{FnRefs, Node, NodeLogic},
-        pin::{Pin, PinOptions, PinType, ValueType},
-        variable::{Variable, VariableType},
+        pin::{Pin, PinOptions, PinType, ValueType, resolve_schema},
+        variable::{Variable, VariableType, default_value_for_type},
     },
     state::FlowLikeState,
 };
 
 const DEFAULT_OUTPUT_PIN_ALIASES: &[&str] = &["result", "value", "output", "out"];
+const GENERIC_EVENT_NODE_TYPE: &str = "events_generic";
+const GENERIC_EVENT_PAYLOAD_PIN: &str = "payload";
 
 /// Result returned by the server-side FlowScript apply path.
 ///
@@ -1116,6 +1118,38 @@ impl FlowScriptApplyPlanner {
                     self.staged_nodes.insert(node_id.clone(), node.clone());
                     generic_commands.push(GenericCommand::UpdateNode(UpdateNodeCommand::new(node)));
                 }
+                BoardCommand::UpdateNodePinOptions {
+                    node_id,
+                    pin_name,
+                    optional,
+                    default_value,
+                } => {
+                    let node_id = self.resolve_node_id(board, node_id)?;
+                    let mut node = self.resolve_node(board, &node_id)?.clone();
+                    if node.name != GENERIC_EVENT_NODE_TYPE {
+                        return Err(flow_like_types::anyhow!(
+                            "Pin options can only be changed on events_generic outputs, not on `{}` (`{node_id}`)",
+                            node.name
+                        ));
+                    }
+                    let pin_id = resolve_pin_id_in_node(&node, pin_name, Some(PinType::Output))?;
+                    let Some(pin) = node.pins.get_mut(&pin_id) else {
+                        return Err(flow_like_types::anyhow!(
+                            "Pin `{pin_id}` not found on node `{node_id}`"
+                        ));
+                    };
+                    if pin.data_type == VariableType::Execution
+                        || pin.name == GENERIC_EVENT_PAYLOAD_PIN
+                    {
+                        return Err(flow_like_types::anyhow!(
+                            "Pin `{}` on events_generic `{node_id}` cannot be optional",
+                            pin.name
+                        ));
+                    }
+                    set_pin_optional(pin, *optional, default_value.as_ref(), &board.refs);
+                    self.staged_nodes.insert(node_id.clone(), node.clone());
+                    generic_commands.push(GenericCommand::UpdateNode(UpdateNodeCommand::new(node)));
+                }
                 _ => {}
             }
         }
@@ -1200,6 +1234,7 @@ impl FlowScriptApplyPlanner {
                 | BoardCommand::CreateVariable { .. }
                 | BoardCommand::UpdateVariable { .. }
                 | BoardCommand::UpdateNodePin { .. }
+                | BoardCommand::UpdateNodePinOptions { .. }
                 | BoardCommand::RenameNode { .. }
                 | BoardCommand::RenameLayer { .. }
                 | BoardCommand::MoveToLayer { .. }
@@ -1830,7 +1865,7 @@ fn append_additional_node_pins(
     let Some(defs) = defs else {
         return Ok(());
     };
-    if !defs.is_empty() && node.name != "events_generic" {
+    if !defs.is_empty() && node.name != GENERIC_EVENT_NODE_TYPE {
         return Err(flow_like_types::anyhow!(
             "Additional catalog-node pins are only supported on events_generic"
         ));
@@ -1840,6 +1875,17 @@ fn append_additional_node_pins(
         if def.pin_type != "Output" || def.data_type == "Execution" {
             return Err(flow_like_types::anyhow!(
                 "Additional events_generic pin `{}` must be a non-execution Output",
+                def.name
+            ));
+        }
+        if !def.optional
+            && def
+                .default_value
+                .as_ref()
+                .is_some_and(|value| !value.is_null())
+        {
+            return Err(flow_like_types::anyhow!(
+                "Additional events_generic pin `{}` carries a default_value but is not optional",
                 def.name
             ));
         }
@@ -1867,15 +1913,60 @@ fn append_additional_node_pins(
                 .unwrap_or(ValueType::Normal),
         );
         pin.schema = def.schema.clone();
-        if def.enforce_schema {
+        if def.enforce_schema || def.optional {
             pin.set_options(PinOptions {
-                enforce_schema: Some(true),
+                enforce_schema: def.enforce_schema.then_some(true),
+                optional: def.optional.then_some(true),
                 ..PinOptions::default()
             });
+        }
+        if def.optional {
+            let default = def
+                .default_value
+                .clone()
+                .filter(|value| !value.is_null())
+                .unwrap_or_else(|| {
+                    default_value_for_type(&pin.data_type, &pin.value_type, pin.schema.as_deref())
+                });
+            pin.set_default_value(Some(default));
         }
     }
 
     Ok(())
+}
+
+/// `optional: true` stores the flag and a default (the type default when none is given);
+/// `optional: false` clears both. Mirrored by `setPinOptional` in `use-copilot-commands.tsx`.
+fn set_pin_optional(
+    pin: &mut Pin,
+    optional: bool,
+    default_value: Option<&flow_like_types::Value>,
+    refs: &HashMap<String, String>,
+) {
+    if !optional {
+        pin.default_value = None;
+        if let Some(options) = pin.options.as_mut() {
+            options.optional = None;
+            if *options == PinOptions::default() {
+                pin.options = None;
+            }
+        }
+        return;
+    }
+    let default = default_value
+        .filter(|value| !value.is_null())
+        .cloned()
+        .unwrap_or_else(|| {
+            let schema = pin
+                .schema
+                .as_deref()
+                .and_then(|schema| resolve_schema(schema, refs).ok());
+            default_value_for_type(&pin.data_type, &pin.value_type, schema)
+        });
+    pin.set_default_value(Some(default));
+    let mut options = pin.options.clone().unwrap_or_default();
+    options.set_optional(true);
+    pin.set_options(options);
 }
 
 fn layer_pins(defs: Option<&[PlaceholderPinDef]>) -> flow_like_types::Result<HashMap<String, Pin>> {
@@ -3947,6 +4038,8 @@ eventsChat() {
                     value_type: Some("Array".to_string()),
                     schema: None,
                     enforce_schema: false,
+                    optional: false,
+                    default_value: None,
                 },
                 PlaceholderPinDef {
                     name: "ticket".to_string(),
@@ -3959,6 +4052,8 @@ eventsChat() {
                         r#"{"type":"object","properties":{"id":{"type":"string"}}}"#.to_string(),
                     ),
                     enforce_schema: true,
+                    optional: false,
+                    default_value: None,
                 },
             ]),
             target_layer: None,
@@ -3994,6 +4089,199 @@ eventsChat() {
                 .and_then(|options| options.enforce_schema),
             Some(true)
         );
+    }
+
+    fn generic_event_output_def(
+        name: &str,
+        data_type: &str,
+        value_type: Option<&str>,
+        optional: bool,
+        default_value: Option<flow_like_types::Value>,
+    ) -> PlaceholderPinDef {
+        PlaceholderPinDef {
+            name: name.to_string(),
+            friendly_name: name.to_string(),
+            description: None,
+            pin_type: "Output".to_string(),
+            data_type: data_type.to_string(),
+            value_type: value_type.map(str::to_string),
+            schema: None,
+            enforce_schema: false,
+            optional,
+            default_value,
+        }
+    }
+
+    fn add_generic_event(pins: Vec<PlaceholderPinDef>) -> BoardCommand {
+        BoardCommand::AddNode {
+            node_type: "events_generic".to_string(),
+            ref_id: Some("$0".to_string()),
+            position: None,
+            friendly_name: None,
+            additional_pins: Some(pins),
+            target_layer: None,
+            summary: None,
+        }
+    }
+
+    fn generic_event_board(output: &str) -> Board {
+        let mut board = empty_board();
+        let mut node = generic_event_catalog_node();
+        node.id = "event".to_string();
+        node.add_output_pin(output, output, "", VariableType::String);
+        board.nodes.insert(node.id.clone(), node);
+        board
+    }
+
+    fn pin_options(
+        node_id: &str,
+        pin_name: &str,
+        optional: bool,
+        default_value: Option<flow_like_types::Value>,
+    ) -> BoardCommand {
+        BoardCommand::UpdateNodePinOptions {
+            node_id: node_id.to_string(),
+            pin_name: pin_name.to_string(),
+            optional,
+            default_value,
+        }
+    }
+
+    fn live_generic_event_pin(board: &Board, name: &str) -> Pin {
+        board.nodes["event"]
+            .pins
+            .values()
+            .find(|pin| pin.name == name)
+            .cloned()
+            .expect("custom output survives")
+    }
+
+    #[test]
+    fn add_node_seeds_optional_generic_event_outputs() {
+        let board = empty_board();
+        let catalog = vec![generic_event_catalog_node()];
+        let mut planner = FlowScriptApplyPlanner::new(&board, &catalog, None);
+        let commands = vec![add_generic_event(vec![
+            generic_event_output_def("limit", "Integer", None, true, Some(json!(25))),
+            generic_event_output_def("tags", "String", Some("Array"), true, None),
+            generic_event_output_def("owner", "String", None, false, None),
+        ])];
+
+        let setup = planner
+            .build_setup_commands(&board, &commands)
+            .expect("optional event outputs are valid");
+        let GenericCommand::AddNode(command) = &setup[0] else {
+            panic!("expected AddNode");
+        };
+        let pin = |name: &str| {
+            command
+                .node
+                .pins
+                .values()
+                .find(|pin| pin.name == name)
+                .expect("custom output exists")
+        };
+        assert!(pin("limit").is_optional());
+        assert_eq!(decode_default(pin("limit")), json!(25));
+        assert!(pin("tags").is_optional());
+        assert_eq!(decode_default(pin("tags")), json!([]));
+        assert!(!pin("owner").is_optional());
+        assert!(pin("owner").default_value.is_none());
+        assert!(pin("owner").options.is_none());
+    }
+
+    #[test]
+    fn additional_generic_event_output_default_requires_optional() {
+        let board = empty_board();
+        let catalog = vec![generic_event_catalog_node()];
+        let mut planner = FlowScriptApplyPlanner::new(&board, &catalog, None);
+        let commands = vec![add_generic_event(vec![generic_event_output_def(
+            "limit",
+            "Integer",
+            None,
+            false,
+            Some(json!(25)),
+        )])];
+
+        let Err(error) = planner.build_setup_commands(&board, &commands) else {
+            panic!("a default on a required pin must be rejected");
+        };
+        assert!(error.to_string().contains("not optional"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn update_node_pin_options_sets_then_clears_the_optional_default() {
+        let mut board = generic_event_board("ticketId");
+        let catalog = vec![generic_event_catalog_node()];
+        let state = Arc::new(crate::state::FlowLikeState::new(
+            FlowLikeConfig::new(),
+            HTTPClient::new_without_refetch(),
+        ));
+
+        for (command, expected_default) in [
+            (pin_options("event", "ticketId", true, None), json!("")),
+            (
+                pin_options("event", "ticketId", true, Some(json!("T-1"))),
+                json!("T-1"),
+            ),
+        ] {
+            let result = apply_board_commands_to_board(
+                &mut board,
+                vec![command],
+                &catalog,
+                state.clone(),
+                None,
+            )
+            .await
+            .expect("optional flag applies");
+            assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+            let pin = live_generic_event_pin(&board, "ticketId");
+            assert!(pin.is_optional());
+            assert_eq!(decode_default(&pin), expected_default);
+        }
+
+        let result = apply_board_commands_to_board(
+            &mut board,
+            vec![pin_options("event", "ticketId", false, None)],
+            &catalog,
+            state,
+            None,
+        )
+        .await
+        .expect("required flag applies");
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let pin = live_generic_event_pin(&board, "ticketId");
+        assert!(!pin.is_optional());
+        assert!(pin.default_value.is_none());
+        assert!(pin.options.is_none());
+    }
+
+    #[test]
+    fn update_node_pin_options_rejects_payload_execution_and_foreign_nodes() {
+        let board = generic_event_board("ticketId");
+        let catalog = vec![generic_event_catalog_node()];
+        let mut planner = FlowScriptApplyPlanner::new(&board, &catalog, None);
+        for pin_name in ["payload", "exec_out"] {
+            let Err(error) =
+                planner.build_setup_commands(&board, &[pin_options("event", pin_name, true, None)])
+            else {
+                panic!("`{pin_name}` must never become optional");
+            };
+            assert!(error.to_string().contains("cannot be optional"), "{error}");
+        }
+
+        let mut board = empty_board();
+        let mut log = Node::new("log", "Log", "", "test");
+        log.id = "log".to_string();
+        log.add_output_pin("value", "Value", "", VariableType::String);
+        board.nodes.insert(log.id.clone(), log);
+        let mut planner = FlowScriptApplyPlanner::new(&board, &catalog, None);
+        let Err(error) =
+            planner.build_setup_commands(&board, &[pin_options("log", "value", true, None)])
+        else {
+            panic!("only events_generic outputs may become optional");
+        };
+        assert!(error.to_string().contains("events_generic"), "{error}");
     }
 
     #[test]

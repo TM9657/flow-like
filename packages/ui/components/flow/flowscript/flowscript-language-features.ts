@@ -81,6 +81,14 @@ export type FlowScriptDeclarationKind =
 	| "event"
 	| "handler";
 
+export interface FlowScriptParam {
+	name: string;
+	typeText?: string;
+	/** Declared as `name?: Type`; an event parameter callers may omit. */
+	optional?: boolean;
+	span: Span;
+}
+
 export interface FlowScriptDeclaration {
 	kind: FlowScriptDeclarationKind;
 	name: string;
@@ -91,7 +99,7 @@ export interface FlowScriptDeclaration {
 	nameSpan: Span;
 	span: Span;
 	bodySpan?: Span;
-	params: { name: string; typeText?: string; span: Span }[];
+	params: FlowScriptParam[];
 	children: FlowScriptDeclaration[];
 }
 
@@ -324,27 +332,36 @@ function identAt(masked: string, offset: number): Span | undefined {
 	return { start: offset, end: offset + m[0].length };
 }
 
+/** Parses `name: Type`, `name?: Type` and `name?: Type = literal` entries; the default is dropped
+ * from `typeText` (it is a stored pin value, not part of the type). */
 function parseParams(
 	masked: string,
 	parenOpen: number,
 	parenClose: number,
-): { name: string; typeText?: string; span: Span }[] {
-	const params: { name: string; typeText?: string; span: Span }[] = [];
+): FlowScriptParam[] {
+	const params: FlowScriptParam[] = [];
 	const inner = masked.slice(parenOpen + 1, parenClose);
 	if (!inner.trim()) return params;
 	for (const piece of splitTopLevel(inner, parenOpen + 1)) {
 		const m = new RegExp(
-			`^(\\s*)(${IDENT})\\s*(?::\\s*([\\s\\S]+?))?\\s*$`,
+			`^(\\s*)(${IDENT})\\s*(\\?)?\\s*(?::\\s*([\\s\\S]+?))?\\s*$`,
 		).exec(piece.text);
 		if (!m) continue;
 		const start = piece.start + m[1].length;
+		const annotation = m[4]?.split("=", 1)[0].trim();
 		params.push({
 			name: m[2],
-			typeText: m[3]?.trim(),
+			typeText: annotation || undefined,
+			...(m[3] ? { optional: true } : {}),
 			span: { start, end: start + m[2].length },
 		});
 	}
 	return params;
+}
+
+function paramDetail(param: FlowScriptParam): string {
+	const name = param.optional ? `${param.name}?` : param.name;
+	return param.typeText ? `${name}: ${param.typeText}` : name;
 }
 
 /** Parses `a, b: c` destructure members with the span of each declared local. */
@@ -740,9 +757,7 @@ function computeAnalysis(
 		pushCallable({
 			kind: m[2] === "function" ? "function" : "event",
 			name: m[3],
-			detail: `(${params
-				.map((p) => (p.typeText ? `${p.name}: ${p.typeText}` : p.name))
-				.join(", ")})${returns}`,
+			detail: `(${params.map(paramDetail).join(", ")})${returns}`,
 			nameSpan,
 			span: { start: declStart, end },
 			bodySpan,
@@ -777,9 +792,7 @@ function computeAnalysis(
 			kind: isTopLevel(declStart) ? "event" : "handler",
 			name,
 			eventType: m[4] ? m[3] : undefined,
-			detail: `(${params
-				.map((p) => (p.typeText ? `${p.name}: ${p.typeText}` : p.name))
-				.join(", ")})`,
+			detail: `(${params.map(paramDetail).join(", ")})`,
 			nameSpan,
 			span: { start: declStart, end: bodyClose + 1 },
 			bodySpan: { start: bodyOpen, end: bodyClose + 1 },

@@ -68,6 +68,16 @@ fn map_store_error(
     MediaTransformationError::Retryable("media_object_store_unavailable")
 }
 
+/// The notification carries the key exactly as stored, which is the
+/// percent-encoded form `object_store` wrote; `Path::from` would encode it a
+/// second time and address an object that does not exist.
+fn stored_key(key: &str) -> Result<Path, MediaTransformationError> {
+    Path::parse(key).map_err(|error| {
+        tracing::warn!(error = %error, key, "media key is not a valid object path");
+        MediaTransformationError::Permanent("invalid_media_key")
+    })
+}
+
 pub async fn process(
     ctx: &MediaTransformationContext,
     event: &GcsEvent,
@@ -114,7 +124,7 @@ async fn delete(
     ctx: &MediaTransformationContext,
     key: &str,
 ) -> Result<(), MediaTransformationError> {
-    match ctx.store.delete(&Path::from(key)).await {
+    match ctx.store.delete(&stored_key(key)?).await {
         Ok(()) | Err(flow_like_storage::object_store::Error::NotFound { .. }) => Ok(()),
         Err(error) => Err(map_store_error("delete", error)),
     }
@@ -125,7 +135,7 @@ async fn convert_and_store(
     source_key: &str,
     target_key: &str,
 ) -> Result<(), MediaTransformationError> {
-    let target = Path::from(target_key);
+    let target = stored_key(target_key)?;
     match ctx.store.head(&target).await {
         Ok(_) => {
             tracing::info!(
@@ -138,7 +148,7 @@ async fn convert_and_store(
         Err(error) => return Err(map_store_error("head", error)),
     }
 
-    let source = Path::from(source_key);
+    let source = stored_key(source_key)?;
     let image_data = match ctx.store.get(&source).await {
         Ok(result) => result
             .bytes()
@@ -236,5 +246,16 @@ mod tests {
         assert!(!is_supported_image_format("webp"));
         assert!(is_video_format("MOV"));
         assert!(!is_video_format("svg"));
+    }
+
+    #[test]
+    fn stored_keys_are_addressed_verbatim() {
+        let key = "media/apps/x/%C3%9Cbersicht (2)%231.jpg";
+        assert_eq!(stored_key(key).unwrap().as_ref(), key);
+        assert_ne!(Path::from(key).as_ref(), key);
+        assert_eq!(
+            stored_key("media/../x.jpg"),
+            Err(MediaTransformationError::Permanent("invalid_media_key"))
+        );
     }
 }

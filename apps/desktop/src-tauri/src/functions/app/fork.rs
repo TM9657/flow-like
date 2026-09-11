@@ -38,7 +38,9 @@ use flow_like::flow_like_storage::{
     Path,
     arrow_schema::Schema,
     databases::vector::lancedb::LanceDBVectorStore,
+    join_object_path,
     lancedb::{Connection, table::WriteOptions},
+    normalize_object_path,
     object_store::ObjectStore,
 };
 use flow_like::profile::ProfileApp;
@@ -249,10 +251,7 @@ pub async fn upload_local_app_content_bundle(
             continue;
         }
 
-        let dst_path = relative_path
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .fold(dst_prefix.clone(), |acc, seg| acc.join(seg));
+        let dst_path = join_object_path(&dst_prefix, &relative_path);
 
         match copy_one(
             &src_content_store,
@@ -317,10 +316,7 @@ pub async fn apply_fork_bundle(
             content_objects_skipped = content_objects_skipped.saturating_add(1);
             continue;
         }
-        let dst_path = relative_path
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .fold(dst_app_prefix.clone(), |acc, seg| acc.join(seg));
+        let dst_path = join_object_path(&dst_app_prefix, &relative_path);
         let dst_store = if is_content_blob_path(&relative_path) {
             &dst_content_store
         } else {
@@ -398,10 +394,7 @@ pub async fn apply_fork_bundle(
         if inline_content_paths.contains(&translated) {
             continue;
         }
-        let dst_path = translated
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .fold(dst_app_prefix.clone(), |acc, seg| acc.join(seg));
+        let dst_path = join_object_path(&dst_app_prefix, &translated);
 
         match copy_one(
             &src_content_store,
@@ -669,10 +662,10 @@ fn is_missing_prefix_error(error: &impl std::fmt::Display) -> bool {
     message.contains("not found") || message.contains("No such file")
 }
 
+/// The content prefix the API handed us is already an object-store key, so it
+/// is normalized rather than encoded a second time.
 fn parse_storage_path(raw: &str) -> Path {
-    raw.split('/')
-        .filter(|s| !s.is_empty())
-        .fold(Path::default(), |acc, seg| acc.join(seg))
+    normalize_object_path(raw)
 }
 
 fn relative_to_prefix(path: &str, prefix: &str) -> Option<String> {

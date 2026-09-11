@@ -13,11 +13,12 @@ import { useId, useState } from "react";
 import {
 	STORAGE_ROOT_PREFIX,
 	sortStorageEntries,
+	storageDisplayName,
 	storagePrefixTrail,
 	storageTreeEntry,
 } from "../../lib/storage-tree";
 import { useBackend, useBackendReady } from "../../state/backend-state";
-import { basename, matchesAccept } from "../builder/asset-path";
+import { matchesAccept } from "../builder/asset-path";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { useHomeScope } from "./home-content/shared";
@@ -103,7 +104,7 @@ export function HomeStorageImagePicker({
 							onClick={() => navigate(folder)}
 						>
 							<span className="truncate">
-								{folder ? basename(folder) : "App storage"}
+								{folder ? storageDisplayName(folder) : "App storage"}
 							</span>
 						</Button>
 					</div>

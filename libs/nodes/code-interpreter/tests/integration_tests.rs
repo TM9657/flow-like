@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use flow_like_storage::Path as ObjPath;
-use flow_like_storage::object_store::{self, ObjectStore, PutPayload};
+use flow_like_storage::object_store::{self, ObjectStore, ObjectStoreExt, PutPayload};
 use flow_like_types::Bytes;
 use serde_json::json;
 use tempfile::TempDir;
@@ -255,6 +255,10 @@ mod workspace {
     use flow_like_catalog_code_interpreter::pyodide::runtime::{
         list_workspace_files, upload_ws_puts, workspace_file_server,
     };
+    use flow_like_storage::{display_file_name, normalize_object_path};
+
+    const UMLAUT_PREFIX: &str = "Übersicht";
+    const UMLAUT_NAME: &str = "Übersicht (2)#1.pdf";
 
     fn memory_store() -> Arc<dyn ObjectStore> {
         Arc::new(object_store::memory::InMemory::new())
@@ -289,6 +293,53 @@ mod workspace {
         assert_eq!(files.len(), 2);
         assert!(files.contains(&"file_a.txt".to_string()));
         assert!(files.contains(&"sub/file_b.txt".to_string()));
+    }
+
+    #[tokio::test]
+    async fn list_workspace_files_emits_canonical_keys_for_raw_and_encoded_prefix() {
+        let store = memory_store();
+        put_object(&store, &format!("{UMLAUT_PREFIX}/{UMLAUT_NAME}"), b"umlaut").await;
+        put_object(&store, "other/unrelated.txt", b"nope").await;
+
+        let expected_key = ObjPath::from(UMLAUT_NAME).as_ref().to_string();
+        let encoded_prefix = ObjPath::from(UMLAUT_PREFIX).as_ref().to_string();
+        assert_ne!(encoded_prefix, UMLAUT_PREFIX);
+
+        for prefix in [UMLAUT_PREFIX, encoded_prefix.as_str()] {
+            let files: Vec<String> = list_workspace_files(&store, prefix).await;
+            assert_eq!(files, vec![expected_key.clone()], "prefix {prefix}");
+
+            let resolved = normalize_object_path(&format!("{prefix}/{}", files[0]));
+            assert_eq!(resolved, ObjPath::from(UMLAUT_PREFIX).join(UMLAUT_NAME));
+            let bytes = store.get(&resolved).await.unwrap().bytes().await.unwrap();
+            assert_eq!(bytes.as_ref(), b"umlaut");
+            assert_eq!(display_file_name(&resolved).as_deref(), Some(UMLAUT_NAME));
+        }
+    }
+
+    #[tokio::test]
+    async fn upload_ws_puts_listed_key_resolves_to_raw_object() {
+        let store = memory_store();
+        let tmp = TempDir::new().unwrap();
+        let ws_puts = tmp.path().join("ws_puts");
+        fs::create_dir_all(&ws_puts).await.unwrap();
+
+        let listed_key = ObjPath::from(UMLAUT_NAME).as_ref().to_string();
+        fs::write(ws_puts.join(&listed_key), b"from listed key")
+            .await
+            .unwrap();
+
+        let encoded_prefix = ObjPath::from(UMLAUT_PREFIX).as_ref().to_string();
+        upload_ws_puts(&ws_puts.to_path_buf(), &store, &encoded_prefix).await;
+
+        let result = store
+            .get(&ObjPath::from(UMLAUT_PREFIX).join(UMLAUT_NAME))
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+        assert_eq!(result.as_ref(), b"from listed key");
     }
 
     #[tokio::test]
@@ -414,6 +465,48 @@ mod workspace {
         assert_eq!(content, b"hello world");
         // Pending file should be cleaned up
         assert!(!ws_pending.join("req001").exists());
+    }
+
+    #[tokio::test]
+    async fn file_server_resolves_listed_key_to_raw_object() {
+        let store = memory_store();
+        put_object(&store, &format!("{UMLAUT_PREFIX}/{UMLAUT_NAME}"), b"umlaut").await;
+
+        let tmp = TempDir::new().unwrap();
+        let ws_pending = tmp.path().join("ws_pending");
+        let ws_data = tmp.path().join("ws_data");
+        let ws_notfound = tmp.path().join("ws_notfound");
+        for d in [&ws_pending, &ws_data, &ws_notfound] {
+            fs::create_dir_all(d).await.unwrap();
+        }
+
+        let encoded_prefix = ObjPath::from(UMLAUT_PREFIX).as_ref().to_string();
+        let handle = tokio::spawn(workspace_file_server(
+            store.clone(),
+            encoded_prefix,
+            ws_pending.clone(),
+            ws_data.clone(),
+            ws_notfound.clone(),
+        ));
+
+        let listed_key = ObjPath::from(UMLAUT_NAME).as_ref().to_string();
+        fs::write(ws_pending.join("req002"), &listed_key)
+            .await
+            .unwrap();
+
+        let data_path = ws_data.join(&listed_key);
+        let mut found = false;
+        for _ in 0..100 {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            if data_path.exists() {
+                found = true;
+                break;
+            }
+        }
+
+        handle.abort();
+        assert!(found, "listed key must resolve to the raw-named object");
+        assert_eq!(fs::read(&data_path).await.unwrap(), b"umlaut");
     }
 
     #[tokio::test]

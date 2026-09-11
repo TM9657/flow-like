@@ -50,6 +50,25 @@ export class DownloadManager {
 		};
 	}
 
+	/**
+	 * A resolved download only counts once the files are on disk. Backends that
+	 * stream bits report everything as installed, so this only ever rejects
+	 * where local artifacts are the point of the download.
+	 */
+	private async verifyInstalled(backend: IBackendState, bit: IBit) {
+		let installed: boolean;
+		try {
+			installed = await backend.bitState.isBitInstalled(bit);
+		} catch {
+			return;
+		}
+
+		if (!installed)
+			throw new Error(
+				"The download finished but its files are missing. A network filter may be blocking the model download.",
+			);
+	}
+
 	private notifyComplete(bit: IBit, downloadedBits: IBit[]) {
 		for (const listener of this.completionListeners) {
 			try {
@@ -178,7 +197,8 @@ export class DownloadManager {
 
 		const promise = pack
 			.download(wrappedCb)
-			.then((bits) => {
+			.then(async (bits) => {
+				await this.verifyInstalled(backend, bit);
 				this.notifyComplete(bit, bits);
 				return bits;
 			})

@@ -1,7 +1,7 @@
 use super::provider::{NOTION_PROVIDER_ID, NotionProvider};
 use super::utils::{
     NOTION_API_VERSION, auth_header, content_type_from_filename, file_object_from_upload_id,
-    filename_from_path, log_and_error, notion_error,
+    log_and_error, notion_error,
 };
 use crate::data::path::FlowPath;
 use flow_like::flow::{
@@ -64,7 +64,8 @@ async fn parse_response_json(
 
 fn upload_file_name(file: &FlowPath, filename: String) -> String {
     if filename.is_empty() {
-        filename_from_path(&file.path).unwrap_or_else(|| "notion-upload.bin".to_string())
+        flow_like::flow_like_storage::display_file_name(&file.object_path())
+            .unwrap_or_else(|| "notion-upload.bin".to_string())
     } else {
         filename
     }
@@ -529,5 +530,33 @@ impl NodeLogic for DownloadNotionFileNode {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upload_name_is_the_decoded_file_name_for_raw_and_listed_paths() {
+        let raw = "uploads/Übersicht (2)#1.pdf";
+        let from_raw = FlowPath {
+            path: raw.to_string(),
+            store_ref: "store".to_string(),
+            cache_store_ref: None,
+        };
+        let from_listed = FlowPath::new(raw.to_string(), "store".to_string(), None);
+        assert_eq!(from_listed.path, "uploads/%C3%9Cbersicht (2)%231.pdf");
+        assert_eq!(from_raw.object_path(), from_listed.object_path());
+        for flow_path in [&from_raw, &from_listed] {
+            assert_eq!(
+                upload_file_name(flow_path, String::new()),
+                "Übersicht (2)#1.pdf"
+            );
+        }
+        assert_eq!(
+            upload_file_name(&from_raw, "custom.bin".to_string()),
+            "custom.bin"
+        );
     }
 }

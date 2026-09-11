@@ -14,6 +14,7 @@ async function setup() {
 		Event: window.Event,
 		HTMLElement: window.HTMLElement,
 		HTMLTextAreaElement: window.HTMLTextAreaElement,
+		HTMLInputElement: window.HTMLInputElement,
 		MouseEvent: window.MouseEvent,
 		Node: window.Node,
 		navigator: window.navigator,
@@ -38,8 +39,16 @@ async function setup() {
 	};
 }
 
+const buttonByText = (container: { querySelectorAll: any }, text: string) =>
+	[...(container.querySelectorAll("button") as ArrayLike<HTMLButtonElement>)].find(
+		(button) => button.textContent?.trim() === text,
+	);
+
+const numberInputs = (container: { querySelectorAll: any }) =>
+	[...(container.querySelectorAll('input[type="number"]') as ArrayLike<HTMLInputElement>)];
+
 describe("Geometry editor rendering", () => {
-	test("shows subtype errors and preserves the visible invalid draft", async () => {
+	test("falls back to JSON with the subtype error and preserves the invalid draft", async () => {
 		const { container, root, GeometryValueInput } = await setup();
 		await act(async () => {
 			root.render(
@@ -79,8 +88,12 @@ describe("Geometry editor rendering", () => {
 				/>,
 			),
 		);
-		expect(container.querySelector("textarea")?.value).toBe("");
+		expect(container.querySelector("textarea")).toBeNull();
 		expect(container.querySelector('[role="alert"]')).toBeNull();
+		expect(numberInputs(container).map((input) => input.value)).toEqual([
+			"",
+			"",
+		]);
 		await act(async () =>
 			root.render(
 				<GeometryValueInput
@@ -91,10 +104,112 @@ describe("Geometry editor rendering", () => {
 				/>,
 			),
 		);
-		expect(container.querySelector("textarea")).toBeNull();
+		expect(numberInputs(container)).toHaveLength(0);
 		expect(container.querySelector('input[type="password"]')).not.toBeNull();
 		await act(async () => container.querySelector("button")?.click());
-		expect(container.querySelector("textarea")?.value).toContain("Point");
+		expect(numberInputs(container).map((input) => input.value)).toEqual([
+			"13",
+			"52",
+		]);
+		await act(async () => root.unmount());
+	});
+
+	test("vertex rows add and remove positions and emit normalized geometry", async () => {
+		const { container, root, GeometryValueInput } = await setup();
+		const emitted: unknown[] = [];
+		await act(async () =>
+			root.render(
+				<GeometryValueInput
+					value={{
+						type: "LineString",
+						coordinates: [
+							[0, 0],
+							[1, 1],
+						],
+					}}
+					preview={false}
+					onChange={(value, valid) => emitted.push(valid ? value : "invalid")}
+				/>,
+			),
+		);
+		expect(numberInputs(container)).toHaveLength(4);
+		await act(async () => buttonByText(container, "Add vertex")?.click());
+		expect(emitted.at(-1)).toEqual({
+			type: "LineString",
+			coordinates: [
+				[0, 0],
+				[1, 1],
+				[1, 1],
+			],
+		});
+		expect(numberInputs(container)).toHaveLength(6);
+		const remove = container.querySelectorAll('button[aria-label="Remove vertex"]');
+		expect(remove).toHaveLength(3);
+		await act(async () => (remove[0] as HTMLButtonElement).click());
+		await act(async () => {
+			container
+				.querySelectorAll('button[aria-label="Remove vertex"]')[0]
+				?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+		});
+		expect(emitted.at(-1)).toBe("invalid");
+		expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+			"at least 2 positions",
+		);
+		await act(async () => root.unmount());
+	});
+
+	test("polygons expose rings and empty holes are not emitted", async () => {
+		const { container, root, GeometryValueInput } = await setup();
+		const emitted: unknown[] = [];
+		const square = [
+			[0, 0],
+			[1, 0],
+			[1, 1],
+			[0, 1],
+			[0, 0],
+		];
+		await act(async () =>
+			root.render(
+				<GeometryValueInput
+					value={{ type: "Polygon", coordinates: [square] }}
+					preview={false}
+					onChange={(value, valid) => emitted.push(valid ? value : "invalid")}
+				/>,
+			),
+		);
+		expect(container.textContent).toContain("Exterior ring");
+		expect(numberInputs(container)).toHaveLength(8);
+		await act(async () => buttonByText(container, "Add hole")?.click());
+		expect(container.textContent).toContain("Hole 1");
+		expect(emitted.at(-1)).toEqual({ type: "Polygon", coordinates: [square] });
+		await act(async () =>
+			(
+				container.querySelector(
+					'button[aria-label="Remove hole"]',
+				) as HTMLButtonElement | null
+			)?.click(),
+		);
+		expect(container.textContent).not.toContain("Hole 1");
+		await act(async () => root.unmount());
+	});
+
+	test("JSON mode shows the current value as text", async () => {
+		const { container, root, GeometryValueInput } = await setup();
+		await act(async () =>
+			root.render(
+				<GeometryValueInput
+					value={{ type: "Point", coordinates: [13, 52] }}
+					preview={false}
+					onChange={() => {}}
+				/>,
+			),
+		);
+		expect(container.querySelector("textarea")).toBeNull();
+		await act(async () => buttonByText(container, "JSON")?.click());
+		expect(container.querySelector("textarea")?.value).toContain('"Point"');
+		await act(async () => buttonByText(container, "Map")?.click());
+		expect(container.querySelector("textarea")).toBeNull();
+		expect(numberInputs(container)).toHaveLength(2);
 		await act(async () => root.unmount());
 	});
 });

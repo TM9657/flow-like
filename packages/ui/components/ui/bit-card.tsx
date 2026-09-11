@@ -216,13 +216,21 @@ export function BitCard({
 			await refetchIsInstalled();
 			return;
 		}
-		await downloadBit(bit);
+		try {
+			await downloadBit(bit);
+		} catch (error) {
+			console.error("Failed to download bit:", error);
+			toast.error(t("downloadFailed", "Download failed"), {
+				description: error instanceof Error ? error.message : undefined,
+			});
+		}
 	}, [
 		isInstalled.data,
 		backend.bitState,
 		bit,
 		downloadBit,
 		refetchIsInstalled,
+		t,
 	]);
 
 	const refetchCurrentProfile = currentProfile.refetch;

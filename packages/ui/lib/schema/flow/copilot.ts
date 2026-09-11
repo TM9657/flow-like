@@ -56,6 +56,10 @@ export interface PlaceholderPinDef {
 	schema?: string;
 	/** Require connected pins to agree with schema. */
 	enforce_schema?: boolean;
+	/** Optional event parameter: callers may omit it and the runtime fills the default. */
+	optional?: boolean;
+	/** Stored default for an optional pin. Requires `optional`; omitted = the type default. */
+	default_value?: unknown;
 }
 
 export type BoardCommand =
@@ -104,6 +108,18 @@ export type BoardCommand =
 			pin_id: string;
 			value: unknown;
 			summary?: string;
+	  }
+	| {
+			/**
+			 * Toggle whether a custom `events_generic` output pin is optional. `optional: true`
+			 * stores the flag and `default_value` (the type default when omitted); `optional: false`
+			 * clears both. Execution pins and `payload` are never optional.
+			 */
+			command_type: "UpdateNodePinOptions";
+			node_id: string;
+			pin_name: string;
+			optional: boolean;
+			default_value?: unknown;
 	  }
 	| {
 			command_type: "RenameNode";

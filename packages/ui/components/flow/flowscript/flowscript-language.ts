@@ -765,8 +765,9 @@ export const FLOWSCRIPT_MONARCH: MonarchLanguage = {
 					},
 				},
 			],
-			// Named-argument / object keys and type-annotation labels.
-			[/[A-Za-z_$][\w$]*(?=\s*:(?!:))/, "variable.parameter"],
+			// Named-argument / object keys and type-annotation labels, including optional
+			// `name?: Type` parameters and interface fields.
+			[/[A-Za-z_$][\w$]*(?=\s*\??\s*:(?!:))/, "variable.parameter"],
 			// Bare identifiers, keywords, types, constants.
 			[
 				/[A-Za-z_$][\w$]*/,

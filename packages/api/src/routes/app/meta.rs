@@ -61,6 +61,25 @@ pub struct MediaQuery {
     pub extension: String,
 }
 
+/// Extension charset for every key the API mints from client input: ASCII
+/// alphanumerics only, lower-cased, at most 16 bytes.
+pub(crate) fn sanitize_ext(input: Option<&str>) -> Option<String> {
+    let ext = input?.trim().trim_start_matches('.').to_ascii_lowercase();
+    if ext.is_empty() || ext.len() > 16 || !ext.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return None;
+    }
+    Some(ext)
+}
+
+/// `{item_id}.{ext}` for a media upload; an extension that could smuggle path
+/// or percent characters into the object key is rejected.
+pub(crate) fn media_item_name(item_id: &str, extension: &str) -> Result<String, ApiError> {
+    let ext = sanitize_ext(Some(extension)).ok_or_else(|| {
+        ApiError::bad_request(format!("unsupported media extension '{extension}'"))
+    })?;
+    Ok(format!("{item_id}.{ext}"))
+}
+
 pub enum MetaMode {
     Template(String),
     App(String),
@@ -277,5 +296,30 @@ impl MetaMode {
                     .await
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_ext_keeps_only_ascii_alphanumerics() {
+        assert_eq!(sanitize_ext(Some(" .PNG ")).as_deref(), Some("png"));
+        assert_eq!(sanitize_ext(Some("webp")).as_deref(), Some("webp"));
+        assert_eq!(sanitize_ext(Some("pn%g")), None);
+        assert_eq!(sanitize_ext(Some("Übersicht")), None);
+        assert_eq!(sanitize_ext(Some("png/../x")), None);
+        assert_eq!(sanitize_ext(Some("")), None);
+        assert_eq!(sanitize_ext(Some("averyverylongextension")), None);
+        assert_eq!(sanitize_ext(None), None);
+    }
+
+    #[test]
+    fn media_item_name_rejects_unsafe_extensions() {
+        assert_eq!(media_item_name("id-1", "JPG").unwrap(), "id-1.jpg");
+        assert!(media_item_name("id-1", "pn%g").is_err());
+        assert!(media_item_name("id-1", "Übersicht").is_err());
+        assert!(media_item_name("id-1", "").is_err());
     }
 }

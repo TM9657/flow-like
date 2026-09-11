@@ -544,12 +544,8 @@ fn input_mime_from_path(path: &str) -> &'static str {
     }
 }
 
-fn file_name_from_path(path: &str, fallback_extension: &str) -> String {
-    Path::new(path)
-        .file_name()
-        .and_then(|file_name| file_name.to_str())
-        .map(ToOwned::to_owned)
-        .filter(|file_name| !file_name.is_empty())
+fn file_name_from_path(path: &FlowPath, fallback_extension: &str) -> String {
+    flow_like::flow_like_storage::display_file_name(&path.object_path())
         .unwrap_or_else(|| format!("audio.{fallback_extension}"))
 }
 
@@ -2884,7 +2880,7 @@ impl NodeLogic for SpeechToTextNode {
 
         let request = SpeechToTextRequest {
             audio_bytes,
-            file_name: file_name_from_path(&audio_path.path, &fallback_extension),
+            file_name: file_name_from_path(&audio_path, &fallback_extension),
             mime_type: input_mime_from_path(&audio_path.path).to_string(),
             language: provider_options.language,
             prompt: provider_options.prompt,
@@ -3058,7 +3054,7 @@ impl NodeLogic for LocalSpeechToTextNode {
         let output = match model
             .transcribe(LocalTranscriptionRequest {
                 audio_bytes,
-                file_name: file_name_from_path(&audio_path.path, &fallback_extension),
+                file_name: file_name_from_path(&audio_path, &fallback_extension),
                 language: eval_optional_text_pin(context, "language").await,
                 translate,
                 timestamps,
@@ -3135,4 +3131,27 @@ impl NodeLogic for LocalSpeechToTextNode {
     }
 
     async fn on_update(&self, _node: &mut Node, _board: &Board) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_file_name_is_the_decoded_file_name_for_raw_and_listed_paths() {
+        let raw = "uploads/Übersicht (2)#1.pdf";
+        let from_raw = FlowPath {
+            path: raw.to_string(),
+            store_ref: "store".to_string(),
+            cache_store_ref: None,
+        };
+        let from_listed = FlowPath::new(raw.to_string(), "store".to_string(), None);
+        assert_eq!(from_listed.path, "uploads/%C3%9Cbersicht (2)%231.pdf");
+        assert_eq!(from_raw.object_path(), from_listed.object_path());
+        for flow_path in [&from_raw, &from_listed] {
+            assert_eq!(file_name_from_path(flow_path, "mp3"), "Übersicht (2)#1.pdf");
+        }
+        let empty = FlowPath::new(String::new(), "store".to_string(), None);
+        assert_eq!(file_name_from_path(&empty, "mp3"), "audio.mp3");
+    }
 }

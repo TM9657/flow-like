@@ -122,6 +122,7 @@ impl NodeLogic for KgTraverseToolNode {
                 description: Some(
                     "Cypher query to execute against the knowledge graph".to_string(),
                 ),
+                default: None,
                 enum_values: None,
                 properties: None,
                 required: None,

@@ -933,9 +933,7 @@ impl NodeLogic for SetChatPhotoNode {
         let chat_id = session.chat_id()?;
 
         let bytes = photo.get(context, false).await?;
-        let name = std::path::Path::new(&photo.path)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
+        let name = flow_like::flow_like_storage::display_file_name(&photo.object_path())
             .unwrap_or_else(|| "photo.jpg".to_string());
         let input_file = InputFile::memory(bytes).file_name(name);
 

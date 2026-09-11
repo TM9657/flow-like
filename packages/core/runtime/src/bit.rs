@@ -992,6 +992,36 @@ pub struct BitPack {
     pub bits: Vec<Bit>,
 }
 
+/// Artifacts that are not in the store with their declared size.
+///
+/// A download that returns without leaving the file behind is a failed
+/// download; the store is the only authority on that.
+async fn missing_artifacts(
+    bits: &[Bit],
+    state: &Arc<FlowLikeState>,
+) -> flow_like_types::Result<Vec<String>> {
+    let bits_store = FlowLikeState::bit_store(state).await?.as_generic();
+    let mut missing = Vec::new();
+
+    for bit in bits.iter() {
+        let Some(file_name) = bit.file_name.clone() else {
+            continue;
+        };
+
+        let bit_path = Path::from(bit.hash.clone()).join(file_name);
+        let installed = bits_store
+            .head(&bit_path)
+            .await
+            .is_ok_and(|meta| meta.size as u64 == bit.size.unwrap_or(0));
+
+        if !installed {
+            missing.push(bit.id.clone());
+        }
+    }
+
+    Ok(missing)
+}
+
 async fn collect_dependencies(
     bit: &Bit,
     state: Arc<FlowLikeState>,
@@ -1123,11 +1153,31 @@ impl BitPack {
 
         let results = futures::future::join_all(download_futures).await;
 
-        for result in results {
-            match result {
-                Ok(_) => println!("Download succeeded"),
-                Err(e) => eprintln!("Download failed: {e}"),
-            }
+        // Reporting a failed download as a success is what makes a blocked
+        // network look like a finished install, so every artifact has to answer
+        // for itself before the pack counts as downloaded.
+        let failures = deduplicated_bits
+            .iter()
+            .zip(results)
+            .filter_map(|(bit, result)| result.err().map(|err| format!("{}: {}", bit.id, err)))
+            .collect::<Vec<_>>();
+
+        if !failures.is_empty() {
+            return Err(flow_like_types::anyhow!(
+                "{} of {} artifacts failed to download ({})",
+                failures.len(),
+                deduplicated_bits.len(),
+                failures.join("; ")
+            ));
+        }
+
+        let missing = missing_artifacts(&deduplicated_bits, &state).await?;
+        if !missing.is_empty() {
+            return Err(flow_like_types::anyhow!(
+                "Downloads reported success but {} artifacts are missing from the store ({})",
+                missing.len(),
+                missing.join(", ")
+            ));
         }
 
         // Combine successfully queued bits (deduplicated_bits) with any virtual bits (those without download links)

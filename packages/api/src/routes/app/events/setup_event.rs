@@ -680,7 +680,7 @@ pub(crate) async fn run_event_setup(
         None => collected.clone(),
     };
 
-    let setup_board = if expected_kind == Some("mcp") {
+    let setup_board = if matches!(expected_kind, Some("mcp") | Some("rest")) {
         match state
             .master_board(
                 "setup",
@@ -696,7 +696,7 @@ pub(crate) async fn run_event_setup(
                 tracing::warn!(
                     event_id = %core_event.id,
                     error = %err,
-                    "failed to load board while expanding MCP setup metadata"
+                    "failed to load board while expanding inbound setup metadata; falling back to untyped schemas"
                 );
                 None
             }
@@ -1042,6 +1042,7 @@ fn prepare_registrations(
                     variant,
                     &env.node_id,
                     &env.config,
+                    setup_board,
                     &mut auths,
                     now,
                 )?;
@@ -2007,6 +2008,7 @@ fn mcp_tool_metadata(
     let name = sanitize_mcp_identifier(name_source);
     let description = resolved_mcp_description(&node.description, board_refs);
     let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
     let mut used_argument_names = std::collections::HashSet::new();
     for pin in node.pins.values() {
         if pin.pin_type != PinType::Output || pin.data_type == VariableType::Execution {
@@ -2017,7 +2019,7 @@ fn mcp_tool_metadata(
         }
         let argument_name = unique_mcp_tool_argument_name(pin, &used_argument_names);
         used_argument_names.insert(argument_name.clone());
-        let schema = pin_schema(
+        let mut schema = pin_schema(
             &pin.data_type,
             &pin.value_type,
             pin.schema
@@ -2028,18 +2030,44 @@ fn mcp_tool_metadata(
                 .unwrap_or_default()
                 .as_str(),
         );
+        if pin.is_optional() {
+            insert_optional_default(&mut schema, pin.effective_default(board_refs));
+        } else {
+            required.push(argument_name.clone());
+        }
         properties.insert(argument_name, schema);
     }
 
     (
         name,
         description,
-        json!({
-            "type": "object",
-            "properties": properties,
-            "additionalProperties": true
-        }),
+        object_schema_with_required(properties, required),
     )
+}
+
+fn insert_optional_default(schema: &mut Value, default: Value) {
+    if default.is_null() {
+        return;
+    }
+    if let Some(obj) = schema.as_object_mut() {
+        obj.insert("default".to_string(), default);
+    }
+}
+
+fn object_schema_with_required(
+    properties: serde_json::Map<String, Value>,
+    mut required: Vec<String>,
+) -> Value {
+    let mut schema = json!({
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": true
+    });
+    if !required.is_empty() {
+        required.sort_unstable();
+        schema["required"] = json!(required);
+    }
+    schema
 }
 
 fn sanitize_mcp_identifier(input: &str) -> String {
@@ -2146,6 +2174,7 @@ fn expand_rest_config(
     variant: &str,
     node_id: &str,
     config: &Value,
+    board: Option<&Board>,
     auths: &mut Vec<event_remote_auth::ActiveModel>,
     now: chrono::DateTime<chrono::FixedOffset>,
 ) -> flow_like_types::Result<(Vec<event_remote_registration::ActiveModel>, Option<String>)> {
@@ -2241,7 +2270,7 @@ fn expand_rest_config(
 
     // openapi_routes -> rest_openapi
     if let Some(routes) = config.get("openapi_routes").and_then(|v| v.as_array()) {
-        let spec = build_rest_openapi_spec(config);
+        let spec = build_rest_openapi_spec(config, board);
         for route in routes {
             let path = normalize_route_path(
                 route
@@ -2308,18 +2337,27 @@ fn expand_rest_config(
     Ok((out, auth_id))
 }
 
-/// Build a minimal OpenAPI 3.1 document from a persisted REST server
-/// `config`. We don't have board context here (per-pin schemas would
-/// require running the flow), so request/response bodies are typed as
-/// open `object`. The catalog node produces a richer in-process doc;
-/// this one is the authoritative spec that inbound serves remotely.
-fn build_rest_openapi_spec(config: &Value) -> Value {
+/// Build the OpenAPI 3.1 document from a persisted REST server `config`.
+/// With the setup `board` at hand, request bodies are typed from the route
+/// handlers' output pins (non-optional pins are `required`, optional pins
+/// carry their effective default); without a board they fall back to an
+/// open `object`. Response bodies stay open either way. The catalog node
+/// produces the in-process doc; this one is the authoritative spec that
+/// inbound serves remotely.
+fn build_rest_openapi_spec(config: &Value, board: Option<&Board>) -> Value {
     let mut paths = serde_json::Map::new();
 
     if let Some(routes) = config.get("function_routes").and_then(|v| v.as_array()) {
         for route in routes {
             let path =
                 normalize_route_path(route.get("path").and_then(|v| v.as_str()).unwrap_or("/"));
+            let function_refs: Vec<&str> = route
+                .get("function_refs")
+                .and_then(|v| v.as_array())
+                .map(|refs| refs.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            let (body_schema, body_required) =
+                rest_route_request_body_schema(board, &function_refs);
             let methods: Vec<String> = route
                 .get("methods")
                 .and_then(|v| v.as_array())
@@ -2357,8 +2395,8 @@ fn build_rest_openapi_spec(config: &Value) -> Value {
                 });
                 if method != "get" && method != "head" {
                     op["requestBody"] = json!({
-                        "required": false,
-                        "content": {"application/json": {"schema": {"type": "object", "additionalProperties": true}}}
+                        "required": body_required,
+                        "content": {"application/json": {"schema": body_schema}}
                     });
                 }
                 obj.insert(method, op);
@@ -2444,6 +2482,102 @@ fn build_rest_openapi_spec(config: &Value) -> Value {
     doc
 }
 
+/// Request-body schema for a function route, typed from every handler in
+/// `function_refs`. Twin of `route_request_body_schema` in
+/// `flow_like_catalog_web::web::rest`: `payload` pins become
+/// `x-flow-like-payload-schema`, every other data output pin becomes a
+/// property. Returns the schema and whether the body is required.
+fn rest_route_request_body_schema(board: Option<&Board>, function_refs: &[&str]) -> (Value, bool) {
+    let mut payload_schemas = Vec::new();
+    let mut properties = serde_json::Map::new();
+    let mut required = Vec::new();
+
+    if let Some(board) = board {
+        for node in function_refs.iter().filter_map(|id| board.nodes.get(*id)) {
+            for pin in node.pins.values() {
+                if pin.pin_type != PinType::Output
+                    || pin.data_type == VariableType::Execution
+                    || is_rest_internal_arg_pin(&pin.name)
+                {
+                    continue;
+                }
+                let mut schema = pin_schema(
+                    &pin.data_type,
+                    &pin.value_type,
+                    pin.schema
+                        .as_deref()
+                        .map(|schema| resolve_mcp_text_ref(schema, &board.refs))
+                        .as_deref(),
+                    resolved_mcp_description(&pin.description, &board.refs)
+                        .unwrap_or_default()
+                        .as_str(),
+                );
+                if pin.name == "payload" {
+                    payload_schemas.push(schema);
+                    continue;
+                }
+                let name = rest_pin_property_name(pin);
+                if pin.is_optional() {
+                    insert_optional_default(&mut schema, pin.effective_default(&board.refs));
+                } else {
+                    required.push(name.clone());
+                }
+                properties.insert(name, schema);
+            }
+        }
+    }
+
+    if !properties.is_empty() {
+        let body_required = !required.is_empty();
+        let mut schema = object_schema_with_required(properties, required);
+        if !payload_schemas.is_empty() {
+            schema["x-flow-like-payload-schema"] = merge_rest_schemas(payload_schemas);
+        }
+        return (schema, body_required);
+    }
+
+    if !payload_schemas.is_empty() {
+        return (merge_rest_schemas(payload_schemas), false);
+    }
+
+    (
+        json!({"type": "object", "additionalProperties": true}),
+        false,
+    )
+}
+
+fn rest_pin_property_name(pin: &Pin) -> String {
+    let friendly = pin.friendly_name.trim();
+    if friendly.is_empty() {
+        sanitize_mcp_identifier(&pin.name)
+    } else {
+        sanitize_mcp_identifier(friendly)
+    }
+}
+
+fn is_rest_internal_arg_pin(name: &str) -> bool {
+    matches!(
+        name,
+        "_client"
+            | "request"
+            | "method"
+            | "path"
+            | "query"
+            | "headers"
+            | "body"
+            | "body_text"
+            | "body_bytes"
+    )
+}
+
+fn merge_rest_schemas(mut schemas: Vec<Value>) -> Value {
+    if schemas.len() == 1 {
+        schemas.remove(0)
+    } else {
+        json!({ "allOf": schemas })
+    }
+}
+
 fn canonical_rest_auth_type(auth_type: &str) -> &str {
     match auth_type {
         "o_auth_bearer" | "oauth_bearer" => "oauth_bearer",
@@ -2453,6 +2587,7 @@ fn canonical_rest_auth_type(auth_type: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    use flow_like::flow::pin::PinOptions;
     use serde_json::json;
 
     use super::{build_rest_openapi_spec, is_completed_run_status, rest_file_routes};
@@ -2628,6 +2763,7 @@ mod tests {
         let (_, _, schema) = super::mcp_tool_metadata(&node, &refs);
         assert_eq!(schema["type"], json!("object"));
         assert_eq!(schema["properties"], json!({}));
+        assert!(schema.get("required").is_none());
 
         node.add_output_pin(
             "note_limit",
@@ -2640,6 +2776,61 @@ mod tests {
             schema["properties"],
             json!({"limit": {"type": "integer", "description": "Maximum notes"}})
         );
+        assert_eq!(schema["required"], json!(["limit"]));
+    }
+
+    #[test]
+    fn mcp_tool_schema_requires_non_optional_pins_and_defaults_optional_ones() {
+        let mut node = super::Node::new("search_notes", "Search Notes", "Search", "Tests");
+        node.add_output_pin(
+            "query",
+            "Query",
+            "Search query",
+            super::VariableType::String,
+        );
+        node.add_output_pin(
+            "note_limit",
+            "Limit",
+            "Maximum notes",
+            super::VariableType::Integer,
+        )
+        .set_options(PinOptions::new().set_optional(true).build())
+        .set_default_value(Some(json!(20)));
+        let refs = super::HashMap::new();
+
+        let (_, _, schema) = super::mcp_tool_metadata(&node, &refs);
+        assert_eq!(schema["required"], json!(["query"]));
+        assert_eq!(
+            schema["properties"]["limit"],
+            json!({"type": "integer", "description": "Maximum notes", "default": 20})
+        );
+        assert!(schema["properties"]["query"].get("default").is_none());
+    }
+
+    #[test]
+    fn mcp_tool_schema_omits_required_when_every_pin_is_optional() {
+        let mut node = super::Node::new("search_notes", "Search Notes", "Search", "Tests");
+        node.add_output_pin(
+            "query",
+            "Query",
+            "Search query",
+            super::VariableType::String,
+        )
+        .set_options(PinOptions::new().set_optional(true).build());
+        node.add_output_pin(
+            "cursor",
+            "Cursor",
+            "Page cursor",
+            super::VariableType::String,
+        )
+        .set_options(PinOptions::new().set_optional(true).build())
+        .set_default_value(Some(json!(null)));
+        let refs = super::HashMap::new();
+
+        let (_, _, schema) = super::mcp_tool_metadata(&node, &refs);
+        assert!(schema.get("required").is_none());
+        assert_eq!(schema["properties"]["query"]["default"], json!(""));
+        assert_eq!(schema["properties"]["cursor"]["default"], json!(""));
     }
 
     #[test]
@@ -2701,7 +2892,7 @@ mod tests {
 
         assert_eq!(rest_file_routes(&config).len(), 1);
 
-        let spec = build_rest_openapi_spec(&config);
+        let spec = build_rest_openapi_spec(&config, None);
         assert_eq!(
             spec["paths"]["/assets/{filename}"]["get"]["summary"],
             json!("Static directory file")
@@ -2710,5 +2901,132 @@ mod tests {
             spec["paths"]["/assets/{filename}"]["get"]["responses"]["200"]["content"]["text/plain"]
                 .is_object()
         );
+    }
+
+    fn detached_board_with(node: super::Node) -> super::Board {
+        let mut board = super::Board::new_detached(
+            None,
+            flow_like_storage::object_store::path::Path::from("apps"),
+        );
+        board.nodes.insert(node.id.clone(), node);
+        board
+    }
+
+    fn single_route_config(path: &str, method: &str, node_id: &str) -> serde_json::Value {
+        json!({
+            "function_routes": [{
+                "path": path,
+                "methods": [method],
+                "function_refs": [node_id]
+            }]
+        })
+    }
+
+    #[test]
+    fn rest_openapi_request_body_marks_optional_pins_and_defaults() {
+        let mut node = super::Node::new(
+            "events_generic",
+            "Generic Event",
+            "A generic event without input or output",
+            "Events",
+        );
+        node.add_output_pin(
+            "exec_out",
+            "Exec Out",
+            "Starting an event",
+            super::VariableType::Execution,
+        );
+        node.add_output_pin("Name", "Name", "Person name", super::VariableType::String);
+        node.add_output_pin("Age", "Age", "Person age", super::VariableType::Integer);
+        node.add_output_pin(
+            "Country",
+            "Country",
+            "Person country",
+            super::VariableType::String,
+        )
+        .set_default_value(Some(json!("DE")))
+        .set_options(PinOptions::new().set_optional(true).build());
+        node.add_output_pin(
+            "Nickname",
+            "Nickname",
+            "Optional alias",
+            super::VariableType::String,
+        )
+        .set_options(PinOptions::new().set_optional(true).build());
+        node.add_output_pin(
+            "payload",
+            "Payload",
+            "The payload",
+            super::VariableType::Struct,
+        )
+        .set_open_schema();
+        let config = single_route_config("/form", "POST", &node.id);
+        let board = detached_board_with(node);
+
+        let spec = build_rest_openapi_spec(&config, Some(&board));
+        let request_body = &spec["paths"]["/form"]["post"]["requestBody"];
+        let schema = &request_body["content"]["application/json"]["schema"];
+
+        assert_eq!(request_body["required"], json!(true));
+        assert_eq!(schema["type"], json!("object"));
+        assert_eq!(schema["properties"]["name"]["type"], json!("string"));
+        assert!(schema["properties"]["name"].get("default").is_none());
+        assert_eq!(schema["properties"]["age"]["type"], json!("integer"));
+        assert!(schema["properties"]["age"].get("default").is_none());
+        assert_eq!(schema["properties"]["country"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["country"]["default"], json!("DE"));
+        assert_eq!(schema["properties"]["nickname"]["default"], json!(""));
+        assert_eq!(schema["required"], json!(["age", "name"]));
+        assert!(schema["properties"].get("payload").is_none());
+        assert!(schema["properties"].get("exec_out").is_none());
+        assert_eq!(
+            schema["x-flow-like-payload-schema"]["additionalProperties"],
+            json!(true)
+        );
+    }
+
+    #[test]
+    fn rest_openapi_request_body_is_optional_when_every_pin_is_optional() {
+        let mut node = super::Node::new(
+            "events_generic",
+            "Generic Event",
+            "A generic event without input or output",
+            "Events",
+        );
+        node.add_output_pin("Note", "Note", "Optional note", super::VariableType::String)
+            .set_default_value(Some(json!(null)))
+            .set_options(PinOptions::new().set_optional(true).build());
+        let config = single_route_config("/notes", "POST", &node.id);
+        let board = detached_board_with(node);
+
+        let spec = build_rest_openapi_spec(&config, Some(&board));
+        let request_body = &spec["paths"]["/notes"]["post"]["requestBody"];
+        let schema = &request_body["content"]["application/json"]["schema"];
+
+        assert_eq!(request_body["required"], json!(false));
+        assert_eq!(schema["properties"]["note"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["note"]["default"], json!(""));
+        assert!(schema.get("required").is_none());
+    }
+
+    #[test]
+    fn rest_openapi_request_body_stays_open_without_a_board() {
+        let config = json!({
+            "function_routes": [{
+                "path": "/form",
+                "methods": ["POST", "GET"],
+                "function_refs": ["missing-node"]
+            }]
+        });
+
+        let spec = build_rest_openapi_spec(&config, None);
+        let request_body = &spec["paths"]["/form"]["post"]["requestBody"];
+
+        assert_eq!(request_body["required"], json!(false));
+        assert_eq!(
+            request_body["content"]["application/json"]["schema"],
+            json!({"type": "object", "additionalProperties": true})
+        );
+        assert!(spec["paths"]["/form"]["get"].get("requestBody").is_none());
     }
 }

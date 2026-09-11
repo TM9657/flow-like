@@ -47,6 +47,7 @@ import { AutoResizeText } from "./auto-resize-text";
 import { CommentDialog } from "./comment-dialog";
 import { useUndoRedo } from "./flow-history";
 import type { RemoteSelectionParticipant } from "./flow-node";
+import { FlowNodeQualityBadge } from "./flow-node/flow-node-quality-badge";
 import { FlowPin } from "./flow-pin";
 import type { FlowSelectorDataRef } from "./flow-selector-data";
 import type { RemoteEditorParticipant } from "./flowscript/flowscript-presence";
@@ -375,6 +376,11 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 							/>
 						</div>
 					)}
+					<FlowNodeQualityBadge
+						boardId={props.data.boardId}
+						targetId={props.data.layer.id}
+						className="left-1/2 top-0 -translate-x-1/2 -translate-y-1/2"
+					/>
 					{severity !== ILogLevel.Debug && (
 						<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(50%)] right-0 text-center bg-background rounded-full">
 							{severity === ILogLevel.Fatal && (

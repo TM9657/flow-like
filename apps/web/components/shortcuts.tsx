@@ -9,7 +9,7 @@ import {
 import { IBitTypes } from "@flow-like/flow-like-ui/lib/schema/hub/bit-search-query";
 import { useTranslation } from "@flow-like/locales";
 import { useLiveQuery } from "dexie-react-hooks";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ export function Shortcuts() {
 	const backend = useBackend();
 	const router = useRouter();
 	const pathname = usePathname();
+	const searchParams = useSearchParams();
 	const auth = useAuth();
 	const invalidate = useInvalidateInvoke();
 	const currentProfile = useInvoke(
@@ -109,6 +110,7 @@ export function Shortcuts() {
 			shortcuts={shortcuts}
 			currentProfileId={currentProfile.data?.hub_profile.id}
 			pathname={pathname}
+			search={searchParams.toString()}
 			onNavigate={(path: string) => router.push(path)}
 			backend={backend}
 			appMetadata={appMetadata.data}

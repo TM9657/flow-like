@@ -29,11 +29,7 @@ async fn flow_path_to_input_file(
     let bytes = flow_path.get(context, false).await?;
     let name = filename
         .map(|s| s.to_string())
-        .or_else(|| {
-            std::path::Path::new(&flow_path.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-        })
+        .or_else(|| flow_like::flow_like_storage::display_file_name(&flow_path.object_path()))
         .unwrap_or_else(|| "file".to_string());
 
     Ok(InputFile::memory(bytes).file_name(name))

@@ -1560,6 +1560,8 @@ pub struct HistoryJSONSchemaDefine {
     pub schema_type: Option<HistoryJSONSchemaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "enum")]
     pub enum_values: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]

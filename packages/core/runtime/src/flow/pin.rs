@@ -20,6 +20,7 @@ pub struct PinOptions {
     pub step: Option<f64>,
     pub enforce_schema: Option<bool>,
     pub enforce_generic_value_type: Option<bool>,
+    pub optional: Option<bool>,
 }
 
 impl Default for PinOptions {
@@ -37,6 +38,7 @@ impl PinOptions {
             step: None,
             enforce_schema: None,
             enforce_generic_value_type: None,
+            optional: None,
         }
     }
 
@@ -52,6 +54,11 @@ impl PinOptions {
 
     pub fn set_sensitive(&mut self, sensitive: bool) -> &mut Self {
         self.sensitive = Some(sensitive);
+        self
+    }
+
+    pub fn set_optional(&mut self, optional: bool) -> &mut Self {
+        self.optional = Some(optional);
         self
     }
 
@@ -98,6 +105,9 @@ impl PinOptions {
         }
         if let Some(enforce_generic_value_type) = &self.enforce_generic_value_type {
             hasher.append(enforce_generic_value_type.to_string().as_bytes());
+        }
+        if let Some(optional) = &self.optional {
+            hasher.append(optional.to_string().as_bytes());
         }
     }
 }
@@ -273,6 +283,32 @@ impl Pin {
         self
     }
 
+    pub fn is_optional(&self) -> bool {
+        self.options
+            .as_ref()
+            .and_then(|options| options.optional)
+            .unwrap_or(false)
+    }
+
+    /// The value a missing optional pin resolves to: the stored literal when it decodes to a
+    /// non-null value, otherwise the type default. See [`super::variable::default_value_for_type`].
+    pub fn effective_default(&self, refs: &std::collections::HashMap<String, String>) -> Value {
+        let stored = self
+            .default_value
+            .as_deref()
+            .and_then(|bytes| flow_like_types::json::from_slice::<Value>(bytes).ok());
+        let schema = self
+            .schema
+            .as_deref()
+            .and_then(|schema| resolve_schema(schema, refs).ok());
+        super::variable::effective_default(
+            stored.as_ref(),
+            &self.data_type,
+            &self.value_type,
+            schema,
+        )
+    }
+
     pub fn set_value_type(&mut self, value_type: ValueType) -> &mut Self {
         self.value_type = value_type;
         self
@@ -409,6 +445,43 @@ mod tests {
         assert!(!super::geometry_pins_are_compatible(&output, &input, &refs).unwrap());
         output.schema = Some(r#"{"$id":"flow:geometry","x-geometry":"Triangle"}"#.into());
         assert!(super::geometry_pins_are_compatible(&output, &input, &refs).is_err());
+    }
+
+    #[test]
+    fn effective_default_decodes_the_literal_and_resolves_schema_refs() {
+        use flow_like_types::geometry::{GeometryKind, marker};
+        use flow_like_types::json::json;
+        let refs = std::collections::HashMap::from([(
+            "multi-ref".to_string(),
+            marker(GeometryKind::MultiPoint).to_string(),
+        )]);
+        let mut node = crate::flow::node::Node::new("default-test", "Default", "", "");
+        let mut pin = node
+            .add_output_pin("out", "Out", "", super::VariableType::Integer)
+            .clone();
+        assert!(!pin.is_optional());
+        assert_eq!(pin.effective_default(&refs), json!(0));
+
+        pin.set_options(super::PinOptions::new().set_optional(true).build());
+        assert!(pin.is_optional());
+        pin.set_default_value(Some(json!(4)));
+        assert_eq!(pin.effective_default(&refs), json!(4));
+        pin.set_default_value(Some(Value::Null));
+        assert_eq!(pin.effective_default(&refs), json!(0));
+        pin.default_value = Some(b"not json".to_vec());
+        assert_eq!(pin.effective_default(&refs), json!(0));
+
+        pin.set_default_value(None);
+        pin.set_data_type(super::VariableType::Geometry);
+        pin.schema = Some("multi-ref".into());
+        assert_eq!(
+            pin.effective_default(&refs),
+            json!({"type": "MultiPoint", "coordinates": []})
+        );
+        pin.schema = Some(marker(GeometryKind::Point).into());
+        assert_eq!(pin.effective_default(&refs), Value::Null);
+        pin.set_value_type(super::ValueType::HashMap);
+        assert_eq!(pin.effective_default(&refs), json!({}));
     }
 
     #[test]

@@ -69,6 +69,7 @@ export interface IEventInput {
 	schema?: string | null;
 	default_value?: number[] | null;
 	index: number;
+	optional?: boolean;
 }
 
 export interface ICanaryEvent {

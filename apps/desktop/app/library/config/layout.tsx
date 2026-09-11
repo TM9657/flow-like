@@ -10,19 +10,12 @@ import {
 	Button,
 	Card,
 	CardContent,
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
 	HoverCard,
 	HoverCardContent,
 	HoverCardTrigger,
 	IAppVisibility,
 	type IEvent,
 	Input,
-	Label,
 	ScrollArea,
 	Separator,
 	Sheet,
@@ -31,7 +24,6 @@ import {
 	SheetHeader,
 	SheetTitle,
 	Skeleton,
-	Switch,
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
@@ -55,7 +47,6 @@ import { configRouteFillsHeight } from "@flow-like/flow-like-ui/lib/config-route
 import { EVENT_CONFIG } from "@flow-like/flow-like-ui/lib/event-config";
 import { useTranslation } from "@flow-like/locales";
 import { useQuery } from "@tanstack/react-query";
-import { invoke } from "@tauri-apps/api/core";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
 	ChartAreaIcon,
@@ -66,8 +57,6 @@ import {
 	DatabaseIcon,
 	DollarSignIcon,
 	DownloadIcon,
-	EyeIcon,
-	EyeOffIcon,
 	FolderClosedIcon,
 	GlobeIcon,
 	KeyIcon,
@@ -83,7 +72,6 @@ import {
 	SendIcon,
 	SparklesIcon,
 	SquarePenIcon,
-	UnlockIcon,
 	UserIcon,
 	UsersRoundIcon,
 	WorkflowIcon,
@@ -99,9 +87,9 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { toast } from "sonner";
 import { appsDB } from "../../../lib/apps-db";
 import { isIosTauriRuntime } from "../../../lib/platform";
+import ExportAppDialog from "../components/ExportAppDialog";
 
 interface INavigationItem {
 	href: string;
@@ -402,11 +390,6 @@ export default function Id({
 
 	const [isMaximized, setIsMaximized] = useState(false);
 	const [exportOpen, setExportOpen] = useState(false);
-	const [encrypt, setEncrypt] = useState(false);
-	const [password, setPassword] = useState("");
-	const [confirmPassword, setConfirmPassword] = useState("");
-	const [showPassword, setShowPassword] = useState(false);
-	const [exporting, setExporting] = useState(false);
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 	const [mobileNavFilter, setMobileNavFilter] = useState("");
 	const [lockedItem, setLockedItem] = useState<INavigationItem | null>(null);
@@ -516,23 +499,6 @@ export default function Id({
 			document.documentElement.style.overflowY = "";
 		};
 	}, []);
-
-	useEffect(() => {
-		const saved =
-			typeof window !== "undefined"
-				? localStorage.getItem("exportEncrypted")
-				: null;
-		if (saved != null) setEncrypt(saved === "true");
-	}, []);
-
-	useEffect(() => {
-		if (typeof window !== "undefined")
-			localStorage.setItem("exportEncrypted", String(encrypt));
-		if (!encrypt) {
-			setPassword("");
-			setConfirmPassword("");
-		}
-	}, [encrypt]);
 
 	useEffect(() => {
 		if (!isIosTauri) return;
@@ -683,48 +649,6 @@ export default function Id({
 		update,
 		activeItem,
 	]);
-
-	const strength = useMemo(() => {
-		if (!encrypt) return 0;
-		let s = 0;
-		if (password.length >= 8) s++;
-		if (/[A-Z]/.test(password) && /[a-z]/.test(password)) s++;
-		if (/\d/.test(password)) s++;
-		if (/[^A-Za-z0-9]/.test(password)) s++;
-		return s;
-	}, [password, encrypt]);
-
-	const passValid =
-		!encrypt || (password.length >= 8 && password === confirmPassword);
-
-	const handleExport = useCallback(async () => {
-		const loader = toast.loading(t("exportingApp", "Exporting app..."), {
-			description: t(
-				"thisMayTakeAMomentPleaseWait",
-				"This may take a moment, please wait.",
-			),
-		});
-		setExporting(true);
-		try {
-			await invoke("export_app_to_file", {
-				appId: id,
-				...(encrypt && password ? { password } : {}),
-			});
-			toast.success(
-				t("appExportedSuccessfully", "App exported successfully!"),
-				{ id: loader },
-			);
-			setExportOpen(false);
-			setPassword("");
-			setConfirmPassword("");
-		} catch (error) {
-			console.error("Export error:", error);
-			toast.error("Failed to export app");
-		} finally {
-			setExporting(false);
-			toast.dismiss(loader);
-		}
-	}, [id, encrypt, password]);
 
 	async function executeEvent(event: IEvent) {
 		if (!id) return;
@@ -1019,147 +943,11 @@ export default function Id({
 					/>
 				)}
 
-				{/* Global Export Dialog */}
-				<Dialog open={exportOpen} onOpenChange={setExportOpen}>
-					<DialogContent className="sm:max-w-[520px]">
-						<DialogHeader>
-							<DialogTitle>
-								{t("exportApplication", "Export Application")}
-							</DialogTitle>
-							<DialogDescription>
-								{`Choose how you want to export your app.`}
-							</DialogDescription>
-						</DialogHeader>
-
-						<div className="space-y-4">
-							<div className="flex items-center justify-between rounded-lg border p-3">
-								<div className="flex items-center gap-3">
-									{encrypt ? (
-										<LockIcon className="w-4 h-4 text-primary" />
-									) : (
-										<UnlockIcon className="w-4 h-4 text-muted-foreground" />
-									)}
-									<div className="min-w-0">
-										<p className="text-sm font-medium">
-											{encrypt ? "Encrypted export" : "Unencrypted export"}
-										</p>
-										<p className="text-xs text-muted-foreground">
-											{encrypt
-												? `Protect your export with a password.`
-												: `Quick export without encryption.`}
-										</p>
-									</div>
-								</div>
-								<div className="flex items-center gap-2">
-									<span className="text-xs text-muted-foreground">
-										{t("encrypt", "Encrypt")}
-									</span>
-									<Switch checked={encrypt} onCheckedChange={setEncrypt} />
-								</div>
-							</div>
-
-							{encrypt && (
-								<div className="space-y-3">
-									<div className="grid gap-2">
-										<Label htmlFor="export-password" className="text-xs">
-											{t("password", "Password")}
-										</Label>
-										<div className="relative">
-											<Input
-												id="export-password"
-												type={showPassword ? "text" : "password"}
-												value={password}
-												onChange={(e) => setPassword(e.target.value)}
-												placeholder={t(
-													"enterAStrongPassword",
-													"Enter a strong password",
-												)}
-												autoFocus
-											/>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon"
-												className="absolute right-1 top-1 h-7 w-7"
-												onClick={() => setShowPassword((s) => !s)}
-												aria-label={
-													showPassword ? "Hide password" : "Show password"
-												}
-											>
-												{showPassword ? (
-													<EyeOffIcon className="w-4 h-4" />
-												) : (
-													<EyeIcon className="w-4 h-4" />
-												)}
-											</Button>
-										</div>
-									</div>
-
-									<div className="grid gap-2">
-										<Label
-											htmlFor="export-password-confirm"
-											className="text-xs"
-										>
-											{t("confirmPassword", "Confirm password")}
-										</Label>
-										<Input
-											id="export-password-confirm"
-											type={showPassword ? "text" : "password"}
-											value={confirmPassword}
-											onChange={(e) => setConfirmPassword(e.target.value)}
-											placeholder={t("reenterPassword", "Re-enter password")}
-										/>
-									</div>
-
-									<div className="flex items-center gap-2">
-										<div className="flex gap-1" aria-hidden>
-											{[0, 1, 2, 3].map((i) => (
-												<span
-													key={i}
-													className={`h-1.5 w-10 rounded ${strength > i ? "bg-green-500" : "bg-muted"}`}
-												/>
-											))}
-										</div>
-										<span className="text-xs text-muted-foreground">
-											{strength <= 1
-												? "Weak"
-												: strength === 2
-													? "Fair"
-													: strength === 3
-														? "Good"
-														: "Strong"}
-										</span>
-									</div>
-
-									{!passValid && (
-										<p className="text-xs text-destructive">
-											{t(
-												"passwordsMustMatchAndBeAtLeast8Characters",
-												"Passwords must match and be at least 8 characters.",
-											)}
-										</p>
-									)}
-								</div>
-							)}
-						</div>
-
-						<DialogFooter className="gap-2">
-							<Button
-								variant="outline"
-								onClick={() => setExportOpen(false)}
-								disabled={exporting}
-							>
-								{t("cancel", "Cancel")}
-							</Button>
-							<Button
-								onClick={handleExport}
-								disabled={exporting || (encrypt && !passValid)}
-							>
-								{exporting ? "Exporting..." : "Export"}
-							</Button>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
+				<ExportAppDialog
+					appId={id}
+					open={exportOpen}
+					onOpenChange={setExportOpen}
+				/>
 
 				<div
 					className={`grid w-full items-stretch gap-6 flex-1 overflow-hidden min-h-0 transition-all duration-300 ${isMaximized ? "grid-cols-1" : "md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]"}`}

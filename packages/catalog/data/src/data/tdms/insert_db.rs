@@ -68,11 +68,10 @@ async fn resolve_tdms_source_file(
     context: &mut ExecutionContext,
 ) -> flow_like_types::Result<TdmsSourceFile> {
     let runtime = tdms_path.to_runtime(context).await?;
-    let object_path = flow_like_storage::Path::from(runtime.path.as_ref());
 
     if let flow_like_storage::files::store::FlowLikeStore::Local(local_store) =
         runtime.store.as_ref()
-        && let Ok(local_path) = local_store.path_to_filesystem(&object_path)
+        && let Ok(local_path) = local_store.path_to_filesystem(&runtime.path)
         && local_path.exists()
     {
         return Ok(TdmsSourceFile::Direct(local_path));
@@ -81,7 +80,7 @@ async fn resolve_tdms_source_file(
     let mut stream = runtime
         .store
         .as_generic()
-        .get(&object_path)
+        .get(&runtime.path)
         .await?
         .into_stream();
     let tmp_file = tempfile::NamedTempFile::new()?;

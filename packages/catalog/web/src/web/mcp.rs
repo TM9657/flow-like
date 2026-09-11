@@ -160,10 +160,10 @@ fn default_max_body_bytes() -> usize {
     10 * 1024 * 1024
 }
 
-fn flow_path_filename(path: &str) -> &str {
-    path.rsplit(['/', '\\'])
-        .find(|segment| !segment.is_empty())
-        .unwrap_or(path)
+fn resource_identity(flow_path: &FlowPath) -> (String, String) {
+    let object_path = flow_path.object_path();
+    let name = flow_like_storage::display_file_name(&object_path).unwrap_or_default();
+    (format!("file://{object_path}"), name)
 }
 
 #[crate::register_node]
@@ -460,17 +460,9 @@ impl NodeLogic for RegisterMcpResourceNode {
         let name: String = context.evaluate_pin("name").await.unwrap_or_default();
         let description: Option<String> = context.evaluate_pin("description").await.ok();
 
-        let filename = flow_path_filename(&flow_path.path);
-        let uri = if uri.is_empty() {
-            format!("file://{}", flow_path.path)
-        } else {
-            uri
-        };
-        let name = if name.is_empty() {
-            filename.to_string()
-        } else {
-            name
-        };
+        let (default_uri, default_name) = resource_identity(&flow_path);
+        let uri = if uri.is_empty() { default_uri } else { uri };
+        let name = if name.is_empty() { default_name } else { name };
         let mime_type = Some(super::rest::guess_content_type(&flow_path.path).to_string());
 
         config.resources.push(McpResourceRegistration {
@@ -936,6 +928,7 @@ async fn tool_metadata(
     let name = super::http_runtime::sanitize_identifier(name_source);
     let description = resolved_mcp_description(&node_guard.description, board_refs);
     let mut properties = json::Map::new();
+    let mut required = Vec::new();
     let mut argument_aliases = HashMap::new();
     let mut used_argument_names = HashSet::new();
     for pin in node_guard.pins.values() {
@@ -964,17 +957,20 @@ async fn tool_metadata(
             obj.entry("title".to_string())
                 .or_insert_with(|| json!(pin.friendly_name.trim()));
         }
-        properties.insert(argument_name, schema);
+        super::rest::insert_pin_property(
+            &mut properties,
+            &mut required,
+            argument_name,
+            schema,
+            pin,
+            board_refs,
+        );
     }
 
     (
         name,
         description,
-        json!({
-            "type": "object",
-            "properties": properties,
-            "additionalProperties": true
-        }),
+        super::rest::object_schema_with_required(properties, required),
         argument_aliases,
     )
 }
@@ -2361,6 +2357,25 @@ mod authentication_config_tests {
     }
 
     #[test]
+    fn resource_identity_decodes_the_name_and_keeps_the_uri_encoded() {
+        let raw = "uploads/Übersicht (2)#1.pdf";
+        let encoded = "uploads/%C3%9Cbersicht (2)%231.pdf";
+        let from_raw = FlowPath {
+            path: raw.to_string(),
+            store_ref: "store".to_string(),
+            cache_store_ref: None,
+        };
+        let from_listed = FlowPath::new(raw.to_string(), "store".to_string(), None);
+        assert_eq!(from_listed.path, encoded);
+
+        for flow_path in [from_raw, from_listed] {
+            let (uri, name) = resource_identity(&flow_path);
+            assert_eq!(uri, format!("file://{encoded}"));
+            assert_eq!(name, "Übersicht (2)#1.pdf");
+        }
+    }
+
+    #[test]
     fn legacy_mcp_configs_keep_existing_execution_identity() {
         let config: McpServerConfig = from_value(json!({
             "host": "127.0.0.1",
@@ -2490,6 +2505,11 @@ mod tests {
             "Message to echo",
             VariableType::String,
         );
+        let mut optional = PinOptions::new();
+        optional.set_optional(true);
+        node.add_output_pin("limit", "Limit", "Max results", VariableType::Integer)
+            .set_default_value(Some(json!(10)))
+            .set_options(optional);
         node.add_output_pin("_client", "Client", "Client", VariableType::Struct);
         node.add_output_pin(
             "payload",
@@ -2567,20 +2587,24 @@ mod tests {
             response["result"]["tools"][0]["name"],
             json!("test_mcp_handler")
         );
+        let input_schema = &response["result"]["tools"][0]["inputSchema"];
         assert_eq!(
-            response["result"]["tools"][0]["inputSchema"]["properties"]["message"]["type"],
+            input_schema["properties"]["message"]["type"],
             json!("string")
         );
         assert!(
-            response["result"]["tools"][0]["inputSchema"]["properties"]
-                .get("_client")
+            input_schema["properties"]["message"]
+                .get("default")
                 .is_none()
         );
-        assert!(
-            response["result"]["tools"][0]["inputSchema"]["properties"]
-                .get("payload")
-                .is_none()
+        assert_eq!(
+            input_schema["properties"]["limit"]["type"],
+            json!("integer")
         );
+        assert_eq!(input_schema["properties"]["limit"]["default"], json!(10));
+        assert_eq!(input_schema["required"], json!(["message"]));
+        assert!(input_schema["properties"].get("_client").is_none());
+        assert!(input_schema["properties"].get("payload").is_none());
     }
 
     #[tokio::test]
@@ -2594,6 +2618,7 @@ mod tests {
 
         assert_eq!(tool.schema["type"], json!("object"));
         assert_eq!(tool.schema["properties"], json!({}));
+        assert!(tool.schema.get("required").is_none());
         assert!(tool.argument_aliases.is_empty());
 
         let response = tool_call_response(
@@ -2690,6 +2715,28 @@ mod tests {
             argument_aliases.get("name"),
             Some(&MCP_TOOL_PIN_REF_NAME.to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn mcp_tool_metadata_defaults_optional_pins_without_stored_literal() {
+        let mut node = Node::new("paged_tool", "Paged Tool", "Pages results", "Tests");
+        let mut optional = PinOptions::new();
+        optional.set_optional(true);
+        node.add_output_pin("cursor", "Cursor", "Page cursor", VariableType::String)
+            .set_options(optional.clone());
+        node.add_output_pin("page", "Page", "Page number", VariableType::Integer)
+            .set_options(optional.clone());
+        node.add_output_pin("tags", "Tags", "Filter tags", VariableType::String)
+            .set_value_type(ValueType::Array)
+            .set_options(optional);
+        let handler = internal_node(node);
+
+        let (_, _, schema, _) = tool_metadata(&handler, &HashMap::new()).await;
+
+        assert!(schema.get("required").is_none());
+        assert_eq!(schema["properties"]["cursor"]["default"], json!(""));
+        assert_eq!(schema["properties"]["page"]["default"], json!(0));
+        assert_eq!(schema["properties"]["tags"]["default"], json!([]));
     }
 
     #[tokio::test]

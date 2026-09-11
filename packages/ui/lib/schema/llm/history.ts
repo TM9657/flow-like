@@ -102,6 +102,7 @@ export interface IHistoryFunctionParameters {
 }
 
 export interface IHistoryJSONSchemaDefine {
+	default?: unknown;
 	description?: null | string;
 	enum_values?: string[] | null;
 	items?: null | IHistoryJSONSchemaDefine;

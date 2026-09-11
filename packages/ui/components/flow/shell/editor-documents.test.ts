@@ -10,6 +10,7 @@ import {
 	sameDocument,
 	serializeTabs,
 	tabAfterClose,
+	withBoardTabPosition,
 	withDocumentOpened,
 	withMissingTabsDropped,
 	withTabClosed,
@@ -176,6 +177,54 @@ describe("withTabLayerPath", () => {
 	test("parking on the same path keeps the identity, so memoised tabs hold", () => {
 		const tabs = withTabLayerPath(open(main), "board:main", "x");
 		expect(withTabLayerPath(tabs, "board:main", "x")[0]).toBe(tabs[0]);
+	});
+});
+
+describe("withBoardTabPosition", () => {
+	test("moves only the keyed board instance when navigation crosses files", () => {
+		let tabs = open(main, module("a"), { kind: "page", pageId: "page" });
+		tabs = withDocumentOpened(tabs, module("a"), { newTab: true }).tabs;
+		tabs = withTabLayerPath(tabs, "board:a#2", "a/caller");
+		const next = withBoardTabPosition(tabs, "board:a#2", "b", "b/function");
+
+		expect(next[3]).toEqual({
+			key: "board:a#2",
+			doc: { kind: "board", fileId: "b" },
+			layerPath: "b/function",
+		});
+		expect(next[0]).toBe(tabs[0]);
+		expect(next[1]).toBe(tabs[1]);
+		expect(next[2]).toBe(tabs[2]);
+		expect(tabs[3].doc).toEqual(module("a"));
+		expect(tabs[3].layerPath).toBe("a/caller");
+	});
+
+	test("returning to main clears the previous file and layer together", () => {
+		const tabs = withTabLayerPath(open(module("a")), "board:a", "a/function");
+		const next = withBoardTabPosition(tabs, "board:a", "main", undefined);
+		expect(next[0]).toEqual({ key: "board:a", doc: main });
+		expect("layerPath" in next[0]).toBe(false);
+	});
+
+	test("moving within a file preserves its document identity", () => {
+		const tabs = open(module("a"));
+		const next = withBoardTabPosition(tabs, "board:a", "a", "a/function");
+		expect(next[0]).not.toBe(tabs[0]);
+		expect(next[0].doc).toBe(tabs[0].doc);
+		expect(next[0].layerPath).toBe("a/function");
+	});
+
+	test("an unchanged canvas position preserves the tab collection", () => {
+		const tabs = withTabLayerPath(open(module("a")), "board:a", "a/function");
+		expect(withBoardTabPosition(tabs, "board:a", "a", "a/function")).toBe(tabs);
+	});
+
+	test("ignores missing tabs and document tabs", () => {
+		const tabs = open(main, { kind: "page", pageId: "page" });
+		expect(withBoardTabPosition(tabs, "missing", "a", "a/function")).toBe(tabs);
+		expect(withBoardTabPosition(tabs, "page:page", "a", "a/function")).toBe(
+			tabs,
+		);
 	});
 });
 

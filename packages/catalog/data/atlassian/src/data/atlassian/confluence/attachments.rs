@@ -10,7 +10,6 @@ use flow_like::flow::{
 };
 use flow_like_types::{JsonSchema, Value, async_trait, json::json, reqwest};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 /// Confluence attachment
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -24,12 +23,8 @@ pub struct ConfluenceAttachment {
 }
 
 fn filename_from_flow_path(path: &FlowPath, fallback: &str) -> String {
-    Path::new(&path.path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
-        .unwrap_or(fallback)
-        .to_string()
+    flow_like::flow_like_storage::display_file_name(&path.object_path())
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 fn parse_attachment(value: &Value, provider: &AtlassianProvider) -> Option<ConfluenceAttachment> {

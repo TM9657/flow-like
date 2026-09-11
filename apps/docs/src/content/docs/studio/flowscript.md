@@ -211,6 +211,17 @@ eventsGeneric fetchPage(url: string, payload: Struct) {
 }
 ```
 
+An event parameter written `name?: Type` is optional: callers may omit it and the runtime fills
+the type's empty value (`""`, `0`, `false`, `[]`, `{}`), while `name?: Type = literal` stores that
+literal as the default instead. `payload` is never optional, and function parameters carry neither
+`?` nor `=`.
+
+```ts
+eventsGeneric fetchPage(url: string, retries?: int = 3, payload: Struct) {
+    …
+}
+```
+
 A `function` becomes a Function layer. Declare named output pins for returned values:
 `function double(n: int): (out: int) { return n * 2 }`. User functions also join the method tables.
 The first parameter is the receiver, so `fullName.parseName()` calls

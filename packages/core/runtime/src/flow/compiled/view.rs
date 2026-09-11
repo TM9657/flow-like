@@ -266,6 +266,7 @@ fn reconstruct_pin(cp: &CompiledPin, pin_ids: &[&str], default_node: Option<&Nod
             step: o.step,
             enforce_schema: o.enforce_schema,
             enforce_generic_value_type: o.enforce_generic_value_type,
+            optional: o.optional,
         }),
         value: None,
     })

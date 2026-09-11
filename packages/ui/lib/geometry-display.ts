@@ -28,6 +28,15 @@ export function describeGeometry(
 	value: unknown,
 	metadata?: Record<string, unknown>,
 ): GeometryDisplay {
+	return describe(value, isWgs84GeometryMetadata(metadata));
+}
+
+/** Flow pin and variable geometries are WGS 84 longitude/latitude by contract. */
+export function describeFlowGeometry(value: unknown): GeometryDisplay {
+	return describe(value, true);
+}
+
+function describe(value: unknown, knownCrs: boolean): GeometryDisplay {
 	const kind =
 		value &&
 		typeof value === "object" &&
@@ -38,7 +47,7 @@ export function describeGeometry(
 	const display: GeometryDisplay = {
 		kind,
 		geometry: null,
-		knownCrs: isWgs84GeometryMetadata(metadata),
+		knownCrs,
 		error: null,
 		positions: 0,
 		parts: 0,

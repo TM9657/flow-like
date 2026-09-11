@@ -3127,12 +3127,11 @@ async fn copy_one(
 /// nested path. Every content mirror below has to fold per segment or
 /// the destination silently ends up with garbage keys (this is what
 /// used to drop the entire project LanceDB under `storage/db/**` on
-/// online → online forks).
+/// online → online forks). The relative part comes out of a listing, so it
+/// is already encoded; each segment is normalized instead of encoded a
+/// second time.
 fn join_relative(prefix: &Path, relative: &str) -> Path {
-    relative
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .fold(prefix.clone(), |acc, segment| acc.join(segment))
+    flow_like_storage::join_object_path(prefix, relative)
 }
 
 /// Bytes + objects a single prefix mirror moved. Summed into
@@ -4884,6 +4883,24 @@ mod tests {
                 .join("db/tables.lance/data/chunk.lance")
                 .as_ref(),
             join_relative(&prefix, "db/tables.lance/data/chunk.lance").as_ref()
+        );
+
+        // A listed suffix is already encoded; the destination carries the
+        // same key, not a second encoding of it.
+        let listed = Path::from("upload").join("Übersicht (2)#1.pdf");
+        assert_eq!(listed.as_ref(), "upload/%C3%9Cbersicht (2)%231.pdf");
+        assert_eq!(
+            join_relative(&prefix, listed.as_ref()),
+            prefix.clone().join("upload").join("Übersicht (2)#1.pdf")
+        );
+        assert_eq!(
+            join_relative(&prefix, "upload/Übersicht (2)#1.pdf"),
+            join_relative(&prefix, listed.as_ref())
+        );
+        assert_eq!(
+            flow_like_storage::display_file_name(&join_relative(&prefix, listed.as_ref()))
+                .as_deref(),
+            Some("Übersicht (2)#1.pdf")
         );
     }
 

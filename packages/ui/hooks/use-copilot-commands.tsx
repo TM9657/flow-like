@@ -22,6 +22,7 @@ import {
 } from "../lib";
 import { expectedCopilotPinType } from "../lib/copilot-command-pins";
 import { getErrorMessage } from "../lib/error-message";
+import { encodedTypeDefault } from "../lib/flow-defaults";
 import {
 	type FlowPilotCommandApplyFailure,
 	executeFlowPilotCommandBatch,
@@ -39,7 +40,7 @@ import {
 } from "../lib/schema/flow/board";
 import type { PlaceholderPinDef } from "../lib/schema/flow/copilot";
 import { type INode, IVariableType } from "../lib/schema/flow/node";
-import { type IPin, IPinType } from "../lib/schema/flow/pin";
+import { type IPin, type IPinOptions, IPinType } from "../lib/schema/flow/pin";
 import type { ILayer } from "../lib/schema/flow/run";
 import { convertJsonToUint8Array } from "../lib/uint8";
 
@@ -90,6 +91,51 @@ function jsonByteLength(value: unknown): number {
 function encodedJsonValue(value: unknown): number[] | null {
 	if (value === null || value === undefined) return null;
 	return Array.from(convertJsonToUint8Array(value) || []);
+}
+
+const GENERIC_EVENT_NODE_TYPE = "events_generic";
+const GENERIC_EVENT_PAYLOAD_PIN = "payload";
+
+function optionalPinDefault(
+	pin: Pick<IPin, "data_type" | "value_type">,
+	defaultValue: unknown,
+): number[] | null {
+	return (
+		encodedJsonValue(defaultValue) ??
+		encodedTypeDefault(pin.value_type, pin.data_type)
+	);
+}
+
+function pinOptionsFor(
+	enforceSchema: boolean,
+	optional: boolean,
+): IPinOptions | null {
+	if (!enforceSchema && !optional) return null;
+	return {
+		...(enforceSchema ? { enforce_schema: true } : {}),
+		...(optional ? { optional: true } : {}),
+	};
+}
+
+/** Mirrors `set_pin_optional` in the Rust applier: `optional: true` stores the flag and a default
+ * (the type default when none is given); `optional: false` clears both. */
+function setPinOptional(
+	pin: IPin,
+	optional: boolean,
+	defaultValue: unknown,
+): IPin {
+	if (!optional) {
+		const { optional: _cleared, ...rest } = pin.options ?? {};
+		const keepsOptions = Object.values(rest).some(
+			(value) => value !== null && value !== undefined,
+		);
+		return { ...pin, default_value: null, options: keepsOptions ? rest : null };
+	}
+	return {
+		...pin,
+		default_value: optionalPinDefault(pin, defaultValue),
+		options: { ...(pin.options ?? {}), optional: true },
+	};
 }
 
 function layerTypeFromCommand(value?: string): ILayerType {
@@ -166,7 +212,7 @@ function appendAdditionalNodePins(
 	pinDefs: PlaceholderPinDef[] | undefined,
 ): INode {
 	if (!pinDefs?.length) return node;
-	if (node.name !== "events_generic") {
+	if (node.name !== GENERIC_EVENT_NODE_TYPE) {
 		throw new Error(
 			"Additional catalog-node pins are only supported on events_generic",
 		);
@@ -186,6 +232,16 @@ function appendAdditionalNodePins(
 				`Additional events_generic pin "${pinDef.name}" must be a non-execution Output`,
 			);
 		}
+		const optional = pinDef.optional ?? false;
+		if (
+			!optional &&
+			pinDef.default_value !== null &&
+			pinDef.default_value !== undefined
+		) {
+			throw new Error(
+				`Additional events_generic pin "${pinDef.name}" carries a default_value but is not optional`,
+			);
+		}
 		if (
 			Object.values(pins).some(
 				(pin) => pin.pin_type === IPinType.Output && pin.name === pinDef.name,
@@ -197,20 +253,27 @@ function appendAdditionalNodePins(
 		}
 
 		const id = createId();
+		const dataType = pinDef.data_type as IVariableType;
+		const valueType = (pinDef.value_type as IValueType) ?? IValueType.Normal;
 		pins[id] = {
 			id,
 			name: pinDef.name,
 			friendly_name: pinDef.friendly_name,
 			description: pinDef.description ?? "",
 			pin_type: IPinType.Output,
-			data_type: pinDef.data_type as IVariableType,
-			value_type: (pinDef.value_type as IValueType) ?? IValueType.Normal,
+			data_type: dataType,
+			value_type: valueType,
 			index: ++outputCount,
 			connected_to: [],
 			depends_on: [],
-			default_value: null,
+			default_value: optional
+				? optionalPinDefault(
+						{ data_type: dataType, value_type: valueType },
+						pinDef.default_value,
+					)
+				: null,
 			schema: pinDef.schema ?? null,
-			options: pinDef.enforce_schema ? { enforce_schema: true } : null,
+			options: pinOptionsFor(pinDef.enforce_schema ?? false, optional),
 		};
 	}
 
@@ -1252,6 +1315,67 @@ export function useCopilotCommands({
 						);
 						latestBoardNodes[renamedNode.id] = renamedNode;
 						replaceMappedNode(renamedNode);
+						break;
+					}
+
+					case "UpdateNodePinOptions": {
+						const node = resolveNode(cmd.node_id);
+						if (!node) {
+							recordCommandFailure(
+								cmd,
+								"board edit",
+								`Cannot update pin options: node "${cmd.node_id}" was not found`,
+							);
+							break;
+						}
+						if (node.name !== GENERIC_EVENT_NODE_TYPE) {
+							recordCommandFailure(
+								cmd,
+								"board edit",
+								`Cannot update pin options: "${node.friendly_name}" is a ${node.name} node, only events_generic outputs can be optional`,
+							);
+							break;
+						}
+						const pinId = resolvePinId(
+							cmd.node_id,
+							cmd.pin_name,
+							IPinType.Output,
+						);
+						const pin = pinId ? node.pins[pinId] : undefined;
+						if (!pin || !pinId) {
+							recordCommandFailure(
+								cmd,
+								"board edit",
+								`Cannot update pin options: output pin "${cmd.pin_name}" was not found on "${node.friendly_name}"`,
+							);
+							break;
+						}
+						if (
+							pin.data_type === IVariableType.Execution ||
+							pin.name === GENERIC_EVENT_PAYLOAD_PIN
+						) {
+							recordCommandFailure(
+								cmd,
+								"board edit",
+								`Cannot update pin options: pin "${pin.name}" on "${node.friendly_name}" cannot be optional`,
+							);
+							break;
+						}
+						const updatedNode: INode = {
+							...node,
+							pins: {
+								...node.pins,
+								[pinId]: setPinOptional(pin, cmd.optional, cmd.default_value),
+							},
+						};
+						remainingGenericCommands.push(
+							updateNodeCommand({ node: updatedNode, old_node: node }),
+						);
+						latestBoardNodes[updatedNode.id] = updatedNode;
+						replaceMappedNode(updatedNode);
+						flowPilotDebugLog(
+							`[UpdateNodePinOptions] Queued ${node.friendly_name}.${pin.name} optional=${cmd.optional}`,
+						);
 						break;
 					}
 

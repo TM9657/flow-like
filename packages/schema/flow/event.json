@@ -503,6 +503,10 @@
 					"format": "uint16",
 					"minimum": 0,
 					"maximum": 65535
+				},
+				"optional": {
+					"type": "boolean",
+					"default": false
 				}
 			},
 			"required": [

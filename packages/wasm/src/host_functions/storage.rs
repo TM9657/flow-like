@@ -2,8 +2,9 @@
 //!
 //! Provides storage access for WASM modules.
 
+use flow_like_storage::normalize_object_path;
 use flow_like_storage::object_store::ObjectStoreExt;
-use flow_like_storage::object_store::{path::Path, PutPayload};
+use flow_like_storage::object_store::{PutPayload, path::Path};
 use flow_like_types::Bytes;
 use std::collections::HashMap;
 
@@ -25,6 +26,14 @@ pub struct StorageFlowPath {
     pub path: String,
     pub store_ref: String,
     pub cache_store_ref: Option<String>,
+}
+
+impl StorageFlowPath {
+    /// Canonical object key. Guests may send a raw name or a key that came out
+    /// of a list response; both resolve to the same object.
+    pub fn object_path(&self) -> Path {
+        normalize_object_path(&self.path)
+    }
 }
 
 pub fn validate_path(path: &str) -> bool {
@@ -106,7 +115,7 @@ pub async fn put_flow_path(
         return false;
     };
 
-    let path = Path::from(flow_path.path.clone());
+    let path = flow_path.object_path();
     let payload = PutPayload::from_bytes(Bytes::from(data));
 
     if let Err(e) = store.as_generic().put(&path, payload.clone()).await {
@@ -152,4 +161,42 @@ pub async fn finish_write(
         return false;
     };
     put_flow_path(storage_ctx, &pw.flow_path, pw.buffer, "wasm write-finish").await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flow_like_storage::display_file_name;
+
+    const NAME: &str = "Übersicht (2)#1.pdf";
+
+    fn flow_path(path: impl Into<String>) -> StorageFlowPath {
+        StorageFlowPath {
+            path: path.into(),
+            store_ref: "store".into(),
+            cache_store_ref: None,
+        }
+    }
+
+    #[test]
+    fn raw_and_listed_paths_resolve_to_the_same_key() {
+        let expected = Path::from("apps/a/upload").join(NAME);
+        let raw = flow_path(format!("apps/a/upload/{NAME}"));
+        let listed = flow_path(expected.as_ref());
+
+        assert_eq!(raw.object_path(), expected);
+        assert_eq!(listed.object_path(), expected);
+        assert_eq!(
+            display_file_name(&listed.object_path()).as_deref(),
+            Some(NAME)
+        );
+    }
+
+    #[test]
+    fn traversal_in_guest_path_stays_inert() {
+        assert_eq!(
+            flow_path("apps/a/../../etc/passwd").object_path().as_ref(),
+            "apps/a/%2E%2E/%2E%2E/etc/passwd"
+        );
+    }
 }

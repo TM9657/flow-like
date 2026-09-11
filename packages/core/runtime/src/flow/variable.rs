@@ -344,6 +344,58 @@ pub fn validate_typed_default(
     Ok(())
 }
 
+/// The value an absent optional declaration resolves to. Every result is fixed so default
+/// bytes hash identically across machines; `Null` only where no valid empty shape exists.
+pub fn default_value_for_type(
+    data_type: &VariableType,
+    value_type: &ValueType,
+    schema: Option<&str>,
+) -> Value {
+    match value_type {
+        ValueType::Array | ValueType::HashSet => return json::json!([]),
+        ValueType::HashMap => return json::json!({}),
+        ValueType::Normal => {}
+    }
+    match data_type {
+        VariableType::String | VariableType::PathBuf => json::json!(""),
+        VariableType::Integer | VariableType::Byte => json::json!(0),
+        VariableType::Float => json::json!(0.0),
+        VariableType::Boolean => json::json!(false),
+        VariableType::Date => json::json!("1970-01-01T00:00:00Z"),
+        VariableType::Struct => json::json!({}),
+        VariableType::Geometry => empty_geometry(schema),
+        VariableType::Generic | VariableType::Execution => Value::Null,
+    }
+}
+
+fn empty_geometry(schema: Option<&str>) -> Value {
+    use flow_like_types::geometry::GeometryKind;
+    match geometry_kind_from_schema(schema).ok().flatten() {
+        Some(
+            kind @ (GeometryKind::MultiPoint
+            | GeometryKind::MultiLineString
+            | GeometryKind::MultiPolygon),
+        ) => json::json!({"type": kind.as_str(), "coordinates": []}),
+        Some(GeometryKind::Point | GeometryKind::LineString | GeometryKind::Polygon) => Value::Null,
+        Some(GeometryKind::GeometryCollection) | None => {
+            json::json!({"type": "GeometryCollection", "geometries": []})
+        }
+    }
+}
+
+/// The stored default when it is a non-null value, otherwise the type default.
+pub fn effective_default(
+    stored: Option<&Value>,
+    data_type: &VariableType,
+    value_type: &ValueType,
+    schema: Option<&str>,
+) -> Value {
+    match stored {
+        Some(value) if !value.is_null() => value.clone(),
+        _ => default_value_for_type(data_type, value_type, schema),
+    }
+}
+
 impl crate::flow::board::Board {
     /// Check every declared Geometry default before saving or compiling a board.
     pub fn validate_geometry_contracts(&self) -> flow_like_types::Result<()> {
@@ -450,6 +502,121 @@ mod tests {
         );
         assert!(VariableType::try_from_proto(11).is_err());
         assert!(VariableType::try_from_proto(-1).is_err());
+    }
+
+    #[test]
+    fn type_defaults_cover_every_cell_and_geometry_defaults_validate() {
+        use super::*;
+        use flow_like_types::geometry::{GeometryKind, marker};
+        let collection = json::json!({"type": "GeometryCollection", "geometries": []});
+        let containers = [
+            (ValueType::Array, json::json!([])),
+            (ValueType::HashSet, json::json!([])),
+            (ValueType::HashMap, json::json!({})),
+        ];
+        let scalars = [
+            (VariableType::String, json::json!("")),
+            (VariableType::PathBuf, json::json!("")),
+            (VariableType::Integer, json::json!(0)),
+            (VariableType::Byte, json::json!(0)),
+            (VariableType::Float, json::json!(0.0)),
+            (VariableType::Boolean, json::json!(false)),
+            (VariableType::Date, json::json!("1970-01-01T00:00:00Z")),
+            (VariableType::Struct, json::json!({})),
+            (VariableType::Generic, Value::Null),
+            (VariableType::Execution, Value::Null),
+            (VariableType::Geometry, collection.clone()),
+        ];
+        for (data_type, expected) in &scalars {
+            assert_eq!(
+                default_value_for_type(data_type, &ValueType::Normal, None),
+                *expected,
+                "{data_type:?}"
+            );
+            for (container, expected) in &containers {
+                assert_eq!(
+                    default_value_for_type(data_type, container, None),
+                    *expected,
+                    "{data_type:?} {container:?}"
+                );
+            }
+        }
+        assert!(default_value_for_type(&VariableType::Float, &ValueType::Normal, None).is_f64());
+
+        let empty = |kind: GeometryKind| json::json!({"type": kind.as_str(), "coordinates": []});
+        for (kind, expected) in [
+            (GeometryKind::Point, Value::Null),
+            (GeometryKind::LineString, Value::Null),
+            (GeometryKind::Polygon, Value::Null),
+            (GeometryKind::MultiPoint, empty(GeometryKind::MultiPoint)),
+            (
+                GeometryKind::MultiLineString,
+                empty(GeometryKind::MultiLineString),
+            ),
+            (
+                GeometryKind::MultiPolygon,
+                empty(GeometryKind::MultiPolygon),
+            ),
+            (GeometryKind::GeometryCollection, collection.clone()),
+        ] {
+            let schema = Some(marker(kind));
+            let value = default_value_for_type(&VariableType::Geometry, &ValueType::Normal, schema);
+            assert_eq!(value, expected, "{kind:?}");
+            if !value.is_null() {
+                validate_typed_value(&VariableType::Geometry, &ValueType::Normal, schema, &value)
+                    .unwrap();
+            }
+            for (container, _) in &containers {
+                let value = default_value_for_type(&VariableType::Geometry, container, schema);
+                validate_typed_value(&VariableType::Geometry, container, schema, &value).unwrap();
+            }
+        }
+        for schema in [None, Some("unresolved-ref"), Some(r#"{"type":"object"}"#)] {
+            let value = default_value_for_type(&VariableType::Geometry, &ValueType::Normal, schema);
+            assert_eq!(value, collection, "{schema:?}");
+            validate_typed_value(&VariableType::Geometry, &ValueType::Normal, None, &value)
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn effective_default_prefers_a_non_null_stored_value() {
+        use super::*;
+        assert_eq!(
+            effective_default(
+                Some(&json::json!(7)),
+                &VariableType::Integer,
+                &ValueType::Normal,
+                None
+            ),
+            json::json!(7)
+        );
+        assert_eq!(
+            effective_default(
+                Some(&json::json!(false)),
+                &VariableType::Boolean,
+                &ValueType::Normal,
+                None
+            ),
+            json::json!(false)
+        );
+        assert_eq!(
+            effective_default(
+                Some(&Value::Null),
+                &VariableType::Integer,
+                &ValueType::Normal,
+                None
+            ),
+            json::json!(0)
+        );
+        assert_eq!(
+            effective_default(None, &VariableType::String, &ValueType::Array, None),
+            json::json!([])
+        );
+        assert_eq!(
+            effective_default(None, &VariableType::Generic, &ValueType::Normal, None),
+            Value::Null
+        );
     }
 
     #[test]

@@ -25,6 +25,7 @@ import os
 import io
 import time
 import traceback
+from urllib.parse import unquote
 
 EXEC_DIR = "/flow"
 
@@ -65,13 +66,18 @@ class Workspace:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def list(self, prefix: str = "") -> list:
-        """Return all workspace paths that start with *prefix*."""
-        safe_prefix = self._safe(prefix)
+        """Return all workspace paths that start with *prefix*.
+
+        Manifest entries are the host's canonical (percent-encoded) keys and
+        can be passed back to ``get``/``put`` verbatim; *prefix* may be given
+        raw or encoded.
+        """
+        safe_prefix = unquote(self._safe(prefix))
         if not safe_prefix:
             return list(self._manifest)
         return [
             p for p in self._manifest
-            if p == safe_prefix or p.startswith(safe_prefix + "/")
+            if unquote(p) == safe_prefix or unquote(p).startswith(safe_prefix + "/")
         ]
 
     def get(self, path: str):
@@ -93,7 +99,7 @@ class Workspace:
         pending_path = _WS_PENDING + "/" + req_id
         notfound_path = notfound_base + req_id
 
-        with open(pending_path, "w") as fh:
+        with open(pending_path, "w", encoding="utf-8") as fh:
             fh.write(safe)
 
         # Poll: time.sleep() → WASI clock_nanosleep → tokio yield → file server runs.

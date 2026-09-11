@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { INode } from "./schema/flow/node";
 import type { IPin } from "./schema/flow/pin";
-import type { IStorageScope } from "./storage-tree";
+import { type IStorageScope, storageDisplayPath } from "./storage-tree";
 import { convertJsonToUint8Array } from "./uint8";
 
 /**
@@ -85,7 +85,9 @@ export function buildStoragePathNodes({
 
 	dirOut.connected_to = [parentIn.id];
 	parentIn.depends_on = [dirOut.id];
-	childName.default_value = convertJsonToUint8Array(path);
+	// Listings hand over the encoded key; `child` normalizes either form, so the board
+	// carries the readable one.
+	childName.default_value = convertJsonToUint8Array(storageDisplayPath(path));
 
 	// User storage has an app-wide root and a per-node one; a file the browser listed is
 	// always in the app-wide one.

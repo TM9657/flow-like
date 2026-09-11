@@ -196,7 +196,7 @@ impl NodeLogic for GetChangesNode {
         // An identical manifest path in a different store is a real file. Compare
         // normalized object-store paths so stray slashes never create phantom churn.
         let same_store = root.store_ref == manifest_path.store_ref;
-        let manifest_key = flow_like_storage::Path::from(manifest_path.path.as_str());
+        let manifest_key = manifest_path.object_path();
         let mut ignored_manifest_keys = HashSet::new();
         if same_store {
             ignored_manifest_keys.insert(manifest_key.as_ref().to_string());

@@ -3289,10 +3289,7 @@ fn unknown_source(name: &str) -> ValueSource {
 }
 
 fn param_to_ast(param: &FlowIrParam) -> Param {
-    Param {
-        name: param.name.clone(),
-        ty: type_to_ast(&param.value_type),
-    }
+    Param::new(param.name.clone(), type_to_ast(&param.value_type))
 }
 
 fn type_to_ast(value_type: &FlowIrType) -> TypeRef {

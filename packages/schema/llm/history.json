@@ -424,6 +424,7 @@
 				"description": {
 					"type": ["string", "null"]
 				},
+				"default": true,
 				"enum": {
 					"type": ["array", "null"],
 					"items": {

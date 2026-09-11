@@ -4,6 +4,7 @@ use crate::entity::sea_orm_active_enums::{
 use crate::entity::{meta, wasm_package, wasm_package_review};
 use crate::error::ApiError;
 use crate::middleware::jwt::AppUser;
+use crate::routes::app::meta::media_item_name;
 use crate::routes::registry::server::PackageReview;
 use crate::state::AppState;
 use axum::extract::{Path, Query, State};
@@ -623,7 +624,7 @@ pub async fn push_package_media(
     );
 
     let item_id = create_id();
-    let item_name = format!("{}.{}", item_id, query.extension);
+    let item_name = media_item_name(&item_id, &query.extension)?;
     let item = query.item;
     let language = query.language.clone();
 

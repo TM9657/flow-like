@@ -1832,6 +1832,125 @@ export const catalogNodes: CatalogNode[] = [
     "permissions": []
   },
   {
+    "slug": "nodes/ai/generative/llm-extractor-struct-schema",
+    "packageName": "llm",
+    "name": "llm_extractor_struct_schema",
+    "friendlyName": "AI Extractor with Struct Schema",
+    "description": "Uses an LLM and a reference struct's schema to extract structured data from free-form text",
+    "category": "AI/Generative",
+    "categoryPath": [
+      "AI",
+      "Generative"
+    ],
+    "categorySlug": "nodes/ai/generative",
+    "icon": "/flow/icons/bot-invoke.svg",
+    "scores": {
+      "privacy": 4,
+      "security": 4,
+      "performance": 6,
+      "governance": 5,
+      "reliability": 6,
+      "cost": 4
+    },
+    "pins": [
+      {
+        "name": "exec_in",
+        "friendlyName": "Input",
+        "description": "Execution trigger to start the extraction",
+        "pinType": "Input",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "model",
+        "friendlyName": "Model",
+        "description": "Bit pointing to the LLM that will perform the extraction",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Bit\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"default\":\"\"},\"type\":{\"$ref\":\"#/$defs/BitTypes\",\"default\":\"Other\"},\"meta\":{\"type\":\"object\",\"additionalProperties\":{\"$ref\":\"#/$defs/Metadata\"},\"default\":{}},\"authors\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"repository\":{\"type\":[\"string\",\"null\"],\"default\":null},\"download_link\":{\"type\":[\"string\",\"null\"],\"default\":null},\"file_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"hash\":{\"type\":\"string\",\"default\":\"\"},\"size\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0,\"default\":null},\"hub\":{\"type\":\"string\",\"default\":\"\"},\"parameters\":{\"default\":null},\"version\":{\"type\":[\"string\",\"null\"],\"default\":null},\"license\":{\"type\":[\"string\",\"null\"],\"default\":null},\"dependencies\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"dependency_tree_hash\":{\"type\":\"string\",\"default\":\"\"},\"created\":{\"type\":\"string\",\"default\":\"\"},\"updated\":{\"type\":\"string\",\"default\":\"\"},\"model_slug\":{\"type\":[\"string\",\"null\"],\"default\":null},\"model_evaluation\":{\"anyOf\":[{\"$ref\":\"#/$defs/LlmModelEvaluation\"},{\"type\":\"null\"}],\"default\":null}},\"$defs\":{\"BitTypes\":{\"type\":\"string\",\"enum\":[\"Llm\",\"Vlm\",\"Tts\",\"Stt\",\"Embedding\",\"ImageEmbedding\",\"File\",\"Media\",\"ImageGeneration\",\"VideoGeneration\",\"Template\",\"Tokenizer\",\"TokenizerConfig\",\"SpecialTokensMap\",\"Config\",\"Course\",\"PreprocessorConfig\",\"Projection\",\"Project\",\"Board\",\"Other\",\"ObjectDetection\"]},\"Metadata\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"long_description\":{\"type\":[\"string\",\"null\"]},\"release_notes\":{\"type\":[\"string\",\"null\"]},\"tags\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"use_case\":{\"type\":[\"string\",\"null\"]},\"icon\":{\"type\":[\"string\",\"null\"]},\"thumbnail\":{\"type\":[\"string\",\"null\"]},\"preview_media\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"age_rating\":{\"type\":[\"integer\",\"null\"],\"format\":\"int32\"},\"website\":{\"type\":[\"string\",\"null\"]},\"support_url\":{\"type\":[\"string\",\"null\"]},\"docs_url\":{\"type\":[\"string\",\"null\"]},\"organization_specific_values\":{\"type\":[\"array\",\"null\"],\"items\":{\"type\":\"integer\",\"format\":\"uint8\",\"minimum\":0,\"maximum\":255}},\"created_at\":{\"$ref\":\"#/$defs/SystemTime\"},\"updated_at\":{\"$ref\":\"#/$defs/SystemTime\"}},\"required\":[\"name\",\"description\",\"tags\",\"preview_media\",\"created_at\",\"updated_at\"]},\"SystemTime\":{\"type\":\"object\",\"properties\":{\"secs_since_epoch\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"nanos_since_epoch\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0}},\"required\":[\"secs_since_epoch\",\"nanos_since_epoch\"]},\"LlmModelEvaluation\":{\"type\":\"object\",\"properties\":{\"slug\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"release_date\":{\"type\":[\"string\",\"null\"]},\"creator_name\":{\"type\":\"string\"},\"creator_slug\":{\"type\":\"string\"},\"evaluations\":true,\"pricing\":true,\"median_output_tokens_per_second\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"},\"median_time_to_first_token_seconds\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"},\"median_time_to_first_answer_token\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"}},\"required\":[\"slug\",\"name\",\"creator_name\",\"creator_slug\"]}}}",
+        "index": 2,
+        "options": {
+          "enforceSchema": true
+        }
+      },
+      {
+        "name": "struct_shape",
+        "friendlyName": "Schema Reference",
+        "description": "A reference struct whose schema defines the extracted data. Its value is never evaluated",
+        "pinType": "Input",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"type\":\"object\",\"additionalProperties\":true}",
+        "index": 3,
+        "options": {
+          "enforceSchema": false
+        }
+      },
+      {
+        "name": "text",
+        "friendlyName": "Text",
+        "description": "Raw text that should be structured via the reference schema",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "index": 4
+      },
+      {
+        "name": "hint",
+        "friendlyName": "Extraction Hint",
+        "description": "Optional hint to guide the extraction, such as selecting line items instead of totals",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "",
+        "index": 5
+      },
+      {
+        "name": "exec_out",
+        "friendlyName": "Execution Output",
+        "description": "Executes after extraction succeeds",
+        "pinType": "Output",
+        "dataType": "Execution",
+        "valueType": "Normal",
+        "index": 1
+      },
+      {
+        "name": "response",
+        "friendlyName": "Json",
+        "description": "Structured JSON value that matches the reference schema",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"type\":\"object\",\"additionalProperties\":true}",
+        "index": 2
+      },
+      {
+        "name": "stats",
+        "friendlyName": "Stats",
+        "description": "Token usage, cost, and model statistics",
+        "pinType": "Output",
+        "dataType": "Struct",
+        "valueType": "Normal",
+        "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LLMUsageStats\",\"type\":\"object\",\"properties\":{\"usage\":{\"$ref\":\"#/$defs/Usage\"},\"model\":{\"type\":[\"string\",\"null\"]},\"duration_ms\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0},\"iterations\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"calls\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/ModelCallEntry\"}}},\"required\":[\"usage\"],\"$defs\":{\"Usage\":{\"type\":\"object\",\"properties\":{\"completion_tokens\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"prompt_tokens\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"total_tokens\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"cost\":{\"type\":[\"number\",\"null\"],\"format\":\"double\"},\"prompt_tokens_details\":{\"anyOf\":[{\"$ref\":\"#/$defs/PromptTokenDetails\"},{\"type\":\"null\"}]},\"completion_tokens_details\":{\"anyOf\":[{\"$ref\":\"#/$defs/CompletionTokenDetails\"},{\"type\":\"null\"}]},\"upstream_inference_cost\":{\"anyOf\":[{\"$ref\":\"#/$defs/CostDetails\"},{\"type\":\"null\"}]}},\"required\":[\"completion_tokens\",\"prompt_tokens\",\"total_tokens\"]},\"PromptTokenDetails\":{\"type\":\"object\",\"properties\":{\"cached_tokens\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"audio_tokens\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0}}},\"CompletionTokenDetails\":{\"type\":\"object\",\"properties\":{\"accepted_prediction_tokens\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"audio_tokens\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"reasoning_tokens\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"rejected_prediction_tokens\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0}}},\"CostDetails\":{\"type\":\"object\",\"properties\":{\"upstream_inference_cost\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0}}},\"ModelCallEntry\":{\"type\":\"object\",\"properties\":{\"model\":{\"type\":\"string\"},\"usage\":{\"$ref\":\"#/$defs/Usage\"},\"duration_ms\":{\"type\":[\"integer\",\"null\"],\"format\":\"uint64\",\"minimum\":0}},\"required\":[\"model\",\"usage\"]}}}",
+        "index": 3,
+        "options": {
+          "enforceSchema": true
+        }
+      }
+    ],
+    "inputCount": 5,
+    "outputCount": 3,
+    "flags": [
+      "Long running"
+    ],
+    "version": 1,
+    "oauthProviders": [],
+    "requiredOauthScopes": {},
+    "permissions": []
+  },
+  {
     "slug": "nodes/ai/generative/ai-generative-add-headers",
     "packageName": "llm",
     "name": "ai_generative_add_headers",
@@ -155262,8 +155381,8 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "AI",
     "slug": "nodes/ai",
     "depth": 1,
-    "count": 250,
-    "description": "Browse 250 generated Flow-Like node references in AI with pin details and available schema, package, and risk-rating metadata."
+    "count": 251,
+    "description": "Browse 251 generated Flow-Like node references in AI with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Agents",
@@ -155294,8 +155413,8 @@ export const catalogCategories: CatalogCategory[] = [
     "path": "AI/Generative",
     "slug": "nodes/ai/generative",
     "depth": 2,
-    "count": 101,
-    "description": "Browse 101 generated Flow-Like node references in AI/Generative with pin details and available schema, package, and risk-rating metadata."
+    "count": 102,
+    "description": "Browse 102 generated Flow-Like node references in AI/Generative with pin details and available schema, package, and risk-rating metadata."
   },
   {
     "label": "Audio",

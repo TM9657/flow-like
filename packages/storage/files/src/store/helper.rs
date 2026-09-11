@@ -1,5 +1,6 @@
 // ---------- HTTP(S) ----------
 
+use crate::object_path::decode_path_segment;
 use anyhow::{Result, anyhow};
 use base64::{Engine, engine::general_purpose};
 use bytes::Bytes;
@@ -102,7 +103,7 @@ fn filename_from_url_path(u: &Url) -> Option<String> {
         if seg.is_empty() {
             None
         } else {
-            Some(seg.to_string())
+            Some(decode_path_segment(seg).into_owned())
         }
     })
 }
@@ -196,4 +197,19 @@ fn sanitize_for_path(name: &str) -> String {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::filename_from_url_path;
+    use reqwest::Url;
+
+    #[test]
+    fn url_path_filename_is_decoded() {
+        let url = Url::parse("https://x.test/files/%C3%9Cbersicht%20(2)%231.pdf").unwrap();
+        assert_eq!(
+            filename_from_url_path(&url).as_deref(),
+            Some("Übersicht (2)#1.pdf")
+        );
+    }
 }

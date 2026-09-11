@@ -12,6 +12,20 @@ use std::{
 
 use super::cache::{cache_file_exists, read_cache_file, write_cache_file};
 
+/// Client for hub metadata requests.
+///
+/// These are small JSON calls, so they get a whole-request budget: an
+/// unanswered one otherwise blocks bit listings and dependency resolution for
+/// as long as the connection stays open.
+fn hub_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent(concat!("flow-like/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(60))
+        .build()
+        .unwrap_or_default()
+}
+
 const HEADERS_TO_CACHE: [&str; 8] = [
     "authorization",
     "x-api-key",
@@ -199,7 +213,7 @@ impl HTTPClient {
     }
 
     pub fn client(&self) -> reqwest::Client {
-        self.client.get_or_init(reqwest::Client::new).clone()
+        self.client.get_or_init(hub_client).clone()
     }
 
     pub async fn hashed_request<T>(&self, request: Request) -> flow_like_types::Result<T>

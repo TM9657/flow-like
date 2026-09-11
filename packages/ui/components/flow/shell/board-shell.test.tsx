@@ -134,6 +134,42 @@ describe("board shell surfaces", () => {
 		expect(opened).toBe("variables");
 	});
 
+	test("the rail exposes navigation links and preserves browser new-tab clicks", () => {
+		let commandRuns = 0;
+		for (const href of ["/library/config/flows?id=app-1", "/library"]) {
+			const container = render(
+				<BoardActivityRail
+					top={[
+						{
+							id: "back",
+							title: "Back to app",
+							icon: null,
+							href,
+							onSelect: () => {
+								commandRuns += 1;
+							},
+						},
+					]}
+					bottom={[]}
+				/>,
+			);
+			const link = container.querySelector("a");
+			expect(link?.getAttribute("href")).toBe(href);
+			expect(link?.getAttribute("aria-label")).toBe("Back to app");
+			expect(container.querySelector("button")).toBeNull();
+			for (const options of [{ metaKey: true }, { ctrlKey: true }]) {
+				const event = new window.MouseEvent("click", {
+					bubbles: true,
+					cancelable: true,
+					...options,
+				});
+				act(() => link?.dispatchEvent(event as unknown as MouseEvent));
+				expect(event.defaultPrevented).toBe(false);
+			}
+		}
+		expect(commandRuns).toBe(0);
+	});
+
 	test("a pane exposes its title and one close affordance", () => {
 		let closed = false;
 		const container = render(

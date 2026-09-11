@@ -5,7 +5,7 @@ use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 #[cfg(all(feature = "execute", not(all(feature = "local", feature = "remote"))))]
 use flow_like::flow::execution::{internal_node::InternalNode, log::LogMessage};
 #[cfg(all(feature = "execute", not(feature = "remote")))]
-use flow_like::flow::pin::{PinType, ValueType};
+use flow_like::flow::pin::{Pin, PinType, ValueType};
 use flow_like::flow::{
     node::{Node, NodeLogic},
     pin::PinOptions,
@@ -1619,7 +1619,7 @@ async fn build_openapi_document(
 
     for route in &config.function_routes {
         let path = super::http_runtime::normalize_path(&route.path);
-        let request_schema =
+        let (request_schema, body_required) =
             route_request_body_schema(context, &route.function_refs, &board_refs).await;
         let (summary, description, function_refs) =
             route_function_metadata(context, &route.function_refs, &board_refs).await;
@@ -1639,7 +1639,7 @@ async fn build_openapi_document(
             }
             if method != "get" && method != "head" {
                 operation["requestBody"] = json!({
-                    "required": false,
+                    "required": body_required,
                     "content": {
                         "application/json": {
                             "schema": request_schema.clone()
@@ -1818,14 +1818,53 @@ async fn route_function_metadata(
 }
 
 #[cfg(all(feature = "execute", not(feature = "remote")))]
+pub(crate) fn insert_pin_property(
+    properties: &mut json::Map<String, flow_like_types::Value>,
+    required: &mut Vec<String>,
+    name: String,
+    mut schema: flow_like_types::Value,
+    pin: &Pin,
+    board_refs: &HashMap<String, String>,
+) {
+    if pin.is_optional() {
+        let default = pin.effective_default(board_refs);
+        if !default.is_null()
+            && let Some(obj) = schema.as_object_mut()
+        {
+            obj.insert("default".to_string(), default);
+        }
+    } else {
+        required.push(name.clone());
+    }
+    properties.insert(name, schema);
+}
+
+#[cfg(all(feature = "execute", not(feature = "remote")))]
+pub(crate) fn object_schema_with_required(
+    properties: json::Map<String, flow_like_types::Value>,
+    mut required: Vec<String>,
+) -> flow_like_types::Value {
+    let mut schema = json!({
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": true
+    });
+    if !required.is_empty() {
+        required.sort_unstable();
+        schema["required"] = json!(required);
+    }
+    schema
+}
+
+#[cfg(all(feature = "execute", not(feature = "remote")))]
 async fn route_request_body_schema(
     context: &ExecutionContext,
     function_refs: &[String],
     board_refs: &HashMap<String, String>,
-) -> flow_like_types::Value {
+) -> (flow_like_types::Value, bool) {
     let mut payload_schemas = Vec::new();
     let mut properties = json::Map::new();
-    let mut has_named_body_properties = false;
+    let mut required = Vec::new();
 
     for id in function_refs {
         let Some(node) = context.nodes.get(id) else {
@@ -1833,66 +1872,55 @@ async fn route_request_body_schema(
         };
         let guard = node.node.lock().await;
         for pin in guard.pins.values() {
-            if pin.pin_type != PinType::Output || pin.data_type == VariableType::Execution {
+            if pin.pin_type != PinType::Output
+                || pin.data_type == VariableType::Execution
+                || is_rest_internal_arg_pin(&pin.name)
+            {
                 continue;
             }
             let resolved_schema = resolve_openapi_text_ref_opt(pin.schema.as_deref(), board_refs);
+            let schema = openapi_pin_schema(
+                &pin.data_type,
+                &pin.value_type,
+                resolved_schema.as_deref(),
+                &pin.description,
+                board_refs,
+            );
             if pin.name == "payload" {
-                payload_schemas.push(openapi_pin_schema(
-                    &pin.data_type,
-                    &pin.value_type,
-                    resolved_schema.as_deref(),
-                    &pin.description,
-                    board_refs,
-                ));
+                payload_schemas.push(schema);
                 continue;
             }
-            if is_rest_internal_arg_pin(&pin.name) {
-                continue;
-            }
-            has_named_body_properties = true;
-            let property_name = openapi_pin_property_name(pin);
-            properties.insert(
-                property_name,
-                openapi_pin_schema(
-                    &pin.data_type,
-                    &pin.value_type,
-                    resolved_schema.as_deref(),
-                    &pin.description,
-                    board_refs,
-                ),
+            insert_pin_property(
+                &mut properties,
+                &mut required,
+                openapi_pin_property_name(pin),
+                schema,
+                pin,
+                board_refs,
             );
         }
     }
 
-    if has_named_body_properties {
-        let mut schema = json!({
-            "type": "object",
-            "properties": properties,
-            "additionalProperties": true
-        });
+    if !properties.is_empty() {
+        let body_required = !required.is_empty();
+        let mut schema = object_schema_with_required(properties, required);
         if !payload_schemas.is_empty() {
             schema["x-flow-like-payload-schema"] = merge_openapi_schemas(payload_schemas);
         }
-        return schema;
+        return (schema, body_required);
     }
 
     if !payload_schemas.is_empty() {
-        return merge_openapi_schemas(payload_schemas);
+        return (merge_openapi_schemas(payload_schemas), false);
     }
 
-    if properties.is_empty() {
+    (
         json!({
             "type": "object",
             "additionalProperties": true
-        })
-    } else {
-        json!({
-            "type": "object",
-            "properties": properties,
-            "additionalProperties": true
-        })
-    }
+        }),
+        false,
+    )
 }
 
 #[cfg(all(feature = "execute", not(feature = "remote")))]
@@ -1959,7 +1987,7 @@ fn openapi_pin_schema(
 }
 
 #[cfg(all(feature = "execute", not(feature = "remote")))]
-fn openapi_pin_property_name(pin: &flow_like::flow::pin::Pin) -> String {
+fn openapi_pin_property_name(pin: &Pin) -> String {
     let friendly = super::http_runtime::sanitize_identifier(pin.friendly_name.trim());
     if !friendly.is_empty() {
         return friendly;
@@ -3144,6 +3172,20 @@ mod tests {
         );
         handler_node.add_output_pin("Name", "Name", "Person name", VariableType::String);
         handler_node.add_output_pin("Age", "Age", "Person age", VariableType::Integer);
+        let mut optional = PinOptions::new();
+        optional.set_optional(true);
+        handler_node
+            .add_output_pin("Country", "Country", "Person country", VariableType::String)
+            .set_default_value(Some(json!("DE")))
+            .set_options(optional.clone());
+        handler_node
+            .add_output_pin(
+                "Nickname",
+                "Nickname",
+                "Optional alias",
+                VariableType::String,
+            )
+            .set_options(optional);
         handler_node
             .add_output_pin("payload", "Payload", "The payload", VariableType::Struct)
             .set_open_schema();
@@ -3161,16 +3203,59 @@ mod tests {
         };
 
         let spec = build_openapi_document(&context, &config, "127.0.0.1:8080").await;
-        let schema =
-            &spec["paths"]["/form"]["post"]["requestBody"]["content"]["application/json"]["schema"];
+        let request_body = &spec["paths"]["/form"]["post"]["requestBody"];
+        let schema = &request_body["content"]["application/json"]["schema"];
 
+        assert_eq!(request_body["required"], json!(true));
         assert_eq!(schema["type"], json!("object"));
         assert_eq!(schema["properties"]["name"]["type"], json!("string"));
+        assert!(schema["properties"]["name"].get("default").is_none());
         assert_eq!(schema["properties"]["age"]["type"], json!("integer"));
+        assert_eq!(schema["properties"]["country"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["country"]["default"], json!("DE"));
+        assert_eq!(schema["properties"]["nickname"]["default"], json!(""));
+        assert_eq!(schema["required"], json!(["age", "name"]));
         assert!(schema["properties"].get("payload").is_none());
         assert_eq!(
             schema["x-flow-like-payload-schema"]["additionalProperties"],
             json!(true)
         );
+    }
+
+    #[tokio::test]
+    async fn rest_openapi_request_body_is_optional_when_every_pin_is_optional() {
+        let mut handler_node = Node::new(
+            "events_generic",
+            "Generic Event",
+            "A generic event without input or output",
+            "Events",
+        );
+        let mut optional = PinOptions::new();
+        optional.set_optional(true);
+        handler_node
+            .add_output_pin("Note", "Note", "Optional note", VariableType::String)
+            .set_default_value(Some(json!(null)))
+            .set_options(optional);
+
+        let handler = internal_node(handler_node);
+        let parent = internal_node(RestServerNode::new().get_node());
+        let context = test_context(parent, vec![handler.clone()]).await;
+        let config = RestServerConfig {
+            function_routes: vec![RestFunctionRoute {
+                path: "/notes".to_string(),
+                methods: vec!["POST".to_string()],
+                function_refs: vec![handler.node_id().to_string()],
+            }],
+            ..Default::default()
+        };
+
+        let spec = build_openapi_document(&context, &config, "127.0.0.1:8080").await;
+        let request_body = &spec["paths"]["/notes"]["post"]["requestBody"];
+        let schema = &request_body["content"]["application/json"]["schema"];
+
+        assert_eq!(request_body["required"], json!(false));
+        assert_eq!(schema["properties"]["note"]["type"], json!("string"));
+        assert_eq!(schema["properties"]["note"]["default"], json!(""));
+        assert!(schema.get("required").is_none());
     }
 }

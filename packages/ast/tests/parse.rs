@@ -510,6 +510,47 @@ fn roundtrip_named_event_with_params() {
 }
 
 #[test]
+fn roundtrip_event_optional_params_with_defaults() {
+    use flow_like_ast::Literal;
+
+    let text = "eventsGeneric addTargetAction(actionId: string, label?: string = \"x\", count?: int, tags?: string[] = [], meta?: Struct = {}) {\n    logInfo({ message: actionId })\n}\n";
+    assert_idempotent(text, &RenderOptions::default());
+    let ast = parse(text).expect("optional event params parse");
+    let params = &ast.events[0].params;
+    assert_eq!(params.len(), 5);
+
+    assert!(!params[0].optional);
+    assert!(params[0].default.is_none());
+
+    assert!(params[1].optional);
+    assert!(matches!(&params[1].default, Some(Literal::String(v)) if v == "x"));
+
+    assert!(params[2].optional);
+    assert!(params[2].default.is_none());
+
+    assert!(params[3].optional);
+    assert_eq!(params[3].ty.container, flow_like_ast::Container::Array);
+    assert!(matches!(&params[3].default, Some(Literal::Json(raw)) if raw == "[]"));
+
+    assert!(params[4].optional);
+    assert!(matches!(&params[4].default, Some(Literal::Json(raw)) if raw == "{}"));
+}
+
+#[test]
+fn function_params_keep_authored_optional_marker_for_reconcile() {
+    let ast = parse("function helper(a?: int = 1, b: string) {\n}\n")
+        .expect("the grammar accepts the marker everywhere; reconcile diagnoses it");
+    let params = &ast.functions[0].params;
+    assert!(params[0].optional);
+    assert!(matches!(
+        params[0].default,
+        Some(flow_like_ast::Literal::Int(1))
+    ));
+    assert!(!params[1].optional);
+    assert!(params[1].default.is_none());
+}
+
+#[test]
 fn unnamed_event_keeps_no_event_name() {
     let ast = parse("eventsSimple() {\n    logInfo({ message: \"hi\" })\n}\n")
         .expect("unnamed event parses");

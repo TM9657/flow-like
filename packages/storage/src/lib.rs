@@ -25,6 +25,11 @@ pub use flow_like_storage_files::Path;
 pub use flow_like_storage_files::blake3;
 #[cfg(feature = "files")]
 pub use flow_like_storage_files::object_store;
+#[cfg(feature = "files")]
+pub use flow_like_storage_files::{
+    decode_path_segment, display_file_name, display_object_path, join_object_path,
+    normalize_object_path,
+};
 #[cfg(feature = "database-runtime")]
 pub use lance;
 #[cfg(feature = "database-runtime")]

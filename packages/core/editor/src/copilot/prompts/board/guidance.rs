@@ -42,11 +42,15 @@ Choose the entry by the data the workflow receives:
   or background Event setups such as cron/daemon. **Cron is configuration on a Simple Event, not a
   FlowScript call or catalog node.** Build `eventsSimple()` and let the outer assistant attach the
   cron expression/timezone with `upsert_event` after this board edit succeeds.
-- `eventsGeneric(payload: Struct, ticketId: string, priority: string) { ...; return value }`:
+- `eventsGeneric(payload: Struct, ticketId: string, priority?: string = "normal") { ...; return value }`:
   request/form/API payload, typed field pins, and an optional result. On a NEW Generic entry, every
   declared parameter after `payload` becomes a typed output pin; matching payload keys populate
   those pins and unmatched metadata remains in `payload`. Existing custom pins round-trip as typed
-  parameters. Use exact struct helper declarations when the catch-all `payload` is sufficient.
+  parameters. A parameter written `name?: Type` is optional: callers may omit it and its pin
+  receives the default — `name?: Type = literal` stores that literal, a bare `name?: Type` uses the
+  type default (`""`, `0`, `false`, `[]`, `{}`). `payload` can never be optional, and function
+  parameters never carry `?` or `=`. Use exact struct helper declarations when the catch-all
+  `payload` is sufficient.
 - `eventsChat(...) { ... }`: chat history, sessions, tools/actions, attachments, and user context.
   Use the chat response/chunk/stat nodes to reply. The outer assistant exposes it as simple/advanced
   chat or a compatible chat transport.

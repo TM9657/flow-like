@@ -27,6 +27,7 @@ import {
 	InfoIcon,
 	ListIcon,
 	PlusIcon,
+	RotateCcwIcon,
 	SaveIcon,
 	SlidersHorizontalIcon,
 	Trash2Icon,
@@ -48,6 +49,10 @@ import {
 } from "../../lib";
 import { GEOMETRY_BOARD_FORMAT_VERSION } from "../../lib/board-format";
 import {
+	defaultValueFromType,
+	encodedTypeDefault,
+} from "../../lib/flow-defaults";
+import {
 	type IBoard,
 	type ILayer,
 	type ILayerCache,
@@ -56,7 +61,13 @@ import {
 	IPinType,
 } from "../../lib/schema/flow/board";
 import type { INode } from "../../lib/schema/flow/node";
+import type { IVariable } from "../../lib/schema/flow/variable";
 import {
+	convertJsonToUint8Array,
+	parseUint8ArrayToJson,
+} from "../../lib/uint8";
+import {
+	Badge,
 	Button,
 	Dialog,
 	DialogContent,
@@ -87,6 +98,7 @@ import {
 import { typeToColor } from "./utils";
 import { GeometrySubtypeSelect } from "./variables/geometry-variable";
 import { ValueTypeIcon } from "./variables/variables-menu";
+import { VariablesMenuEdit } from "./variables/variables-menu-edit";
 
 export type PinEdit = {
 	id: string;
@@ -127,6 +139,35 @@ const toMachineName = (s: string) =>
 
 const sortByIndex = <T extends { index: number }>(arr: T[]) =>
 	[...arr].sort((a, b) => a.index - b.index);
+
+const isPayloadPin = (pin: PinEdit, isGenericEvent: boolean) =>
+	isGenericEvent && pin.name === "payload";
+
+const canBeOptional = (pin: PinEdit, isGenericEvent: boolean) =>
+	isGenericEvent &&
+	pin.pin_type === IPinType.Output &&
+	pin.data_type !== IVariableType.Execution &&
+	!isPayloadPin(pin, isGenericEvent);
+
+const hasNonNullDefault = (default_value?: number[] | null) => {
+	const decoded = parseUint8ArrayToJson(default_value);
+	return decoded !== undefined && decoded !== null;
+};
+
+const retypedDefault = (
+	pin: PinEdit,
+	valueType: IValueType,
+	dataType: IVariableType,
+): Partial<PinEdit> => {
+	if (!pin.options?.optional) return { default_value: null };
+	if (dataType === IVariableType.Execution) {
+		return {
+			default_value: null,
+			options: { ...pin.options, optional: false },
+		};
+	}
+	return { default_value: encodedTypeDefault(valueType, dataType) };
+};
 
 const reindex = <T extends { index: number }>(arr: T[]) =>
 	arr.map((p, i) => ({ ...p, index: i + 1 }));
@@ -634,6 +675,7 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							onRemove={removePin}
 							onReorder={reorderByIds}
 							isGenericEvent={isGenericEvent}
+							refs={boardRef?.current?.refs}
 						/>
 					</TabsContent>{" "}
 					<TabsContent value="outputs" className="mt-3 space-y-2">
@@ -656,6 +698,7 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							onRemove={removePin}
 							onReorder={reorderByIds}
 							isGenericEvent={isGenericEvent}
+							refs={boardRef?.current?.refs}
 						/>
 					</TabsContent>
 					{isFunctionLayer && (
@@ -821,6 +864,7 @@ interface PinListProps {
 	onRemove: (id: string) => void;
 	onReorder: (orderedIds: string[]) => void;
 	isGenericEvent?: boolean;
+	refs?: Record<string, string>;
 }
 
 const PinValueTypeDropdown: React.FC<{
@@ -944,6 +988,7 @@ export const PinList: React.FC<PinListProps> = ({
 	onRemove,
 	onReorder,
 	isGenericEvent = false,
+	refs,
 }) => {
 	const { t } = useTranslation("flow");
 	const sensors = useSensors(
@@ -990,6 +1035,7 @@ export const PinList: React.FC<PinListProps> = ({
 								onMoveDown={onMoveDown}
 								onRemove={onRemove}
 								isGenericEvent={isGenericEvent}
+								refs={refs}
 							/>
 						))}
 					</SortableContext>
@@ -1009,6 +1055,7 @@ const SortablePinRow: React.FC<{
 	onMoveDown: (id: string) => void;
 	onRemove: (id: string) => void;
 	isGenericEvent?: boolean;
+	refs?: Record<string, string>;
 }> = ({
 	geometryEnabled,
 	pin,
@@ -1019,6 +1066,7 @@ const SortablePinRow: React.FC<{
 	onMoveDown,
 	onRemove,
 	isGenericEvent = false,
+	refs,
 }) => {
 	const { t } = useTranslation("flow");
 	const {
@@ -1039,6 +1087,7 @@ const SortablePinRow: React.FC<{
 	const [expanded, setExpanded] = useState(false);
 	const [editingName, setEditingName] = useState(false);
 	const [nameDraft, setNameDraft] = useState(pin.friendly_name);
+	const optionalCapable = canBeOptional(pin, isGenericEvent);
 
 	useEffect(() => {
 		if (!editingName) setNameDraft(pin.friendly_name);
@@ -1076,7 +1125,12 @@ const SortablePinRow: React.FC<{
 				<PinValueTypeDropdown
 					value_type={pin.value_type}
 					data_type={pin.data_type}
-					onChange={(vt) => onEdit(pin.id, { value_type: vt })}
+					onChange={(vt) =>
+						onEdit(pin.id, {
+							value_type: vt,
+							...retypedDefault(pin, vt, pin.data_type),
+						})
+					}
 					className="shrink-0"
 				/>
 				<button
@@ -1108,27 +1162,37 @@ const SortablePinRow: React.FC<{
 							}}
 						/>
 					) : (
-						<button
-							type="button"
-							className="text-left truncate w-full"
-							onClick={(e) => {
-								e.stopPropagation();
-								// Prevent editing payload pin name on generic_event nodes
-								if (!(isGenericEvent && pin.name === "payload")) {
-									setEditingName(true);
+						<span className="inline-flex w-full min-w-0 items-center gap-2">
+							<button
+								type="button"
+								className="min-w-0 flex-1 truncate text-left"
+								onClick={(e) => {
+									e.stopPropagation();
+									// Prevent editing payload pin name on generic_event nodes
+									if (!isPayloadPin(pin, isGenericEvent)) {
+										setEditingName(true);
+									}
+								}}
+								title={
+									isPayloadPin(pin, isGenericEvent)
+										? t(
+												"payloadPinCannotBeRenamed",
+												"Payload pin cannot be renamed",
+											)
+										: t("clickToRename", "Click to rename")
 								}
-							}}
-							title={
-								isGenericEvent && pin.name === "payload"
-									? t(
-											"payloadPinCannotBeRenamed",
-											"Payload pin cannot be renamed",
-										)
-									: t("clickToRename", "Click to rename")
-							}
-						>
-							{pin.friendly_name ?? pin.name ?? pin.id}
-						</button>
+							>
+								{pin.friendly_name ?? pin.name ?? pin.id}
+							</button>
+							{optionalCapable && Boolean(pin.options?.optional) && (
+								<Badge
+									variant="outline"
+									className="shrink-0 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+								>
+									{t("optional", "Optional")}
+								</Badge>
+							)}
+						</span>
 					)}
 					<span className="ml-2 text-[10px] text-muted-foreground">{`(${pin.id})`}</span>
 				</div>{" "}
@@ -1136,7 +1200,11 @@ const SortablePinRow: React.FC<{
 					geometryEnabled={geometryEnabled}
 					value={pin.data_type}
 					onChange={(dt) =>
-						onEdit(pin.id, { data_type: dt, schema: null, default_value: null })
+						onEdit(pin.id, {
+							data_type: dt,
+							schema: null,
+							...retypedDefault(pin, pin.value_type, dt),
+						})
 					}
 					className="hidden sm:flex"
 				/>
@@ -1162,9 +1230,9 @@ const SortablePinRow: React.FC<{
 					variant="destructive"
 					size="icon"
 					onClick={() => onRemove(pin.id)}
-					disabled={isGenericEvent && pin.name === "payload"}
+					disabled={isPayloadPin(pin, isGenericEvent)}
 					title={
-						isGenericEvent && pin.name === "payload"
+						isPayloadPin(pin, isGenericEvent)
 							? t("payloadPinCannotBeRemoved", "Payload pin cannot be removed")
 							: t("removePin", "Remove pin")
 					}
@@ -1193,9 +1261,9 @@ const SortablePinRow: React.FC<{
 							value={pin.description}
 							onChange={(e) => onEdit(pin.id, { description: e.target.value })}
 							placeholder="Optional"
-							disabled={isGenericEvent && pin.name === "payload"}
+							disabled={isPayloadPin(pin, isGenericEvent)}
 							title={
-								isGenericEvent && pin.name === "payload"
+								isPayloadPin(pin, isGenericEvent)
 									? t(
 											"payloadPinDescriptionCannotBeEdited",
 											"Payload pin description cannot be edited",
@@ -1204,6 +1272,9 @@ const SortablePinRow: React.FC<{
 							}
 						/>
 					</div>
+					{optionalCapable && (
+						<PinOptionalSection pin={pin} onEdit={onEdit} refs={refs} />
+					)}
 				</div>
 			)}{" "}
 			<div className="sr-only">
@@ -1213,6 +1284,136 @@ const SortablePinRow: React.FC<{
 					onSchemaChange={(schema) => onEdit(pin.id, { schema })}
 				/>
 			</div>
+		</div>
+	);
+};
+
+const PinOptionalSection: React.FC<{
+	pin: PinEdit;
+	onEdit: (id: string, patch: Partial<PinEdit>) => void;
+	refs?: Record<string, string>;
+}> = ({ pin, onEdit, refs }) => {
+	const { t } = useTranslation("flow");
+	const optional = Boolean(pin.options?.optional);
+	const hasDefault = hasNonNullDefault(pin.default_value);
+	// Bumped on every reset so the editor remounts with the fresh seed instead of
+	// keeping the value it held internally.
+	const [resetGeneration, setResetGeneration] = useState(0);
+
+	const setOptional = useCallback(
+		(checked: boolean) => {
+			const options = { ...(pin.options ?? {}), optional: checked };
+			if (!checked) {
+				onEdit(pin.id, { options, default_value: null });
+				return;
+			}
+			if (hasDefault) {
+				onEdit(pin.id, { options });
+				return;
+			}
+			onEdit(pin.id, {
+				options,
+				default_value: encodedTypeDefault(pin.value_type, pin.data_type),
+			});
+		},
+		[onEdit, pin.id, pin.options, pin.value_type, pin.data_type, hasDefault],
+	);
+
+	const resetDefault = useCallback(() => {
+		onEdit(pin.id, {
+			default_value: encodedTypeDefault(pin.value_type, pin.data_type),
+		});
+		setResetGeneration((g) => g + 1);
+	}, [onEdit, pin.id, pin.value_type, pin.data_type]);
+
+	const editorVariable = useMemo<IVariable>(
+		() => ({
+			id: pin.id,
+			name: pin.friendly_name,
+			category: null,
+			description: pin.description,
+			data_type: pin.data_type,
+			value_type: pin.value_type,
+			schema: pin.schema ?? null,
+			exposed: false,
+			secret: false,
+			editable: true,
+			default_value:
+				pin.default_value ??
+				convertJsonToUint8Array(
+					defaultValueFromType(pin.value_type, pin.data_type),
+				) ??
+				null,
+		}),
+		[
+			pin.id,
+			pin.friendly_name,
+			pin.description,
+			pin.data_type,
+			pin.value_type,
+			pin.schema,
+			pin.default_value,
+		],
+	);
+
+	const editorKey = `${pin.value_type}-${pin.data_type}-${pin.schema ?? ""}-${resetGeneration}`;
+
+	return (
+		<div className="space-y-3">
+			<div className="flex items-start justify-between gap-4 rounded-md border p-3">
+				<div className="space-y-1">
+					<Label htmlFor={`pin-optional-${pin.id}`} className="text-sm">
+						{t("optional", "Optional")}
+					</Label>
+					<p className="text-xs text-muted-foreground">
+						{t("callersMayOmitThisInput", "Callers may omit this input")}
+					</p>
+				</div>
+				<Switch
+					id={`pin-optional-${pin.id}`}
+					checked={optional}
+					onCheckedChange={setOptional}
+				/>
+			</div>
+			{optional && (
+				<div className="space-y-2">
+					<div className="flex items-center justify-between gap-2">
+						<Label className="text-xs">
+							{t("defaultWhenNotProvided", "Default when not provided")}
+						</Label>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+							onClick={resetDefault}
+						>
+							<RotateCcwIcon className="h-3.5 w-3.5" />
+							{t("resetDefault", "Reset default")}
+						</Button>
+					</div>
+					{!hasDefault && (
+						<p className="text-xs text-muted-foreground">
+							{pin.data_type === IVariableType.Generic
+								? t(
+										"noDefaultSetWithoutOneThePinResolvesToNullWhenTheCallerOmitsIt",
+										"No default set. Without one the pin resolves to null when the caller omits it.",
+									)
+								: t(
+										"noDefaultStoredCallersReceiveTheTypesEmptyValue",
+										"No default stored. Callers that omit this input receive the type's empty value.",
+									)}
+						</p>
+					)}
+					<VariablesMenuEdit
+						key={editorKey}
+						variable={editorVariable}
+						refs={refs}
+						updateVariable={async (v) =>
+							onEdit(pin.id, { default_value: v.default_value ?? null })
+						}
+					/>
+				</div>
+			)}
 		</div>
 	);
 };

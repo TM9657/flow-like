@@ -134,6 +134,12 @@ pub struct PlaceholderPinDef {
     /// Whether connections must agree with `schema`. Older payloads default to permissive.
     #[serde(default)]
     pub enforce_schema: bool,
+    /// Optional event parameter: callers may omit it and the runtime fills the default.
+    #[serde(default)]
+    pub optional: bool,
+    /// Stored default for an optional pin. Requires `optional`; omitted = the type default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_value: Option<serde_json::Value>,
 }
 
 /// Edge in the graph
@@ -247,6 +253,16 @@ pub enum BoardCommand {
         value: serde_json::Value,
         #[serde(default)]
         summary: Option<String>,
+    },
+    /// Toggle whether a custom `events_generic` output pin is optional. `optional: true` stores
+    /// the flag and `default_value` (the type default when omitted); `optional: false` clears
+    /// both. Execution pins and `payload` are never optional.
+    UpdateNodePinOptions {
+        node_id: String,
+        pin_name: String,
+        optional: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default_value: Option<serde_json::Value>,
     },
     /// Rename an existing node's friendly (display) name without touching its behavior. Used by
     /// FlowScript named events (`eventsSimple dashboardLoad() { }`) when only the name changed.
@@ -457,5 +473,62 @@ mod cache_command_tests {
                 ..
             } if layer_id == "cached-function"
         ));
+    }
+}
+
+#[cfg(test)]
+mod pin_options_tests {
+    use super::{BoardCommand, PlaceholderPinDef};
+    use serde_json::json;
+
+    #[test]
+    fn update_node_pin_options_omits_absent_default_and_round_trips() {
+        let command = BoardCommand::UpdateNodePinOptions {
+            node_id: "event".to_string(),
+            pin_name: "ticketId".to_string(),
+            optional: true,
+            default_value: None,
+        };
+
+        let value = serde_json::to_value(&command).expect("serialize pin options command");
+        assert_eq!(value["command_type"], "UpdateNodePinOptions");
+        assert_eq!(value["pin_name"], "ticketId");
+        assert_eq!(value["optional"], true);
+        assert!(value.get("default_value").is_none());
+
+        let decoded: BoardCommand = serde_json::from_value(json!({
+            "command_type": "UpdateNodePinOptions",
+            "node_id": "event",
+            "pin_name": "ticketId",
+            "optional": false
+        }))
+        .expect("deserialize pin options command without a default");
+        assert!(matches!(
+            decoded,
+            BoardCommand::UpdateNodePinOptions {
+                optional: false,
+                default_value: None,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn placeholder_pin_def_defaults_to_required_without_a_default() {
+        let def: PlaceholderPinDef = serde_json::from_value(json!({
+            "name": "ticketId",
+            "friendly_name": "ticketId",
+            "description": null,
+            "pin_type": "Output",
+            "data_type": "String",
+            "value_type": null
+        }))
+        .expect("older payloads decode");
+        assert!(!def.optional);
+        assert!(def.default_value.is_none());
+
+        let encoded = serde_json::to_value(&def).expect("serialize pin def");
+        assert_eq!(encoded["optional"], false);
+        assert!(encoded.get("default_value").is_none());
     }
 }

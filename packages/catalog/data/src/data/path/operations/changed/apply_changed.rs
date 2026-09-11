@@ -162,7 +162,7 @@ fn selected_keys(
     root: &FlowPath,
     selected_paths: Vec<FlowPath>,
 ) -> flow_like_types::Result<HashSet<String>> {
-    let root_path = Path::from(root.path.as_str());
+    let root_path = root.object_path();
     let mut selected = HashSet::with_capacity(selected_paths.len());
 
     for path in selected_paths {
@@ -351,11 +351,34 @@ mod tests {
     fn selected_paths_preserve_encoded_object_keys() {
         let root = FlowPath::new("root".to_string(), "store".to_string(), None);
         let encoded = FlowPath::new("root/a%23b.txt".to_string(), "store".to_string(), None);
+        let raw = FlowPath::new("root/a#b.txt".to_string(), "store".to_string(), None);
 
-        let selected = selected_keys(&root, vec![encoded]).unwrap();
+        let selected = selected_keys(&root, vec![encoded, raw]).unwrap();
 
+        assert_eq!(selected.len(), 1);
         assert!(selected.contains("root/a%23b.txt"));
         assert!(!selected.contains("root/a%2523b.txt"));
+    }
+
+    #[test]
+    fn selected_paths_resolve_raw_and_listed_umlaut_names_to_one_key() {
+        let root = FlowPath::new("root".to_string(), "store".to_string(), None);
+        let listed = Path::from("root").join("Übersicht (2)#1.pdf");
+        let raw = FlowPath::new(
+            "root/Übersicht (2)#1.pdf".to_string(),
+            "store".to_string(),
+            None,
+        );
+        let encoded = FlowPath::new(listed.as_ref().to_string(), "store".to_string(), None);
+
+        let selected = selected_keys(&root, vec![raw, encoded]).unwrap();
+
+        assert_eq!(selected.len(), 1);
+        assert!(selected.contains(listed.as_ref()));
+        assert_eq!(
+            flow_like_storage::display_file_name(&listed).as_deref(),
+            Some("Übersicht (2)#1.pdf")
+        );
     }
 
     #[test]

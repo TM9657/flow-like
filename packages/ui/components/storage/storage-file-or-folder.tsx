@@ -7,7 +7,11 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useInvoke } from "../../hooks";
-import { type IStorageItem, humanFileSize } from "../../lib";
+import {
+	type IStorageItem,
+	humanFileSize,
+	storageDisplayName,
+} from "../../lib";
 import { buildStoragePathNodes } from "../../lib/storage-path-nodes";
 import { useBackend } from "../../state/backend-state";
 import {
@@ -112,7 +116,7 @@ export function FileOrFolder({
 						</div>
 						<div className="flex flex-col items-start">
 							<p className="line-clamp-1 text-start font-medium text-foreground text-sm sm:text-base">
-								{file.location.split("/").pop()}
+								{storageDisplayName(file.location)}
 							</p>
 							<Badge
 								variant="secondary"
@@ -213,7 +217,7 @@ export function FileOrFolder({
 					</div>
 					<div className="flex flex-col items-start flex-1 min-w-0">
 						<p className="line-clamp-1 text-start font-medium text-foreground truncate w-full text-sm sm:text-base">
-							{file.location.split("/").pop()}
+							{storageDisplayName(file.location)}
 						</p>
 						<div className="flex items-center gap-1 sm:gap-2 mt-1">
 							<Badge

@@ -633,6 +633,10 @@ export const generatedNodeSidebar = [
             "slug": "nodes/ai/generative/llm-extractor-history"
           },
           {
+            "label": "AI Extractor with Struct Schema",
+            "slug": "nodes/ai/generative/llm-extractor-struct-schema"
+          },
+          {
             "label": "Add Model Headers",
             "slug": "nodes/ai/generative/ai-generative-add-headers"
           },

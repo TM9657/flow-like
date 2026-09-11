@@ -2,6 +2,7 @@
 
 import { useTranslation } from "@flow-like/locales";
 import { ArrowBigLeftDashIcon, HouseIcon, WorkflowIcon } from "lucide-react";
+import Link from "next/link";
 import { memo } from "react";
 import { useInvoke } from "../../../hooks/use-invoke";
 import { cn } from "../../../lib/utils";
@@ -20,13 +21,11 @@ export const BoardNavMenu = memo(function BoardNavMenu({
 	appHref,
 	boardParent,
 	boardId,
-	onNavigate,
 }: Readonly<{
 	appHref: string;
 	/** The route the board was opened from, when one registered itself. */
 	boardParent?: string;
 	boardId: string;
-	onNavigate: (href: string) => void;
 }>) {
 	const { t } = useTranslation("flow");
 	const backend = useBackend();
@@ -42,13 +41,13 @@ export const BoardNavMenu = memo(function BoardNavMenu({
 			<NavRow
 				icon={<HouseIcon />}
 				label={t("appFlows", "App flows")}
-				onSelect={() => onNavigate(appHref)}
+				href={appHref}
 			/>
 			{boardParent && boardParent !== appHref && (
 				<NavRow
 					icon={<ArrowBigLeftDashIcon />}
 					label={t("backToApp", "Back to app")}
-					onSelect={() => onNavigate(boardParent)}
+					href={boardParent}
 				/>
 			)}
 			{others.length > 0 && (
@@ -61,7 +60,7 @@ export const BoardNavMenu = memo(function BoardNavMenu({
 							key={id}
 							icon={<WorkflowIcon />}
 							label={name}
-							onSelect={() => onNavigate(`/flow?id=${id}&app=${appId}`)}
+							href={`/flow?id=${id}&app=${appId}`}
 						/>
 					))}
 				</>
@@ -73,21 +72,20 @@ export const BoardNavMenu = memo(function BoardNavMenu({
 const NavRow = memo(function NavRow({
 	icon,
 	label,
-	onSelect,
-}: Readonly<{ icon: React.ReactNode; label: string; onSelect: () => void }>) {
+	href,
+}: Readonly<{ icon: React.ReactNode; label: string; href: string }>) {
 	return (
-		<button
-			type="button"
-			onClick={onSelect}
+		<Link
+			href={href}
 			className={cn(
-				"flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs",
-				"hover:bg-accent hover:text-accent-foreground",
+				"flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-xs transition-colors",
+				"hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 			)}
 		>
 			<span className="[&>svg]:size-3.5 shrink-0 text-muted-foreground">
 				{icon}
 			</span>
 			<span className="truncate">{label}</span>
-		</button>
+		</Link>
 	);
 });

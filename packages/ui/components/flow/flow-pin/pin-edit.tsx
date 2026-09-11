@@ -25,6 +25,7 @@ import { VariableDescription } from "./variable-types/default-text";
 import { ElementSelect } from "./variable-types/element-select";
 import { EnumVariable } from "./variable-types/enum-variable";
 import { FnVariable } from "./variable-types/fn-select";
+import { GeometryChip } from "./variable-types/geometry-chip";
 import {
 	OntologyActionSelect,
 	OntologyObjectSelect,
@@ -252,6 +253,11 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 				setValue={updateDefaultValue}
 			/>
 		);
+	if (
+		pin.data_type === IVariableType.Geometry &&
+		pin.value_type === IValueType.Normal
+	)
+		return <GeometryChip nodeId={nodeId} pin={pin} value={cachedDefaultValue} />;
 	if (
 		(pin.options?.valid_values?.length ?? 0) > 0 &&
 		pin.data_type === IVariableType.String

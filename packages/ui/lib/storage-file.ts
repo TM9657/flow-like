@@ -8,6 +8,7 @@
  * for the cases the value alone cannot settle.
  */
 
+import { decodeStorageSegment } from "./storage-tree";
 import { splitNameSegments } from "./utils";
 
 export type StorageFileScope = "app" | "user";
@@ -114,7 +115,7 @@ function toRef(
 		scope,
 		path: segments.join("/"),
 		directory: segments.slice(0, -1).join("/"),
-		fileName,
+		fileName: decodeStorageSegment(fileName),
 		extension,
 	};
 }

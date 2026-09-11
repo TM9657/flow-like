@@ -2,34 +2,29 @@
 
 import {
 	Button,
-	type IApp,
-	IAppVisibility,
 	LibraryPage,
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@flow-like/flow-like-ui";
 import { useTranslation } from "@flow-like/locales";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ImportIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
-import { appsDB } from "./../../lib/apps-db";
 import { isMobileDevice as detectMobileDevice } from "./../../lib/platform";
-import ImportEncryptedDialog from "./components/ImportEncryptedDialog";
+import ImportArchiveDialog from "./components/ImportArchiveDialog";
 
 export default function DesktopLibraryPage() {
 	const { t } = useTranslation("common");
 	const router = useRouter();
 	const auth = useAuth();
 	const [importDialogOpen, setImportDialogOpen] = useState(false);
-	const [encryptedImportPath, setEncryptedImportPath] = useState<string | null>(
-		null,
-	);
+	const [importPath, setImportPath] = useState<string | null>(null);
+	const importDialogOpenRef = useRef(false);
 
 	const isMobileDevice = useMemo(detectMobileDevice, []);
 
@@ -73,29 +68,25 @@ export default function DesktopLibraryPage() {
 		[normalizePickerPath],
 	);
 
-	const importApp = useCallback(async (path: string) => {
-		if (path.toLowerCase().endsWith(".enc.flow-app")) {
-			setEncryptedImportPath(path);
+	const importApp = useCallback(
+		(path: string) => {
+			if (importDialogOpenRef.current) {
+				toast.info(
+					t("importAlreadyInProgress", "An import is already in progress."),
+				);
+				return;
+			}
+			importDialogOpenRef.current = true;
+			setImportPath(path);
 			setImportDialogOpen(true);
-			return;
-		}
-		const toastId = toast.loading(t("importingApp", "Importing app..."), {
-			description: t("pleaseWait", "Please wait."),
-		});
-		try {
-			const app = await invoke<IApp>("import_app_from_file", { path });
-			await appsDB.visibility.put({
-				visibility: app.visibility ?? IAppVisibility.Offline,
-				appId: app.id,
-			});
-			toast.success(
-				t("appImportedSuccessfully", "App imported successfully!"),
-				{ id: toastId },
-			);
-		} catch (err) {
-			console.error(err);
-			toast.error(`Failed to import app`, { id: toastId });
-		}
+		},
+		[t],
+	);
+
+	const handleImportDialogOpenChange = useCallback((next: boolean) => {
+		importDialogOpenRef.current = next;
+		setImportDialogOpen(next);
+		if (!next) setImportPath(null);
 	}, []);
 
 	const pickImportFile = useCallback(async () => {
@@ -114,18 +105,15 @@ export default function DesktopLibraryPage() {
 			toast.error("Unable to open selected file.");
 			return;
 		}
-		await importApp(path);
-	}, [importApp, isMobileDevice, resolveSelectedPath]);
+		importApp(path);
+	}, [importApp, isMobileDevice, resolveSelectedPath, t]);
 
 	useEffect(() => {
-		const unlistenPromise = listen<{ path: string }>(
-			"import/file",
-			async (event) => {
-				const path = event.payload.path;
-				if (!path) return;
-				await importApp(path);
-			},
-		);
+		const unlistenPromise = listen<{ path: string }>("import/file", (event) => {
+			const path = event.payload.path;
+			if (!path) return;
+			importApp(path);
+		});
 
 		return () => {
 			unlistenPromise.then((unsub) => unsub()).catch(() => void 0);
@@ -158,7 +146,7 @@ export default function DesktopLibraryPage() {
 				<TooltipContent>{t("importApp", "Import app")}</TooltipContent>
 			</Tooltip>
 		),
-		[pickImportFile],
+		[pickImportFile, t],
 	);
 
 	const mobileImportButton = useMemo(
@@ -182,13 +170,10 @@ export default function DesktopLibraryPage() {
 			extraMobileActions={[mobileImportButton]}
 			isAuthenticated={auth.isAuthenticated}
 			renderExtras={({ refetchApps }) => (
-				<ImportEncryptedDialog
+				<ImportArchiveDialog
 					open={importDialogOpen}
-					onOpenChange={(o) => {
-						setImportDialogOpen(o);
-						if (!o) setEncryptedImportPath(null);
-					}}
-					path={encryptedImportPath}
+					onOpenChange={handleImportDialogOpenChange}
+					path={importPath}
 					onImported={refetchApps}
 				/>
 			)}

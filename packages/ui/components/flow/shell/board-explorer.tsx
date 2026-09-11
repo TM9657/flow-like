@@ -373,7 +373,7 @@ export function BoardExplorer({
 								startDraftInside(layer.id);
 							}}
 							className={cn(
-								"flex size-4 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover/row:opacity-100",
+								"flex size-5 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity hover:bg-primary/10 focus-visible:opacity-100 focus-visible:outline-none group-hover/row:opacity-100 group-focus-within/row:opacity-100",
 								isActive
 									? "text-accent-foreground/70 hover:text-accent-foreground"
 									: "text-muted-foreground hover:text-foreground",
@@ -474,7 +474,7 @@ export function BoardExplorer({
 	};
 
 	return (
-		<div className="flex flex-col gap-0.5 p-1">
+		<div className="flex flex-col gap-0.5 p-2">
 			<SectionHeader
 				label={t("flow", "Flow")}
 				action={
@@ -586,6 +586,8 @@ export function BoardExplorer({
 						depth={0}
 						icon={<LayoutTemplateIcon />}
 						label={page.name}
+						description={page.description}
+						labelClassName="font-sans font-medium text-foreground"
 						muted
 						onSelect={() => onOpenPage(page.pageId, boardId)}
 						trailing={
@@ -601,7 +603,7 @@ export function BoardExplorer({
 									)}
 								/>
 							) : (
-								<ExternalLinkIcon className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100" />
+								<ExternalLinkIcon className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100" />
 							)
 						}
 					/>

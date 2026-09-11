@@ -29,8 +29,12 @@ import type {
 	IEventInput,
 	IIntercomEvent,
 	IRunPayload,
+	IValueType,
+	IVariableType,
 } from "../../lib";
 import { formatDuration } from "../../lib/date";
+import { defaultValueFromType } from "../../lib/flow-defaults";
+import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
 import type { IRouteMapping } from "../../state/backend-state/route-state";
 import { useExecutionEngine } from "../../state/execution-engine-context";
@@ -123,6 +127,60 @@ function isAttachmentInput(input: IEventInput): boolean {
 
 function isMultiValueInput(input: IEventInput): boolean {
 	return input.value_type === "Array" || input.value_type === "HashSet";
+}
+
+function isJsonInput(input: IEventInput): boolean {
+	return (
+		isMultiValueInput(input) ||
+		input.data_type === "Struct" ||
+		input.data_type === "Generic"
+	);
+}
+
+function isRequiredInput(input: IEventInput): boolean {
+	return input.optional !== true;
+}
+
+function decodeInputDefault(input: IEventInput): unknown {
+	const stored = parseUint8ArrayToJson(input.default_value);
+	const value =
+		stored ??
+		(input.optional === true
+			? defaultValueFromType(
+					input.value_type as IValueType,
+					input.data_type as IVariableType,
+				)
+			: undefined);
+	if (value === null || value === undefined) return undefined;
+	if (input.data_type === "Date" && typeof value === "string") {
+		return value.slice(0, 10);
+	}
+	return value;
+}
+
+function seedFieldValue(input: IEventInput, value: unknown): unknown {
+	if (isJsonInput(input)) return JSON.stringify(value, null, 2);
+	if (input.data_type === "Boolean") return Boolean(value);
+	return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function seedFormValues(inputs: IEventInput[]): Record<string, unknown> {
+	const seeded: Record<string, unknown> = {};
+	for (const input of inputs) {
+		if (isAttachmentInput(input)) continue;
+		const value = decodeInputDefault(input);
+		if (value === undefined) continue;
+		seeded[input.name] = seedFieldValue(input, value);
+	}
+	return seeded;
+}
+
+function isEmptyJsonValue(value: unknown): boolean {
+	return (
+		value === undefined ||
+		value === null ||
+		(Array.isArray(value) && value.length === 0)
+	);
 }
 
 function buildUseNavigationUrl(
@@ -630,6 +688,25 @@ function AttachmentsDisplay({
 	);
 }
 
+function FieldLabel({ label, required }: { label: string; required: boolean }) {
+	const { t } = useTranslation("interfaces");
+	const requiredTitle = t("required", "Required");
+	return (
+		<Label className="text-sm font-medium">
+			{label}
+			{required && (
+				<span
+					className="ml-1 text-destructive"
+					title={requiredTitle}
+					aria-label={requiredTitle}
+				>
+					*
+				</span>
+			)}
+		</Label>
+	);
+}
+
 // ============================================================================
 // Collapsible Result Component (collapsed by default)
 // ============================================================================
@@ -757,9 +834,11 @@ export function GenericEventFormInterface({
 
 	const [values, setValues] = useState<Record<string, unknown>>({});
 	const [files, setFiles] = useState<Record<string, File[]>>({});
+	const inputPinsRef = useRef(inputPins);
+	inputPinsRef.current = inputPins;
 
 	useEffect(() => {
-		setValues({});
+		setValues(seedFormValues(inputPinsRef.current));
 		setFiles({});
 		setFieldErrors({});
 		setError(null);
@@ -943,13 +1022,20 @@ export function GenericEventFormInterface({
 	const buildRunPayload = useCallback(async (): Promise<IRunPayload | null> => {
 		const nextFieldErrors: Record<string, string> = {};
 		const payload: Record<string, unknown> = {};
+		const requiredError = t("thisFieldIsRequired", "This field is required");
+		const markMissing = (pin: IEventInput) => {
+			if (isRequiredInput(pin)) nextFieldErrors[pin.name] = requiredError;
+		};
 
 		for (const pin of inputPins) {
 			const key = pin.name;
 
 			if (isAttachmentInput(pin)) {
 				const selected = files[key] ?? [];
-				if (selected.length === 0) continue;
+				if (selected.length === 0) {
+					markMissing(pin);
+					continue;
+				}
 				const urls: string[] = [];
 				for (const file of selected) {
 					const url = await backend.helperState.fileToUrl(file, false);
@@ -961,17 +1047,17 @@ export function GenericEventFormInterface({
 
 			const raw = values[key];
 
-			if (
-				isMultiValueInput(pin) ||
-				pin.data_type === "Struct" ||
-				pin.data_type === "Generic"
-			) {
+			if (isJsonInput(pin)) {
 				const parsed = parseJsonField(raw);
 				if (!parsed.ok) {
 					nextFieldErrors[key] = parsed.error;
 					continue;
 				}
-				if (parsed.value !== undefined) payload[key] = parsed.value;
+				if (isEmptyJsonValue(parsed.value)) {
+					markMissing(pin);
+					continue;
+				}
+				payload[key] = parsed.value;
 				continue;
 			}
 
@@ -981,7 +1067,10 @@ export function GenericEventFormInterface({
 					break;
 				}
 				case "Integer": {
-					if (raw === "" || raw == null) break;
+					if (raw === "" || raw == null) {
+						markMissing(pin);
+						break;
+					}
 					const num = Number.parseInt(String(raw), 10);
 					if (Number.isNaN(num)) {
 						nextFieldErrors[key] = "Invalid integer";
@@ -991,7 +1080,10 @@ export function GenericEventFormInterface({
 					break;
 				}
 				case "Float": {
-					if (raw === "" || raw == null) break;
+					if (raw === "" || raw == null) {
+						markMissing(pin);
+						break;
+					}
 					const num = Number.parseFloat(String(raw));
 					if (Number.isNaN(num)) {
 						nextFieldErrors[key] = "Invalid number";
@@ -1001,11 +1093,18 @@ export function GenericEventFormInterface({
 					break;
 				}
 				case "Date": {
-					if (typeof raw === "string" && raw.trim()) payload[key] = raw;
+					if (typeof raw === "string" && raw.trim()) {
+						payload[key] = raw;
+						break;
+					}
+					markMissing(pin);
 					break;
 				}
 				default: {
-					if (raw === "" || raw == null) break;
+					if (raw === "" || raw == null) {
+						markMissing(pin);
+						break;
+					}
 					payload[key] = raw;
 					break;
 				}
@@ -1021,7 +1120,7 @@ export function GenericEventFormInterface({
 			id: event.node_id,
 			payload,
 		};
-	}, [backend.helperState, event.node_id, files, inputPins, values]);
+	}, [backend.helperState, event.node_id, files, inputPins, values, t]);
 
 	const run = useCallback(async () => {
 		setError(null);
@@ -1329,12 +1428,13 @@ export function GenericEventFormInterface({
 										? pin.description
 										: undefined;
 								const err = fieldErrors[key];
+								const required = isRequiredInput(pin);
 
 								return (
 									<div key={pin.id}>
 										{isAttachmentInput(pin) ? (
 											<div className="space-y-2">
-												<Label className="text-sm font-medium">{label}</Label>
+												<FieldLabel label={label} required={required} />
 												<Input
 													type="file"
 													multiple={isMultiValueInput(pin)}
@@ -1365,7 +1465,7 @@ export function GenericEventFormInterface({
 										) : pin.data_type === "Boolean" ? (
 											<div className="flex items-center justify-between gap-3 rounded-lg border p-4">
 												<div className="space-y-0.5">
-													<Label className="text-sm font-medium">{label}</Label>
+													<FieldLabel label={label} required={required} />
 													{help && (
 														<p className="text-xs text-muted-foreground">
 															{help}
@@ -1382,7 +1482,7 @@ export function GenericEventFormInterface({
 										) : pin.data_type === "Integer" ||
 											pin.data_type === "Float" ? (
 											<div className="space-y-2">
-												<Label className="text-sm font-medium">{label}</Label>
+												<FieldLabel label={label} required={required} />
 												<Input
 													type="number"
 													step={pin.data_type === "Float" ? "any" : "1"}
@@ -1403,7 +1503,7 @@ export function GenericEventFormInterface({
 											</div>
 										) : pin.data_type === "Date" ? (
 											<div className="space-y-2">
-												<Label className="text-sm font-medium">{label}</Label>
+												<FieldLabel label={label} required={required} />
 												<Input
 													type="date"
 													value={String(values[key] ?? "")}
@@ -1414,12 +1514,13 @@ export function GenericEventFormInterface({
 														{help}
 													</p>
 												)}
+												{err && (
+													<p className="text-xs text-destructive">{err}</p>
+												)}
 											</div>
-										) : pin.data_type === "Struct" ||
-											pin.data_type === "Generic" ||
-											isMultiValueInput(pin) ? (
+										) : isJsonInput(pin) ? (
 											<div className="space-y-2">
-												<Label className="text-sm font-medium">{label}</Label>
+												<FieldLabel label={label} required={required} />
 												<Textarea
 													value={String(values[key] ?? "")}
 													onChange={(e) => setFieldValue(key, e.target.value)}
@@ -1437,7 +1538,7 @@ export function GenericEventFormInterface({
 											</div>
 										) : (
 											<div className="space-y-2">
-												<Label className="text-sm font-medium">{label}</Label>
+												<FieldLabel label={label} required={required} />
 												<Input
 													type="text"
 													placeholder={t("enterVal", "Enter {{val}}", {
@@ -1450,6 +1551,9 @@ export function GenericEventFormInterface({
 													<p className="text-xs text-muted-foreground">
 														{help}
 													</p>
+												)}
+												{err && (
+													<p className="text-xs text-destructive">{err}</p>
 												)}
 											</div>
 										)}

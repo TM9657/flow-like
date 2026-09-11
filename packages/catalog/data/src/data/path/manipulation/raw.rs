@@ -5,6 +5,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+use flow_like_storage::display_object_path;
 use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]
@@ -23,7 +24,7 @@ impl NodeLogic for RawPathNode {
         let mut node = Node::new(
             "raw_path",
             "Raw Path",
-            "Gets the raw path string",
+            "Gets the human-readable path string",
             "Data/Files/Path",
         );
         node.set_flowscript_name("path", "rawPath");
@@ -37,7 +38,7 @@ impl NodeLogic for RawPathNode {
         node.add_output_pin(
             "raw_path",
             "Raw Path",
-            "Raw Path String",
+            "Human-readable path string with percent-encoding removed (e.g. 'Übersicht (2)#1.pdf')",
             VariableType::String,
         );
 
@@ -48,7 +49,7 @@ impl NodeLogic for RawPathNode {
         let path: FlowPath = context.evaluate_pin("path").await?;
 
         let path = path.to_runtime(context).await?;
-        let raw_path = path.path.as_ref().to_string();
+        let raw_path = display_object_path(&path.path);
 
         context.set_pin_value("raw_path", json!(raw_path)).await?;
         Ok(())

@@ -1,6 +1,6 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReactFlowInstance } from "@xyflow/react";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
 	type IBoard,
 	type IComment,
@@ -44,71 +44,93 @@ function chainToPath(chain: string[]): string | undefined {
 	return chain.length > 0 ? chain.join("/") : undefined;
 }
 
+/** Resolves a saved path against current ownership, retaining any surviving ancestor. */
+export function resolveLayerPath(
+	layers: Record<string, ILayer> | undefined,
+	path: string | undefined,
+): string | undefined {
+	const segments =
+		path?.split("/").filter((segment) => segment && segment !== "root") ?? [];
+	if (!layers) return chainToPath(segments);
+	for (let index = segments.length - 1; index >= 0; index--) {
+		if (layers[segments[index]]) {
+			return chainToPath(resolveLayerChain(layers, segments[index]));
+		}
+	}
+	return undefined;
+}
+
 /** The path one level up, or undefined when `path` is already a top-level layer. */
 export function parentPath(path: string): string | undefined {
 	const segments = path.split("/");
 	return segments.length > 1 ? segments.slice(0, -1).join("/") : undefined;
 }
 
-/** One step the user took into a layer: the path they were on, and the one they opened. */
+/** One step into a layer, including the caller to return to when leaving a function. */
 export interface LayerVisit {
 	from: string | undefined;
 	to: string;
 }
 
-/** Long enough for any real trail; a goto that never gets popped must not grow it forever. */
 const MAX_TRAIL_LENGTH = 64;
 
-/**
- * Appends a step, keeping the trail bounded. Re-opening the layer that is already on screen
- * is not a step — recording it would make that layer its own way out.
- */
+/** Keeps only a connected trail. Old visits cannot become exits after a direct jump. */
 export function recordVisit(
 	trail: readonly LayerVisit[],
 	visit: LayerVisit,
 ): LayerVisit[] {
 	if (visit.from === visit.to) return [...trail];
 
-	const next = [...trail, visit];
-	return next.length > MAX_TRAIL_LENGTH
-		? next.slice(next.length - MAX_TRAIL_LENGTH)
-		: next;
+	const connected = trail.at(-1)?.to === visit.from ? trail : [];
+	const next = [...connected, visit];
+	return next.slice(-MAX_TRAIL_LENGTH);
 }
 
-/**
- * Where "layer up" lands, and the trail that is left behind. Functions hang off the board
- * root no matter which Call Function node opened them, so their parent chain leads to the
- * root rather than back to the caller — a function opened from inside another function
- * would drop the user all the way out. The trail retraces the way in instead, and the most
- * recent visit wins so entering the same function twice still unwinds one step at a time.
- *
- * Falls back to the parent chain whenever the trail does not describe where the user
- * currently is — they got there through a breadcrumb, a goto or a peer jump.
- */
+/** Returns to the caller when there is an active visit, otherwise to the owning layer. */
 export function resolveExit(
 	trail: readonly LayerVisit[],
 	layerPath: string,
 ): { path: string | undefined; trail: LayerVisit[] } {
-	for (let index = trail.length - 1; index >= 0; index--) {
-		if (trail[index].to !== layerPath) continue;
-		return { path: trail[index].from, trail: trail.slice(0, index) };
+	const visit = trail.at(-1);
+	if (visit?.to === layerPath) {
+		return { path: visit.from, trail: trail.slice(0, -1) };
 	}
-
 	return { path: parentPath(layerPath), trail: [] };
 }
 
-/**
- * Drops the trail from the last visit to `path` onward. A goto lands on a layer without
- * walking into it, so the steps recorded for it no longer describe how it was reached.
- */
-export function dropVisitsTo(
+/** Jumps within a layer branch keep its caller and follow the structural path inside it. */
+export function reconcileLayerTrail(
 	trail: readonly LayerVisit[],
-	path: string,
+	currentPath: string | undefined,
+	targetPath: string | undefined,
 ): LayerVisit[] {
-	for (let index = trail.length - 1; index >= 0; index--) {
-		if (trail[index].to === path) return trail.slice(0, index);
+	if (currentPath === targetPath) return [...trail];
+	if (!currentPath || !targetPath) return [];
+	const currentSegments = currentPath.split("/");
+	const targetSegments = targetPath.split("/");
+	let sharedDepth = 0;
+	while (
+		sharedDepth < currentSegments.length &&
+		currentSegments[sharedDepth] === targetSegments[sharedDepth]
+	)
+		sharedDepth++;
+	if (sharedDepth === 0) return [];
+
+	let parent = targetSegments.slice(0, sharedDepth).join("/");
+	let next: LayerVisit[] = [];
+	if (trail.at(-1)?.to === currentPath) {
+		for (let index = trail.length - 1; index >= 0; index--) {
+			if (trail[index].to !== parent) continue;
+			next = trail.slice(0, index + 1);
+			break;
+		}
 	}
-	return [...trail];
+	for (const segment of targetSegments.slice(sharedDepth)) {
+		const to = `${parent}/${segment}`;
+		next = recordVisit(next, { from: parent, to });
+		parent = to;
+	}
+	return next;
 }
 
 export interface FocusTarget {
@@ -206,7 +228,22 @@ export function isFocusRendered({
 	return renderedIds.some((id) => !baselineIds.has(id));
 }
 
+export interface NavigateToLayerOptions {
+	/** A tab restore switches history before React renders the newly active tab. */
+	navigationKey?: string;
+	/** A new split starts with the caller trail of its source tab. */
+	copyNavigationKey?: string;
+	resetTrail?: boolean;
+	saveViewport?: boolean;
+}
+
+interface LayerNavigationState {
+	path: string | undefined;
+	trail: LayerVisit[];
+}
+
 interface UseLayerNavigationProps {
+	navigationKey?: string;
 	board: UseQueryResult<IBoard>;
 	layerPath: string | undefined;
 	setCurrentLayer: (layer: string | undefined) => void;
@@ -218,6 +255,7 @@ interface UseLayerNavigationProps {
 }
 
 export function useLayerNavigation({
+	navigationKey = "board",
 	board,
 	layerPath,
 	setCurrentLayer,
@@ -227,8 +265,93 @@ export function useLayerNavigation({
 	fitView,
 	getNodes,
 }: UseLayerNavigationProps) {
-	/** The layers the user walked into, in order, so leaving them retraces the way back. */
-	const trail = useRef<LayerVisit[]>([]);
+	const histories = useRef(new Map<string, LayerNavigationState>());
+	const activeKey = useRef(navigationKey);
+	const renderedKey = useRef(navigationKey);
+	const currentPath = useRef(layerPath);
+	const pendingFocus = useRef<(() => void) | undefined>(undefined);
+	const latest = useRef({
+		board,
+		saveViewport,
+		holdViewport,
+		fitView,
+		getNodes,
+	});
+	latest.current = { board, saveViewport, holdViewport, fitView, getNodes };
+	currentPath.current = layerPath;
+	if (renderedKey.current !== navigationKey) {
+		activeKey.current = navigationKey;
+		renderedKey.current = navigationKey;
+	}
+	if (!histories.current.has(activeKey.current)) {
+		histories.current.set(activeKey.current, { path: layerPath, trail: [] });
+	}
+
+	const cancelFocus = useCallback(() => {
+		pendingFocus.current?.();
+		pendingFocus.current = undefined;
+	}, []);
+	useEffect(() => cancelFocus, [cancelFocus]);
+
+	const currentHistory = useCallback(() => {
+		const history = histories.current.get(activeKey.current) ?? {
+			path: currentPath.current,
+			trail: [],
+		};
+		if (history.path !== currentPath.current) {
+			history.trail = reconcileLayerTrail(
+				history.trail,
+				history.path,
+				currentPath.current,
+			);
+			history.path = currentPath.current;
+		}
+		return history;
+	}, []);
+
+	const commitPath = useCallback(
+		(path: string | undefined, history: LayerNavigationState) => {
+			histories.current.set(activeKey.current, { path, trail: history.trail });
+			currentPath.current = path;
+			setCurrentLayer(path?.split("/").pop());
+			setLayerPath(path);
+		},
+		[setCurrentLayer, setLayerPath],
+	);
+
+	const navigateToLayer = useCallback(
+		(target: string | undefined, options: NavigateToLayerOptions = {}) => {
+			cancelFocus();
+			const path = resolveLayerPath(latest.current.board.data?.layers, target);
+			if (path !== currentPath.current && options.saveViewport !== false) {
+				void latest.current.saveViewport();
+			}
+			let history = currentHistory();
+			if (
+				options.navigationKey &&
+				options.navigationKey !== activeKey.current
+			) {
+				histories.current.set(activeKey.current, history);
+				activeKey.current = options.navigationKey;
+				const existing = histories.current.get(options.navigationKey);
+				const source = options.copyNavigationKey
+					? histories.current.get(options.copyNavigationKey)
+					: undefined;
+				history = source
+					? { path: source.path, trail: [...source.trail] }
+					: (existing ?? { path, trail: [] });
+			}
+			history.trail = options.resetTrail
+				? []
+				: reconcileLayerTrail(history.trail, history.path, path);
+			commitPath(path, history);
+		},
+		[cancelFocus, commitPath, currentHistory],
+	);
+
+	const forgetNavigation = useCallback((key: string) => {
+		histories.current.delete(key);
+	}, []);
 
 	/**
 	 * Navigates to anything addressable on the canvas: a node (in whichever layer or
@@ -238,6 +361,8 @@ export function useLayerNavigation({
 	 */
 	const focusNode = useCallback(
 		(targetId: string) => {
+			const { board, getNodes, holdViewport, fitView, saveViewport } =
+				latest.current;
 			const boardData = board.data;
 			if (!boardData) return;
 
@@ -256,24 +381,33 @@ export function useLayerNavigation({
 			const targetPath = chainToPath(chain);
 			const targetLayer =
 				chain.length > 0 ? chain[chain.length - 1] : undefined;
-			const switchesLayer = targetPath !== layerPath;
+			const switchesLayer = targetPath !== currentPath.current;
 
 			// Leaving a layer discards what is on screen; keep its viewport so coming back
 			// lands where the user left off.
 			if (switchesLayer) void saveViewport();
 
-			// A goto into another layer lands on its real place in the hierarchy, so the steps
-			// recorded for it no longer describe how it was reached. Staying in the current
-			// layer — jumping to a node inside it — leaves the way in untouched.
-			if (switchesLayer && targetPath) {
-				trail.current = dropVisitsTo(trail.current, targetPath);
-			}
-
+			cancelFocus();
+			const history = currentHistory();
+			history.trail = reconcileLayerTrail(
+				history.trail,
+				history.path,
+				targetPath,
+			);
 			const baselineIds = new Set(getNodes().map((rendered) => rendered.id));
 
 			const release = holdViewport();
-			setCurrentLayer(targetLayer);
-			setLayerPath(targetPath);
+			let cancelled = false;
+			let frame: number | undefined;
+			let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+			const cancel = () => {
+				cancelled = true;
+				if (frame !== undefined) cancelAnimationFrame(frame);
+				if (releaseTimer !== undefined) clearTimeout(releaseTimer);
+				release();
+			};
+			pendingFocus.current = cancel;
+			commitPath(targetPath, history);
 
 			const sentinelId = focusSentinelId(
 				boardData.layers ?? {},
@@ -283,6 +417,7 @@ export function useLayerNavigation({
 			const deadline = performance.now() + FOCUS_RENDER_TIMEOUT_MS;
 
 			const focusRenderedNode = () => {
+				if (cancelled) return;
 				const renderedIds = getNodes().map((rendered) => rendered.id);
 				const ready = isFocusRendered({
 					renderedIds,
@@ -308,81 +443,79 @@ export function useLayerNavigation({
 					}
 					// Held past the animation: the layer swap also changes the node count, and
 					// that effect can still be queued behind this frame.
-					setTimeout(release, FOCUS_ANIMATION_MS + 100);
+					releaseTimer = setTimeout(() => {
+						release();
+						if (pendingFocus.current === cancel)
+							pendingFocus.current = undefined;
+					}, FOCUS_ANIMATION_MS + 100);
 					return;
 				}
 
 				if (performance.now() >= deadline) {
 					console.warn("Failed to focus rendered node:", targetId);
 					release();
+					if (pendingFocus.current === cancel) pendingFocus.current = undefined;
 					// The hold has already suppressed this layer's viewport restore, so frame
 					// whatever did render rather than leaving the canvas wherever it was.
 					fitView({ duration: 300 });
 					return;
 				}
 
-				requestAnimationFrame(focusRenderedNode);
+				frame = requestAnimationFrame(focusRenderedNode);
 			};
 
-			requestAnimationFrame(focusRenderedNode);
+			frame = requestAnimationFrame(focusRenderedNode);
 		},
-		[
-			board.data,
-			layerPath,
-			fitView,
-			getNodes,
-			holdViewport,
-			saveViewport,
-			setCurrentLayer,
-			setLayerPath,
-		],
+		[cancelFocus, commitPath, currentHistory],
 	);
 
 	const pushLayer = useCallback(
 		async (pushedLayer: ILayer) => {
-			await saveViewport();
-
-			// Resolved rather than appended: functions are entered from the sidebar and from
-			// Call Function nodes anywhere on the board, so the layer being opened is often
-			// not a child of the one currently open.
-			const chain = resolveLayerChain(board.data?.layers ?? {}, pushedLayer.id);
-			const targetPath =
-				chainToPath(chain) ??
-				// Layer created in this session and not in the query cache yet.
-				(layerPath ? `${layerPath}/${pushedLayer.id}` : pushedLayer.id);
-
-			trail.current = recordVisit(trail.current, {
-				from: layerPath,
+			cancelFocus();
+			const { board, saveViewport } = latest.current;
+			const targetPath = chainToPath(
+				resolveLayerChain(
+					{
+						...board.data?.layers,
+						[pushedLayer.id]:
+							board.data?.layers?.[pushedLayer.id] ?? pushedLayer,
+					},
+					pushedLayer.id,
+				),
+			);
+			if (!targetPath || targetPath === currentPath.current) return;
+			const saving = saveViewport();
+			const history = currentHistory();
+			history.trail = recordVisit(history.trail, {
+				from: currentPath.current,
 				to: targetPath,
 			});
-
-			setCurrentLayer(pushedLayer.id);
-			setLayerPath(targetPath);
+			// Viewport persistence can finish later without overwriting a newer navigation.
+			commitPath(targetPath, history);
+			await saving;
 		},
-		[
-			board.data?.layers,
-			layerPath,
-			saveViewport,
-			setCurrentLayer,
-			setLayerPath,
-		],
+		[cancelFocus, commitPath, currentHistory],
 	);
 
 	const popLayer = useCallback(() => {
-		if (!layerPath) return;
-
-		void saveViewport();
-
-		const exit = resolveExit(trail.current, layerPath);
-		trail.current = exit.trail;
-
-		setLayerPath(exit.path);
-		setCurrentLayer(exit.path?.split("/").pop());
-	}, [layerPath, saveViewport, setCurrentLayer, setLayerPath]);
+		cancelFocus();
+		const path = currentPath.current;
+		if (!path) return;
+		void latest.current.saveViewport();
+		const history = currentHistory();
+		const exit = resolveExit(history.trail, path);
+		history.trail = exit.trail;
+		commitPath(
+			resolveLayerPath(latest.current.board.data?.layers, exit.path),
+			history,
+		);
+	}, [cancelFocus, commitPath, currentHistory]);
 
 	return {
 		focusNode,
 		pushLayer,
 		popLayer,
+		navigateToLayer,
+		forgetNavigation,
 	};
 }

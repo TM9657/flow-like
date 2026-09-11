@@ -561,9 +561,18 @@ pub fn run() {
 
     #[cfg(all(not(debug_assertions), not(target_os = "ios")))]
     {
-        // iOS release logging is initialized above. Other platforms use stderr.
+        // iOS release logging is initialized above. Other platforms use stderr,
+        // which a Windows release build does not have: the file in the log
+        // directory is then the only record of what went wrong.
+        let file_layer = settings::open_log_file().map(|file| {
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(std::sync::Arc::new(file))
+        });
+
         tracing_subscriber::registry()
             .with(tracing_subscriber::fmt::layer())
+            .with(file_layer)
             .init();
     }
 
@@ -937,6 +946,17 @@ pub fn run() {
                         }
                     };
 
+                    // An error body is still valid JSON. Caching one would
+                    // replace a good hub response with a gateway's rejection
+                    // until a later refetch happens to succeed.
+                    if !response.status().is_success() {
+                        tracing::warn!(
+                            "Skipping refetch cache update, response status {}",
+                            response.status()
+                        );
+                        continue;
+                    }
+
                     let value = match response.json::<serde_json::Value>().await {
                         Ok(value) => value,
                         Err(e) => {
@@ -1072,6 +1092,9 @@ pub fn run() {
             functions::app::app_list_packages,
             functions::app::sharing::export_app_to_file,
             functions::app::sharing::import_app_from_file,
+            functions::app::sharing::get_app_export_preflight,
+            functions::app::sharing::inspect_app_archive,
+            functions::app::sharing::cancel_archive_operation,
             functions::app::fork::apply_fork_bundle,
             functions::app::fork::summarize_local_app_bundle,
             functions::app::fork::upload_local_app_content_bundle,

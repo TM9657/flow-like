@@ -1393,6 +1393,7 @@ COMMAND TYPES:
 - AddPlaceholder: Add a placeholder with custom pins
 - ConnectPins: Connect two pins (use pin NAME, not ID)
 - UpdateNodePin: Set a pin's value
+- UpdateNodePinOptions: Make a custom events_generic output pin optional (with a default) or required again
 - RemoveNode: Delete a node
 - CreateVariable/UpdateVariable/DeleteVariable
 - CreateComment/DeleteComment
@@ -1429,7 +1430,9 @@ REF_IDS: Use '$0', '$1', etc. to reference nodes in same batch"#.to_string(),
                                                     "description": { "type": "string" },
                                                     "pin_type": { "const": "Output" },
                                                     "data_type": { "type": "string", "enum": ["String", "Integer", "Float", "Boolean", "Struct", "Geometry", "Generic", "Date", "PathBuf", "Byte"] },
-                                                    "value_type": { "type": "string", "enum": ["Normal", "Array", "HashMap", "HashSet"] }
+                                                    "value_type": { "type": "string", "enum": ["Normal", "Array", "HashMap", "HashSet"] },
+                                                    "optional": { "type": "boolean", "description": "Optional event parameter: callers may omit it and the runtime fills default_value (or the type default). Default false." },
+                                                    "default_value": { "description": "Default for an optional pin as JSON matching data_type/value_type. Requires optional: true; omitted = the type default." }
                                                 },
                                                 "required": ["name", "friendly_name", "pin_type", "data_type"]
                                             }
@@ -1508,6 +1511,16 @@ REF_IDS: Use '$0', '$1', etc. to reference nodes in same batch"#.to_string(),
                                         "summary": { "type": "string", "description": "Human-readable summary, e.g. 'Set threshold to 0.5'" }
                                     },
                                     "required": ["command_type", "node_id", "pin_id", "value", "summary"]
+                                },
+                                {
+                                    "properties": {
+                                        "command_type": { "const": "UpdateNodePinOptions" },
+                                        "node_id": { "type": "string", "description": "events_generic node ID or ref_id (e.g., '$0')" },
+                                        "pin_name": { "type": "string", "description": "Custom output pin NAME (never 'payload' or an execution pin)" },
+                                        "optional": { "type": "boolean", "description": "true marks the pin optional and stores default_value (or the type default); false makes it required again and clears the default" },
+                                        "default_value": { "description": "Default for the optional pin as JSON matching its type. Only allowed with optional: true." }
+                                    },
+                                    "required": ["command_type", "node_id", "pin_name", "optional"]
                                 },
                                 {
                                     "properties": {
@@ -1684,6 +1697,17 @@ REF_IDS: Use '$0', '$1', etc. to reference nodes in same batch"#.to_string(),
                     node_id, pin_id, ..
                 } => {
                     format!("  - UpdatePin: {}.{}", node_id, pin_id)
+                }
+                BoardCommand::UpdateNodePinOptions {
+                    node_id,
+                    pin_name,
+                    optional,
+                    ..
+                } => {
+                    format!(
+                        "  - UpdatePinOptions: {}.{} optional={}",
+                        node_id, pin_name, optional
+                    )
                 }
                 BoardCommand::CreateVariable { name, .. } => {
                     format!("  - CreateVariable: {}", name)
@@ -3377,6 +3401,15 @@ fn render_edit_flowscript_result_legacy(
             BoardCommand::UpdateNodePin {
                 node_id, pin_id, ..
             } => lines.push(format!("  - UpdatePin: {}.{}", node_id, pin_id)),
+            BoardCommand::UpdateNodePinOptions {
+                node_id,
+                pin_name,
+                optional,
+                ..
+            } => lines.push(format!(
+                "  - UpdatePinOptions: {}.{} optional={}",
+                node_id, pin_name, optional
+            )),
             BoardCommand::RemoveNode { node_id, .. } => {
                 lines.push(format!("  - RemoveNode: {}", node_id))
             }
@@ -4125,6 +4158,52 @@ mod tests {
         assert!(!listing.contains("ttl:0s"));
     }
 
+    #[tokio::test]
+    async fn legacy_emit_schema_carries_the_optional_pin_contract() {
+        let definition = EmitCommandsTool.definition(String::new()).await;
+        let variants = definition
+            .parameters
+            .pointer("/properties/commands/items/oneOf")
+            .and_then(Value::as_array)
+            .expect("command variants");
+        let variant = |command_type: &str| {
+            variants
+                .iter()
+                .find(|variant| {
+                    variant
+                        .pointer("/properties/command_type/const")
+                        .and_then(Value::as_str)
+                        == Some(command_type)
+                })
+                .unwrap_or_else(|| panic!("{command_type} schema"))
+        };
+
+        let pin_options = variant("UpdateNodePinOptions");
+        assert_eq!(
+            pin_options
+                .pointer("/properties/optional/type")
+                .and_then(Value::as_str),
+            Some("boolean")
+        );
+        assert!(pin_options.pointer("/properties/pin_name").is_some());
+        assert!(pin_options.pointer("/properties/default_value").is_some());
+        assert_eq!(
+            pin_options.pointer("/required"),
+            Some(&json!(["command_type", "node_id", "pin_name", "optional"]))
+        );
+
+        let additional_pin = variant("AddNode")
+            .pointer("/properties/additional_pins/items/properties")
+            .expect("additional pin schema");
+        assert_eq!(
+            additional_pin
+                .pointer("/optional/type")
+                .and_then(Value::as_str),
+            Some("boolean")
+        );
+        assert!(additional_pin.pointer("/default_value").is_some());
+    }
+
     #[test]
     fn model_facing_emit_schema_exposes_visual_commands_only() {
         let schema = model_facing_emit_commands_parameters();
@@ -4154,6 +4233,7 @@ mod tests {
             "ConnectPins",
             "DisconnectPins",
             "UpdateNodePin",
+            "UpdateNodePinOptions",
             "SetNodeFunctionRefs",
             "CreateVariable",
             "UpdateVariable",

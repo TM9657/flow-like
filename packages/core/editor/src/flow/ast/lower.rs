@@ -1927,10 +1927,7 @@ impl<'a> Lowering<'a> {
         let mut boundary: Vec<&Pin> = layer.pins.values().filter(|p| !is_exec(p)).collect();
         boundary.sort_by_key(|p| p.index);
         for pin in boundary {
-            let param = Param {
-                name: util::declared_name(&pin.name),
-                ty: self.type_ref_for_pin(pin),
-            };
+            let param = Param::new(util::declared_name(&pin.name), self.type_ref_for_pin(pin));
             match pin.pin_type {
                 PinType::Input => params.push(param),
                 PinType::Output => returns.push(param),
@@ -2418,9 +2415,15 @@ impl<'a> Lowering<'a> {
         for pin in outputs {
             let name = unique_name(&util::declared_name(&pin.name), &mut used);
             self.event_params.insert(pin.id.as_str(), name.clone());
+            let optional = pin.is_optional();
+            let default = optional
+                .then(|| pin.default_value.as_deref().and_then(util::decode_default))
+                .flatten();
             params.push(Param {
                 name,
                 ty: self.type_ref_for_pin(pin),
+                optional,
+                default,
             });
         }
         params

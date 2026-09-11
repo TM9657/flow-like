@@ -28,6 +28,8 @@ pub struct EventInput {
     pub value_type: String,
     pub schema: Option<String>,
     pub default_value: Option<Vec<u8>>,
+    #[serde(default)]
+    pub optional: bool,
     pub index: u16,
 }
 
@@ -776,6 +778,11 @@ impl Event {
                     value_type: format!("{:?}", pin.value_type),
                     schema: pin.schema.clone(),
                     default_value: pin.default_value.clone(),
+                    optional: pin
+                        .options
+                        .as_ref()
+                        .and_then(|o| o.optional)
+                        .unwrap_or(false),
                     index: pin.index,
                 })
                 .collect();
@@ -1866,6 +1873,7 @@ mod tests {
             value_type: "Normal".to_string(),
             schema: None,
             default_value: None,
+            optional: false,
             index: 0,
         }];
         assert!(base.content_equal(&repinned));

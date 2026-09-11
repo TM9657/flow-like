@@ -333,6 +333,30 @@ impl LanceDBVectorStore {
         Ok(tables)
     }
 
+    /// Compact fragments, rebuild indices and prune every version except the
+    /// current one. Irreversible: time travel to older versions is gone.
+    pub async fn prune_history(&self) -> Result<()> {
+        self.run_optimize_actions(prune_history_actions()).await
+    }
+
+    async fn run_optimize_actions(
+        &self,
+        actions: Vec<lancedb::table::OptimizeAction>,
+    ) -> Result<()> {
+        let table = self.table.clone().ok_or(anyhow!("Table not initialized"))?;
+        let scalar_indices = scalar_indices_for_compaction(&table).await?;
+
+        for action in actions {
+            let compacting = matches!(&action, lancedb::table::OptimizeAction::Compact { .. });
+            table.optimize(action).await?;
+            if compacting {
+                restore_compacted_scalar_indices(&table, &scalar_indices).await?;
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn add_columns(
         &self,
         transform: NewColumnTransform,
@@ -723,6 +747,23 @@ fn optimize_actions(keep_versions: bool) -> Vec<lancedb::table::OptimizeAction> 
     }
 
     actions
+}
+
+/// Compact, rebuild indices and drop every version except the current one.
+/// Used before an archive export, where the version history is dead weight.
+fn prune_history_actions() -> Vec<lancedb::table::OptimizeAction> {
+    vec![
+        lancedb::table::OptimizeAction::Compact {
+            options: CompactionOptions::default(),
+            remap_options: None,
+        },
+        lancedb::table::OptimizeAction::Index(OptimizeOptions::new()),
+        lancedb::table::OptimizeAction::Prune {
+            older_than: Some(Duration::zero()),
+            delete_unverified: Some(false),
+            error_if_tagged_old_versions: Some(false),
+        },
+    ]
 }
 
 #[derive(Debug, PartialEq)]
@@ -1117,18 +1158,8 @@ impl VectorStore for LanceDBVectorStore {
     }
 
     async fn optimize(&self, keep_versions: bool) -> Result<()> {
-        let table = self.table.clone().ok_or(anyhow!("Table not initialized"))?;
-        let scalar_indices = scalar_indices_for_compaction(&table).await?;
-
-        for action in optimize_actions(keep_versions) {
-            let compacting = matches!(&action, lancedb::table::OptimizeAction::Compact { .. });
-            table.optimize(action).await?;
-            if compacting {
-                restore_compacted_scalar_indices(&table, &scalar_indices).await?;
-            }
-        }
-
-        Ok(())
+        self.run_optimize_actions(optimize_actions(keep_versions))
+            .await
     }
 
     async fn list(

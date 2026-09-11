@@ -8451,6 +8451,7 @@ dependencies = [
  "flow-like-types",
  "futures 0.3.32",
  "geo 0.31.0",
+ "geohash",
  "h3o",
  "schemars 1.2.1",
  "serde",
@@ -9473,6 +9474,7 @@ dependencies = [
  "serde",
  "smb2",
  "tokio",
+ "tracing",
  "urlencoding",
 ]
 
@@ -30057,6 +30059,7 @@ dependencies = [
  "typed-path",
  "zeroize",
  "zopfli",
+ "zstd",
 ]
 
 [[package]]

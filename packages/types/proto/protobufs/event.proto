@@ -103,4 +103,5 @@ message EventInput {
   optional string schema = 7;
   optional bytes default_value = 8;
   uint32 index = 9;
+  bool optional = 10;
 }

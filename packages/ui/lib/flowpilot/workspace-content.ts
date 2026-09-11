@@ -281,6 +281,7 @@ export async function readWorkspaceDocument(
 				"description",
 				"data_type",
 				"value_type",
+				"optional",
 			]);
 			if (input.schema !== undefined && input.schema !== null) {
 				const schema = projectWorkspaceSchema(input.schema);

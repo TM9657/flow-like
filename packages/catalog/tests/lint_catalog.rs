@@ -606,6 +606,7 @@ async fn covered_on_update_nodes_are_hash_stable_after_second_run() {
         "a2ui_update_overlay",
         "ai_processing_extract_document_ai",
         "ai_processing_extract_documents_ai",
+        "llm_extractor_struct_schema",
         "struct_cast_to_schema",
         "struct_cast_to_struct",
     ];
