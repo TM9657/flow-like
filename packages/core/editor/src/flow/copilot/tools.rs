@@ -1518,9 +1518,10 @@ REF_IDS: Use '$0', '$1', etc. to reference nodes in same batch"#.to_string(),
                                         "node_id": { "type": "string", "description": "events_generic node ID or ref_id (e.g., '$0')" },
                                         "pin_name": { "type": "string", "description": "Custom output pin NAME (never 'payload' or an execution pin)" },
                                         "optional": { "type": "boolean", "description": "true marks the pin optional and stores default_value (or the type default); false makes it required again and clears the default" },
-                                        "default_value": { "description": "Default for the optional pin as JSON matching its type. Only allowed with optional: true." }
+                                        "default_value": { "description": "Default for the optional pin as JSON matching its type. Only allowed with optional: true." },
+                                        "summary": { "type": "string", "description": "Human-readable summary, e.g. 'Make ticketId optional'" }
                                     },
-                                    "required": ["command_type", "node_id", "pin_name", "optional"]
+                                    "required": ["command_type", "node_id", "pin_name", "optional", "summary"]
                                 },
                                 {
                                     "properties": {
@@ -4189,7 +4190,13 @@ mod tests {
         assert!(pin_options.pointer("/properties/default_value").is_some());
         assert_eq!(
             pin_options.pointer("/required"),
-            Some(&json!(["command_type", "node_id", "pin_name", "optional"]))
+            Some(&json!([
+                "command_type",
+                "node_id",
+                "pin_name",
+                "optional",
+                "summary"
+            ]))
         );
 
         let additional_pin = variant("AddNode")

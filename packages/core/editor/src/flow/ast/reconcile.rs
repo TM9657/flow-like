@@ -8416,11 +8416,17 @@ impl<'a> StructuralPlanner<'a> {
                 );
                 continue;
             }
+            let summary = Some(if param.optional {
+                format!("Make {} optional", pin.name)
+            } else {
+                format!("Make {} required", pin.name)
+            });
             self.update_commands.push(BoardCommand::UpdateNodePinOptions {
                 node_id: node.id.clone(),
                 pin_name: pin.name.clone(),
                 optional: param.optional,
                 default_value: authored_default,
+                summary,
             });
         }
     }
@@ -21585,6 +21591,7 @@ eventsSimple() {
                     pin_name,
                     optional,
                     default_value,
+                    ..
                 } => Some((
                     node_id.clone(),
                     pin_name.clone(),

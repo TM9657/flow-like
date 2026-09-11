@@ -120,6 +120,7 @@ export type BoardCommand =
 			pin_name: string;
 			optional: boolean;
 			default_value?: unknown;
+			summary?: string;
 	  }
 	| {
 			command_type: "RenameNode";

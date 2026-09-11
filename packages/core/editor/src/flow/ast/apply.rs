@@ -1123,6 +1123,7 @@ impl FlowScriptApplyPlanner {
                     pin_name,
                     optional,
                     default_value,
+                    ..
                 } => {
                     let node_id = self.resolve_node_id(board, node_id)?;
                     let mut node = self.resolve_node(board, &node_id)?.clone();
@@ -4144,6 +4145,7 @@ eventsChat() {
             pin_name: pin_name.to_string(),
             optional,
             default_value,
+            summary: None,
         }
     }
 
