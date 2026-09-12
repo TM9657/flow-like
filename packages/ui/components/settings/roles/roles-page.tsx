@@ -5,6 +5,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { Plus, SearchIcon, Shield } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useInfiniteInvoke, useInvoke } from "../../../hooks/use-invoke";
 import { useSearch } from "../../../hooks/use-search-index";
 import { RolePermissions } from "../../../lib/permission/role-permission";
@@ -12,10 +13,18 @@ import { useBackend } from "../../../state/backend-state";
 import type { IBackendRole } from "../../../state/backend-state/types";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
+import { SectionLockedPanel } from "../permission/permission-gate";
+import { PermissionNotice } from "../permission/permission-notice";
 import { type RoleTemplate, permissionsFromTemplate } from "./access-ladders";
 import { RoleEditor } from "./role-editor";
 import { LadderKey, RoleRow } from "./role-row";
 import { TemplatePicker } from "./role-templates";
+
+/** The server answered "not yours to read" rather than failing. */
+function isPermissionDenied(error: unknown): boolean {
+	const status = (error as { status?: number } | null | undefined)?.status;
+	return status === 401 || status === 403;
+}
 
 function emptyRole(appId: string, template: RoleTemplate): IBackendRole {
 	const now = new Date().toISOString();
@@ -38,18 +47,25 @@ export function RolesPage() {
 	const backend = useBackend();
 	const enabled = appId.length > 0;
 
+	const permissions = useAppPermissions(appId);
+	/** `GET /apps/{id}/roles` checks `ReadRoles`. */
+	const canReadRoles = permissions.can(RolePermissions.ReadRoles);
+	/** Every role mutation is `ensure_permission!(.., Admin)`. */
+	const canManageRoles = permissions.can(RolePermissions.Admin);
+	const canReadTeam = permissions.can(RolePermissions.ReadTeam);
+
 	const roles = useInvoke(
 		backend.roleState.getRoles,
 		backend.roleState,
 		[appId],
-		enabled,
+		enabled && canReadRoles,
 	);
 	const team = useInfiniteInvoke(
 		backend.teamState.getTeam,
 		backend.teamState,
 		[appId],
 		50,
-		enabled,
+		enabled && canReadTeam,
 	);
 
 	const [openRoleId, setOpenRoleId] = useState<string | undefined>();
@@ -70,6 +86,14 @@ export function RolesPage() {
 		}
 		return counts;
 	}, [team.data, team.isError]);
+
+	/**
+	 * A denied read must not fall through to "No roles found". `can` degrades
+	 * open while the role is unknown, so a 403 that comes back anyway counts
+	 * too — but only a denial, never a plain request failure.
+	 */
+	const rolesLocked =
+		enabled && (!canReadRoles || isPermissionDenied(roles.error));
 
 	const allRoles = useMemo(() => {
 		const persisted = roles.data?.[1] ?? [];
@@ -135,33 +159,39 @@ export function RolesPage() {
 			if (isDirty && !confirm("Discard unsaved changes to this role?")) return;
 			setIsNewRole(false);
 			setOpenRoleId(role.id);
-			setDraft({ ...role, attributes: [...(role.attributes ?? [])] });
+			// Without Admin there is no editor to feed, and an untouched draft
+			// would only arm the save bar behind a button the server refuses.
+			setDraft(
+				canManageRoles
+					? { ...role, attributes: [...(role.attributes ?? [])] }
+					: undefined,
+			);
 		},
-		[openRoleId, isDirty, closeDraft],
+		[openRoleId, isDirty, closeDraft, canManageRoles],
 	);
 
 	const createFromTemplate = useCallback(
 		(template: RoleTemplate) => {
-			if (!appId) return;
+			if (!appId || !canManageRoles) return;
 			const role = emptyRole(appId, template);
 			setShowTemplates(false);
 			setIsNewRole(true);
 			setOpenRoleId(role.id);
 			setDraft(role);
 		},
-		[appId],
+		[appId, canManageRoles],
 	);
 
 	const handleSave = useCallback(async () => {
-		if (!appId || !draft) return;
+		if (!appId || !draft || !canManageRoles) return;
 		await backend.roleState.upsertRole(appId, { ...draft, app_id: appId });
 		await roles.refetch();
 		setIsNewRole(false);
-	}, [appId, backend, draft, roles]);
+	}, [appId, backend, draft, roles, canManageRoles]);
 
 	const handleDuplicate = useCallback(
 		async (role: IBackendRole) => {
-			if (!appId) return;
+			if (!appId || !canManageRoles) return;
 			const cleaned = new RolePermissions(BigInt(role.permissions))
 				.remove(RolePermissions.Owner)
 				.remove(RolePermissions.Admin);
@@ -174,12 +204,12 @@ export function RolesPage() {
 			closeDraft();
 			await roles.refetch();
 		},
-		[appId, backend, roles, closeDraft],
+		[appId, backend, roles, closeDraft, canManageRoles, t],
 	);
 
 	const handleDelete = useCallback(
 		async (roleId: string) => {
-			if (!appId) return;
+			if (!appId || !canManageRoles) return;
 			if (isNewRole) {
 				closeDraft();
 				return;
@@ -188,16 +218,16 @@ export function RolesPage() {
 			closeDraft();
 			await roles.refetch();
 		},
-		[appId, backend, roles, isNewRole, closeDraft],
+		[appId, backend, roles, isNewRole, closeDraft, canManageRoles],
 	);
 
 	const handleSetDefault = useCallback(
 		async (roleId: string) => {
-			if (!appId) return;
+			if (!appId || !canManageRoles) return;
 			await backend.roleState.makeRoleDefault(appId, roleId);
 			await roles.refetch();
 		},
-		[appId, backend, roles],
+		[appId, backend, roles, canManageRoles],
 	);
 
 	const affected = openRoleId ? (memberCounts?.get(openRoleId) ?? 0) : 0;
@@ -218,94 +248,148 @@ export function RolesPage() {
 								)}
 							</p>
 						</div>
-						<div className="flex items-center gap-2">
-							<div className="relative">
-								<SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-								<Input
-									placeholder={t("searchRoles", "Search roles")}
-									value={searchTerm}
-									onChange={(event) => setSearchTerm(event.target.value)}
-									className="pl-8 w-44"
-								/>
-							</div>
-							<Button onClick={() => setShowTemplates(true)}>
-								<Plus className="h-4 w-4 mr-2" />
-								{t("newRole", "New role")}
-							</Button>
-						</div>
-					</div>
-
-					{showTemplates && (
-						<TemplatePicker
-							onPick={createFromTemplate}
-							onCancel={() => setShowTemplates(false)}
-						/>
-					)}
-
-					{visibleRoles.length > 0 && <LadderKey />}
-
-					<div className="flex flex-col gap-2">
-						{visibleRoles.map((role) => {
-							const isOpen = role.id === openRoleId;
-							const shown = isOpen && draft ? draft : role;
-							return (
-								<RoleRow
-									key={role.id}
-									role={shown}
-									isDefault={role.id === defaultRoleId}
-									isOpen={isOpen}
-									memberCount={
-										isNewRole && isOpen ? 0 : memberCounts?.get(role.id)
-									}
-									onToggle={() => toggleRole(role)}
-								>
-									{isOpen && draft && (
-										<RoleEditor
-											role={draft}
-											memberCount={isNewRole ? 0 : memberCounts?.get(role.id)}
-											isDefault={role.id === defaultRoleId}
-											knownAttributes={knownAttributes}
-											onChange={setDraft}
-											onDuplicate={() => handleDuplicate(role)}
-											onDelete={() => handleDelete(role.id)}
-											onSetDefault={() => handleSetDefault(role.id)}
-										/>
-									)}
-								</RoleRow>
-							);
-						})}
-					</div>
-
-					{visibleRoles.length === 0 && (
-						<div className="text-center py-12">
-							<Shield className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
-							<h3 className="text-base font-semibold mb-1">
-								{t("noRolesFound", "No roles found")}
-							</h3>
-							<p className="text-sm text-muted-foreground mb-4">
-								{searchTerm
-									? t("tryADifferentSearchTerm", "Try a different search term.")
-									: t(
-											"createYourFirstRoleToGetStarted",
-											"Create your first role to get started.",
-										)}
-							</p>
-							{!searchTerm && (
+						{!rolesLocked && (
+							<div className="flex items-center gap-2">
+								<div className="relative">
+									<SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+									<Input
+										placeholder={t("searchRoles", "Search roles")}
+										value={searchTerm}
+										onChange={(event) => setSearchTerm(event.target.value)}
+										className="pl-8 w-44"
+									/>
+								</div>
 								<Button
-									variant="outline"
-									size="sm"
 									onClick={() => setShowTemplates(true)}
+									disabled={!canManageRoles}
 								>
 									<Plus className="h-4 w-4 mr-2" />
 									{t("newRole", "New role")}
 								</Button>
+							</div>
+						)}
+					</div>
+
+					{rolesLocked ? (
+						<SectionLockedPanel
+							feature={t("roles", "Roles")}
+							description={t(
+								"yourRoleCannotSeeHowAccessIsConfiguredOnThisProject",
+								"Your role cannot see how access is configured on this project.",
 							)}
-						</div>
+							missing={[RolePermissions.ReadRoles]}
+							roleName={permissions.roleName}
+						/>
+					) : (
+						<>
+							{!canManageRoles && (
+								<PermissionNotice
+									tone="readOnly"
+									title={t(
+										"rolesAreReadOnlyForYourRole",
+										"Roles are read-only for your role",
+									)}
+									description={t(
+										"youCanSeeWhatEachRoleReachesButOnlyAnAdministratorCanCreateEditOrDeleteThem",
+										"You can see what each role reaches, but only an administrator can create, edit or delete them.",
+									)}
+									missing={[RolePermissions.Admin]}
+								/>
+							)}
+
+							{showTemplates && canManageRoles && (
+								<TemplatePicker
+									onPick={createFromTemplate}
+									onCancel={() => setShowTemplates(false)}
+								/>
+							)}
+
+							{visibleRoles.length > 0 && <LadderKey />}
+
+							<div className="flex flex-col gap-2">
+								{visibleRoles.map((role) => {
+									const isOpen = role.id === openRoleId;
+									const shown = isOpen && draft ? draft : role;
+									return (
+										<RoleRow
+											key={role.id}
+											role={shown}
+											isDefault={role.id === defaultRoleId}
+											isOpen={isOpen}
+											memberCount={
+												isNewRole && isOpen ? 0 : memberCounts?.get(role.id)
+											}
+											onToggle={() => toggleRole(role)}
+										>
+											{isOpen &&
+												(draft ? (
+													<RoleEditor
+														role={draft}
+														memberCount={
+															isNewRole ? 0 : memberCounts?.get(role.id)
+														}
+														isDefault={role.id === defaultRoleId}
+														knownAttributes={knownAttributes}
+														onChange={setDraft}
+														onDuplicate={() => handleDuplicate(role)}
+														onDelete={() => handleDelete(role.id)}
+														onSetDefault={() => handleSetDefault(role.id)}
+													/>
+												) : (
+													<PermissionNotice
+														tone="readOnly"
+														className="m-4"
+														title={t(
+															"editingThisRoleNeedsAdministratorAccess",
+															"Editing this role needs administrator access",
+														)}
+														description={t(
+															"theGaugesAboveShowWhatThisRoleReachesAskAnOwnerOrAdminToChangeIt",
+															"The gauges above show what this role reaches. Ask an owner or admin to change it.",
+														)}
+														missing={[RolePermissions.Admin]}
+													/>
+												))}
+										</RoleRow>
+									);
+								})}
+							</div>
+
+							{visibleRoles.length === 0 && (
+								<div className="text-center py-12">
+									<Shield className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+									<h3 className="text-base font-semibold mb-1">
+										{t("noRolesFound", "No roles found")}
+									</h3>
+									<p className="text-sm text-muted-foreground mb-4">
+										{searchTerm
+											? t(
+													"tryADifferentSearchTerm",
+													"Try a different search term.",
+												)
+											: t(
+													"createYourFirstRoleToGetStarted",
+													"Create your first role to get started.",
+												)}
+									</p>
+									{!searchTerm && canManageRoles && (
+										<Button
+											variant="outline"
+											size="sm"
+											onClick={() => setShowTemplates(true)}
+										>
+											<Plus className="h-4 w-4 mr-2" />
+											{t("newRole", "New role")}
+										</Button>
+									)}
+								</div>
+							)}
+						</>
 					)}
 				</div>
 			</div>
 
-			{isDirty && draft && (
+			{isDirty && draft && canManageRoles && (
 				<div className="flex items-center gap-3 px-4 py-2.5 border-t bg-card">
 					<p className="flex-1 text-sm text-muted-foreground">
 						<span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mr-2 align-middle" />

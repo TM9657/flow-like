@@ -7,12 +7,16 @@ import { useMemo } from "react";
 import type { IEvent } from "../../../lib";
 import { formatRelativeTime } from "../../../lib/date";
 import { formatEventTypeLabel } from "../../../lib/event-type-label";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import type { PageListItem } from "../../../state/backend-state/page-state";
 import type { IRouteMapping } from "../../../state/backend-state/route-state";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
+import { PermissionNotice } from "../permission";
 import { EmptyHint, SectionCard, StateDot } from "./dashboard-primitives";
 import type { SurfaceRunHealth } from "./use-project-runs";
+import type { DashboardPermissions } from "./use-project-signals";
 
 export interface ProjectSurface {
 	id: string;
@@ -92,33 +96,88 @@ export function SurfacesTable({
 	appId,
 	surfaces,
 	limit,
-}: Readonly<{ appId: string; surfaces: ProjectSurface[]; limit?: number }>) {
+	permissions,
+}: Readonly<{
+	appId: string;
+	surfaces: ProjectSurface[];
+	limit?: number;
+	permissions: DashboardPermissions;
+}>) {
 	const { t } = useTranslation("settings");
 	const shown = limit ? surfaces.slice(0, limit) : surfaces;
 	const manageHref = `/library/config/pages?id=${appId}`;
+	// Triggers and routes are `ListEvents`; the pages they open are `ReadBoards`.
+	// A denial on either leaves the list incomplete, so it has to be named —
+	// "no triggers yet" and "you cannot see the triggers" lead opposite ways.
+	const missingReads = [
+		...(permissions.canListEvents ? [] : [RolePermissions.ListEvents]),
+		...(permissions.canReadBoards ? [] : [RolePermissions.ReadBoards]),
+	];
+	const partial = missingReads.length > 0;
 
 	return (
 		<SectionCard
-			title="Surfaces"
+			title={t("surfaces", "Surfaces")}
 			icon={GlobeIcon}
-			count={surfaces.length}
+			count={partial ? undefined : surfaces.length}
 			contentClassName="p-0"
 			action={
-				<Link href={manageHref}>
-					<Button variant="ghost" size="sm" className="gap-1 text-xs">
-						Manage
-						<ArrowRightIcon className="h-3 w-3" />
-					</Button>
-				</Link>
+				permissions.canWriteEvents ? (
+					<Link href={manageHref}>
+						<Button variant="ghost" size="sm" className="gap-1 text-xs">
+							{t("manage", "Manage")}
+							<ArrowRightIcon className="h-3 w-3" />
+						</Button>
+					</Link>
+				) : (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<span>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="gap-1 text-xs"
+									disabled
+								>
+									{t("manage", "Manage")}
+									<ArrowRightIcon className="h-3 w-3" />
+								</Button>
+							</span>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{t(
+								"yourRoleCannotChangeThisProjectsTriggers",
+								"Your role cannot change this project's triggers.",
+							)}
+						</TooltipContent>
+					</Tooltip>
+				)
 			}
 		>
+			{partial && (
+				<div className="p-3">
+					<PermissionNotice
+						title={t("someSurfacesAreHidden", "Some surfaces are hidden")}
+						description={t(
+							"yourRoleCannotSeeEveryWayIntoThisAppSoThisListIsIncomplete",
+							"Your role cannot see every way into this app, so this list is incomplete.",
+						)}
+						missing={missingReads}
+						requireAll
+					/>
+				</div>
+			)}
 			{surfaces.length === 0 ? (
-				<EmptyHint>
-					{t("noTriggersYet", "No triggers yet.")}{" "}
-					<Link href={manageHref} className="text-primary hover:underline">
-						{t("setUpAnEvent", "Set up an event")}
-					</Link>
-				</EmptyHint>
+				!partial && (
+					<EmptyHint>
+						{t("noTriggersYet", "No triggers yet.")}{" "}
+						{permissions.canWriteEvents ? (
+							<Link href={manageHref} className="text-primary hover:underline">
+								{t("setUpAnEvent", "Set up an event")}
+							</Link>
+						) : null}
+					</EmptyHint>
+				)
 			) : (
 				<div className="overflow-x-auto">
 					<table className="w-full text-sm">

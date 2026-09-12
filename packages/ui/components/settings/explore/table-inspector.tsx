@@ -5,13 +5,20 @@ import { AlertTriangle, Database, RefreshCw } from "lucide-react";
 import type React from "react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useInvoke } from "../../../hooks/use-invoke";
 import { cn } from "../../../lib";
 import { getErrorMessage } from "../../../lib/error-message";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import { useBackend } from "../../../state/backend-state";
 import { parseIndexType } from "../../../state/backend-state/db-state";
 import { Button } from "../../ui/button";
 import LanceDBExplorer from "../../ui/lance-viewer";
+import { SectionLockedPanel } from "../permission/permission-gate";
+import { PermissionNotice } from "../permission/permission-notice";
+
+const READ_DATA = [RolePermissions.ReadFiles, RolePermissions.ReadDatabase];
+const WRITE_DATA = [RolePermissions.WriteFiles, RolePermissions.WriteDatabase];
 
 export const DEFAULT_TABLE_PAGE_SIZE = 25;
 
@@ -43,6 +50,9 @@ export function TableInspector({
 }: Readonly<TableInspectorProps>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
+	const permissions = useAppPermissions(appId);
+	const canRead = permissions.can(...READ_DATA);
+	const canWrite = permissions.can(...WRITE_DATA);
 
 	const [internalPage, setInternalPage] = useState(page ?? 1);
 	const [internalPageSize, setInternalPageSize] = useState(
@@ -64,7 +74,8 @@ export function TableInspector({
 
 	// Backends without a database (the website's empty state) throw on every
 	// call, so nothing may be requested before a table is actually selected.
-	const enabled = Boolean(appId) && Boolean(table);
+	const hasTarget = Boolean(appId) && Boolean(table);
+	const enabled = hasTarget && canRead;
 
 	const schema = useInvoke(
 		backend.dbState.getSchema,
@@ -279,7 +290,7 @@ export function TableInspector({
 		className,
 	);
 
-	if (!enabled) {
+	if (!hasTarget) {
 		return (
 			<TableInspectorNotice
 				className={containerCls}
@@ -291,6 +302,35 @@ export function TableInspector({
 			>
 				{children}
 			</TableInspectorNotice>
+		);
+	}
+
+	if (permissions.isLoading) {
+		return (
+			<TableInspectorSkeleton className={containerCls} tableName={table}>
+				{children}
+			</TableInspectorSkeleton>
+		);
+	}
+
+	// An empty grid reads as "this table has no rows", which is the opposite of
+	// "you may not read it" — so a denial replaces the grid instead of filling it.
+	if (!canRead) {
+		return (
+			<div className={cn(containerCls, "p-4 gap-4")}>
+				<TableInspectorHeader tableName={table}>
+					{children}
+				</TableInspectorHeader>
+				<SectionLockedPanel
+					feature={t("tableData", "Table data")}
+					description={t(
+						"yourRoleCannotReadThisProjectsTables",
+						"Your role cannot read this project's tables, so this table's rows, schema and indexes stay hidden.",
+					)}
+					missing={READ_DATA}
+					roleName={permissions.roleName}
+				/>
+			</div>
 		);
 	}
 
@@ -324,6 +364,18 @@ export function TableInspector({
 
 	return (
 		<div className={containerCls}>
+			{!canWrite && (
+				<PermissionNotice
+					tone="readOnly"
+					className="mb-3 shrink-0"
+					title={t("tableIsReadOnly", "This table is read-only for you")}
+					description={t(
+						"editingRowsColumnsAndIndexesNeedsWriteAccess",
+						"Editing rows, adding or altering columns, building indexes and optimizing are hidden because your role cannot write this project's data.",
+					)}
+					missing={WRITE_DATA}
+				/>
+			)}
 			<LanceDBExplorer
 				appId={appId}
 				total={count.data}
@@ -338,14 +390,14 @@ export function TableInspector({
 				loading={list.isLoading}
 				error={list.error?.message}
 				onRefresh={handleRefresh}
-				onOptimize={handleOptimize}
-				onUpdateItem={handleUpdateItem}
-				onDropColumns={handleDropColumns}
-				onAddColumn={handleAddColumn}
-				onAlterColumn={handleAlterColumn}
+				onOptimize={canWrite ? handleOptimize : undefined}
+				onUpdateItem={canWrite ? handleUpdateItem : undefined}
+				onDropColumns={canWrite ? handleDropColumns : undefined}
+				onAddColumn={canWrite ? handleAddColumn : undefined}
+				onAlterColumn={canWrite ? handleAlterColumn : undefined}
 				onGetIndices={handleGetIndices}
-				onDropIndex={handleDropIndex}
-				onBuildIndex={handleBuildIndex}
+				onDropIndex={canWrite ? handleDropIndex : undefined}
+				onBuildIndex={canWrite ? handleBuildIndex : undefined}
 			>
 				{children}
 			</LanceDBExplorer>

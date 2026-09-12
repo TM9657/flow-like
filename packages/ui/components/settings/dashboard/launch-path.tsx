@@ -6,6 +6,7 @@ import {
 	CheckIcon,
 	CopyIcon,
 	EyeIcon,
+	KeyRoundIcon,
 	LockIcon,
 	PlayCircleIcon,
 	PlusIcon,
@@ -16,18 +17,21 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { IApp, IBoardListing } from "../../../lib";
-import { IAppVisibility } from "../../../lib";
+import { IAppVisibility, RolePermissions } from "../../../lib";
 import { formatDuration, formatRelativeTime } from "../../../lib/date";
 import { cn } from "../../../lib/utils";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
+import { PermissionNotice, SectionLockCallout } from "../permission";
 import { Meter, SectionCard, StateDot } from "./dashboard-primitives";
+import { GuardedAction } from "./project-identity-row";
 import type { ProjectSurface } from "./surfaces-table";
 import type { ProjectRunHealth } from "./use-project-runs";
 import {
 	type AiActStatus,
 	type AttentionSignal,
+	type DashboardPermissions,
 	type InspectorPanel,
 	type ListingChecklistItem,
 	isOnlineVisibility,
@@ -113,9 +117,21 @@ function RailSignalRow({
 			: signal.tone === "warning"
 				? "warn"
 				: "idle";
+	const LockGlyph = signal.lock === "visibility" ? KeyRoundIcon : LockIcon;
 	const body = (
 		<>
-			<StateDot tone={tone} />
+			{signal.lock ? (
+				<LockGlyph
+					className={cn(
+						"size-3 shrink-0",
+						signal.lock === "visibility"
+							? "text-primary"
+							: "text-muted-foreground",
+					)}
+				/>
+			) : (
+				<StateDot tone={tone} />
+			)}
 			<span className="min-w-0 flex-1 truncate">{signal.label}</span>
 			{signal.stage && (
 				<span className="shrink-0 text-[10px] text-muted-foreground">
@@ -144,24 +160,15 @@ function RailSignalRow({
 	);
 }
 
-function Blocker({
-	children,
-	action,
-}: Readonly<{ children: ReactNode; action?: ReactNode }>) {
-	return (
-		<div className="flex flex-wrap items-center gap-3 rounded-md border border-dashed border-blue-500/40 bg-blue-500/5 px-3 py-2.5 text-xs">
-			<LockIcon className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-			<span className="min-w-0 flex-1">{children}</span>
-			{action}
-		</div>
-	);
-}
-
 /**
  * The lifecycle dashboard. A young project's real question is "what next", so
  * the page is ordered by dependency: each stage shows only its own controls,
  * finished stages collapse to a summary, and a locked stage states the blocker
  * next to the control that clears it.
+ *
+ * A stage whose data this account cannot read says so instead of reporting the
+ * work as not started: "no flows yet" and "you cannot see the flows" ask for
+ * opposite next steps.
  */
 export function LaunchPath({
 	appId,
@@ -173,6 +180,7 @@ export function LaunchPath({
 	listing,
 	listingDone,
 	signals,
+	permissions,
 	onOpenPanel,
 }: Readonly<{
 	appId: string;
@@ -184,6 +192,7 @@ export function LaunchPath({
 	listing: ListingChecklistItem[];
 	listingDone: number;
 	signals: AttentionSignal[];
+	permissions: DashboardPermissions;
 	onOpenPanel: (panel: InspectorPanel) => void;
 }>) {
 	const { t } = useTranslation("settings");
@@ -194,14 +203,46 @@ export function LaunchPath({
 	const hasRun = runs.hasEverRun;
 	const listed = isOnlineVisibility(app.visibility);
 	const canInvite = listed;
+	const canEditListing = permissions.canWriteMeta || permissions.canWriteApp;
+	const ownerOnly = t(
+		"onlyAnOwnerCanChangeThis",
+		"Only an owner can change this.",
+	);
+
+	// A stage whose inputs this role cannot read is unknown, not unstarted. The
+	// empty list a denial leaves behind is otherwise indistinguishable from a
+	// project that has nothing in it, and the whole ladder then reports a mature
+	// app as sitting at stage one with "Start here" on it.
+	const logicHidden = !permissions.canReadBoards;
+	const triggersHidden = !permissions.canListEvents;
+	const runsHidden = runs.denied;
+	const publicationHidden = aiAct.applicable && !aiAct.readable;
+	const anyHidden =
+		logicHidden || triggersHidden || runsHidden || publicationHidden;
 
 	const stageStates: StageState[] = [
-		hasLogic ? "done" : "current",
-		!hasLogic ? "todo" : hasTriggers ? "done" : "current",
-		!hasTriggers ? "todo" : hasRun ? "done" : "current",
+		logicHidden ? "blocked" : hasLogic ? "done" : "current",
+		logicHidden || triggersHidden
+			? "blocked"
+			: !hasLogic
+				? "todo"
+				: hasTriggers
+					? "done"
+					: "current",
+		triggersHidden || runsHidden
+			? "blocked"
+			: !hasTriggers
+				? "todo"
+				: hasRun
+					? "done"
+					: "current",
 		canInvite ? "done" : hasRun ? "blocked" : "todo",
 		listingDone === listing.length ? "done" : "todo",
-		listed && aiAct.hasAssessment ? "done" : "todo",
+		publicationHidden
+			? "blocked"
+			: listed && aiAct.hasAssessment
+				? "done"
+				: "todo",
 	];
 	const completed = stageStates.filter((state) => state === "done").length;
 	const currentIndex = stageStates.findIndex((state) => state === "current");
@@ -216,20 +257,27 @@ export function LaunchPath({
 						{t("launchProgress", "Launch progress")}
 					</span>
 					<span className="text-xs text-muted-foreground">
-						{currentIndex >= 0
-							? t("stageValOfLength", "stage {{val}} of {{length}}", {
-									val: currentIndex + 1,
-									length: stageStates.length,
-								})
-							: t(
-									"completedOfLengthComplete",
-									"{{completed}} of {{length}} complete",
-									{ completed, length: stageStates.length },
-								)}
+						{anyHidden
+							? t(
+									"someStagesAreHiddenFromYourRole",
+									"some stages are hidden from your role",
+								)
+							: currentIndex >= 0
+								? t("stageValOfLength", "stage {{val}} of {{length}}", {
+										val: currentIndex + 1,
+										length: stageStates.length,
+									})
+								: t(
+										"completedOfLengthComplete",
+										"{{completed}} of {{length}} complete",
+										{ completed, length: stageStates.length },
+									)}
 					</span>
-					<div className="ml-auto w-40">
-						<Meter value={completed} total={stageStates.length} />
-					</div>
+					{!anyHidden && (
+						<div className="ml-auto w-40">
+							<Meter value={completed} total={stageStates.length} />
+						</div>
+					)}
 				</div>
 
 				{/* 1 — build */}
@@ -240,6 +288,10 @@ export function LaunchPath({
 						stageStates[0] === "done" ? (
 							<Badge variant="secondary" className="text-[10px]">
 								{t("done", "Done")}
+							</Badge>
+						) : stageStates[0] === "blocked" ? (
+							<Badge variant="outline" className="text-[10px]">
+								{t("hidden", "Hidden")}
 							</Badge>
 						) : (
 							<Badge className="text-[10px]">
@@ -261,7 +313,16 @@ export function LaunchPath({
 							: undefined
 					}
 				>
-					{hasLogic ? (
+					{!permissions.canReadBoards ? (
+						<PermissionNotice
+							title={t("flowsAreHidden", "Flows are hidden")}
+							description={t(
+								"yourRoleCannotListThisProjectsFlowsThisIsNotAnEmptyProject",
+								"Your role cannot list this project's flows. This is not an empty project.",
+							)}
+							missing={[RolePermissions.ReadBoards]}
+						/>
+					) : hasLogic ? (
 						<Card className="gap-0 p-1.5">
 							{boards.slice(0, 4).map((board) => (
 								<Link
@@ -292,18 +353,72 @@ export function LaunchPath({
 								{`A flow is the logic your app runs. Start from a blank canvas, a template, or describe what you want and let FlowPilot draft it.`}
 							</p>
 							<div className="flex shrink-0 flex-wrap gap-2 sm:ml-auto">
-								<Link href={`/library/config/flows?id=${appId}`}>
-									<Button size="sm">
-										<PlusIcon className="mr-1.5 h-3 w-3" />
-										{t("newFlow", "New flow")}
-									</Button>
-								</Link>
-								<Link href={`/library/config/templates?id=${appId}`}>
-									<Button variant="outline" size="sm">
-										<CopyIcon className="mr-1.5 h-3 w-3" />
-										{t("fromTemplate", "From template")}
-									</Button>
-								</Link>
+								<GuardedAction
+									allowed={permissions.canWriteBoards}
+									reason={t(
+										"yourRoleCannotCreateFlowsInThisProject",
+										"Your role cannot create flows in this project.",
+									)}
+								>
+									<Link
+										href={`/library/config/flows?id=${appId}`}
+										aria-disabled={!permissions.canWriteBoards}
+										tabIndex={permissions.canWriteBoards ? undefined : -1}
+										className={cn(
+											!permissions.canWriteBoards &&
+												"pointer-events-none opacity-60",
+										)}
+									>
+										<Button size="sm" disabled={!permissions.canWriteBoards}>
+											<PlusIcon className="mr-1.5 h-3 w-3" />
+											{t("newFlow", "New flow")}
+										</Button>
+									</Link>
+								</GuardedAction>
+								<GuardedAction
+									allowed={
+										permissions.canWriteBoards && permissions.canReadTemplates
+									}
+									reason={t(
+										"yourRoleCannotStartAFlowFromATemplate",
+										"Your role cannot start a flow from a template.",
+									)}
+								>
+									<Link
+										href={`/library/config/templates?id=${appId}`}
+										aria-disabled={
+											!(
+												permissions.canWriteBoards &&
+												permissions.canReadTemplates
+											)
+										}
+										tabIndex={
+											permissions.canWriteBoards && permissions.canReadTemplates
+												? undefined
+												: -1
+										}
+										className={cn(
+											!(
+												permissions.canWriteBoards &&
+												permissions.canReadTemplates
+											) && "pointer-events-none opacity-60",
+										)}
+									>
+										<Button
+											variant="outline"
+											size="sm"
+											disabled={
+												!(
+													permissions.canWriteBoards &&
+													permissions.canReadTemplates
+												)
+											}
+										>
+											<CopyIcon className="mr-1.5 h-3 w-3" />
+											{t("fromTemplate", "From template")}
+										</Button>
+									</Link>
+								</GuardedAction>
 							</div>
 						</Card>
 					)}
@@ -330,12 +445,21 @@ export function LaunchPath({
 									length: activeSurfaces.length,
 									length2: surfaces.length,
 								})
-							: hasLogic
+							: hasLogic || logicHidden
 								? undefined
 								: t("needsAtLeastOneFlow", "Needs at least one flow")
 					}
 				>
-					{surfaces.length > 0 ? (
+					{!permissions.canListEvents ? (
+						<PermissionNotice
+							title={t("triggersAreHidden", "Triggers are hidden")}
+							description={t(
+								"yourRoleCannotListThisProjectsTriggersOrRoutes",
+								"Your role cannot list this project's triggers or routes.",
+							)}
+							missing={[RolePermissions.ListEvents]}
+						/>
+					) : surfaces.length > 0 ? (
 						<div className="flex flex-wrap gap-2">
 							{surfaces.slice(0, 6).map((surface) => (
 								<span
@@ -358,15 +482,30 @@ export function LaunchPath({
 									"A trigger decides when your flows run — an incoming message, a schedule, a page someone opens, or an API call.",
 								)}
 							</p>
-							<Link
-								href={`/library/config/pages?id=${appId}`}
+							<GuardedAction
+								allowed={permissions.canWriteEvents}
+								reason={t(
+									"yourRoleCannotChangeThisProjectsTriggers",
+									"Your role cannot change this project's triggers.",
+								)}
 								className="shrink-0 sm:ml-auto"
 							>
-								<Button size="sm">
-									<SparklesIcon className="mr-1.5 h-3 w-3" />
-									{t("setUpEvents", "Set up events")}
-								</Button>
-							</Link>
+								<Link
+									href={`/library/config/pages?id=${appId}`}
+									aria-disabled={!permissions.canWriteEvents}
+									tabIndex={permissions.canWriteEvents ? undefined : -1}
+									className={cn(
+										"shrink-0 sm:ml-auto",
+										!permissions.canWriteEvents &&
+											"pointer-events-none opacity-60",
+									)}
+								>
+									<Button size="sm" disabled={!permissions.canWriteEvents}>
+										<SparklesIcon className="mr-1.5 h-3 w-3" />
+										{t("setUpEvents", "Set up events")}
+									</Button>
+								</Link>
+							</GuardedAction>
 						</Card>
 					) : null}
 				</StageRow>
@@ -399,14 +538,25 @@ export function LaunchPath({
 												: "",
 									},
 								)
-							: hasTriggers
+							: hasTriggers || triggersHidden
 								? undefined
 								: t("needsATrigger", "Needs a trigger")
 					}
 				>
-					{hasTriggers && (
+					{/* Triggers this role cannot list leave `hasTriggers` false, which
+					    would take the run-history notice and the run controls with it. */}
+					{(hasTriggers || triggersHidden) && (
 						<Card className="space-y-3 p-4">
-							{hasRun ? (
+							{runs.denied ? (
+								<PermissionNotice
+									title={t("runHistoryIsHidden", "Run history is hidden")}
+									description={t(
+										"yourRoleCannotReadThisProjectsRunLogSoThisStageCannotBeConfirmed",
+										"Your role cannot read this project's run log, so this stage cannot be confirmed from here.",
+									)}
+									missing={[RolePermissions.ReadBoards]}
+								/>
+							) : hasRun ? (
 								<div className="space-y-1.5">
 									{[...runs.byBoard.entries()]
 										.slice(0, 4)
@@ -456,20 +606,47 @@ export function LaunchPath({
 									)}
 								</p>
 							)}
-							<div className="flex flex-wrap gap-2">
-								<Link href={`/use?id=${appId}`}>
-									<Button size="sm" variant={hasRun ? "outline" : "default"}>
-										<PlayCircleIcon className="mr-1.5 h-3 w-3" />
-										{t("runIt", "Run it")}
-									</Button>
-								</Link>
-								<Link href={`/use?id=${appId}`}>
-									<Button variant="outline" size="sm">
-										<EyeIcon className="mr-1.5 h-3 w-3" />
-										{t("previewAsUser", "Preview as user")}
-									</Button>
-								</Link>
-							</div>
+							<GuardedAction
+								allowed={permissions.canExecute}
+								reason={t(
+									"yourRoleCannotRunThisProject",
+									"Your role cannot run this project.",
+								)}
+							>
+								<div
+									className={cn(
+										"flex flex-wrap gap-2",
+										!permissions.canExecute && "pointer-events-none opacity-60",
+									)}
+								>
+									<Link
+										href={`/use?id=${appId}`}
+										tabIndex={permissions.canExecute ? undefined : -1}
+									>
+										<Button
+											size="sm"
+											variant={hasRun ? "outline" : "default"}
+											disabled={!permissions.canExecute}
+										>
+											<PlayCircleIcon className="mr-1.5 h-3 w-3" />
+											{t("runIt", "Run it")}
+										</Button>
+									</Link>
+									<Link
+										href={`/use?id=${appId}`}
+										tabIndex={permissions.canExecute ? undefined : -1}
+									>
+										<Button
+											variant="outline"
+											size="sm"
+											disabled={!permissions.canExecute}
+										>
+											<EyeIcon className="mr-1.5 h-3 w-3" />
+											{t("previewAsUser", "Preview as user")}
+										</Button>
+									</Link>
+								</div>
+							</GuardedAction>
 						</Card>
 					)}
 				</StageRow>
@@ -493,23 +670,73 @@ export function LaunchPath({
 				>
 					{canInvite ? (
 						<div className="flex flex-wrap gap-2">
-							<Link href={`/library/config/team?id=${appId}`}>
-								<Button variant="outline" size="sm">
-									{t("manageTeam", "Manage team")}
-								</Button>
-							</Link>
-							<Link href={`/library/config/roles?id=${appId}`}>
-								<Button variant="outline" size="sm">
-									{t("defineRoles", "Define roles")}
-								</Button>
-							</Link>
+							<GuardedAction
+								allowed={permissions.canReadTeam}
+								reason={t(
+									"yourRoleCannotSeeThisProjectsMembers",
+									"Your role cannot see this project's members.",
+								)}
+							>
+								<Link
+									href={`/library/config/team?id=${appId}`}
+									aria-disabled={!permissions.canReadTeam}
+									tabIndex={permissions.canReadTeam ? undefined : -1}
+									className={cn(
+										!permissions.canReadTeam &&
+											"pointer-events-none opacity-60",
+									)}
+								>
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={!permissions.canReadTeam}
+									>
+										{t("manageTeam", "Manage team")}
+									</Button>
+								</Link>
+							</GuardedAction>
+							<GuardedAction
+								allowed={permissions.canReadRoles}
+								reason={t(
+									"yourRoleCannotOpenTheRoleEditor",
+									"Your role cannot open the role editor.",
+								)}
+							>
+								<Link
+									href={`/library/config/roles?id=${appId}`}
+									aria-disabled={!permissions.canReadRoles}
+									tabIndex={permissions.canReadRoles ? undefined : -1}
+									className={cn(
+										!permissions.canReadRoles &&
+											"pointer-events-none opacity-60",
+									)}
+								>
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={!permissions.canReadRoles}
+									>
+										{t("defineRoles", "Define roles")}
+									</Button>
+								</Link>
+							</GuardedAction>
 						</div>
 					) : (
-						<Blocker
+						<SectionLockCallout
+							kind="visibility"
 							action={
-								<Button size="sm" onClick={() => onOpenPanel("access")}>
-									Change visibility
-								</Button>
+								<GuardedAction
+									allowed={permissions.canWriteApp}
+									reason={ownerOnly}
+								>
+									<Button
+										size="sm"
+										disabled={!permissions.canWriteApp}
+										onClick={() => onOpenPanel("access")}
+									>
+										{t("changeVisibility", "Change visibility")}
+									</Button>
+								</GuardedAction>
 							}
 						>
 							{app.visibility === IAppVisibility.Offline
@@ -521,7 +748,7 @@ export function LaunchPath({
 										"aPrivateProjectIsSyncedToYourAccountOnlySwitchToPrototypeToInviteCollaboratorsAssignRolesAndShareALink",
 										"A private project is synced to your account only. Switch to Prototype to invite collaborators, assign roles and share a link.",
 									)}
-						</Blocker>
+						</SectionLockCallout>
 					)}
 				</StageRow>
 
@@ -566,14 +793,23 @@ export function LaunchPath({
 								</span>
 							))}
 						</div>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => onOpenPanel("listing")}
+						<GuardedAction
+							allowed={canEditListing}
+							reason={t(
+								"yourRoleCannotEditThisProjectsListing",
+								"Your role cannot edit this project's listing.",
+							)}
 						>
-							{t("editListing", "Edit listing")}
-							<ArrowRightIcon className="ml-1.5 h-3 w-3" />
-						</Button>
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={!canEditListing}
+								onClick={() => onOpenPanel("listing")}
+							>
+								{t("editListing", "Edit listing")}
+								<ArrowRightIcon className="ml-1.5 h-3 w-3" />
+							</Button>
+						</GuardedAction>
 					</Card>
 				</StageRow>
 
@@ -584,9 +820,11 @@ export function LaunchPath({
 					last
 					badge={
 						<Badge variant="outline" className="text-[10px]">
-							{listed
-								? t("readyToSubmit", "Ready to submit")
-								: t("notStarted", "Not started")}
+							{publicationHidden
+								? t("hidden", "Hidden")
+								: listed
+									? t("readyToSubmit", "Ready to submit")
+									: t("notStarted", "Not started")}
 						</Badge>
 					}
 					summary={t("reviewTakes13Days", "Review takes 1–3 days")}
@@ -608,6 +846,14 @@ export function LaunchPath({
 									</Badge>
 								)}
 							</span>
+						) : aiAct.applicable && !aiAct.readable ? (
+							<span className="flex items-center gap-2 text-muted-foreground">
+								<LockIcon className="h-3.5 w-3.5" />
+								{t(
+									"publicationStatusIsVisibleOnlyToOwnersOfThisProject",
+									"Publication status is visible only to owners of this project.",
+								)}
+							</span>
 						) : (
 							<span className="text-muted-foreground">
 								{t(
@@ -616,14 +862,21 @@ export function LaunchPath({
 								)}
 							</span>
 						)}
-						<Button
-							variant="outline"
-							size="sm"
-							className="ml-auto"
-							onClick={() => onOpenPanel("compliance")}
+						<GuardedAction
+							allowed={permissions.canWriteApp}
+							reason={ownerOnly}
+							className="ml-auto inline-flex"
 						>
-							{t("openPublication", "Open publication")}
-						</Button>
+							<Button
+								variant="outline"
+								size="sm"
+								className="ml-auto"
+								disabled={!permissions.canWriteApp}
+								onClick={() => onOpenPanel("compliance")}
+							>
+								{t("openPublication", "Open publication")}
+							</Button>
+						</GuardedAction>
 					</Card>
 				</StageRow>
 			</div>
@@ -653,46 +906,57 @@ export function LaunchPath({
 				</SectionCard>
 
 				<SectionCard title={t("atAGlance", "At a glance")}>
-					<div className="space-y-2 text-xs">
-						<div className="flex items-center gap-2">
-							<span className="text-muted-foreground">
-								{t("runs24h2", "Runs · 24h")}
-							</span>
-							<span className="ml-auto font-medium tabular-nums">
-								{runs.windowRuns.toLocaleString()}
-							</span>
+					{runs.denied ? (
+						<PermissionNotice
+							title={t("runHealthIsHidden", "Run health is hidden")}
+							description={t(
+								"yourRoleCannotReadThisProjectsRunLog",
+								"Your role cannot read this project's run log.",
+							)}
+							missing={[RolePermissions.ReadBoards]}
+						/>
+					) : (
+						<div className="space-y-2 text-xs">
+							<div className="flex items-center gap-2">
+								<span className="text-muted-foreground">
+									{t("runs24h2", "Runs · 24h")}
+								</span>
+								<span className="ml-auto font-medium tabular-nums">
+									{runs.windowRuns.toLocaleString()}
+								</span>
+							</div>
+							<div className="flex items-center gap-2">
+								<span className="text-muted-foreground">
+									{t("success", "Success")}
+								</span>
+								<span className="ml-auto font-medium tabular-nums">
+									{runs.successRate === null
+										? "—"
+										: `${runs.successRate.toFixed(1)}%`}
+								</span>
+							</div>
+							<div className="flex items-center gap-2">
+								<span className="text-muted-foreground">
+									{t("lastRun", "Last run")}
+								</span>
+								<span className="ml-auto font-medium">
+									{runs.lastRunAt
+										? formatRelativeTime(runs.lastRunAt, "narrow")
+										: "never"}
+								</span>
+							</div>
+							<div className="flex items-center gap-2">
+								<span className="text-muted-foreground">
+									{t("status", "Status")}
+								</span>
+								<span className="ml-auto">
+									<Badge variant="secondary" className="text-[10px]">
+										{app.status}
+									</Badge>
+								</span>
+							</div>
 						</div>
-						<div className="flex items-center gap-2">
-							<span className="text-muted-foreground">
-								{t("success", "Success")}
-							</span>
-							<span className="ml-auto font-medium tabular-nums">
-								{runs.successRate === null
-									? "—"
-									: `${runs.successRate.toFixed(1)}%`}
-							</span>
-						</div>
-						<div className="flex items-center gap-2">
-							<span className="text-muted-foreground">
-								{t("lastRun", "Last run")}
-							</span>
-							<span className="ml-auto font-medium">
-								{runs.lastRunAt
-									? formatRelativeTime(runs.lastRunAt, "narrow")
-									: "never"}
-							</span>
-						</div>
-						<div className="flex items-center gap-2">
-							<span className="text-muted-foreground">
-								{t("status", "Status")}
-							</span>
-							<span className="ml-auto">
-								<Badge variant="secondary" className="text-[10px]">
-									{app.status}
-								</Badge>
-							</span>
-						</div>
-					</div>
+					)}
 				</SectionCard>
 
 				{app.changelog && (

@@ -3,6 +3,9 @@
 import {
 	type IApp,
 	IAppVisibility,
+	PermissionNotice,
+	RolePermissions,
+	useAppPermissions,
 	useBackend,
 	useFeatures,
 	useInvalidateInvoke,
@@ -17,7 +20,7 @@ import {
 	normalizeAppPublicationRequests,
 } from "@flow-like/flow-like-ui/components/settings/visibility-status/app-publication-review-card";
 import { VisibilityStatusSwitcher as SharedVisibilityStatusSwitcher } from "@flow-like/flow-like-ui/components/settings/visibility-status/visibility-status-switcher";
-import { i18n as i18next } from "@flow-like/locales";
+import { i18n as i18next, useTranslation } from "@flow-like/locales";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { ForkAppButton } from "./fork-app-button";
@@ -58,6 +61,9 @@ function usePublicationRequests(appId: string, enabled: boolean) {
 /**
  * Everything that decides who can reach the app: visibility, forking and the
  * fork entry point. Mounted inside the dashboard's Access inspector panel.
+ *
+ * Both cards resolve the caller's own role themselves — visibility and
+ * forking are `Owner` routes, and this mount site cannot know the reader.
  */
 export function AppAccessSection({
 	localApp,
@@ -110,11 +116,17 @@ export function AppComplianceSection({
 	localApp,
 	canEdit,
 }: Readonly<Omit<SectionProps, "refreshApp" | "appName">>) {
+	const { t } = useTranslation("settings");
 	const features = useFeatures();
+	const permissions = useAppPermissions(localApp.id);
 	const isOffline = localApp.visibility === IAppVisibility.Offline;
+	/** `GET /apps/{id}/publication` is `ensure_permission!(.., Admin)`. */
+	const canReadReview = permissions.can(RolePermissions.Admin);
+	/** Every `apps/{id}/ai-act/*` route is `ensure_permission!(.., Owner)`. */
+	const canAssess = permissions.can(RolePermissions.Owner);
 	const publicationRequests = usePublicationRequests(
 		localApp.id,
-		canEdit && !isOffline,
+		canEdit && !isOffline && canReadReview,
 	);
 
 	if (isOffline) {
@@ -135,14 +147,30 @@ export function AppComplianceSection({
 
 	return (
 		<>
-			{features.data?.ai_act && canEdit && (
+			{features.data?.ai_act && canEdit && canAssess && (
 				<AppAiActWizard appId={localApp.id} />
 			)}
-			<AppPublicationReviewCard
-				requests={publicationRequests.data ?? []}
-				isLoading={publicationRequests.isLoading}
-				error={reviewError}
-			/>
+			{canReadReview ? (
+				<AppPublicationReviewCard
+					requests={publicationRequests.data ?? []}
+					isLoading={publicationRequests.isLoading}
+					error={reviewError}
+				/>
+			) : (
+				// The review card renders nothing on an empty list, so without this
+				// a denied read would leave the panel silently blank.
+				<PermissionNotice
+					title={t(
+						"publicationReviewUnavailable",
+						"Publication review unavailable",
+					)}
+					description={t(
+						"yourRoleCannotSeeThisProjectsPublicationRequestsOrAuditorFeedback",
+						"Your role cannot see this project's publication requests or auditor feedback.",
+					)}
+					missing={[RolePermissions.Admin]}
+				/>
+			)}
 		</>
 	);
 }

@@ -75,6 +75,7 @@ import {
 	getVisibilityTransitions,
 } from "../visibility-status/visibility-meta";
 import { EntityVisibilitySwitcher } from "../visibility-status/visibility-status-switcher";
+import { TeamActionLock, useTeamAccess } from "./team-shared";
 
 const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 const MAX_IMAGE_MB = 20;
@@ -100,15 +101,27 @@ export function GroupConsole({
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	const access = useTeamAccess(appId);
 
 	const detail = useInvoke(
 		backend.teamState.getGroup,
 		backend.teamState,
 		[appId, group.id],
-		open,
+		open && access.canReadTeam && !access.isLoading,
 	);
 	const current = detail.data ?? group;
+	// Anchoring says which app steers the suite; the role says whether this
+	// account may steer it. Every write below needs both.
 	const isAnchor = current.owner_app_id === appId;
+	const canCurate = isAnchor && access.canAdminister;
+	const canPublish = isAnchor && access.canOwn;
+	const curateReason = isAnchor
+		? access.adminReason
+		: t(
+				"onlyTheAnchorAppCanCurateThisSuite",
+				"Only the anchor app can curate this suite.",
+			);
+	const publishReason = isAnchor ? access.ownerReason : curateReason;
 	const visibility = fromWireVisibility(current.visibility);
 
 	const refresh = useCallback(async () => {
@@ -175,7 +188,8 @@ export function GroupConsole({
 								<BrandingTab
 									appId={appId}
 									group={current}
-									canEdit={isAnchor}
+									canEdit={canCurate}
+									lockReason={curateReason}
 									onSaved={refresh}
 								/>
 							</TabsContent>
@@ -184,6 +198,10 @@ export function GroupConsole({
 									appId={appId}
 									group={current}
 									isAnchor={isAnchor}
+									canCurate={canCurate}
+									canLeave={access.canAdminister}
+									lockReason={curateReason}
+									memberReason={access.adminReason}
 									suggestions={suggestions}
 									onChange={refresh}
 									onLeft={() => {
@@ -197,6 +215,9 @@ export function GroupConsole({
 									appId={appId}
 									group={current}
 									isAnchor={isAnchor}
+									canReadPublication={canCurate}
+									canChangeVisibility={canPublish}
+									lockReason={publishReason}
 									onChange={refresh}
 								/>
 							</TabsContent>
@@ -205,6 +226,8 @@ export function GroupConsole({
 									appId={appId}
 									group={current}
 									isAnchor={isAnchor}
+									canCurate={canCurate}
+									lockReason={curateReason}
 									onChange={refresh}
 									onDeleted={() => {
 										onOpenChange(false);
@@ -358,11 +381,13 @@ function BrandingTab({
 	appId,
 	group,
 	canEdit,
+	lockReason,
 	onSaved,
 }: Readonly<{
 	appId: string;
 	group: IGroup;
 	canEdit: boolean;
+	lockReason: string;
 	onSaved: () => Promise<void>;
 }>) {
 	const { t } = useTranslation("settings");
@@ -559,12 +584,7 @@ function BrandingTab({
 					{t("saveChanges2", "Save changes")}
 				</Button>
 			) : (
-				<InfoNote>
-					{t(
-						"onlyTheAnchorAppCanEditThisSuiteapossBranding",
-						"Only the anchor app can edit this suite's branding.",
-					)}
-				</InfoNote>
+				<InfoNote>{lockReason}</InfoNote>
 			)}
 		</div>
 	);
@@ -597,6 +617,10 @@ function AppsTab({
 	appId,
 	group,
 	isAnchor,
+	canCurate,
+	canLeave,
+	lockReason,
+	memberReason,
 	suggestions,
 	onChange,
 	onLeft,
@@ -604,6 +628,12 @@ function AppsTab({
 	appId: string;
 	group: IGroup;
 	isAnchor: boolean;
+	/** Anchor app *and* an admin role — what adding or removing members needs. */
+	canCurate: boolean;
+	/** Leaving is this app's own decision, so it only needs an admin role. */
+	canLeave: boolean;
+	lockReason: string;
+	memberReason: string;
 	suggestions: { id: string; name: string }[];
 	onChange: () => Promise<void>;
 	onLeft: () => void;
@@ -763,15 +793,18 @@ function AppsTab({
 									</Badge>
 								)}
 								{isAnchor && member.kind !== "PRIMARY" && (
-									<Button
-										size="icon"
-										variant="ghost"
-										className="h-7 w-7"
-										disabled={busy}
-										onClick={() => removeMember(member.app_id)}
-									>
-										<X className="w-3.5 h-3.5" />
-									</Button>
+									<TeamActionLock locked={!canCurate} reason={lockReason}>
+										<Button
+											size="icon"
+											variant="ghost"
+											className="h-7 w-7"
+											disabled={busy || !canCurate}
+											onClick={() => removeMember(member.app_id)}
+											aria-label={t("removeFromSuite", "Remove from suite")}
+										>
+											<X className="w-3.5 h-3.5" />
+										</Button>
+									</TeamActionLock>
 								)}
 							</div>
 							{hiddenMeta && (
@@ -797,16 +830,18 @@ function AppsTab({
 							"This app decides for itself whether it stays listed inside the suite.",
 						)}
 					</p>
-					<Button
-						variant="outline"
-						size="sm"
-						disabled={busy}
-						onClick={leave}
-						className="text-destructive hover:text-destructive"
-					>
-						<LogOut className="w-3.5 h-3.5 mr-1.5" />
-						{t("leaveSuite", "Leave suite")}
-					</Button>
+					<TeamActionLock locked={!canLeave} reason={memberReason}>
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={busy || !canLeave}
+							onClick={leave}
+							className="text-destructive hover:text-destructive"
+						>
+							<LogOut className="w-3.5 h-3.5 mr-1.5" />
+							{t("leaveSuite", "Leave suite")}
+						</Button>
+					</TeamActionLock>
 				</div>
 			)}
 
@@ -816,6 +851,8 @@ function AppsTab({
 						title={t("addAnApp", "Add an app")}
 						hint="Connected apps join instantly; everyone else receives an invite to accept."
 					/>
+
+					{!canCurate && <InfoNote>{lockReason}</InfoNote>}
 
 					{quickAdd.length > 0 && (
 						<div className="flex flex-wrap gap-1.5">
@@ -829,7 +866,8 @@ function AppsTab({
 								<button
 									key={app.id}
 									type="button"
-									disabled={busy}
+									disabled={busy || !canCurate}
+									title={canCurate ? undefined : lockReason}
 									onClick={() => addMember(app.id)}
 									className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1 text-[11px] transition-colors hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50"
 								>
@@ -872,15 +910,17 @@ function AppsTab({
 												{app.id}
 											</p>
 										</div>
-										<Button
-											size="sm"
-											variant="secondary"
-											disabled={busy}
-											onClick={() => addMember(app.id)}
-										>
-											<Plus className="w-3.5 h-3.5 mr-1" />
-											{t("add", "Add")}
-										</Button>
+										<TeamActionLock locked={!canCurate} reason={lockReason}>
+											<Button
+												size="sm"
+												variant="secondary"
+												disabled={busy || !canCurate}
+												onClick={() => addMember(app.id)}
+											>
+												<Plus className="w-3.5 h-3.5 mr-1" />
+												{t("add", "Add")}
+											</Button>
+										</TeamActionLock>
 									</div>
 								))
 							)}
@@ -898,14 +938,17 @@ function AppsTab({
 								placeholder={t("appId", "App ID")}
 								className="h-8 text-xs font-mono"
 							/>
-							<Button
-								size="sm"
-								variant="secondary"
-								disabled={busy || !manualId.trim()}
-								onClick={() => addMember(manualId)}
-							>
-								<Plus className="w-3.5 h-3.5" />
-							</Button>
+							<TeamActionLock locked={!canCurate} reason={lockReason}>
+								<Button
+									size="sm"
+									variant="secondary"
+									disabled={busy || !manualId.trim() || !canCurate}
+									onClick={() => addMember(manualId)}
+									aria-label={t("addByAppId", "Add by app ID")}
+								>
+									<Plus className="w-3.5 h-3.5" />
+								</Button>
+							</TeamActionLock>
 						</div>
 					</details>
 				</div>
@@ -992,11 +1035,19 @@ function VisibilityTab({
 	appId,
 	group,
 	isAnchor,
+	canReadPublication,
+	canChangeVisibility,
+	lockReason,
 	onChange,
 }: Readonly<{
 	appId: string;
 	group: IGroup;
 	isAnchor: boolean;
+	/** The publication status is an admin read on the anchor app. */
+	canReadPublication: boolean;
+	/** Moving a suite between visibilities is owner-only. */
+	canChangeVisibility: boolean;
+	lockReason: string;
 	onChange: () => Promise<void>;
 }>) {
 	const { t } = useTranslation("settings");
@@ -1006,7 +1057,7 @@ function VisibilityTab({
 		backend.teamState.getGroupPublication,
 		backend.teamState,
 		[appId, group.id],
-		isAnchor,
+		canReadPublication,
 	);
 
 	const visibility = fromWireVisibility(group.visibility);
@@ -1056,7 +1107,7 @@ function VisibilityTab({
 			<EntityVisibilitySwitcher
 				entityId={group.id}
 				visibility={visibility}
-				canEdit={isAnchor}
+				canEdit={canChangeVisibility}
 				entityNoun="suite"
 				onVisibilityChange={handleChange}
 				availableTransitions={transitions}
@@ -1070,6 +1121,8 @@ function VisibilityTab({
 					)}
 				</InfoNote>
 			)}
+
+			{isAnchor && !canChangeVisibility && <InfoNote>{lockReason}</InfoNote>}
 
 			{isAnchor && !canPublish && !isStoreVisible(visibility) && (
 				<InfoNote tone="warning">
@@ -1114,12 +1167,16 @@ function DangerTab({
 	appId,
 	group,
 	isAnchor,
+	canCurate,
+	lockReason,
 	onChange,
 	onDeleted,
 }: Readonly<{
 	appId: string;
 	group: IGroup;
 	isAnchor: boolean;
+	canCurate: boolean;
+	lockReason: string;
 	onChange: () => Promise<void>;
 	onDeleted: () => void;
 }>) {
@@ -1133,6 +1190,10 @@ function DangerTab({
 				{`Only the anchor app can archive or delete this suite. Your app can leave it from the Apps tab at any time.`}
 			</InfoNote>
 		);
+	}
+
+	if (!canCurate) {
+		return <InfoNote>{lockReason}</InfoNote>;
 	}
 
 	const changeStatus = async (status: string) => {

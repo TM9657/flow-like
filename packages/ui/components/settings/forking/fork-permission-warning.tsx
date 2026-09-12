@@ -5,6 +5,7 @@ import { AlertTriangleIcon, CheckIcon, WrenchIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useInvoke } from "../../../hooks";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { RolePermissions } from "../../../lib/permission/role-permission";
 import type { IForkPolicy } from "../../../lib/schema/app/fork";
 import { useBackend } from "../../../state/backend-state";
@@ -64,6 +65,8 @@ const FORK_PERMISSION_REQUIREMENTS: ReadonlyArray<{
 	},
 ];
 
+type ForkRequirement = (typeof FORK_PERMISSION_REQUIREMENTS)[number];
+
 /** Permissive fallback matching the server's NULL-policy default, used while
  * the owner's policy is still loading and for viewers who can't read it. */
 const PERMISSIVE_FORK_POLICY: IForkPolicy = {
@@ -74,6 +77,25 @@ const PERMISSIVE_FORK_POLICY: IForkPolicy = {
 	widgets: true,
 	templates: true,
 };
+
+function MissingPermissionList({
+	missing,
+}: Readonly<{ missing: readonly ForkRequirement[] }>) {
+	const { t } = useTranslation("settings");
+	return (
+		<ul className="list-disc pl-5">
+			{missing.map(({ label, reason }) => (
+				<li key={label}>
+					{label}
+					<span className="text-xs opacity-80">
+						{" "}
+						{t("neededForReason", "— needed for {{reason}}", { reason })}
+					</span>
+				</li>
+			))}
+		</ul>
+	);
+}
 
 export interface ForkPermissionWarningProps {
 	appId: string;
@@ -87,12 +109,14 @@ export interface ForkPermissionWarningProps {
 }
 
 /**
- * Surfaces the common pitfall where forking is enabled but the app's
- * default (member) role lacks the read permissions a fork actually needs.
- * When that happens the Fork button stays hidden for members even though
- * the owner opted in. Renders a warning listing the missing permissions
- * plus a one-click fix that grants them to the default role through the
- * existing roles API.
+ * Surfaces the common pitfall where forking is enabled but the reader cannot
+ * actually fork, so the Fork button silently stays hidden.
+ *
+ * Owners see it from the app's side: the default (member) role is missing the
+ * reads a fork needs, plus a one-click fix that grants them through the roles
+ * API. Everyone else sees it from their own side — asking `GET /apps/{id}/roles`
+ * would need `ReadRoles`, which is exactly what the affected members lack, so
+ * their answer comes from their own resolved role instead.
  */
 export function ForkPermissionWarning({
 	appId,
@@ -102,11 +126,15 @@ export function ForkPermissionWarning({
 }: Readonly<ForkPermissionWarningProps>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
+	const permissions = useAppPermissions(appId);
 	const roles = useInvoke(
 		backend.roleState.getRoles,
 		backend.roleState,
 		[appId],
-		enabled && typeof appId === "string",
+		enabled &&
+			typeof appId === "string" &&
+			canEdit &&
+			permissions.can(RolePermissions.ReadRoles),
 	);
 	const [fixing, setFixing] = useState(false);
 
@@ -119,18 +147,26 @@ export function ForkPermissionWarning({
 
 	const { defaultRole, missing } = useMemo(() => {
 		if (!roles.data) {
-			return { defaultRole: undefined, missing: [] };
+			return { defaultRole: undefined, missing: [] as ForkRequirement[] };
 		}
 		const defaultRoleId = roles.data[0];
 		const allRoles = roles.data[1];
 		const role = allRoles.find((r) => r.id === defaultRoleId);
-		if (!role) return { defaultRole: undefined, missing: [] };
+		if (!role) {
+			return { defaultRole: undefined, missing: [] as ForkRequirement[] };
+		}
 		const perms = new RolePermissions(role.permissions);
 		return {
 			defaultRole: role,
 			missing: required.filter(({ permission }) => !perms.contains(permission)),
 		};
 	}, [roles.data, required]);
+
+	/** What the reader's own role is missing. Empty while the role is unknown. */
+	const ownMissing = useMemo(
+		() => required.filter(({ permission }) => !permissions.can(permission)),
+		[required, permissions],
+	);
 
 	const handleFix = useCallback(async () => {
 		if (!defaultRole || fixing) return;
@@ -149,7 +185,12 @@ export function ForkPermissionWarning({
 			};
 			await backend.roleState.upsertRole(appId, next);
 			await roles.refetch();
-			toast.success("Default role updated — members can now fork this app.");
+			toast.success(
+				t(
+					"defaultRoleUpdatedMembersCanNowForkThisApp",
+					"Default role updated — members can now fork this app.",
+				),
+			);
 		} catch (err) {
 			toast.error(
 				err instanceof Error
@@ -166,9 +207,45 @@ export function ForkPermissionWarning({
 		} finally {
 			setFixing(false);
 		}
-	}, [appId, backend.roleState, defaultRole, fixing, required, roles]);
+	}, [appId, backend.roleState, defaultRole, fixing, required, roles, t]);
 
-	if (!enabled || !defaultRole || missing.length === 0) return null;
+	if (!enabled) return null;
+
+	// The reader is not the owner, so `policy` was never fetched and `required`
+	// is the permissive superset. Naming a permission this app's fork settings
+	// exclude would be a false accusation, so the copy says "can need", not
+	// "needs", and points at the setting only the owner can see.
+	if (!canEdit) {
+		if (ownMissing.length === 0) return null;
+		return (
+			<Alert className="mt-4">
+				<AlertTriangleIcon className="w-4 h-4" />
+				<AlertTitle>
+					{t(
+						"forkingMayNotBeAvailableToYourRole",
+						"Forking may not be available to your role",
+					)}
+				</AlertTitle>
+				<AlertDescription>
+					<p>
+						{t(
+							"forkingIsEnabledButYourRoleIsMissingReadPermissionsAForkCanNeedWhichOnesApplyDependsOnThisAppsForkSettingsWhichOnlyTheOwnerCanSee",
+							"Forking is enabled, but your role is missing read permissions a fork can need. Which of these actually apply depends on this app's fork settings, which only the owner can see.",
+						)}
+					</p>
+					<MissingPermissionList missing={ownMissing} />
+					<p className="text-xs">
+						{t(
+							"askTheAppOwnerToGrantThesePermissionsToYourRole",
+							"Ask the app owner to grant these permissions to your role.",
+						)}
+					</p>
+				</AlertDescription>
+			</Alert>
+		);
+	}
+
+	if (!defaultRole || missing.length === 0) return null;
 
 	return (
 		<Alert variant="destructive" className="mt-4">
@@ -191,45 +268,30 @@ export function ForkPermissionWarning({
 						"is missing read permissions a fork needs. Until these are granted, the Fork button stays hidden for members.",
 					)}
 				</p>
-				<ul className="list-disc pl-5">
-					{missing.map(({ label, reason }) => (
-						<li key={label}>
-							{label}
-							<span className="text-xs opacity-80"> — needed for {reason}</span>
-						</li>
-					))}
-				</ul>
-				{canEdit && (
-					<p className="text-xs">
-						{`Only what this app's fork settings include is required. Excluding a category above removes its permission from this list.`}
-					</p>
-				)}
-				{canEdit ? (
-					<Button
-						type="button"
-						size="sm"
-						variant="outline"
-						className="mt-2"
-						disabled={fixing}
-						onClick={handleFix}
-					>
-						{fixing ? (
-							<CheckIcon className="w-3.5 h-3.5" />
-						) : (
-							<WrenchIcon className="w-3.5 h-3.5" />
-						)}
-						{fixing
-							? t("applying", "Applying…")
-							: t("grantRequiredPermissions", "Grant required permissions")}
-					</Button>
-				) : (
-					<p className="text-xs">
-						{t(
-							"askTheAppOwnerToGrantThesePermissionsToTheDefaultRole",
-							"Ask the app owner to grant these permissions to the default role.",
-						)}
-					</p>
-				)}
+				<MissingPermissionList missing={missing} />
+				<p className="text-xs">
+					{t(
+						"onlyWhatThisAppsForkSettingsIncludeIsRequiredExcludingACategoryAboveRemovesItsPermissionFromThisList",
+						"Only what this app's fork settings include is required. Excluding a category above removes its permission from this list.",
+					)}
+				</p>
+				<Button
+					type="button"
+					size="sm"
+					variant="outline"
+					className="mt-2"
+					disabled={fixing}
+					onClick={handleFix}
+				>
+					{fixing ? (
+						<CheckIcon className="w-3.5 h-3.5" />
+					) : (
+						<WrenchIcon className="w-3.5 h-3.5" />
+					)}
+					{fixing
+						? t("applying", "Applying…")
+						: t("grantRequiredPermissions", "Grant required permissions")}
+				</Button>
 			</AlertDescription>
 		</Alert>
 	);

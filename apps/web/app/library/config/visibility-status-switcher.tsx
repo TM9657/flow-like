@@ -3,6 +3,9 @@
 import {
 	type IApp,
 	IAppVisibility,
+	PermissionNotice,
+	RolePermissions,
+	useAppPermissions,
 	useBackend,
 	useFeatures,
 	useInvalidateInvoke,
@@ -18,6 +21,7 @@ import {
 	normalizeAppPublicationRequests,
 } from "@flow-like/flow-like-ui/components/settings/visibility-status/app-publication-review-card";
 import { VisibilityStatusSwitcher as SharedVisibilityStatusSwitcher } from "@flow-like/flow-like-ui/components/settings/visibility-status/visibility-status-switcher";
+import { useTranslation } from "@flow-like/locales";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 
@@ -31,6 +35,9 @@ interface SectionProps {
 /**
  * Who can reach the app: visibility, forking and the fork entry point.
  * Mounted inside the dashboard's Access inspector panel.
+ *
+ * Both cards resolve the caller's own role themselves — visibility and
+ * forking are `Owner` routes, and this mount site cannot know the reader.
  */
 export function AppAccessSection({
 	localApp,
@@ -80,13 +87,21 @@ export function AppComplianceSection({
 	localApp,
 	canEdit,
 }: Readonly<Omit<SectionProps, "refreshApp" | "appName">>) {
+	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const features = useFeatures();
+	const permissions = useAppPermissions(localApp.id);
 	const profile = useInvoke(
 		backend.userState.getSettingsProfile,
 		backend.userState,
 		[],
 	);
+
+	const isOffline = localApp.visibility === IAppVisibility.Offline;
+	/** `GET /apps/{id}/publication` is `ensure_permission!(.., Admin)`. */
+	const canReadReview = permissions.can(RolePermissions.Admin);
+	/** Every `apps/{id}/ai-act/*` route is `ensure_permission!(.., Owner)`. */
+	const canAssess = permissions.can(RolePermissions.Owner);
 
 	const publicationRequests = useQuery<
 		RawAppPublicationRequestItem[],
@@ -101,7 +116,9 @@ export function AppComplianceSection({
 				`apps/${localApp.id}/publication`,
 			);
 		},
-		enabled: !!profile.data && canEdit,
+		// Deliberately not gated on `!isOffline`: an app that was rejected and
+		// then taken offline still has auditor feedback its owner needs to read.
+		enabled: !!profile.data && canEdit && canReadReview,
 		select: normalizeAppPublicationRequests,
 	});
 
@@ -112,14 +129,30 @@ export function AppComplianceSection({
 
 	return (
 		<>
-			{localApp.visibility !== IAppVisibility.Offline &&
-				features.data?.ai_act &&
-				canEdit && <AppAiActWizard appId={localApp.id} />}
-			<AppPublicationReviewCard
-				requests={publicationRequests.data ?? []}
-				isLoading={publicationRequests.isLoading}
-				error={reviewError}
-			/>
+			{!isOffline && features.data?.ai_act && canEdit && canAssess && (
+				<AppAiActWizard appId={localApp.id} />
+			)}
+			{!canReadReview ? (
+				// The review card renders nothing on an empty list, so without this
+				// a denied read would leave the panel silently blank.
+				<PermissionNotice
+					title={t(
+						"publicationReviewUnavailable",
+						"Publication review unavailable",
+					)}
+					description={t(
+						"yourRoleCannotSeeThisProjectsPublicationRequestsOrAuditorFeedback",
+						"Your role cannot see this project's publication requests or auditor feedback.",
+					)}
+					missing={[RolePermissions.Admin]}
+				/>
+			) : (
+				<AppPublicationReviewCard
+					requests={publicationRequests.data ?? []}
+					isLoading={publicationRequests.isLoading}
+					error={reviewError}
+				/>
+			)}
 		</>
 	);
 }

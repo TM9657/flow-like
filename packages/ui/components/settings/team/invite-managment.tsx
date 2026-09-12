@@ -52,6 +52,7 @@ import {
 	EmptyState,
 	Input,
 	Label,
+	RolePermissions,
 	Select,
 	SelectContent,
 	SelectItem,
@@ -72,17 +73,21 @@ import {
 	userInitials,
 	userSecondaryLabel,
 } from "../../../lib/user-display";
+import { SectionLockedPanel } from "../permission";
 import {
 	SectionHeading,
 	TEAM_ACTION_GRADIENT,
 	TEAM_ROW_META,
 	TEAM_ROW_TITLE,
+	TeamActionLock,
 	TeamCallout,
 	TeamHint,
+	TeamReadError,
 	TeamRowActions,
 	TeamRowIcon,
 	TeamSection,
 	teamRowClass,
+	useTeamAccess,
 } from "./team-shared";
 
 export function InviteUserDialog({
@@ -92,15 +97,23 @@ export function InviteUserDialog({
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidateInfinite = useInvalidateInfiniteInvoke();
+	const access = useTeamAccess(appId);
 	const [message, setMessage] = useState("");
 	const [invitee, setInvitee] = useState("");
 	const [invitingId, setInvitingId] = useState<string | null>(null);
 	const [showInviteDialog, setShowInviteDialog] = useState(false);
 
-	const userSearch = useProjectUserSearch(appId, invitee, showInviteDialog);
+	// Both halves of this dialog — the project contacts and the user directory —
+	// are Admin-only reads, so neither may fire for a role that cannot invite.
+	const canInvite = access.canAdminister;
+	const isOpen = showInviteDialog && canInvite;
+	const userSearch = useProjectUserSearch(appId, invitee, isOpen);
 
 	return (
-		<Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+		<Dialog
+			open={isOpen}
+			onOpenChange={(next) => setShowInviteDialog(next && canInvite)}
+		>
 			<DialogTrigger asChild>{trigger}</DialogTrigger>
 			<DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
 				<DialogHeader className="space-y-3">
@@ -275,12 +288,17 @@ export function InviteUserDialog({
 									{t("searchingDirectory", "Searching for more people...")}
 								</p>
 							)}
+							{/* The server's own message tells a revoked role from a dropped
+							    connection; "Retry" alone reads as a network blip. */}
 							{userSearch.contactsError && (
 								<div className="flex items-center justify-between gap-2">
 									<p>
-										{t(
-											"projectContactsFailed",
-											"Could not load people from your projects.",
+										{apiErrorMessage(
+											userSearch.contactsError,
+											t(
+												"projectContactsFailed",
+												"Could not load people from your projects.",
+											),
 										)}
 									</p>
 									<Button
@@ -294,7 +312,12 @@ export function InviteUserDialog({
 							)}
 							{userSearch.directoryError && (
 								<div className="flex items-center justify-between gap-2">
-									<p>{t("userSearchFailed", "Could not search for users")}</p>
+									<p>
+										{apiErrorMessage(
+											userSearch.directoryError,
+											t("userSearchFailed", "Could not search for users"),
+										)}
+									</p>
 									<Button
 										size="sm"
 										variant="outline"
@@ -333,9 +356,13 @@ export function InviteUserDialog({
 export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
-	const links = useInvoke(backend.teamState.getInviteLinks, backend.teamState, [
-		appId,
-	]);
+	const access = useTeamAccess(appId);
+	const links = useInvoke(
+		backend.teamState.getInviteLinks,
+		backend.teamState,
+		[appId],
+		access.canAdminister && !access.isLoading,
+	);
 	const [showCreateLinkDialog, setShowCreateLinkDialog] = useState(false);
 	const [newLinkName, setNewLinkName] = useState("");
 	const [newLinkMaxUses, setNewLinkMaxUses] = useState<string>("");
@@ -392,6 +419,20 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 		[backend, links.refetch, appId],
 	);
 
+	if (!access.canAdminister && !access.isLoading) {
+		return (
+			<SectionLockedPanel
+				feature={t("invitesLinks", "Invites & links")}
+				description={t(
+					"onlyProjectAdminsCanInvitePeopleOrManageInviteLinks",
+					"Only project admins can invite people or manage invite links.",
+				)}
+				missing={[RolePermissions.Admin]}
+				roleName={access.roleName}
+			/>
+		);
+	}
+
 	return (
 		<div className="space-y-8">
 			<TeamSection>
@@ -403,15 +444,24 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 						"Search a Flow-Like account and send it an invitation with a note.",
 					)}
 					actions={
-						<InviteUserDialog
-							appId={appId}
-							trigger={
-								<Button size="sm" className={TEAM_ACTION_GRADIENT}>
-									<UserPlusIcon className="size-4" />
-									{t("invitePeople", "Invite people")}
-								</Button>
-							}
-						/>
+						<TeamActionLock
+							locked={!access.canAdminister}
+							reason={access.adminReason}
+						>
+							<InviteUserDialog
+								appId={appId}
+								trigger={
+									<Button
+										size="sm"
+										className={TEAM_ACTION_GRADIENT}
+										disabled={!access.canAdminister}
+									>
+										<UserPlusIcon className="size-4" />
+										{t("invitePeople", "Invite people")}
+									</Button>
+								}
+							/>
+						</TeamActionLock>
 					}
 				/>
 				<TeamCallout icon={SearchIcon}>
@@ -436,12 +486,21 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 							open={showCreateLinkDialog}
 							onOpenChange={setShowCreateLinkDialog}
 						>
-							<DialogTrigger asChild>
-								<Button variant="outline" size="sm">
-									<PlusIcon className="size-4" />
-									{t("newLink", "New link")}
-								</Button>
-							</DialogTrigger>
+							<TeamActionLock
+								locked={!access.canAdminister}
+								reason={access.adminReason}
+							>
+								<DialogTrigger asChild>
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={!access.canAdminister}
+									>
+										<PlusIcon className="size-4" />
+										{t("newLink", "New link")}
+									</Button>
+								</DialogTrigger>
+							</TeamActionLock>
 							<DialogContent className="sm:max-w-md">
 								<DialogHeader className="space-y-3">
 									<div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
@@ -553,7 +612,7 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 									</Button>
 									<Button
 										onClick={createInviteLink}
-										disabled={!newLinkName.trim()}
+										disabled={!newLinkName.trim() || !access.canAdminister}
 									>
 										{t("createLink", "Create Link")}
 									</Button>
@@ -563,7 +622,14 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 					}
 				/>
 
-				{(links.data?.length ?? 0) === 0 ? (
+				{links.isError && (
+					<TeamReadError
+						title={t("inviteLinksUnavailable", "Invite links unavailable")}
+						error={links.error}
+					/>
+				)}
+
+				{!links.isError && (links.data?.length ?? 0) === 0 && (
 					<EmptyState
 						className="max-w-full"
 						title={t("noInviteLinks", "No Invite Links")}
@@ -573,7 +639,9 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 						)}
 						icons={[UsersIcon, LinkIcon, MailIcon]}
 					/>
-				) : (
+				)}
+
+				{(links.data?.length ?? 0) > 0 && (
 					<div className="flex flex-col gap-2">
 						{links.data?.map((link) => (
 							<div key={link.id} className={teamRowClass({ align: "start" })}>
@@ -670,6 +738,7 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 														<AlertDialogTrigger asChild>
 															<DropdownMenuItem
 																variant="destructive"
+																disabled={!access.canAdminister}
 																onSelect={(e) => e.preventDefault()}
 															>
 																<Trash2Icon className="size-4" />

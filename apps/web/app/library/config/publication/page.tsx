@@ -1,6 +1,11 @@
 "use client";
 
-import { useBackend, useInvoke } from "@flow-like/flow-like-ui";
+import {
+	RolePermissions,
+	useAppPermissions,
+	useBackend,
+	useInvoke,
+} from "@flow-like/flow-like-ui";
 import { AppPublicationPage } from "@flow-like/flow-like-ui/components/settings/visibility-status/app-publication-page";
 import {
 	type AppPublicationRequestItem,
@@ -15,6 +20,10 @@ export default function Page() {
 	const searchParams = useSearchParams();
 	const router = useRouter();
 	const id = searchParams.get("id");
+
+	const permissions = useAppPermissions(id);
+	/** `GET /apps/{id}/publication` is `ensure_permission!(.., Admin)`. */
+	const canReadReview = permissions.can(RolePermissions.Admin);
 
 	const profile = useInvoke(
 		backend.userState.getSettingsProfile,
@@ -35,7 +44,7 @@ export default function Page() {
 				`apps/${id}/publication`,
 			);
 		},
-		enabled: !!profile.data && !!id,
+		enabled: !!profile.data && !!id && canReadReview,
 		select: normalizeAppPublicationRequests,
 	});
 
@@ -44,12 +53,7 @@ export default function Page() {
 			requests={publicationRequests.data ?? []}
 			appId={id}
 			isLoading={publicationRequests.isLoading}
-			error={
-				publicationRequests.isError
-					? (publicationRequests.error?.message ??
-						"Failed to load publication review history")
-					: null
-			}
+			error={publicationRequests.error}
 			onBack={() => router.push(`/library/config?id=${id}`)}
 		/>
 	);

@@ -46,6 +46,7 @@ import type {
 	IOAuthTokenStoreWithPending,
 	IStoredOAuthToken,
 } from "../../../lib/oauth/types";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import { normalizeRoutePath } from "../../../lib/route-path";
 import type { IEvent } from "../../../lib/schema/flow/event";
 import type { IHub } from "../../../lib/schema/hub/hub";
@@ -68,6 +69,7 @@ import {
 import { Input } from "../../ui/input";
 import { useProjectRuns } from "../dashboard/use-project-runs";
 import type { SurfaceRunHealth } from "../dashboard/use-project-runs";
+import { PermissionNotice } from "../permission/permission-notice";
 import { type EventStatus, getEventStatus } from "./event-status";
 import { computeEventIssues } from "./use-event-issues";
 import type { IEventIssue } from "./use-event-issues";
@@ -128,6 +130,10 @@ export interface EventsOverviewProps {
 	eventMapping: IEventMapping;
 	/** Event types that render a UI and therefore own a route path. */
 	uiEventTypes?: string[];
+	/** Whether the signed-in role may write this project's events. */
+	canEdit?: boolean;
+	/** Whether it may read the flows behind them (board names, sink lookup). */
+	canReadBoards?: boolean;
 	onEdit: (event: IEvent) => void;
 	onDelete: (eventId: string) => void;
 	onNavigateToNode: (event: IEvent, nodeId: string) => void;
@@ -159,6 +165,8 @@ export function EventsOverview({
 	appId,
 	eventMapping,
 	uiEventTypes,
+	canEdit = true,
+	canReadBoards = true,
 	onEdit,
 	onDelete,
 	onNavigateToNode,
@@ -195,7 +203,7 @@ export function EventsOverview({
 		backend.boardState.getBoardSummaries,
 		backend.boardState,
 		[appId],
-		appId !== "",
+		appId !== "" && canReadBoards,
 	);
 
 	// Run health is read from the run log rather than analytics, so it works for
@@ -218,6 +226,7 @@ export function EventsOverview({
 	// The event stores a node id; the sink registry is keyed by node name, so
 	// deciding whether a row even has a sink means reading the board.
 	useEffect(() => {
+		if (!canReadBoards) return;
 		let cancelled = false;
 		const load = async () => {
 			const boardIds = boardIdsKey ? boardIdsKey.split(",") : [];
@@ -241,7 +250,7 @@ export function EventsOverview({
 		return () => {
 			cancelled = true;
 		};
-	}, [appId, backend.boardState, boardIdsKey, events]);
+	}, [appId, backend.boardState, boardIdsKey, canReadBoards, events]);
 
 	const sinkEvents = useMemo(
 		() =>
@@ -418,16 +427,18 @@ export function EventsOverview({
 
 	const handleToggleActive = useCallback(
 		async (row: EventRowModel) => {
+			if (!canEdit) return;
 			await requestToggle(row.event, {
 				active: !row.event.active,
 				requiresSink: row.requiresSink,
 			});
 		},
-		[requestToggle],
+		[canEdit, requestToggle],
 	);
 
 	const handleRouteChange = useCallback(
 		async (eventId: string, previous: string | undefined, next: string) => {
+			if (!canEdit) return;
 			const normalized = next.trim() ? normalizeRoutePath(next) : "";
 			if (normalized === (previous ?? "")) return;
 			try {
@@ -442,7 +453,12 @@ export function EventsOverview({
 				console.error(`Failed to save route for event ${eventId}:`, error);
 			}
 		},
-		[appId, backend.routeState, invalidate],
+		[appId, backend.routeState, canEdit, invalidate],
+	);
+
+	const writeDeniedMessage = t(
+		"yourRoleCannotChangeThisProjectsEvents",
+		"Your role cannot create, change or delete this project's events.",
 	);
 
 	return (
@@ -473,11 +489,37 @@ export function EventsOverview({
 					onChange={setTypeFilter}
 				/>
 
-				<Button onClick={onCreateEvent} className="h-9 gap-2">
+				<Button
+					onClick={onCreateEvent}
+					className="h-9 gap-2"
+					disabled={!canEdit}
+					title={canEdit ? undefined : writeDeniedMessage}
+				>
 					<PlusIcon className="h-4 w-4" />
 					{t("newEvent", "New event")}
 				</Button>
 			</div>
+
+			{!canEdit && (
+				<PermissionNotice
+					tone="readOnly"
+					className="shrink-0"
+					title={t("eventsAreReadonly", "Events are read-only for you")}
+					description={writeDeniedMessage}
+					missing={[RolePermissions.WriteEvents]}
+				/>
+			)}
+			{!canReadBoards && (
+				<PermissionNotice
+					className="shrink-0"
+					title={t("flowNamesUnavailable", "Flow names unavailable")}
+					description={t(
+						"theFlowColumnStaysEmptyWithoutWorkflowAccess",
+						"Your role cannot read this project's flows, so the flow column and sink status stay blank rather than reporting a flow that isn't there.",
+					)}
+					missing={[RolePermissions.ReadBoards]}
+				/>
+			)}
 
 			{blocked.length > 0 && status !== "attention" && (
 				<AttentionBand rows={blocked} onSelect={onEdit} />
@@ -512,6 +554,8 @@ export function EventsOverview({
 							boardsMap={boardsMap}
 							isOffline={isOffline}
 							pendingActive={pendingId}
+							canEdit={canEdit}
+							writeDeniedMessage={writeDeniedMessage}
 							onEdit={onEdit}
 							onDelete={onDelete}
 							onNavigateToNode={onNavigateToNode}
@@ -525,6 +569,8 @@ export function EventsOverview({
 							boardsMap={boardsMap}
 							isOffline={isOffline}
 							pendingActive={pendingId}
+							canEdit={canEdit}
+							writeDeniedMessage={writeDeniedMessage}
 							onEdit={onEdit}
 							onDelete={onDelete}
 							onNavigateToNode={onNavigateToNode}
@@ -716,6 +762,8 @@ function EventGroupSection({
 	boardsMap,
 	isOffline,
 	pendingActive,
+	canEdit,
+	writeDeniedMessage,
 	onEdit,
 	onDelete,
 	onNavigateToNode,
@@ -728,6 +776,8 @@ function EventGroupSection({
 	boardsMap: Map<string, string>;
 	isOffline?: boolean;
 	pendingActive: string | null;
+	canEdit: boolean;
+	writeDeniedMessage: string;
 	onEdit: (event: IEvent) => void;
 	onDelete: (eventId: string) => void;
 	onNavigateToNode: (event: IEvent, nodeId: string) => void;
@@ -757,6 +807,8 @@ function EventGroupSection({
 						boardsMap={boardsMap}
 						isOffline={isOffline}
 						busy={pendingActive === row.event.id}
+						canEdit={canEdit}
+						writeDeniedMessage={writeDeniedMessage}
 						onEdit={onEdit}
 						onDelete={onDelete}
 						onNavigateToNode={onNavigateToNode}
@@ -788,6 +840,8 @@ function EventRow({
 	boardsMap,
 	isOffline,
 	busy,
+	canEdit,
+	writeDeniedMessage,
 	onEdit,
 	onDelete,
 	onNavigateToNode,
@@ -798,6 +852,8 @@ function EventRow({
 	boardsMap: Map<string, string>;
 	isOffline?: boolean;
 	busy: boolean;
+	canEdit: boolean;
+	writeDeniedMessage: string;
 	onEdit: (event: IEvent) => void;
 	onDelete: (eventId: string) => void;
 	onNavigateToNode: (event: IEvent, nodeId: string) => void;
@@ -817,6 +873,9 @@ function EventRow({
 		: "Latest";
 	const runsFailed = row.health?.failed ?? 0;
 	const runsTotal = row.health?.total ?? 0;
+	const toggleActiveLabel = event.active
+		? t("pauseEvent", "Pause event")
+		: t("resumeEvent", "Resume event");
 
 	return (
 		<div
@@ -891,6 +950,8 @@ function EventRow({
 				{row.isRouted ? (
 					<RouteChip
 						path={row.routePath}
+						canEdit={canEdit}
+						writeDeniedMessage={writeDeniedMessage}
 						onSave={(next) => onRouteChange(event.id, row.routePath, next)}
 					/>
 				) : row.entry ? (
@@ -928,9 +989,9 @@ function EventRow({
 						variant="ghost"
 						size="sm"
 						className="h-7 w-7 p-0"
-						disabled={busy}
-						title={event.active ? "Pause event" : "Resume event"}
-						aria-label={event.active ? "Pause event" : "Resume event"}
+						disabled={busy || !canEdit}
+						title={canEdit ? toggleActiveLabel : writeDeniedMessage}
+						aria-label={toggleActiveLabel}
 						onClick={() => onToggleActive(row)}
 					>
 						{busy ? (
@@ -966,7 +1027,8 @@ function EventRow({
 					variant="ghost"
 					size="sm"
 					className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-					title={t("delete", "Delete")}
+					disabled={!canEdit}
+					title={canEdit ? t("delete", "Delete") : writeDeniedMessage}
 					aria-label={t("deleteEvent", "Delete event")}
 					onClick={() => onDelete(event.id)}
 				>
@@ -1037,9 +1099,13 @@ function RunSparkline({
  */
 function RouteChip({
 	path,
+	canEdit,
+	writeDeniedMessage,
 	onSave,
 }: Readonly<{
 	path?: string;
+	canEdit: boolean;
+	writeDeniedMessage: string;
 	onSave: (next: string) => Promise<void>;
 }>) {
 	const { t } = useTranslation("settings");
@@ -1087,14 +1153,17 @@ function RouteChip({
 	return (
 		<button
 			type="button"
+			disabled={!canEdit}
 			onClick={() => setEditing(true)}
 			title={
-				path
-					? t("pathClickToEdit", "{{path}} — click to edit", { path })
-					: t("clickToSetARoute", "Click to set a route")
+				!canEdit
+					? writeDeniedMessage
+					: path
+						? t("pathClickToEdit", "{{path}} — click to edit", { path })
+						: t("clickToSetARoute", "Click to set a route")
 			}
 			className={cn(
-				"inline-flex max-w-full items-center gap-1.5 truncate rounded border px-1.5 py-0.5 font-mono text-[11.5px] leading-[1.45] transition-opacity hover:opacity-80",
+				"inline-flex max-w-full items-center gap-1.5 truncate rounded border px-1.5 py-0.5 font-mono text-[11.5px] leading-[1.45] transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60",
 				path
 					? "border-primary/25 bg-primary/10 text-primary"
 					: "border-destructive/25 bg-destructive/10 text-destructive",

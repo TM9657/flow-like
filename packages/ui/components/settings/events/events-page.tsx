@@ -29,6 +29,9 @@ import {
 	Label,
 	OAuthConsentDialog,
 	PatSelectorDialog,
+	PermissionNotice,
+	RolePermissions,
+	SectionLockedPanel,
 	Select,
 	SelectContent,
 	SelectItem,
@@ -37,6 +40,7 @@ import {
 	Textarea,
 	VariableConfigCard,
 	VariableTypeIndicator,
+	useAppPermissions,
 	useBackend,
 	useInvalidateInvoke,
 	useInvoke,
@@ -209,18 +213,26 @@ export default function EventsPage({
 		[uiEventTypes],
 	);
 	const router = useRouter();
+	const permissions = useAppPermissions(id);
+	const canListEvents = permissions.can(RolePermissions.ListEvents);
+	const canWriteEvents = permissions.can(RolePermissions.WriteEvents);
+	const canReadBoards = permissions.can(RolePermissions.ReadBoards);
+	const writeDeniedMessage = t(
+		"yourRoleCannotChangeThisProjectsEvents",
+		"Your role cannot create, change or delete this project's events.",
+	);
 	const events = useInvoke(
 		backend.eventState.getEvents,
 		backend.eventState,
 		[id ?? ""],
-		(id ?? "") !== "",
+		(id ?? "") !== "" && canListEvents,
 	);
 
 	const boards = useInvoke(
 		backend.boardState.getBoardSummaries,
 		backend.boardState,
 		[id ?? ""],
-		(id ?? "") !== "",
+		(id ?? "") !== "" && canReadBoards,
 	);
 
 	const boardsMap = useMemo(() => {
@@ -237,8 +249,8 @@ export default function EventsPage({
 	// event row itself, so it disappears with the event. Reconciling the two
 	// lists here only ever deleted live routes, because `GET /routes` is a
 	// superset of `GET /events` (which filters by type, active flag and
-	// permission) and because a failed event fetch is indistinguishable from an
-	// app with no events.
+	// permission). A failed or forbidden event fetch is now told apart from an
+	// app with no events below, so neither renders as the other.
 
 	// Check if app is offline
 	useEffect(() => {
@@ -258,6 +270,10 @@ export default function EventsPage({
 		) => {
 			if (!id) {
 				console.error("App ID is required to create an event");
+				return;
+			}
+			if (!canWriteEvents) {
+				toast.error(writeDeniedMessage);
 				return;
 			}
 			if (isCreating) {
@@ -380,11 +396,13 @@ export default function EventsPage({
 			backend.eventState,
 			backend.boardState,
 			backend.routeState,
+			canWriteEvents,
 			eventMapping,
 			isOffline,
 			uiEventTypeSet,
 			invalidate,
 			isCreating,
+			writeDeniedMessage,
 		],
 	);
 
@@ -392,6 +410,10 @@ export default function EventsPage({
 		async (eventId: string) => {
 			if (!id) {
 				console.error("App ID is required to delete an event");
+				return;
+			}
+			if (!canWriteEvents) {
+				toast.error(writeDeniedMessage);
 				return;
 			}
 			try {
@@ -418,11 +440,13 @@ export default function EventsPage({
 		},
 		[
 			id,
+			canWriteEvents,
 			editingEvent,
 			events,
 			backend.eventState,
 			backend.routeState,
 			invalidate,
+			writeDeniedMessage,
 		],
 	);
 
@@ -464,6 +488,10 @@ export default function EventsPage({
 		async (selectedPat: string) => {
 			if (pendingEvent && id) {
 				if (isCreating) {
+					return;
+				}
+				if (!canWriteEvents) {
+					toast.error(writeDeniedMessage);
 					return;
 				}
 				setIsCreating(true);
@@ -511,10 +539,12 @@ export default function EventsPage({
 			id,
 			backend.eventState,
 			backend.routeState,
+			canWriteEvents,
 			events,
 			uiEventTypeSet,
 			invalidate,
 			isCreating,
+			writeDeniedMessage,
 		],
 	);
 
@@ -543,7 +573,39 @@ export default function EventsPage({
 		<div className="container mx-auto flex max-h-full grow flex-col px-3 md:px-0">
 			<div className="flex flex-col grow overflow-hidden max-h-full">
 				<div className="flex flex-col overflow-auto overflow-x-visible grow h-full max-h-full">
-					{events.data?.length === 0 ? (
+					{!canListEvents && !permissions.isLoading ? (
+						<SectionLockedPanel
+							feature={t("events", "Events")}
+							description={t(
+								"yourRoleCannotSeeThisProjectsEvents",
+								"Your role cannot list this project's events, so nothing is shown here — that is not the same as this project having none.",
+							)}
+							missing={[RolePermissions.ListEvents]}
+							roleName={permissions.roleName}
+						/>
+					) : events.isError ? (
+						<Card>
+							<CardContent className="py-12 text-center">
+								<AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+								<h3 className="text-lg font-semibold mb-2">
+									{t("couldNotLoadEvents", "Could not load events")}
+								</h3>
+								<p className="text-muted-foreground mb-4">
+									{errorMessage(events.error)}
+								</p>
+								<Button
+									variant="outline"
+									className="gap-2"
+									onClick={() => {
+										events.refetch();
+									}}
+								>
+									<RefreshCw className="h-4 w-4" />
+									{t("retry", "Retry")}
+								</Button>
+							</CardContent>
+						</Card>
+					) : events.data?.length === 0 ? (
 						<Card>
 							<CardContent className="py-12 text-center">
 								<Settings className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -559,6 +621,8 @@ export default function EventsPage({
 								<Button
 									onClick={() => setIsCreateDialogOpen(true)}
 									className="gap-2"
+									disabled={!canWriteEvents}
+									title={canWriteEvents ? undefined : writeDeniedMessage}
 								>
 									<Plus className="h-4 w-4" />
 									{t("createEvent", "Create Event")}
@@ -572,6 +636,8 @@ export default function EventsPage({
 							appId={id ?? ""}
 							eventMapping={eventMapping}
 							uiEventTypes={uiEventTypes}
+							canEdit={canWriteEvents}
+							canReadBoards={canReadBoards}
 							onEdit={handleEditingEvent}
 							onDelete={handleDeleteEvent}
 							onNavigateToNode={handleNavigateToNode}
@@ -676,6 +742,14 @@ function EventConfiguration({
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const isMobile = useIsMobile();
+	const permissions = useAppPermissions(appId);
+	const canWriteEvents = permissions.can(RolePermissions.WriteEvents);
+	const canListEvents = permissions.can(RolePermissions.ListEvents);
+	const canReadBoards = permissions.can(RolePermissions.ReadBoards);
+	const writeDeniedMessage = t(
+		"yourRoleCannotChangeThisProjectsEvents",
+		"Your role cannot create, change or delete this project's events.",
+	);
 	const [isEditing, setIsEditing] = useState(false);
 	const [formData, setFormData] = useState<IEvent>(event);
 	const [showPatDialog, setShowPatDialog] = useState(false);
@@ -726,7 +800,7 @@ function EventConfiguration({
 		backend.routeState.getRoutes,
 		backend.routeState,
 		[appId],
-		(appId ?? "") !== "",
+		(appId ?? "") !== "" && canListEvents,
 	);
 
 	const routeForEvent = useMemo(() => {
@@ -764,25 +838,25 @@ function EventConfiguration({
 		backend.boardState.getBoardSummaries,
 		backend.boardState,
 		[appId],
-		!!appId && isEditing && !isPageTargetEvent,
+		!!appId && isEditing && !isPageTargetEvent && canReadBoards,
 	);
 	const pages = useInvoke(
 		backend.pageState.getPages,
 		backend.pageState,
 		[appId],
-		!!appId && isEditing,
+		!!appId && isEditing && canReadBoards,
 	);
 	const board = useInvoke(
 		backend.boardState.getBoard,
 		backend.boardState,
 		[appId, formData.board_id, normalizeBoardVersion(formData.board_version)],
-		!!formData.board_id && !isPageTargetEvent,
+		!!formData.board_id && !isPageTargetEvent && canReadBoards,
 	);
 	const versions = useInvoke(
 		backend.boardState.getBoardVersions,
 		backend.boardState,
 		[appId, formData.board_id],
-		(formData.board_id ?? "") !== "" && isEditing,
+		(formData.board_id ?? "") !== "" && isEditing && canReadBoards,
 	);
 
 	// Check if app is offline
@@ -1030,6 +1104,10 @@ function EventConfiguration({
 		selectedPat?: string,
 		oauthTokens?: Record<string, IOAuthToken>,
 	) => {
+		if (!canWriteEvents) {
+			toast.error(writeDeniedMessage);
+			return;
+		}
 		if (savingRef.current) return;
 		savingRef.current = true;
 		setIsSaving(true);
@@ -1096,6 +1174,10 @@ function EventConfiguration({
 
 	// Refresh inputs from the current node definition
 	const handleRefreshInputs = async () => {
+		if (!canWriteEvents) {
+			toast.error(writeDeniedMessage);
+			return;
+		}
 		setIsRefreshingInputs(true);
 		try {
 			// Re-upsert the event to trigger populate_inputs on the backend
@@ -1330,11 +1412,17 @@ function EventConfiguration({
 		boardVariables: board.data?.variables,
 	});
 
+	// Every inline "click to edit" affordance funnels through here, so a role
+	// that cannot save never enters an edit state it would be stuck in.
 	const enterEdit = useCallback(() => {
+		if (!canWriteEvents) {
+			toast.error(writeDeniedMessage);
+			return;
+		}
 		setIsEditing(true);
-	}, []);
+	}, [canWriteEvents, writeDeniedMessage]);
 
-	const showSaveBar = isDirty || isEditing;
+	const showSaveBar = (isDirty || isEditing) && canWriteEvents;
 	const saveBar = (
 		<EventSaveBar
 			placement={isMobile ? "top" : "bottom"}
@@ -1370,6 +1458,24 @@ function EventConfiguration({
 
 			{/* Content */}
 			<div className="space-y-6 pb-6">
+				{!canWriteEvents && (
+					<PermissionNotice
+						tone="readOnly"
+						title={t("thisEventIsReadonly", "This event is read-only for you")}
+						description={writeDeniedMessage}
+						missing={[RolePermissions.WriteEvents]}
+					/>
+				)}
+				{!canReadBoards && (
+					<PermissionNotice
+						title={t("flowDetailsUnavailable", "Flow details unavailable")}
+						description={t(
+							"readingTheFlowBehindThisEventNeedsWorkflowAccess",
+							"The flow behind this event cannot be read with your role, so its name, nodes and trigger configuration are unavailable — they are not missing.",
+						)}
+						missing={[RolePermissions.ReadBoards]}
+					/>
+				)}
 				{/* Status */}
 				<div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-lg border bg-card/80 px-3 py-3 sm:px-4">
 					<div className="flex shrink-0 items-center gap-2.5">
@@ -1503,6 +1609,8 @@ function EventConfiguration({
 						<Button
 							variant="outline"
 							size="sm"
+							disabled={!canWriteEvents}
+							title={canWriteEvents ? undefined : writeDeniedMessage}
 							onClick={() => {
 								if (!isEditing) enterEdit();
 								handleInputChange("active", !formData.active);
@@ -1823,7 +1931,12 @@ function EventConfiguration({
 												onClick={enterEdit}
 											>
 												{board.data?.name ??
-													t("boardNotFound", "BOARD NOT FOUND!")}
+													(canReadBoards
+														? t("boardNotFound", "BOARD NOT FOUND!")
+														: t(
+																"flowNameHiddenByYourRole",
+																"Name hidden — your role cannot read this flow",
+															))}
 											</button>
 										</div>
 										<div>
@@ -2112,7 +2225,8 @@ function EventConfiguration({
 											variant="outline"
 											size="sm"
 											onClick={handleRefreshInputs}
-											disabled={isRefreshingInputs}
+											disabled={isRefreshingInputs || !canWriteEvents}
+											title={canWriteEvents ? undefined : writeDeniedMessage}
 											className="gap-2"
 										>
 											{isRefreshingInputs ? (
@@ -2448,7 +2562,7 @@ function EventConfiguration({
 										appId={appId}
 										eventType={formData.event_type}
 										eventConfig={eventMapping}
-										editing
+										editing={canWriteEvents}
 										// The working copy, not the saved event — otherwise the
 										// fields render the last-saved values and Discard has
 										// nothing to reset them to.

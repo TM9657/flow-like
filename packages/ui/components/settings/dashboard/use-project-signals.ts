@@ -2,10 +2,12 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useFeatures } from "../../../hooks/use-features";
 import { useInvoke } from "../../../hooks/use-invoke";
 import type { IApp, IEvent, IMetadata } from "../../../lib";
 import { IAppVisibility } from "../../../lib";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import { useBackend } from "../../../state/backend-state";
 import type { ProjectRunHealth } from "./use-project-runs";
 
@@ -25,6 +27,13 @@ export interface AttentionSignal {
 	panel?: InspectorPanel;
 	/** Which Launch Path stage this belongs to, when it maps to one. */
 	stage?: number;
+	/**
+	 * Set when the signal is a gate rather than a task. A key means the reader
+	 * can lift it here; a padlock means someone else holds it. The rail draws
+	 * the glyph instead of a tone dot so the same fact reads the same way as in
+	 * the nav and on the access card.
+	 */
+	lock?: "visibility" | "permission";
 }
 
 export type InspectorPanel =
@@ -35,8 +44,97 @@ export type InspectorPanel =
 	| "release"
 	| "advanced";
 
+/**
+ * What this account may do on the project, resolved once at the top of the
+ * dashboard and threaded down rather than re-asked in every leaf.
+ *
+ * Each flag names the server guard it mirrors, so a denial can be rendered
+ * where the data would have been instead of collapsing into a confident zero.
+ * Read flags use {@link AppPermissions.can}, which degrades open when there is
+ * no permission model to ask — a local-only project has none.
+ */
+export interface DashboardPermissions {
+	/** The role resolved; every flag reflects real server-side bits. */
+	known: boolean;
+	isLoading: boolean;
+	roleName?: string;
+	/** `ReadBoards` — flow summaries, pages and the run log. */
+	canReadBoards: boolean;
+	/** `WriteBoards` — creating or editing a flow. */
+	canWriteBoards: boolean;
+	/** `ListEvents` — triggers and routes. */
+	canListEvents: boolean;
+	/** `WriteEvents` — pausing, wiring and deleting triggers. */
+	canWriteEvents: boolean;
+	/** `ExecuteEvents` or `ExecuteBoards` — running the app. */
+	canExecute: boolean;
+	/** `ReadTemplates` — starting a flow from a template. */
+	canReadTemplates: boolean;
+	/** `ReadTeam` — the member list. */
+	canReadTeam: boolean;
+	/** `ReadRoles` — the role editor. */
+	canReadRoles: boolean;
+	/** `ReadAnalytics` — model spend and usage rollups. */
+	canReadAnalytics: boolean;
+	/** `Owner` — the conformity assessment and publication history. */
+	canReadCompliance: boolean;
+	/** `WriteMeta` — name, summary, description, artwork, tags and links. */
+	canWriteMeta: boolean;
+	/**
+	 * `Owner` — app-row fields (type, status, version, price, categories),
+	 * visibility, forking, compliance and deletion. `Admin` satisfies it, as it
+	 * does server-side.
+	 */
+	canWriteApp: boolean;
+}
+
+/**
+ * Resolve the dashboard's permission set.
+ *
+ * `hostCanEdit` is the deployment's own veto — it can only take editing away,
+ * never grant it, so a host that hardcodes `true` still cannot hand a member
+ * controls their role refuses.
+ */
+export function useDashboardPermissions(
+	appId: string | undefined,
+	hostCanEdit = true,
+): DashboardPermissions {
+	const permissions = useAppPermissions(appId);
+
+	return useMemo(() => {
+		const write = (...list: RolePermissions[]) =>
+			hostCanEdit && permissions.can(...list);
+
+		return {
+			known: permissions.known,
+			isLoading: permissions.isLoading,
+			roleName: permissions.roleName,
+			canReadBoards: permissions.can(RolePermissions.ReadBoards),
+			canWriteBoards: write(RolePermissions.WriteBoards),
+			canListEvents: permissions.can(RolePermissions.ListEvents),
+			canWriteEvents: write(RolePermissions.WriteEvents),
+			canExecute: permissions.can(
+				RolePermissions.ExecuteEvents,
+				RolePermissions.ExecuteBoards,
+			),
+			canReadTemplates: permissions.can(RolePermissions.ReadTemplates),
+			canReadTeam: permissions.can(RolePermissions.ReadTeam),
+			canReadRoles: permissions.can(RolePermissions.ReadRoles),
+			canReadAnalytics: permissions.can(RolePermissions.ReadAnalytics),
+			canReadCompliance: permissions.can(RolePermissions.Owner),
+			canWriteMeta: write(RolePermissions.WriteMeta),
+			canWriteApp: write(RolePermissions.Owner),
+		};
+	}, [permissions, hostCanEdit]);
+}
+
 export interface AiActStatus {
+	/** The assessment applies here and this account may read it. */
 	available: boolean;
+	/** The assessment applies — the feature is on and the project is online. */
+	applicable: boolean;
+	/** This account may read the assessment (`Owner`). */
+	readable: boolean;
 	isLoading: boolean;
 	hasAssessment: boolean;
 	riskCategory: string | null;
@@ -66,10 +164,15 @@ export function isOnlineVisibility(visibility: IAppVisibility): boolean {
 /**
  * Shares the wizard's query key so the dashboard badge and the wizard itself
  * never disagree, and so opening the wizard costs no extra request.
+ *
+ * The endpoint is `Owner`-only, so `canRead` has to gate it: firing it for a
+ * member answers 403, and coercing that to "not submitted" would nag them
+ * about a document they are not allowed to see.
  */
 export function useAiActStatus(
 	appId: string | undefined,
 	visibility: IAppVisibility | undefined,
+	canRead = true,
 ): AiActStatus {
 	const backend = useBackend();
 	const features = useFeatures();
@@ -79,11 +182,9 @@ export function useAiActStatus(
 		[],
 	);
 
-	const enabled =
-		!!appId &&
-		!!profile.data &&
-		!!features.data?.ai_act &&
-		visibility !== IAppVisibility.Offline;
+	const applicable =
+		!!appId && !!features.data?.ai_act && visibility !== IAppVisibility.Offline;
+	const enabled = applicable && !!profile.data && canRead;
 
 	const questionnaire = useQuery<QuestionnaireSummary>({
 		queryKey: ["ai-act", "questionnaire", appId],
@@ -101,6 +202,8 @@ export function useAiActStatus(
 	return useMemo(
 		() => ({
 			available: enabled,
+			applicable,
+			readable: canRead,
 			isLoading: questionnaire.isLoading,
 			hasAssessment: questionnaire.data?.hasAssessment ?? false,
 			riskCategory: questionnaire.data?.classification?.riskCategory ?? null,
@@ -108,7 +211,7 @@ export function useAiActStatus(
 				questionnaire.data?.classification?.conformityScore ?? null,
 			blocked: questionnaire.data?.classification?.blocked ?? false,
 		}),
-		[enabled, questionnaire.data, questionnaire.isLoading],
+		[enabled, applicable, canRead, questionnaire.data, questionnaire.isLoading],
 	);
 }
 
@@ -176,6 +279,7 @@ export interface ProjectSignalsInput {
 	listingDone: number;
 	listingTotal: number;
 	boardNames: Map<string, string>;
+	permissions: DashboardPermissions;
 }
 
 /**
@@ -183,6 +287,10 @@ export interface ProjectSignalsInput {
  * derived from something observable — a failed run, a paused event, a missing
  * assessment. Nothing is invented, so an untouched project legitimately has an
  * empty queue.
+ *
+ * A signal is also dropped when this account cannot reach the thing that
+ * clears it: telling a member to change visibility or finish a listing they
+ * have no permission to touch is worse than saying nothing.
  */
 export function useProjectSignals({
 	appId,
@@ -193,34 +301,39 @@ export function useProjectSignals({
 	listingDone,
 	listingTotal,
 	boardNames,
+	permissions,
 }: ProjectSignalsInput): AttentionSignal[] {
 	return useMemo(() => {
 		const signals: AttentionSignal[] = [];
 
-		for (const [boardId, health] of runs.byBoard) {
-			if (health.failed === 0) continue;
-			signals.push({
-				id: `runs-failed-${boardId}`,
-				tone: "critical",
-				label: `${health.failed} run${health.failed === 1 ? "" : "s"} failed`,
-				subject: boardNames.get(boardId) ?? "Deleted flow",
-				actionLabel: "Open runs",
-				href: `/flow?id=${boardId}&app=${appId}`,
-				stage: 3,
-			});
+		if (permissions.canReadBoards) {
+			for (const [boardId, health] of runs.byBoard) {
+				if (health.failed === 0) continue;
+				signals.push({
+					id: `runs-failed-${boardId}`,
+					tone: "critical",
+					label: `${health.failed} run${health.failed === 1 ? "" : "s"} failed`,
+					subject: boardNames.get(boardId) ?? "Deleted flow",
+					actionLabel: "Open runs",
+					href: `/flow?id=${boardId}&app=${appId}`,
+					stage: 3,
+				});
+			}
 		}
 
-		const pausedEvents = (events ?? []).filter((event) => !event.active);
-		for (const event of pausedEvents.slice(0, 2)) {
-			signals.push({
-				id: `event-paused-${event.id}`,
-				tone: "warning",
-				label: "Trigger is paused",
-				subject: event.name,
-				actionLabel: "Manage",
-				href: `/library/config/pages?id=${appId}`,
-				stage: 2,
-			});
+		if (permissions.canWriteEvents) {
+			const pausedEvents = (events ?? []).filter((event) => !event.active);
+			for (const event of pausedEvents.slice(0, 2)) {
+				signals.push({
+					id: `event-paused-${event.id}`,
+					tone: "warning",
+					label: "Trigger is paused",
+					subject: event.name,
+					actionLabel: "Manage",
+					href: `/library/config/pages?id=${appId}`,
+					stage: 2,
+				});
+			}
 		}
 
 		if (aiAct.available && !aiAct.hasAssessment) {
@@ -245,7 +358,7 @@ export function useProjectSignals({
 			});
 		}
 
-		if (app?.visibility === IAppVisibility.Private) {
+		if (app?.visibility === IAppVisibility.Private && permissions.canWriteApp) {
 			signals.push({
 				id: "private-locks-team",
 				tone: "info",
@@ -253,13 +366,15 @@ export function useProjectSignals({
 				actionLabel: "Change visibility",
 				panel: "access",
 				stage: 4,
+				lock: "visibility",
 			});
 		}
 
 		if (
 			app &&
 			isOnlineVisibility(app.visibility) &&
-			listingDone < listingTotal
+			listingDone < listingTotal &&
+			(permissions.canWriteMeta || permissions.canWriteApp)
 		) {
 			signals.push({
 				id: "listing-incomplete",
@@ -286,5 +401,6 @@ export function useProjectSignals({
 		listingDone,
 		listingTotal,
 		boardNames,
+		permissions,
 	]);
 }

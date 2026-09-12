@@ -66,42 +66,64 @@ import {
 	userInitials,
 	userSecondaryLabel,
 } from "../../../lib/user-display";
+import { PermissionNotice, SectionLockedPanel } from "../permission";
 import {
+	type ITeamAccess,
 	SectionHeading,
 	StatusChip,
 	TEAM_ROW_HANDLE,
 	TEAM_ROW_META,
 	TEAM_ROW_TITLE,
+	TeamActionLock,
 	TeamHint,
+	TeamReadError,
 	TeamRowActions,
 	TeamRowNote,
 	TeamSearchInput,
 	TeamSection,
 	TeamToolbar,
 	teamRowClass,
+	useTeamAccess,
 } from "./team-shared";
 
 export function UserManagement({ appId }: Readonly<{ appId: string }>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
+	const access = useTeamAccess(appId);
+	const canReadTeam = access.canReadTeam && !access.isLoading;
 	const {
 		data: team,
 		hasNextPage,
 		fetchNextPage,
 		isFetchingNextPage,
 		isLoading: isLoadingTeam,
-	} = useInfiniteInvoke(backend.teamState.getTeam, backend.teamState, [appId]);
-	const roles = useInvoke(backend.roleState.getRoles, backend.roleState, [
-		appId,
-	]);
+		isError: teamReadFailed,
+		error: teamError,
+	} = useInfiniteInvoke(
+		backend.teamState.getTeam,
+		backend.teamState,
+		[appId],
+		50,
+		canReadTeam,
+	);
+	const roles = useInvoke(
+		backend.roleState.getRoles,
+		backend.roleState,
+		[appId],
+		access.canReadRoles && !access.isLoading,
+	);
 	const {
 		data: invitePages,
 		hasNextPage: hasMoreInvites,
 		fetchNextPage: fetchMoreInvites,
 		isFetchingNextPage: isFetchingMoreInvites,
-	} = useInfiniteInvoke(backend.teamState.getAppInvites, backend.teamState, [
-		appId,
-	]);
+	} = useInfiniteInvoke(
+		backend.teamState.getAppInvites,
+		backend.teamState,
+		[appId],
+		50,
+		canReadTeam,
+	);
 
 	const [searchQuery, setSearchQuery] = useState("");
 	const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -109,7 +131,12 @@ export function UserManagement({ appId }: Readonly<{ appId: string }>) {
 
 	const members = useMemo(() => team?.pages.flat() ?? [], [team]);
 	const invites = useMemo(() => invitePages?.pages.flat() ?? [], [invitePages]);
-	const roleList = roles.data?.[1];
+	// A denied or failed role read means "roles unknown", never "no roles". The
+	// two platforms disagree on a 403 here — desktop throws, web swallows it and
+	// returns [] — so the degradation is decided here, not by the state class.
+	const rolesDenied = !access.canReadRoles;
+	const rolesUnknown = rolesDenied || roles.isError;
+	const roleList = rolesUnknown ? undefined : (roles.data?.[1] ?? []);
 
 	const filteredTeam = useMemo(() => {
 		if (roleFilter === "all") return members;
@@ -151,7 +178,21 @@ export function UserManagement({ appId }: Readonly<{ appId: string }>) {
 	);
 
 	const isFiltering = searchTerm.length > 0 || roleFilter !== "all";
-	const isInitialLoading = isLoadingTeam || roleList === undefined;
+	const isInitialLoading = access.isLoading || isLoadingTeam || roles.isLoading;
+
+	if (!access.canReadTeam && !access.isLoading) {
+		return (
+			<SectionLockedPanel
+				feature={t("people", "People")}
+				description={t(
+					"yourRoleCannotSeeWhoHasAccessToThisProject",
+					"Your role cannot see who has access to this project.",
+				)}
+				missing={[RolePermissions.ReadTeam]}
+				roleName={access.roleName}
+			/>
+		);
+	}
 
 	return (
 		<TeamSection>
@@ -178,21 +219,59 @@ export function UserManagement({ appId }: Readonly<{ appId: string }>) {
 					onChange={setSearchQuery}
 					placeholder={t("searchByNameOrHandle", "Search by name or handle…")}
 				/>
-				<Select value={roleFilter} onValueChange={setRoleFilter}>
-					<SelectTrigger className="h-9 w-40">
-						<FilterIcon className="size-4 text-muted-foreground" />
-						<SelectValue placeholder={t("filterByRole", "Filter by role")} />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="all">{t("allRoles", "All roles")}</SelectItem>
-						{roleList?.map((role) => (
-							<SelectItem key={role.id} value={role.id}>
-								{role.name}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
+				<TeamActionLock
+					locked={rolesUnknown}
+					reason={
+						rolesDenied
+							? t(
+									"roleNamesNeedTheReadRolesPermission",
+									"Filtering by role needs permission to read this project's roles.",
+								)
+							: t(
+									"filteringByRoleNeedsTheRolesOfThisProjectWhichCouldNotBeRead",
+									"Filtering by role needs this project's roles, which could not be read.",
+								)
+					}
+				>
+					<Select
+						value={roleFilter}
+						onValueChange={setRoleFilter}
+						disabled={rolesUnknown}
+					>
+						<SelectTrigger className="h-9 w-40">
+							<FilterIcon className="size-4 text-muted-foreground" />
+							<SelectValue placeholder={t("filterByRole", "Filter by role")} />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">{t("allRoles", "All roles")}</SelectItem>
+							{roleList?.map((role) => (
+								<SelectItem key={role.id} value={role.id}>
+									{role.name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</TeamActionLock>
 			</TeamToolbar>
+
+			{rolesUnknown &&
+				!access.isLoading &&
+				(rolesDenied ? (
+					<PermissionNotice
+						tone="readOnly"
+						title={t("roleNamesUnavailable", "Role names unavailable")}
+						description={t(
+							"theMemberListIsCompleteButThisRoleCannotSeeWhichRoleEachPersonHolds",
+							"The member list is complete, but your role cannot see which role each person holds.",
+						)}
+						missing={[RolePermissions.ReadRoles]}
+					/>
+				) : (
+					<TeamReadError
+						title={t("roleNamesUnavailable", "Role names unavailable")}
+						error={roles.error}
+					/>
+				))}
 
 			<div className="flex flex-col gap-2">
 				{isInitialLoading ? (
@@ -208,6 +287,7 @@ export function UserManagement({ appId }: Readonly<{ appId: string }>) {
 								key={invite.id}
 								invite={invite}
 								appId={appId}
+								access={access}
 								searchQuery={searchQuery}
 								onMatchChange={reportMatch}
 							/>
@@ -231,30 +311,42 @@ export function UserManagement({ appId }: Readonly<{ appId: string }>) {
 							<Member
 								key={member.id}
 								member={member}
-								roles={roleList ?? []}
+								appId={appId}
+								access={access}
+								roles={roleList}
 								searchQuery={searchQuery}
 								onMatchChange={reportMatch}
 							/>
 						))}
 
-						{visibleCount === 0 && visibleInviteCount === 0 && (
-							<EmptyState
-								className="max-w-full"
-								title={t("noMembersFound", "No members found")}
-								description={
-									isFiltering
-										? t(
-												"tryAdjustingYourSearchOrFilterCriteria",
-												"Try adjusting your search or filter criteria",
-											)
-										: t(
-												"noTeamMembersHaveBeenAddedYet",
-												"No team members have been added yet",
-											)
-								}
-								icons={[UserXIcon]}
-							/>
-						)}
+						{visibleCount === 0 &&
+							visibleInviteCount === 0 &&
+							(teamReadFailed ? (
+								<TeamReadError
+									title={t(
+										"theTeamCouldNotBeLoaded",
+										"The team could not be loaded",
+									)}
+									error={teamError}
+								/>
+							) : (
+								<EmptyState
+									className="max-w-full"
+									title={t("noMembersFound", "No members found")}
+									description={
+										isFiltering
+											? t(
+													"tryAdjustingYourSearchOrFilterCriteria",
+													"Try adjusting your search or filter criteria",
+												)
+											: t(
+													"noTeamMembersHaveBeenAddedYet",
+													"No team members have been added yet",
+												)
+									}
+									icons={[UserXIcon]}
+								/>
+							))}
 					</>
 				)}
 
@@ -316,11 +408,13 @@ function MemberRowSkeleton() {
 function PendingInvite({
 	invite,
 	appId,
+	access,
 	searchQuery,
 	onMatchChange,
 }: Readonly<{
 	invite: IInvite;
 	appId: string;
+	access: ITeamAccess;
 	searchQuery: string;
 	onMatchChange: (id: string, matches: boolean) => void;
 }>) {
@@ -401,11 +495,22 @@ function PendingInvite({
 
 			<TeamRowActions>
 				<AlertDialog>
-					<AlertDialogTrigger asChild>
-						<Button variant="ghost" size="icon" className="size-8">
-							<Trash2Icon className="size-4" />
-						</Button>
-					</AlertDialogTrigger>
+					<TeamActionLock
+						locked={!access.canAdminister}
+						reason={access.adminReason}
+					>
+						<AlertDialogTrigger asChild>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-8"
+								disabled={!access.canAdminister}
+								aria-label={t("revokeInvitation", "Revoke Invitation")}
+							>
+								<Trash2Icon className="size-4" />
+							</Button>
+						</AlertDialogTrigger>
+					</TeamActionLock>
 					<AlertDialogContent>
 						<AlertDialogHeader>
 							<AlertDialogTitle>
@@ -437,18 +542,24 @@ function PendingInvite({
 
 function Member({
 	member,
+	appId,
+	access,
 	roles,
 	searchQuery,
 	onMatchChange,
 }: Readonly<{
 	member: IMember;
-	roles: IBackendRole[];
+	appId: string;
+	access: ITeamAccess;
+	/** `undefined` when the role read was denied or failed — never an empty list. */
+	roles?: IBackendRole[];
 	searchQuery: string;
 	onMatchChange: (memberId: string, matches: boolean) => void;
 }>) {
 	const { t } = useTranslation("settings");
 	const invalidate = useInvalidateInvoke();
-	const userRole = roles.find((role) => role.id === member.role_id);
+	const rolesUnknown = roles === undefined;
+	const userRole = roles?.find((role) => role.id === member.role_id);
 	const permission = new RolePermissions(userRole?.permissions ?? 0);
 	const isOwner = permission.contains(RolePermissions.Owner);
 	const backend = useBackend();
@@ -481,27 +592,21 @@ function Member({
 
 	const handleChangeRole = useCallback(
 		async (roleId: string) => {
-			if (!userRole) return;
 			if (roleId === member.role_id) return;
-			await backend.roleState.assignRole(
-				userRole.app_id,
-				roleId,
-				member.user_id,
-			);
-			invalidate(backend.teamState.getTeam, [userRole.app_id]);
+			await backend.roleState.assignRole(appId, roleId, member.user_id);
+			invalidate(backend.teamState.getTeam, [appId]);
 			setIsChangeRoleOpen(false);
 		},
-		[member.role_id, member.user_id, backend, userRole, invalidate],
+		[appId, member.role_id, member.user_id, backend, invalidate],
 	);
 
 	const handleRemoveMember = useCallback(async () => {
-		if (!userRole) return;
-		await backend.teamState.removeUser(userRole.app_id, member.user_id);
-		invalidate(backend.teamState.getTeam, [userRole.app_id]);
+		await backend.teamState.removeUser(appId, member.user_id);
+		invalidate(backend.teamState.getTeam, [appId]);
 		toast.success(
 			`${userDisplayName(userData, "User")} has been removed from the team.`,
 		);
-	}, [member.user_id, backend, userRole, userData, invalidate]);
+	}, [appId, member.user_id, backend, userData, invalidate]);
 
 	if (!matches) return null;
 
@@ -509,7 +614,9 @@ function Member({
 
 	const evaluatedName = userDisplayName(userData, "Unknown User");
 	const handle = userSecondaryLabel(userData);
-	const roleName = userRole?.name ?? t("noRoleAssigned", "No Role Assigned");
+	const roleName = rolesUnknown
+		? t("roleHidden", "Role hidden")
+		: (userRole?.name ?? t("noRoleAssigned", "No Role Assigned"));
 
 	return (
 		<div className={teamRowClass()}>
@@ -544,18 +651,32 @@ function Member({
 			{!isOwner && (
 				<TeamRowActions>
 					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" size="icon" className="size-8">
-								<MoreVerticalIcon className="size-4" />
-							</Button>
-						</DropdownMenuTrigger>
+						<TeamActionLock
+							locked={!access.canAdminister}
+							reason={access.adminReason}
+						>
+							<DropdownMenuTrigger asChild>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="size-8"
+									disabled={!access.canAdminister}
+									aria-label={t("manageMember", "Manage member")}
+								>
+									<MoreVerticalIcon className="size-4" />
+								</Button>
+							</DropdownMenuTrigger>
+						</TeamActionLock>
 						<DropdownMenuContent align="end">
 							<Dialog
 								open={isChangeRoleOpen}
 								onOpenChange={setIsChangeRoleOpen}
 							>
 								<DialogTrigger asChild>
-									<DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+									<DropdownMenuItem
+										disabled={rolesUnknown}
+										onSelect={(e) => e.preventDefault()}
+									>
 										<SettingsIcon className="size-4" />
 										{t("changeRole", "Change Role")}
 									</DropdownMenuItem>
@@ -582,7 +703,7 @@ function Member({
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>
-													{roles.map((role) => (
+													{roles?.map((role) => (
 														<SelectItem key={role.id} value={role.id}>
 															<div className="flex items-center gap-2">
 																{role.name}

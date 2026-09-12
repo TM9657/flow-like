@@ -1,17 +1,26 @@
 "use client";
 
+import { useTranslation } from "@flow-like/locales";
 import { isEqual } from "lodash-es";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { IApp, IMetadata } from "../../../lib";
 import { useBackend } from "../../../state/backend-state";
-import type { InspectorPanel } from "./use-project-signals";
+import type {
+	DashboardPermissions,
+	InspectorPanel,
+} from "./use-project-signals";
 
 /**
  * Which draft fields each inspector panel owns. Saving a panel writes exactly
  * these fields on top of the server's current copy, so one panel can never
  * silently commit another panel's edits — the behaviour today's single
  * "Unsaved changes" bar cannot offer.
+ *
+ * The two halves are guarded differently: metadata is `WriteMeta`, the app row
+ * is `Owner`. A panel that touches both has to check both, or a `WriteMeta`
+ * editor saves the name and then 403s on the app row, leaving the project
+ * half-updated behind one generic toast.
  */
 const APP_FIELDS: Partial<Record<InspectorPanel, (keyof IApp)[]>> = {
 	identity: ["app_type"],
@@ -43,7 +52,9 @@ export function useProjectDraft(
 	app: IApp | undefined,
 	metadata: IMetadata | undefined,
 	onSaved: () => Promise<void> | void,
+	permissions: Pick<DashboardPermissions, "canWriteMeta" | "canWriteApp">,
 ): ProjectDraft {
+	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const [draftApp, setDraftApp] = useState<IApp | undefined>();
 	const [draftMetadata, setDraftMetadata] = useState<IMetadata | undefined>();
@@ -85,9 +96,31 @@ export function useProjectDraft(
 	const savePanel = useCallback(
 		async (panel: InspectorPanel) => {
 			if (!appId || !app || !metadata || !draftApp || !draftMetadata) return;
+
+			const metaKeys = (METADATA_FIELDS[panel] ?? []).filter(
+				(key) => !isEqual(draftMetadata[key], metadata[key]),
+			);
+			const appKeys = (APP_FIELDS[panel] ?? []).filter(
+				(key) => !isEqual(draftApp[key], app[key]),
+			);
+			// Only the halves that actually changed are sent, so an editor who may
+			// write one of them is never refused for the other.
+			const blocked =
+				(metaKeys.length > 0 && !permissions.canWriteMeta) ||
+				(appKeys.length > 0 && !permissions.canWriteApp);
+			if (blocked) {
+				toast.error(
+					t(
+						"yourRoleCannotSaveTheseChanges",
+						"Your role cannot save these changes.",
+					),
+				);
+				return;
+			}
+			if (metaKeys.length === 0 && appKeys.length === 0) return;
+
 			setIsSaving(true);
 			try {
-				const metaKeys = METADATA_FIELDS[panel] ?? [];
 				if (metaKeys.length > 0) {
 					const nextMetadata = { ...metadata } as IMetadata;
 					for (const key of metaKeys) {
@@ -97,7 +130,6 @@ export function useProjectDraft(
 					await backend.appState.pushAppMeta(appId, nextMetadata);
 				}
 
-				const appKeys = APP_FIELDS[panel] ?? [];
 				if (appKeys.length > 0) {
 					const nextApp = { ...app } as IApp;
 					for (const key of appKeys) {
@@ -116,7 +148,18 @@ export function useProjectDraft(
 				setIsSaving(false);
 			}
 		},
-		[appId, app, metadata, draftApp, draftMetadata, backend.appState, onSaved],
+		[
+			appId,
+			app,
+			metadata,
+			draftApp,
+			draftMetadata,
+			backend.appState,
+			onSaved,
+			permissions.canWriteMeta,
+			permissions.canWriteApp,
+			t,
+		],
 	);
 
 	const resetPanel = useCallback(

@@ -13,6 +13,8 @@ import {
 import type { ReactNode } from "react";
 import { useCallback } from "react";
 import { toast } from "sonner";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import type { IApp } from "../../../types";
 import { IAppVisibility } from "../../../types";
 import {
@@ -34,6 +36,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "../../ui/card";
+import { Skeleton } from "../../ui/skeleton";
+import { PermissionNotice } from "../permission/permission-notice";
 import {
 	type IVisibilityEntityNoun,
 	VISIBILITY_META,
@@ -108,7 +112,7 @@ export function EntityVisibilitySwitcher({
 				);
 			}
 		},
-		[entityId, entityNoun, onVisibilityChange, visibility],
+		[entityId, entityNoun, onVisibilityChange, visibility, t],
 	);
 
 	if (!canEdit) {
@@ -227,8 +231,14 @@ export function EntityVisibilitySwitcher({
 							<InfoIcon className="w-4 h-4" />
 							<span className="text-sm">
 								{visibility === IAppVisibility.Offline
-									? `No transitions available from Offline status`
-									: `No transitions available from current status`}
+									? t(
+											"noTransitionsAvailableFromOfflineStatus",
+											"No transitions available from Offline status",
+										)
+									: t(
+											"noTransitionsAvailableFromCurrentStatus",
+											"No transitions available from current status",
+										)}
 							</span>
 						</div>
 					</div>
@@ -272,17 +282,53 @@ export interface VisibilityStatusSwitcherProps {
 	docsUrl?: string;
 }
 
+/**
+ * App-scoped wrapper. `PATCH /apps/{id}/visibility` is
+ * `ensure_permission!(.., Owner)`, so the caller's own role decides here
+ * rather than at the mount site — every config surface embedding this would
+ * otherwise have to repeat the check, and today none of them do.
+ */
 export function VisibilityStatusSwitcher({
 	localApp,
 	canEdit,
 	onVisibilityChange,
 	docsUrl,
 }: Readonly<VisibilityStatusSwitcherProps>) {
+	const { t } = useTranslation("settings");
+	const permissions = useAppPermissions(localApp.id);
+	const visibility = localApp.visibility ?? IAppVisibility.Offline;
+	const mayChange = canEdit && permissions.can(RolePermissions.Owner);
+
+	if (permissions.isLoading) {
+		return <Skeleton className="h-64 w-full" />;
+	}
+
+	// `EntityVisibilitySwitcher` renders nothing at all without `canEdit`, and
+	// this card is the only place the app's current visibility is stated — so a
+	// member who cannot change it must still be told what it is, and why.
+	if (!mayChange) {
+		return (
+			<PermissionNotice
+				tone="readOnly"
+				title={t(
+					"onlyAnOwnerCanChangeVisibility",
+					"Only an owner can change visibility",
+				)}
+				description={t(
+					"thisProjectIsCurrentlyTitleYourRoleCanSeeThatButNotChangeWhoMayReachIt",
+					"This project is currently {{title}}. Your role can see that, but not change who may reach it.",
+					{ title: VISIBILITY_META[visibility].title },
+				)}
+				missing={[RolePermissions.Owner]}
+			/>
+		);
+	}
+
 	return (
 		<EntityVisibilitySwitcher
 			entityId={localApp.id}
-			visibility={localApp.visibility ?? IAppVisibility.Offline}
-			canEdit={canEdit}
+			visibility={visibility}
+			canEdit
 			entityNoun="app"
 			onVisibilityChange={onVisibilityChange}
 			docsUrl={docsUrl}

@@ -28,6 +28,7 @@ import {
 	EmptyState,
 	Input,
 	Label,
+	RolePermissions,
 	Textarea,
 	initials,
 	seedGradient,
@@ -35,11 +36,18 @@ import {
 	useInvalidateInvoke,
 	useInvoke,
 } from "../../..";
+import { SectionLockedPanel } from "../permission";
 import {
 	VISIBILITY_META,
 	fromWireVisibility,
 } from "../visibility-status/visibility-meta";
 import { GroupConsole } from "./group-console";
+import {
+	type ITeamAccess,
+	TeamActionLock,
+	TeamReadError,
+	useTeamAccess,
+} from "./team-shared";
 
 interface GroupManagementProps {
 	appId: string;
@@ -49,19 +57,26 @@ export function GroupManagement({ appId }: Readonly<GroupManagementProps>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	const access = useTeamAccess(appId);
+	const canRead = access.canReadTeam && !access.isLoading;
 
-	const groups = useInvoke(backend.teamState.listGroups, backend.teamState, [
-		appId,
-	]);
+	const groups = useInvoke(
+		backend.teamState.listGroups,
+		backend.teamState,
+		[appId],
+		canRead,
+	);
 	const requests = useInvoke(
 		backend.teamState.listGroupRequests,
 		backend.teamState,
 		[appId],
+		canRead,
 	);
 	const connections = useInvoke(
 		backend.teamState.getAppConnections,
 		backend.teamState,
 		[appId],
+		canRead,
 	);
 	const connectedApps = useMemo(() => {
 		const data = connections.data;
@@ -133,6 +148,20 @@ export function GroupManagement({ appId }: Readonly<GroupManagementProps>) {
 	const groupList = groups.data ?? [];
 	const pendingRequests = requests.data ?? [];
 
+	if (!access.canReadTeam && !access.isLoading) {
+		return (
+			<SectionLockedPanel
+				feature={t("suites", "Suites")}
+				description={t(
+					"yourRoleCannotSeeWhichSuitesThisAppBelongsTo",
+					"Your role cannot see which suites this app belongs to.",
+				)}
+				missing={[RolePermissions.ReadTeam]}
+				roleName={access.roleName}
+			/>
+		);
+	}
+
 	return (
 		<div className="space-y-8 pb-8">
 			<div className="flex items-start justify-between gap-4">
@@ -149,10 +178,19 @@ export function GroupManagement({ appId }: Readonly<GroupManagementProps>) {
 					</p>
 				</div>
 				<Dialog open={createOpen} onOpenChange={setCreateOpen}>
-					<Button onClick={() => setCreateOpen(true)} className="shrink-0">
-						<Plus className="w-4 h-4 mr-1.5" />
-						{t("newSuite", "New suite")}
-					</Button>
+					<TeamActionLock
+						locked={!access.canAdminister}
+						reason={access.adminReason}
+					>
+						<Button
+							onClick={() => setCreateOpen(true)}
+							disabled={!access.canAdminister}
+							className="shrink-0"
+						>
+							<Plus className="w-4 h-4 mr-1.5" />
+							{t("newSuite", "New suite")}
+						</Button>
+					</TeamActionLock>
 					<DialogContent>
 						<DialogHeader>
 							<DialogTitle>{t("createASuite", "Create a suite")}</DialogTitle>
@@ -207,7 +245,10 @@ export function GroupManagement({ appId }: Readonly<GroupManagementProps>) {
 							<Button variant="ghost" onClick={() => setCreateOpen(false)}>
 								{t("cancel", "Cancel")}
 							</Button>
-							<Button onClick={handleCreate} disabled={busy || !name.trim()}>
+							<Button
+								onClick={handleCreate}
+								disabled={busy || !name.trim() || !access.canAdminister}
+							>
 								{t("createSuite", "Create suite")}
 							</Button>
 						</DialogFooter>
@@ -226,6 +267,7 @@ export function GroupManagement({ appId }: Readonly<GroupManagementProps>) {
 							<GroupRequestCard
 								key={request.membership_id}
 								appId={appId}
+								access={access}
 								request={request}
 								onDone={refresh}
 							/>
@@ -234,7 +276,12 @@ export function GroupManagement({ appId }: Readonly<GroupManagementProps>) {
 				</section>
 			)}
 
-			{groupList.length === 0 ? (
+			{groups.isError ? (
+				<TeamReadError
+					title={t("suitesUnavailable", "Suites unavailable")}
+					error={groups.error}
+				/>
+			) : groupList.length === 0 ? (
 				<EmptyState
 					title={t("noSuitesYet", "No suites yet")}
 					description={t(
@@ -262,10 +309,12 @@ export function GroupManagement({ appId }: Readonly<GroupManagementProps>) {
 
 function GroupRequestCard({
 	appId,
+	access,
 	request,
 	onDone,
 }: Readonly<{
 	appId: string;
+	access: ITeamAccess;
 	request: IGroupMembershipRequest;
 	onDone: () => void;
 }>) {
@@ -318,20 +367,31 @@ function GroupRequestCard({
 					{t("wantsToFeatureYourApp", "wants to feature your app")}
 				</p>
 			</div>
-			<div className="flex items-center gap-1.5">
-				<Button
-					size="sm"
-					variant="ghost"
-					disabled={busy}
-					onClick={() => act(false)}
-				>
-					<X className="w-4 h-4" />
-				</Button>
-				<Button size="sm" disabled={busy} onClick={() => act(true)}>
-					<Check className="w-4 h-4 mr-1" />
-					{t("accept", "Accept")}
-				</Button>
-			</div>
+			<TeamActionLock
+				locked={!access.canAdminister}
+				reason={access.adminReason}
+				className="items-center gap-1.5"
+			>
+				<div className="flex items-center gap-1.5">
+					<Button
+						size="sm"
+						variant="ghost"
+						disabled={busy || !access.canAdminister}
+						onClick={() => act(false)}
+						aria-label={t("decline", "Decline")}
+					>
+						<X className="w-4 h-4" />
+					</Button>
+					<Button
+						size="sm"
+						disabled={busy || !access.canAdminister}
+						onClick={() => act(true)}
+					>
+						<Check className="w-4 h-4 mr-1" />
+						{t("accept", "Accept")}
+					</Button>
+				</div>
+			</TeamActionLock>
 		</div>
 	);
 }

@@ -24,3 +24,4 @@ export * from "./forking/fork-policy-editor";
 export * from "./forking/fork-app-card";
 export * from "./forking/fork-app-dialog";
 export * from "./setup/app-setup-page";
+export * from "./permission";

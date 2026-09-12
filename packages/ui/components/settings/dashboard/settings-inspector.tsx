@@ -19,7 +19,12 @@ import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useDeveloperMode } from "../../../hooks/use-developer-mode";
 import type { IApp, IMetadata } from "../../../lib";
-import { IAppCategory, IAppStatus, type IAppType } from "../../../lib";
+import {
+	IAppCategory,
+	IAppStatus,
+	type IAppType,
+	RolePermissions,
+} from "../../../lib";
 import { useAppCategoryLabel } from "../../../lib/app-category";
 import {
 	APP_TYPE_META,
@@ -48,9 +53,13 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../ui/sheet";
 import { TextEditor } from "../../ui/text-editor";
 import { Textarea } from "../../ui/textarea";
+import { PermissionNotice } from "../permission";
 import { AppDangerZone } from "./app-danger-zone";
 import type { ProjectDraft } from "./use-project-draft";
-import type { InspectorPanel } from "./use-project-signals";
+import type {
+	DashboardPermissions,
+	InspectorPanel,
+} from "./use-project-signals";
 
 export interface InspectorSlots {
 	/** Visibility switcher, forking toggle and fork action. */
@@ -155,7 +164,7 @@ export function SettingsInspector({
 	appId,
 	app,
 	metadata,
-	canEdit,
+	permissions,
 	draft,
 	open,
 	panel,
@@ -170,7 +179,7 @@ export function SettingsInspector({
 	appId: string;
 	app: IApp;
 	metadata: IMetadata;
-	canEdit: boolean;
+	permissions: DashboardPermissions;
 	draft: ProjectDraft;
 	open: boolean;
 	panel: InspectorPanel;
@@ -192,6 +201,12 @@ export function SettingsInspector({
 	const [longDescOpen, setLongDescOpen] = useState(false);
 	const [longDescDraft, setLongDescDraft] = useState("");
 
+	// The two guards behind every control here: metadata writes are `WriteMeta`,
+	// app-row writes (type, categories, status, version, price, changelog) are
+	// `Owner`. A panel that mixes them disables each field on its own guard.
+	const canEditMeta = permissions.canWriteMeta;
+	const canEditApp = permissions.canWriteApp;
+
 	const { draftApp, draftMetadata, setDraftApp, setDraftMetadata } = draft;
 	const panels = useMemo(
 		() =>
@@ -210,7 +225,7 @@ export function SettingsInspector({
 
 	const handleMediaUpload = useCallback(
 		(type: "thumbnail" | "icon") => {
-			if (!canEdit) return;
+			if (!canEditMeta) return;
 			const input = document.createElement("input");
 			input.type = "file";
 			input.accept = "image/jpeg,image/jpg,image/png,image/webp";
@@ -245,13 +260,13 @@ export function SettingsInspector({
 			};
 			input.click();
 		},
-		[appId, canEdit, backend.appState, onMediaChanged],
+		[appId, canEditMeta, backend.appState, onMediaChanged, t],
 	);
 
 	const addTag = useCallback(
 		(tag: string) => {
 			const trimmed = tag.trim();
-			if (!draftMetadata || !canEdit || !trimmed) return;
+			if (!draftMetadata || !canEditMeta || !trimmed) return;
 			if (draftMetadata.tags?.includes(trimmed)) return;
 			setDraftMetadata({
 				...draftMetadata,
@@ -259,18 +274,18 @@ export function SettingsInspector({
 			});
 			setNewTag("");
 		},
-		[draftMetadata, canEdit, setDraftMetadata],
+		[draftMetadata, canEditMeta, setDraftMetadata],
 	);
 
 	const removeTag = useCallback(
 		(tag: string) => {
-			if (!draftMetadata || !canEdit) return;
+			if (!draftMetadata || !canEditMeta) return;
 			setDraftMetadata({
 				...draftMetadata,
 				tags: (draftMetadata.tags ?? []).filter((entry) => entry !== tag),
 			});
 		},
-		[draftMetadata, canEdit, setDraftMetadata],
+		[draftMetadata, canEditMeta, setDraftMetadata],
 	);
 
 	return (
@@ -324,11 +339,37 @@ export function SettingsInspector({
 
 							{activePanel === "identity" && draftMetadata && draftApp && (
 								<div className="space-y-4">
+									{!canEditMeta ? (
+										<PermissionNotice
+											tone="readOnly"
+											title={t("identityIsReadonly", "Identity is read-only")}
+											description={t(
+												"yourRoleCannotChangeThisProjectsNameSummaryDescriptionOrArtwork",
+												"Your role cannot change this project's name, summary, description or artwork.",
+											)}
+											missing={[RolePermissions.WriteMeta]}
+										/>
+									) : (
+										!canEditApp && (
+											<PermissionNotice
+												tone="readOnly"
+												title={t(
+													"theAppTypeIsReadonly",
+													"The app type is read-only",
+												)}
+												description={t(
+													"theAppTypeIsPartOfTheProjectRecordAndOnlyAnOwnerCanChangeIt",
+													"The app type is part of the project record, so only an owner can change it.",
+												)}
+												missing={[RolePermissions.Owner]}
+											/>
+										)
+									)}
 									<div className="space-y-2">
 										<Label>{t("appType", "App type")}</Label>
 										<Select
 											value={draftApp.app_type ?? "unset"}
-											disabled={!canEdit}
+											disabled={!canEditApp}
 											onValueChange={(value) =>
 												setDraftApp({
 													...draftApp,
@@ -375,7 +416,7 @@ export function SettingsInspector({
 										{!draftApp.app_type && suggestedType && (
 											<button
 												type="button"
-												disabled={!canEdit}
+												disabled={!canEditApp}
 												className="flex w-full items-center gap-2 rounded-md border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-left text-xs transition-colors hover:bg-primary/10"
 												onClick={() =>
 													setDraftApp({ ...draftApp, app_type: suggestedType })
@@ -400,7 +441,7 @@ export function SettingsInspector({
 										<Label>Name</Label>
 										<Input
 											value={draftMetadata.name}
-											disabled={!canEdit}
+											disabled={!canEditMeta}
 											onChange={(event) =>
 												setDraftMetadata({
 													...draftMetadata,
@@ -418,7 +459,7 @@ export function SettingsInspector({
 												"One or two sentences shown under the name.",
 											)}
 											value={draftMetadata.description}
-											disabled={!canEdit}
+											disabled={!canEditMeta}
 											onChange={(event) =>
 												setDraftMetadata({
 													...draftMetadata,
@@ -433,7 +474,7 @@ export function SettingsInspector({
 											<Button
 												variant="outline"
 												size="sm"
-												disabled={!canEdit}
+												disabled={!canEditMeta}
 												onClick={() => {
 													setLongDescDraft(
 														draftMetadata.long_description ?? "",
@@ -461,7 +502,7 @@ export function SettingsInspector({
 										<div className="grid grid-cols-2 gap-3">
 											<button
 												type="button"
-												disabled={!canEdit}
+												disabled={!canEditMeta}
 												className="rounded-lg border-2 border-dashed bg-transparent p-3 text-center transition-colors hover:border-primary"
 												onClick={() => handleMediaUpload("icon")}
 											>
@@ -474,7 +515,7 @@ export function SettingsInspector({
 											</button>
 											<button
 												type="button"
-												disabled={!canEdit}
+												disabled={!canEditMeta}
 												className="rounded-lg border-2 border-dashed bg-transparent p-3 text-center transition-colors hover:border-primary"
 												onClick={() => handleMediaUpload("thumbnail")}
 											>
@@ -492,6 +533,20 @@ export function SettingsInspector({
 
 							{activePanel === "access" && (
 								<div className="space-y-4">
+									{!canEditApp && (
+										<PermissionNotice
+											tone="readOnly"
+											title={t(
+												"sharingSettingsAreReadonly",
+												"Sharing settings are read-only",
+											)}
+											description={t(
+												"visibilityAndForkingChangeWhoCanReachTheProjectSoOnlyAnOwnerCanSetThem",
+												"Visibility and forking change who can reach the project, so only an owner can set them.",
+											)}
+											missing={[RolePermissions.Owner]}
+										/>
+									)}
 									{slots?.access ?? (
 										<p className="text-sm text-muted-foreground">
 											{t(
@@ -505,12 +560,41 @@ export function SettingsInspector({
 
 							{activePanel === "listing" && draftApp && draftMetadata && (
 								<div className="space-y-4">
+									{!canEditMeta ? (
+										<PermissionNotice
+											tone="readOnly"
+											title={t(
+												"storeListingIsReadonly",
+												"Store listing is read-only",
+											)}
+											description={t(
+												"yourRoleCannotChangeTheTagsAndLinksThatMakeUpThisListing",
+												"Your role cannot change the tags and links that make up this listing.",
+											)}
+											missing={[RolePermissions.WriteMeta]}
+										/>
+									) : (
+										!canEditApp && (
+											<PermissionNotice
+												tone="readOnly"
+												title={t(
+													"categoriesAreReadonly",
+													"Categories are read-only",
+												)}
+												description={t(
+													"categoriesLiveOnTheProjectRecordSoOnlyAnOwnerCanChangeThem",
+													"Categories live on the project record, so only an owner can change them.",
+												)}
+												missing={[RolePermissions.Owner]}
+											/>
+										)
+									)}
 									<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 										<div className="space-y-2">
 											<Label>{t("primaryCategory", "Primary category")}</Label>
 											<Select
 												value={draftApp.primary_category ?? IAppCategory.Other}
-												disabled={!canEdit}
+												disabled={!canEditApp}
 												onValueChange={(value) =>
 													setDraftApp({
 														...draftApp,
@@ -538,7 +622,7 @@ export function SettingsInspector({
 											</Label>
 											<Select
 												value={draftApp.secondary_category ?? "none"}
-												disabled={!canEdit}
+												disabled={!canEditApp}
 												onValueChange={(value) =>
 													setDraftApp({
 														...draftApp,
@@ -572,7 +656,7 @@ export function SettingsInspector({
 												"Type a tag and press Enter…",
 											)}
 											value={newTag}
-											disabled={!canEdit}
+											disabled={!canEditMeta}
 											onChange={(event) => setNewTag(event.target.value)}
 											onKeyDown={(event) => {
 												if (event.key === "Enter") {
@@ -590,7 +674,7 @@ export function SettingsInspector({
 														className="flex items-center gap-1"
 													>
 														{tag}
-														{canEdit && (
+														{canEditMeta && (
 															<button
 																type="button"
 																onClick={() => removeTag(tag)}
@@ -620,7 +704,7 @@ export function SettingsInspector({
 											<Input
 												placeholder={placeholder}
 												value={draftMetadata[field] ?? ""}
-												disabled={!canEdit}
+												disabled={!canEditMeta}
 												onChange={(event) =>
 													setDraftMetadata({
 														...draftMetadata,
@@ -639,6 +723,19 @@ export function SettingsInspector({
 
 							{activePanel === "compliance" && (
 								<div className="space-y-4">
+									{!canEditApp && (
+										<PermissionNotice
+											title={t(
+												"complianceIsOwneronly",
+												"Compliance is owner-only",
+											)}
+											description={t(
+												"theConformityAssessmentAndPublicationHistoryAreVisibleOnlyToOwners",
+												"The conformity assessment and publication history are visible only to owners of this project.",
+											)}
+											missing={[RolePermissions.Owner]}
+										/>
+									)}
 									{slots?.compliance ?? (
 										<p className="text-sm text-muted-foreground">
 											{t(
@@ -652,12 +749,26 @@ export function SettingsInspector({
 
 							{activePanel === "release" && draftApp && (
 								<div className="space-y-4">
+									{!canEditApp && (
+										<PermissionNotice
+											tone="readOnly"
+											title={t(
+												"pricingAndReleaseAreReadonly",
+												"Pricing and release are read-only",
+											)}
+											description={t(
+												"statusVersionPriceAndChangelogLiveOnTheProjectRecordSoOnlyAnOwnerCanChangeThem",
+												"Status, version, price and changelog live on the project record, so only an owner can change them.",
+											)}
+											missing={[RolePermissions.Owner]}
+										/>
+									)}
 									<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
 										<div className="space-y-2">
 											<Label>{t("status", "Status")}</Label>
 											<Select
 												value={draftApp.status ?? IAppStatus.Active}
-												disabled={!canEdit}
+												disabled={!canEditApp}
 												onValueChange={(value) =>
 													setDraftApp({
 														...draftApp,
@@ -682,7 +793,7 @@ export function SettingsInspector({
 											<Input
 												placeholder="1.0.0"
 												value={draftApp.version ?? ""}
-												disabled={!canEdit}
+												disabled={!canEditApp}
 												onChange={(event) =>
 													setDraftApp({
 														...draftApp,
@@ -697,7 +808,7 @@ export function SettingsInspector({
 												type="number"
 												placeholder="0.00"
 												value={draftApp.price ?? ""}
-												disabled={!canEdit}
+												disabled={!canEditApp}
 												onChange={(event) =>
 													setDraftApp({
 														...draftApp,
@@ -714,7 +825,7 @@ export function SettingsInspector({
 											rows={4}
 											placeholder={`What is new in this version…`}
 											value={draftApp.changelog ?? ""}
-											disabled={!canEdit}
+											disabled={!canEditApp}
 											onChange={(event) =>
 												setDraftApp({
 													...draftApp,
@@ -731,7 +842,7 @@ export function SettingsInspector({
 									{slots?.advanced}
 									<AppDangerZone
 										appId={appId}
-										canEdit={canEdit}
+										canEdit={canEditApp}
 										onDeleted={onDeleted}
 										onLeft={onLeft}
 									/>
@@ -751,7 +862,7 @@ export function SettingsInspector({
 						<div className="min-h-0 flex-1 overflow-auto p-2">
 							<TextEditor
 								appId={appId}
-								editable={canEdit}
+								editable={canEditMeta}
 								isMarkdown
 								initialContent={
 									longDescDraft ||
