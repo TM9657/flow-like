@@ -138,6 +138,12 @@ export interface IPageBootstrap {
 	readonly event: IEvent;
 	readonly page?: IPage | null;
 	readonly revision?: string | null;
+	/**
+	 * App-wide stylesheet, injected above every page surface and scoped to the app
+	 * root. Delivered here because the owner-gated appearance route would 403 an
+	 * ordinary viewer, who holds only `ExecuteEvents`.
+	 */
+	readonly appCustomCss?: string | null;
 	/** Authority revision used by governed Page actions and lifecycle hooks. */
 	readonly executionRevision?: string | null;
 	readonly canonicalRoute?: string | null;

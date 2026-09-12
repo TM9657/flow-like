@@ -5,6 +5,7 @@ import { PageBuilderSurface } from "../../../builder/page-builder-surface";
 import { WidgetBuilderSurface } from "../../../builder/widget-builder-surface";
 import { TableInspector } from "../../../settings/explore/table-inspector";
 import type { IEditorDocument, IEditorTab } from "../editor-documents";
+import { AppStylesDocument } from "./styles-document";
 import { StorageDocument } from "./storage-document";
 
 /**
@@ -34,6 +35,8 @@ export function EditorDocumentView({
 	const { doc } = tab;
 
 	switch (doc.kind) {
+		case "styles":
+			return <AppStylesDocument appId={appId} className="h-full min-h-0" />;
 		case "storage":
 			return (
 				<StorageDocument

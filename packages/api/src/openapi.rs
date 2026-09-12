@@ -158,6 +158,7 @@ impl Modify for SecurityAddon {
         crate::routes::user::notifications::mark_notification_read,
         crate::routes::user::notifications::mark_all_read,
         crate::routes::user::notifications::delete_notification,
+        crate::routes::user::schedules::get_schedules,
         crate::routes::user::bits::list_user_bits,
         crate::routes::user::bits::upsert_user_bit,
         crate::routes::user::bits::delete_user_bit,
@@ -186,6 +187,8 @@ impl Modify for SecurityAddon {
         crate::routes::app::internal::upsert_app::upsert_app,
         crate::routes::app::internal::delete_app::delete_app,
         crate::routes::app::internal::change_visibility::change_visibility,
+        crate::routes::app::internal::change_appearance::change_appearance,
+        crate::routes::app::internal::change_appearance::get_appearance,
         crate::routes::app::internal::change_forking::change_forking,
         crate::routes::app::internal::change_forking::get_forking,
         crate::routes::app::flowpilot_builds::read_app_build,
@@ -651,6 +654,10 @@ impl Modify for SecurityAddon {
         crate::routes::course::weekly::rotate_weekly,
     ),
     components(schemas(
+        // User schedule schemas
+        crate::routes::user::schedules::ScheduleConfig,
+        crate::routes::user::schedules::UserSchedule,
+        crate::routes::user::schedules::UserSchedulesResponse,
         // Health schemas
         crate::routes::health::HealthResponse,
         crate::routes::health::DbHealthResponse,
@@ -824,6 +831,8 @@ impl Modify for SecurityAddon {
         crate::routes::app::api::ApiKeyInput,
         crate::routes::app::api::ApiKeyOut,
         // Analytics
+        crate::compute_cost::ComputeLeg,
+        crate::compute_cost::ComputeCostModel,
         crate::routes::app::analytics::overview::AnalyticsStatsQuery,
         crate::routes::app::analytics::overview::AnalyticsOverview,
         crate::routes::app::analytics::overview::DailyAnalyticsStat,
@@ -1104,6 +1113,7 @@ impl Modify for SecurityAddon {
         crate::utils::fork::db_schema::ForkTableSchema,
         crate::utils::fork::preview::ForkCategorySize,
         crate::utils::fork::preview::ForkSizeBreakdown,
+        crate::routes::app::internal::change_appearance::AppearanceResponse,
         crate::routes::app::internal::change_forking::ForkSettingsResponse,
         crate::routes::app::fork::preview::ForkPreviewTarget,
         crate::utils::fork::job::ForkJobView,

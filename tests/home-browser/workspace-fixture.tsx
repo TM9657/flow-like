@@ -85,16 +85,42 @@ export default function WorkspaceFixture() {
 					? undefined
 					: {
 							...value.usageState,
-							getExecutionHistory: async () => {
+							getExecutionActivity: async (days = 7) => {
 								setCalls((count) => count + 1);
 								await new Promise((resolve) => setTimeout(resolve, 80));
 								if (scenario === "error")
 									throw new Error("Fixture history is unavailable.");
+								const rows = scenario === "empty" ? [] : records;
+								const flagged = rows.filter((row) =>
+									["error", "fatal"].includes(row.status.toLowerCase()),
+								);
+								const buckets = Array.from({ length: days }, (_, index) => ({
+									day: new Date(now - (days - 1 - index) * 86_400_000)
+										.toISOString()
+										.slice(0, 10),
+									count: 0,
+									attention_count: 0,
+								}));
+								for (const row of rows) {
+									const back = Math.floor(
+										(now - Date.parse(row.created_at)) / 86_400_000,
+									);
+									const bucket = buckets[days - 1 - back];
+									if (!bucket) continue;
+									bucket.count += 1;
+									if (["error", "fatal"].includes(row.status.toLowerCase()))
+										bucket.attention_count += 1;
+								}
 								return {
-									items: scenario === "empty" ? [] : records,
-									total: scenario === "empty" ? 0 : 240,
-									page: 0,
-									page_size: 100,
+									days,
+									from: new Date(now - (days - 1) * 86_400_000).toISOString(),
+									to: new Date(now).toISOString(),
+									buckets,
+									apps: [],
+									total: rows.length,
+									attention_total: flagged.length,
+									average_microseconds: rows.length ? 1000 : null,
+									attention: flagged.slice(0, 50),
 								};
 							},
 						},

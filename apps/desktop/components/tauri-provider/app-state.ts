@@ -987,6 +987,53 @@ export class AppState implements IAppState {
 		await appsDB.visibility.put({ visibility, appId });
 	}
 
+	/**
+	 * Unlike the fork settings, this must work offline: an app-wide stylesheet
+	 * on a local-only app is exactly the case the manifest storage was chosen
+	 * for, so the offline branch invokes rather than throwing.
+	 */
+	async getAppStylesheet(appId: string): Promise<string | undefined> {
+		if (await this.backend.isOffline(appId)) {
+			const css = await invoke<string | null>("app_get_stylesheet", {
+				appId,
+			});
+			return css ?? undefined;
+		}
+
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile or auth not set. Cannot read the stylesheet.");
+		}
+
+		const response = await fetcher<{ custom_css?: string | null }>(
+			this.backend.profile,
+			`apps/${appId}/settings/appearance`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+		return response.custom_css ?? undefined;
+	}
+
+	async setAppStylesheet(appId: string, css: string): Promise<void> {
+		if (await this.backend.isOffline(appId)) {
+			await invoke("app_set_stylesheet", { appId, css });
+			return;
+		}
+
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile or auth not set. Cannot save the stylesheet.");
+		}
+
+		await fetcher(
+			this.backend.profile,
+			`apps/${appId}/settings/appearance`,
+			{
+				method: "PATCH",
+				body: JSON.stringify({ custom_css: css }),
+			},
+			this.backend.auth,
+		);
+	}
+
 	async changeAppAllowForking(appId: string, allow: boolean): Promise<void> {
 		if (await this.backend.isOffline(appId)) {
 			throw new Error("Forking settings are only available for online apps.");

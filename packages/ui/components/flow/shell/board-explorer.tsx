@@ -11,6 +11,7 @@ import {
 	ImportIcon,
 	LayoutTemplateIcon,
 	LockIcon,
+	PaletteIcon,
 	PencilLineIcon,
 	PlusIcon,
 	Trash2Icon,
@@ -125,6 +126,7 @@ export function BoardExplorer({
 	currentFileId,
 	onSelectFile,
 	onOpenPage,
+	onOpenStyles,
 	onOpenWidget,
 	onOpenStorageFile,
 	onOpenTable,
@@ -145,6 +147,7 @@ export function BoardExplorer({
 	currentFileId: string;
 	onSelectFile: (moduleId: string | null) => void;
 	onOpenPage: (pageId: string, boardId: string) => void;
+	onOpenStyles: () => void;
 	onOpenWidget: (widgetId: string) => void;
 	onOpenStorageFile: (scope: IEditorScope, path: string) => void;
 	onOpenTable: (scope: IEditorScope, table: string) => void;
@@ -568,6 +571,23 @@ export function BoardExplorer({
 						<PlusIcon className="size-3.5" />
 					</Button>
 				}
+			/>
+
+			{/*
+			 * App-scoped, not board-scoped — it sits here because this is where you reach
+			 * for it while building, one row above the pages it would otherwise be pasted
+			 * into one at a time.
+			 */}
+			<TreeRow
+				depth={0}
+				icon={<PaletteIcon />}
+				label="app.css"
+				description={t(
+					"stylesEveryPageInThisApp",
+					"Styles every page in this app",
+				)}
+				muted
+				onSelect={onOpenStyles}
 			/>
 
 			{draftingPage && (

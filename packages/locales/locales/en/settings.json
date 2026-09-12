@@ -1907,5 +1907,19 @@
 	"yourSemanticLayer": "Your semantic layer",
 	"geometryWgs84": "Geometry (WGS 84)",
 	"geometryColumnHint": "GeoJSON geometry objects with WGS 84 longitude, latitude coordinates in degrees. Scalar values only.",
-	"geometryBackendUpgrade": "Update the backend to a version that supports Geometry."
+	"geometryBackendUpgrade": "Update the backend to a version that supports Geometry.",
+	"runtime": "Runtime",
+	"runtimeCost": "Runtime Cost",
+	"estimate": "Estimate",
+	"estimatedServerlessComputeForRangelabel": "Estimated serverless compute for {{rangeLabel}}",
+	"runtimeValOfSpend": "Runtime {{val}} of spend",
+	"aiSpendVal": "AI {{val}}",
+	"billedCompute": "Billed compute",
+	"avgRunDuration": "Avg run duration",
+	"valDeploymentFactor": "{{val}}× deployment factor",
+	"listPricesExcludingStorageAndNetwork": "List prices, excluding storage and network",
+	"dailyAiSpendAndRuntimeEstimate": "Daily AI spend and runtime estimate",
+	"runtimeOnlyEventlevelAiSpendIsNotTrackedYet": "Runtime only, event-level AI spend is not tracked yet",
+	"noCostInThisDateRange": "No cost in this date range",
+	"valOfRunDuration": "{{val}} of run duration"
 }

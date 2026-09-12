@@ -1,10 +1,8 @@
 import { useTranslation } from "@flow-like/locales";
 import { AlertCircleIcon, CheckIcon, KeyIcon, SaveIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { normalizeGeometryValue } from "../../lib/geometry";
+import { isRuntimeVariableConfigured } from "../../lib/runtime-vars-utils";
 import type { IVariable } from "../../lib/schema/flow/board";
-import { IVariableType } from "../../lib/schema/flow/pin";
-import { parseUint8ArrayToJson } from "../../lib/uint8";
 import type { RuntimeVariableValue } from "../../state/runtime-variables-context";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -31,33 +29,6 @@ export interface RuntimeVariablesPromptProps {
 	onSave: (values: RuntimeVariableValue[]) => Promise<void>;
 	onCancel: () => void;
 	refs?: Record<string, string>;
-}
-
-/**
- * Whether a runtime variable currently holds a usable value. Booleans, numbers
- * and structured values count as configured as soon as they decode; strings
- * (including paths) must be non-empty.
- */
-function isRuntimeVariableConfigured(
-	variable: IVariable,
-	refs?: Record<string, string>,
-): boolean {
-	const decoded = parseUint8ArrayToJson(variable.default_value);
-	if (decoded === undefined || decoded === null) return false;
-	if (variable.data_type === IVariableType.Geometry) {
-		try {
-			normalizeGeometryValue(decoded, {
-				schema: variable.schema,
-				refs,
-				valueType: variable.value_type,
-			});
-			return true;
-		} catch {
-			return false;
-		}
-	}
-	if (typeof decoded === "string") return decoded.trim().length > 0;
-	return true;
 }
 
 /**

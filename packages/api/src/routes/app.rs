@@ -65,6 +65,11 @@ pub fn routes() -> Router<AppState> {
             patch(internal::change_visibility::change_visibility),
         )
         .route(
+            "/{app_id}/settings/appearance",
+            patch(internal::change_appearance::change_appearance)
+                .get(internal::change_appearance::get_appearance),
+        )
+        .route(
             "/{app_id}/settings/forking",
             patch(internal::change_forking::change_forking)
                 .get(internal::change_forking::get_forking),

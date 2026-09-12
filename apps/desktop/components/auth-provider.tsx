@@ -451,7 +451,10 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 					? [invalidateInfinite(backend.teamState.getInvites, [])]
 					: []),
 				invalidate(backend.userState.getNotifications, []),
-				invalidateInfinite(backend.userState.listNotifications, [false]),
+				invalidateInfinite(backend.userState.listNotifications, [
+					false,
+					undefined,
+				]),
 				invalidate(backend.userState.getProfile, []),
 				invalidate(backend.userState.getSettingsProfile, []),
 				invalidate(backend.userState.getProfiles, []),

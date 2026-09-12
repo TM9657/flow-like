@@ -1567,8 +1567,8 @@ export function HomeWidgetSettings({ widget, onChange }: SettingsProps) {
 				/>
 				<Count config={config} update={update} />
 				<p className="text-[11px] text-muted-foreground">
-					These notifications belong to your account. Type filters search the
-					latest 100 matching read/unread records.
+					These notifications belong to your account. The type filter is applied
+					by the source, so it reaches past the newest records.
 				</p>
 			</div>
 		);
@@ -1597,8 +1597,8 @@ export function HomeWidgetSettings({ widget, onChange }: SettingsProps) {
 					<Count config={config} update={update} />
 				)}
 				<p className="text-[11px] leading-relaxed text-muted-foreground">
-					Uses your latest 100 recorded executions. Coverage is shown with the
-					results so partial history stays visible.
+					Counts every execution record in the window, not a sample of the
+					newest ones.
 				</p>
 			</div>
 		);
@@ -1622,24 +1622,36 @@ export function HomeWidgetSettings({ widget, onChange }: SettingsProps) {
 						["executions", "Total recorded executions"],
 						["ai", "Total AI requests"],
 						["embeddings", "Total embedding requests"],
-						["errors", "Error-severity executions in latest 100"],
-						["duration", "Average duration in latest 100"],
+						["errors", "Error-severity executions in the window"],
+						["duration", "Average duration in the window"],
 					]}
 				/>
 				{["errors", "duration"].includes(textConfig(config, "metric")) && (
-					<HomeAppPicker
-						value={
-							textConfig(config, "appId") ? [textConfig(config, "appId")] : []
-						}
-						onChange={(ids) => update("appId", ids[0] ?? "")}
-						label="Limit sample to an app (optional)"
-						allowExplore={false}
-					/>
+					<>
+						<Choice
+							label="Time window"
+							value={String(config.days ?? 7)}
+							onChange={(value) => update("days", Number(value))}
+							choices={[
+								["1", "Today (UTC)"],
+								["7", "Last 7 days (UTC)"],
+								["30", "Last 30 days (UTC)"],
+							]}
+						/>
+						<HomeAppPicker
+							value={
+								textConfig(config, "appId") ? [textConfig(config, "appId")] : []
+							}
+							onChange={(ids) => update("appId", ids[0] ?? "")}
+							label="Limit to an app (optional)"
+							allowExplore={false}
+						/>
+					</>
 				)}
 				<p className="text-[11px] leading-relaxed text-muted-foreground">
-					Totals cover your account's recorded history on this backend. Sample
-					measures use your latest 100 execution records. Log severity does not
-					establish a workflow success rate.
+					Totals cover your account's recorded history on this backend. The
+					window measures count every record in the period. Log severity does
+					not establish a workflow success rate.
 				</p>
 			</div>
 		);
@@ -1669,8 +1681,10 @@ export function HomeWidgetSettings({ widget, onChange }: SettingsProps) {
 				/>
 				<Count config={config} update={update} />
 				<p className="text-[11px] leading-relaxed text-muted-foreground">
-					Upcoming times are calculated from active recurring and one-time
-					events. A device or runner must be available for the event to execute.
+					Upcoming times are calculated from the active recurring and one-time
+					events of every app whose events you can read, narrowed to this
+					profile. A device or runner must be available for the event to
+					execute.
 				</p>
 			</div>
 		);

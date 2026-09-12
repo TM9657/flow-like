@@ -28,6 +28,19 @@ pub struct ListNotificationsParams {
     pub limit: Option<u64>,
     pub offset: Option<u64>,
     pub unread_only: Option<bool>,
+    /// `WORKFLOW` or `SYSTEM`. Filtering here rather than over the returned page
+    /// keeps a caller asking for one kind from missing every row the page cut
+    /// off. An unrecognised value is ignored rather than rejected, so a client
+    /// sending a kind this version does not know keeps its unfiltered list.
+    pub notification_type: Option<String>,
+}
+
+fn notification_type_filter(value: Option<&str>) -> Option<NotificationType> {
+    match value?.trim().to_ascii_uppercase().as_str() {
+        "WORKFLOW" => Some(NotificationType::Workflow),
+        "SYSTEM" => Some(NotificationType::System),
+        _ => None,
+    }
 }
 
 #[utoipa::path(
@@ -102,6 +115,10 @@ pub async fn list_notifications(
 
     if params.unread_only.unwrap_or(false) {
         query = query.filter(notification::Column::Read.eq(false));
+    }
+
+    if let Some(kind) = notification_type_filter(params.notification_type.as_deref()) {
+        query = query.filter(notification::Column::Type.eq(kind));
     }
 
     let notifications = query.limit(limit).offset(offset).all(&state.db).await?;
@@ -311,4 +328,33 @@ pub async fn create_user_notification(
         id: notification_id,
         success: true,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn known_kinds_parse_case_insensitively() {
+        assert_eq!(
+            notification_type_filter(Some("WORKFLOW")),
+            Some(NotificationType::Workflow)
+        );
+        assert_eq!(
+            notification_type_filter(Some(" workflow ")),
+            Some(NotificationType::Workflow)
+        );
+        assert_eq!(
+            notification_type_filter(Some("system")),
+            Some(NotificationType::System)
+        );
+    }
+
+    #[test]
+    fn absent_and_unknown_kinds_leave_the_list_unfiltered() {
+        assert_eq!(notification_type_filter(None), None);
+        assert_eq!(notification_type_filter(Some("all")), None);
+        assert_eq!(notification_type_filter(Some("")), None);
+        assert_eq!(notification_type_filter(Some("DIGEST")), None);
+    }
 }

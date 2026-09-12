@@ -133,11 +133,7 @@ export class EmptyUserState implements IUserState {
 		throw new Error("Method not implemented.");
 	}
 
-	listNotifications(
-		unreadOnly?: boolean,
-		offset?: number,
-		limit?: number,
-	): Promise<INotification[]> {
+	listNotifications(): Promise<INotification[]> {
 		throw new Error("Method not implemented.");
 	}
 

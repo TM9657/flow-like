@@ -13,4 +13,6 @@ model FileAccountingObject {
 
   @@index([appId])
   @@index([userId])
+  // Retention sweep: zero-size tombstones ordered by age, see storage_accounting.rs.
+  @@index([size, updatedAt])
 }

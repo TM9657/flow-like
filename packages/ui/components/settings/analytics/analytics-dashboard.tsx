@@ -11,6 +11,7 @@ import {
 	BrainIcon,
 	CheckCircleIcon,
 	ClockIcon,
+	CpuIcon,
 	ExternalLinkIcon,
 	FilterIcon,
 	MessageSquareIcon,
@@ -31,10 +32,15 @@ import {
 import { toast } from "sonner";
 
 import type { IEvent } from "../../../lib";
+import {
+	formatComputeLeg,
+	formatDurationShare,
+} from "../../../lib/compute-cost";
 import { cn } from "../../../lib/utils";
 import { useBackend } from "../../../state/backend-state";
 import type {
 	IAnalyticsOverview,
+	IComputeCostModel,
 	IDailyAnalyticsStat,
 	IFeedbackItem,
 } from "../../../state/backend-state/analytics-state";
@@ -80,6 +86,7 @@ const chartColors = {
 	latencyP95: "var(--chart-4)",
 	llm: "var(--chart-1)",
 	embedding: "var(--chart-5)",
+	runtime: "var(--chart-3)",
 	positive: "oklch(0.72 0.16 150)",
 	negative: "var(--destructive)",
 };
@@ -248,6 +255,15 @@ function formatCost(microDollars: number): string {
 	return formatDollarAmount(microDollarsToDollars(microDollars));
 }
 
+function formatDuration(ms: number): string {
+	if (ms < 1000) return `${Math.round(ms)}ms`;
+	const seconds = ms / 1000;
+	if (seconds < 90) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+	const minutes = seconds / 60;
+	if (minutes < 90) return `${minutes.toFixed(minutes < 10 ? 1 : 0)}min`;
+	return `${(minutes / 60).toFixed(minutes < 600 ? 1 : 0)}h`;
+}
+
 function getTickValues(labels: string[]): string[] {
 	if (labels.length <= 8) return labels;
 	const step = Math.ceil(labels.length / 8);
@@ -322,6 +338,7 @@ const reliabilityTooltipLabels: Record<string, string> = {
 const costTooltipLabels: Record<string, string> = {
 	llm: "LLM cost",
 	embeddings: "Embedding cost",
+	runtime: "Runtime cost",
 };
 
 const feedbackTooltipLabels: Record<string, string> = {
@@ -422,6 +439,164 @@ function MetricCard({
 				<p className="mt-3 min-h-4 truncate text-xs text-muted-foreground">
 					{detail}
 				</p>
+			</CardContent>
+		</Card>
+	);
+}
+
+function StatTile({ label, value }: { label: string; value: string }) {
+	return (
+		<div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+			<p className="text-xs text-muted-foreground">{label}</p>
+			<p className="mt-1 truncate text-lg font-semibold">{value}</p>
+		</div>
+	);
+}
+
+/**
+ * Runtime cost is an estimate, not a bill: execution rows carry duration, and
+ * the card multiplies that duration by the memory the deployment reserves for a
+ * run. The rate card travels with the response so the footnote always describes
+ * the sizing the number was actually built from.
+ */
+function RuntimeCostCard({
+	computeCost,
+	aiCost,
+	executions,
+	avgLatencyMs,
+	model,
+	rangeLabel,
+}: {
+	computeCost: number;
+	aiCost: number;
+	executions: number;
+	avgLatencyMs: number | null | undefined;
+	model: IComputeCostModel | undefined;
+	rangeLabel: string;
+}) {
+	const { t } = useTranslation("settings");
+	const totalSpend = computeCost + aiCost;
+	const runtimeShare = totalSpend > 0 ? (computeCost / totalSpend) * 100 : 0;
+	const perExecution = executions > 0 ? computeCost / executions : 0;
+	const billedMs = (avgLatencyMs ?? 0) * executions;
+	const multiplier = model?.multiplier ?? 1;
+	const legs = model?.legs ?? [];
+
+	return (
+		<Card className={analyticsCardClassName}>
+			<CardHeader className="pb-3">
+				<div className="flex flex-wrap items-start justify-between gap-3">
+					<div>
+						<CardTitle>{t("runtimeCost", "Runtime Cost")}</CardTitle>
+						<CardDescription>
+							{t(
+								"estimatedServerlessComputeForRangelabel",
+								"Estimated serverless compute for {{rangeLabel}}",
+								{ rangeLabel },
+							)}
+						</CardDescription>
+					</div>
+					<Badge variant="outline">
+						<CpuIcon className="mr-1 h-3 w-3" />
+						{t("estimate", "Estimate")}
+					</Badge>
+				</div>
+			</CardHeader>
+			<CardContent className="space-y-5 pt-0">
+				<div className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+					<div className="space-y-4">
+						<div>
+							<p className="text-3xl font-semibold tracking-tight">
+								{formatCost(computeCost)}
+							</p>
+							<p className="mt-1 text-xs text-muted-foreground">
+								{t("valPerExecution", "{{val}} per execution", {
+									val: formatCost(perExecution),
+								})}
+							</p>
+						</div>
+						<div className="space-y-2">
+							<div className="flex h-2 overflow-hidden rounded-full bg-muted">
+								{totalSpend > 0 && (
+									<>
+										<div
+											className="h-full"
+											style={{
+												width: `${runtimeShare}%`,
+												backgroundColor: chartColors.runtime,
+											}}
+										/>
+										<div
+											className="h-full"
+											style={{
+												width: `${100 - runtimeShare}%`,
+												backgroundColor: chartColors.llm,
+											}}
+										/>
+									</>
+								)}
+							</div>
+							<div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+								<span className="inline-flex items-center gap-1.5">
+									<span
+										className="h-2 w-2 rounded-sm"
+										style={{ backgroundColor: chartColors.runtime }}
+									/>
+									{t("runtimeValOfSpend", "Runtime {{val}} of spend", {
+										val: formatPercent(runtimeShare),
+									})}
+								</span>
+								<span className="inline-flex items-center gap-1.5">
+									<span
+										className="h-2 w-2 rounded-sm"
+										style={{ backgroundColor: chartColors.llm }}
+									/>
+									{t("aiSpendVal", "AI {{val}}", { val: formatCost(aiCost) })}
+								</span>
+							</div>
+						</div>
+					</div>
+					<div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+						<StatTile
+							label={t("billedCompute", "Billed compute")}
+							value={formatDuration(billedMs)}
+						/>
+						<StatTile
+							label={t("avgRunDuration", "Avg run duration")}
+							value={formatLatency(avgLatencyMs)}
+						/>
+						<StatTile
+							label={t("runs", "Runs")}
+							value={formatCompactNumber(executions)}
+						/>
+					</div>
+				</div>
+				<div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+					{legs.map((leg) => (
+						<span
+							key={`${leg.architecture}-${leg.memoryGb}`}
+							className="rounded-md bg-muted/50 px-2 py-0.5"
+						>
+							{formatComputeLeg(leg)} ·{" "}
+							{t("valOfRunDuration", "{{val}} of run duration", {
+								val: formatDurationShare(leg.durationShare),
+							})}
+						</span>
+					))}
+					{multiplier !== 1 && (
+						<span className="rounded-md bg-muted/50 px-2 py-0.5">
+							{t("valDeploymentFactor", "{{val}}\u00d7 deployment factor", {
+								val: multiplier,
+							})}
+						</span>
+					)}
+					<span>
+						{t(
+							"listPricesExcludingStorageAndNetwork",
+							"List prices, excluding storage and network",
+						)}
+					</span>
+				</div>
 			</CardContent>
 		</Card>
 	);
@@ -656,15 +831,18 @@ function CostTrendChart({ data }: { data: IDailyAnalyticsStat[] }) {
 				date: formatChartDate(d.date),
 				llm: microDollarsToDollars(d.llmCost),
 				embeddings: microDollarsToDollars(d.embeddingCost),
+				runtime: microDollarsToDollars(d.computeCost),
 			})),
 		[data],
 	);
-	const hasCost = chartData.some((d) => d.llm > 0 || d.embeddings > 0);
+	const hasCost = chartData.some(
+		(d) => d.llm > 0 || d.embeddings > 0 || d.runtime > 0,
+	);
 
 	if (data.length === 0 || !hasCost) {
 		return (
 			<EmptyChart
-				label={t("noAiCostInThisDateRange", "No AI cost in this date range")}
+				label={t("noCostInThisDateRange", "No cost in this date range")}
 			/>
 		);
 	}
@@ -673,12 +851,12 @@ function CostTrendChart({ data }: { data: IDailyAnalyticsStat[] }) {
 		<div className={chartContainerClassName}>
 			<ResponsiveBar
 				data={chartData}
-				keys={["llm", "embeddings"]}
+				keys={["llm", "embeddings", "runtime"]}
 				indexBy="date"
 				margin={{ top: 18, right: 18, bottom: 42, left: 58 }}
 				padding={0.25}
 				groupMode="stacked"
-				colors={[chartColors.llm, chartColors.embedding]}
+				colors={[chartColors.llm, chartColors.embedding, chartColors.runtime]}
 				enableLabel={false}
 				borderRadius={2}
 				valueFormat={(value) => formatDollarAmount(Number(value))}
@@ -964,6 +1142,9 @@ export function AnalyticsDashboard() {
 		(overview?.totalLlmCost ?? 0) + (overview?.totalEmbeddingCost ?? 0);
 	const costPerExecution =
 		totalExecutions > 0 ? totalCost / totalExecutions : 0;
+	const computeCost = overview?.totalComputeCost ?? 0;
+	const computePerExecution =
+		totalExecutions > 0 ? computeCost / totalExecutions : 0;
 	const totalFeedback = overview?.totalFeedback ?? 0;
 	const positiveFeedback = overview?.positiveFeedback ?? 0;
 	const negativeFeedback = overview?.negativeFeedback ?? 0;
@@ -1003,8 +1184,8 @@ export function AnalyticsDashboard() {
 	if (loading) {
 		return (
 			<div className="space-y-5 p-6">
-				<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-					{Array.from({ length: 5 }).map((_, index) => (
+				<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+					{Array.from({ length: 6 }).map((_, index) => (
 						<Skeleton key={`analytics-card-${index}`} className="h-32" />
 					))}
 				</div>
@@ -1089,7 +1270,7 @@ export function AnalyticsDashboard() {
 				</div>
 			</div>
 
-			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
 				<MetricCard
 					title="Executions"
 					value={formatNumber(totalExecutions)}
@@ -1158,6 +1339,14 @@ export function AnalyticsDashboard() {
 					}
 					icon={BrainIcon}
 				/>
+				<MetricCard
+					title={t("runtime", "Runtime")}
+					value={formatCost(computeCost)}
+					detail={t("valPerExecution", "{{val}} per execution", {
+						val: formatCost(computePerExecution),
+					})}
+					icon={CpuIcon}
+				/>
 			</div>
 
 			<div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
@@ -1220,16 +1409,16 @@ export function AnalyticsDashboard() {
 					<CardHeader className="pb-3">
 						<div className="flex items-start justify-between gap-3">
 							<div>
-								<CardTitle>{t("aiCost", "AI Cost")}</CardTitle>
+								<CardTitle>{t("cost", "Cost")}</CardTitle>
 								<CardDescription>
 									{selectedEventId === "all"
 										? t(
-												"dailyLlmAndEmbeddingSpend",
-												"Daily LLM and embedding spend",
+												"dailyAiSpendAndRuntimeEstimate",
+												"Daily AI spend and runtime estimate",
 											)
 										: t(
-												"eventlevelAiSpendIsNotTrackedYet",
-												"Event-level AI spend is not tracked yet",
+												"runtimeOnlyEventlevelAiSpendIsNotTrackedYet",
+												"Runtime only, event-level AI spend is not tracked yet",
 											)}
 								</CardDescription>
 							</div>
@@ -1239,23 +1428,26 @@ export function AnalyticsDashboard() {
 									{t("embeddings", "Embeddings")}{" "}
 									{formatCost(overview?.totalEmbeddingCost ?? 0)}
 								</div>
+								<div>
+									{t("runtime", "Runtime")} {formatCost(computeCost)}
+								</div>
 							</div>
 						</div>
 					</CardHeader>
 					<CardContent className="pt-0">
-						{selectedEventId === "all" ? (
-							<CostTrendChart data={dailyStats} />
-						) : (
-							<EmptyChart
-								label={t(
-									"eventlevelAiSpendIsNotTrackedYet",
-									"Event-level AI spend is not tracked yet",
-								)}
-							/>
-						)}
+						<CostTrendChart data={dailyStats} />
 					</CardContent>
 				</Card>
 			</div>
+
+			<RuntimeCostCard
+				computeCost={computeCost}
+				aiCost={totalCost}
+				executions={totalExecutions}
+				avgLatencyMs={overview?.avgLatencyMs}
+				model={overview?.computeCostModel}
+				rangeLabel={dateRangeLabel.toLowerCase()}
+			/>
 
 			<div className="grid gap-4 xl:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.2fr)]">
 				<Card className={analyticsCardClassName}>

@@ -6,7 +6,12 @@
  * Matched per path segment — a substring check on `/storage` silently misses
  * `/user-storage`, which collapses that page's height.
  */
-const FULL_HEIGHT_SEGMENTS = new Set(["storage", "user-storage", "explore"]);
+const FULL_HEIGHT_SEGMENTS = new Set([
+	"storage",
+	"user-storage",
+	"explore",
+	"setup",
+]);
 
 export function configRouteFillsHeight(route?: string | null): boolean {
 	if (!route) return false;

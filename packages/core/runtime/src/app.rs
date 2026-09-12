@@ -32,6 +32,12 @@ pub enum StandardInterfaces {
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FrontendConfiguration {
     pub landing_page: Option<String>,
+
+    /// App-wide stylesheet. Injected once above every page surface and scoped
+    /// to the app root, so page-level CSS stays later in document order and
+    /// keeps winning ties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_css: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -1436,6 +1442,44 @@ mod tests {
         let deser = super::App::from_proto(flow_like_types::proto::App::decode(&buf[..]).unwrap());
 
         assert_eq!(app.id, deser.id);
+    }
+
+    /// The `frontend` slot shipped for a long time without ever surviving a
+    /// save: `to_proto` omitted it and `from_proto` hardcoded `None`, so the
+    /// app-wide stylesheet would vanish on every write with no error anywhere.
+    /// Nothing but this test catches that regression.
+    #[tokio::test]
+    async fn save_round_trips_the_app_wide_stylesheet() {
+        let store = FlowLikeStore::Other(Arc::new(object_store::memory::InMemory::new()));
+        let state = Arc::new(crate::state::FlowLikeState::new(
+            FlowLikeConfig::with_default_store(store),
+            HTTPClient::new_without_refetch(),
+        ));
+        let mut app = super::App::new(
+            Some("stylesheet-round-trip".to_string()),
+            Metadata::default(),
+            Vec::new(),
+            state.clone(),
+        )
+        .await
+        .expect("test app should be created");
+
+        app.frontend = Some(super::FrontendConfiguration {
+            landing_page: Some("/home".to_string()),
+            custom_css: Some(".card { border-radius: 1rem; }".to_string()),
+        });
+        app.save().await.expect("app should save");
+
+        let loaded = super::App::load("stylesheet-round-trip".to_string(), state)
+            .await
+            .expect("app should load");
+        let frontend = loaded.frontend.expect("frontend should survive the save");
+
+        assert_eq!(
+            frontend.custom_css.as_deref(),
+            Some(".card { border-radius: 1rem; }")
+        );
+        assert_eq!(frontend.landing_page.as_deref(), Some("/home"));
     }
 
     #[tokio::test]

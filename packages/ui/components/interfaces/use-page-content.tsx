@@ -30,6 +30,7 @@ import {
 } from "../../lib/runtime-route";
 import { normalizeBoardVersion } from "../../lib/schema/flow/board-version";
 import type { IEvent } from "../../lib/schema/flow/event";
+import { escapeCssAttributeValue } from "../../lib/chat-appearance";
 import { useSetQueryParams } from "../../lib/set-query-params";
 import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
@@ -42,6 +43,7 @@ import type {
 } from "../../state/backend-state/page-state";
 import type { IRouteMapping } from "../../state/backend-state/route-state";
 import type { ISettingsProfile } from "../../types";
+import { ScopedCustomCss } from "../scoped-custom-css";
 import { LoadingScreen } from "../ui/loading-screen";
 import { Container } from "./container";
 import {
@@ -1431,7 +1433,22 @@ export function UsePageContent({
 
 	const Root = embedded ? "div" : "main";
 	return (
-		<Root className="flex flex-col h-full overflow-hidden flex-1 min-h-0">
+		<Root
+			className="flex flex-col h-full overflow-hidden flex-1 min-h-0"
+			data-app-id={appId}
+		>
+			{/*
+			 * The app-wide stylesheet. Deliberately a per-Root element rather than a
+			 * document.head singleton: two apps can be embedded on one document at
+			 * once, and a singleton would let one app repaint the other. It renders
+			 * before <Container>, so the page-level sheet — same specificity, later
+			 * in document order — keeps winning ties.
+			 */}
+			<ScopedCustomCss
+				css={validatedBootstrap?.appCustomCss}
+				scopeSelector={`[data-app-id="${escapeCssAttributeValue(appId)}"]`}
+				options={{ scopeRoot: true }}
+			/>
 			<Container ref={sidebarRef}>
 				<div className="flex flex-col grow h-full w-full max-h-full overflow-hidden">
 					{shouldRenderHeader ? (

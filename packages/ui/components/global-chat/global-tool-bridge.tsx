@@ -6138,13 +6138,21 @@ Completion contract: build complete helper logic first and add the Event entry l
 				}
 				case "flowpilot_widget": {
 					if (argString(args, "mode") === "inspect") {
+						const inspectAppId =
+							argString(args, "app_id") || argString(args, "appId");
+						// getApp rather than the Owner-gated appearance route, so a
+						// non-owner editor reads the real sheet instead of a 403.
+						const inspectApp = await backend.appState
+							.getApp(inspectAppId)
+							.catch(() => undefined);
 						return inspectFlowPilotWidgetPage(backend.pageState, {
-							appId: argString(args, "app_id") || argString(args, "appId"),
+							appId: inspectAppId,
 							pageId: argString(args, "page_id") || argString(args, "pageId"),
 							boardId:
 								argString(args, "board_id") ||
 								argString(args, "boardId") ||
 								undefined,
+							appCustomCss: inspectApp?.frontend?.custom_css ?? null,
 						});
 					}
 					const instruction = argString(args, "instruction");

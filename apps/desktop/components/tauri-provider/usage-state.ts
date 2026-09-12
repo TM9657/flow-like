@@ -1,5 +1,6 @@
 import type {
 	IEmbeddingUsageRecord,
+	IExecutionActivity,
 	IExecutionUsageRecord,
 	ILlmUsageRecord,
 	IPaginatedResponse,
@@ -64,6 +65,21 @@ export class UsageState implements IUsageState {
 		return fetcher<IPaginatedResponse<IExecutionUsageRecord>>(
 			this.backend.profile!,
 			`usage/executions?${params}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+	}
+
+	async getExecutionActivity(
+		days = 7,
+		appId?: string,
+	): Promise<IExecutionActivity> {
+		const params = new URLSearchParams({ days: String(days) });
+		if (appId) params.set("app_id", appId);
+
+		return fetcher<IExecutionActivity>(
+			this.backend.profile!,
+			`usage/executions/activity?${params}`,
 			{ method: "GET" },
 			this.backend.auth,
 		);

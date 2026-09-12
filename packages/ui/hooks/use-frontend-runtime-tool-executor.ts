@@ -1962,17 +1962,25 @@ export function useFrontendRuntimeToolExecutor(
 							return { status: "ok", widgets, package_widgets: packageWidgets };
 						}
 						default: {
-							const [pageList, widgetList, packageWidgets] = await Promise.all([
-								backend.pageState.getPages(toolAppId, boardId),
-								backend.widgetState.getWidgets(toolAppId),
-								loadUiInspectPackageWidgets(backend, toolAppId),
-							]);
-							const pages = await inspectUiPageList(pageList, (item) =>
-								backend.pageState.getPage(
-									toolAppId,
-									item.pageId,
-									item.boardId ?? boardId,
-								),
+							const [pageList, widgetList, packageWidgets, app] =
+								await Promise.all([
+									backend.pageState.getPages(toolAppId, boardId),
+									backend.widgetState.getWidgets(toolAppId),
+									loadUiInspectPackageWidgets(backend, toolAppId),
+									// Read through getApp, not the appearance route: that one is
+									// Owner-gated, and an editor who is not the owner would get a
+									// 403 reported as "no app stylesheet".
+									backend.appState.getApp(toolAppId),
+								]);
+							const pages = await inspectUiPageList(
+								pageList,
+								(item) =>
+									backend.pageState.getPage(
+										toolAppId,
+										item.pageId,
+										item.boardId ?? boardId,
+									),
+								app?.frontend?.custom_css ?? null,
 							);
 							return {
 								status: "ok",

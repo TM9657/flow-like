@@ -238,6 +238,24 @@ Model-provider keys and endpoint variables are listed in `.env.example`.
 Populate only the providers your installation uses, and keep their secrets out
 of hub JSON.
 
+## Runtime cost estimates
+
+App analytics and the admin usage dashboard price every run from its measured
+duration. The reference sizing bills an x86_64 function holding 2 GB for the
+whole run plus an arm64 function holding 1.2 GB for half of it, at AWS Lambda
+list prices, including the per-invocation fee.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `COMPUTE_COST_MULTIPLIER` | `1.0` | Scales the whole estimate for deployments whose functions are sized differently |
+
+A deployment that reserves twice the memory of the reference sizing sets
+`COMPUTE_COST_MULTIPLIER=2`. The API reads the variable once per process, so a
+change takes effect on restart. Values that are not a non-negative number are
+logged and ignored. The estimate covers compute only: storage, network and
+managed services are not included, and usage limits still apply to AI spend
+alone.
+
 ## Validate configuration changes
 
 ```bash

@@ -1,4 +1,6 @@
-use crate::app::{App, AppCategory, AppExecutionMode, AppStatus, AppType, AppVisibility};
+use crate::app::{
+    App, AppCategory, AppExecutionMode, AppStatus, AppType, AppVisibility, FrontendConfiguration,
+};
 use flow_like_types::{FromProto, Timestamp, ToProto};
 use std::time::SystemTime;
 
@@ -35,6 +37,7 @@ impl ToProto<flow_like_types::proto::App> for App {
             allow_forking: Some(self.allow_forking),
             forked_from: self.forked_from.clone(),
             forked_at: self.forked_at.map(Timestamp::from),
+            frontend: self.frontend.as_ref().map(|frontend| frontend.to_proto()),
         }
     }
 }
@@ -78,7 +81,23 @@ impl FromProto<flow_like_types::proto::App> for App {
             forked_from: proto.forked_from,
             forked_at: proto.forked_at.and_then(|t| SystemTime::try_from(t).ok()),
             app_state: None,
-            frontend: None,
+            frontend: proto.frontend.map(FrontendConfiguration::from_proto),
+        }
+    }
+}
+
+impl FrontendConfiguration {
+    fn to_proto(&self) -> flow_like_types::proto::FrontendConfiguration {
+        flow_like_types::proto::FrontendConfiguration {
+            landing_page: self.landing_page.clone(),
+            custom_css: self.custom_css.clone(),
+        }
+    }
+
+    fn from_proto(proto: flow_like_types::proto::FrontendConfiguration) -> Self {
+        FrontendConfiguration {
+            landing_page: proto.landing_page,
+            custom_css: proto.custom_css,
         }
     }
 }

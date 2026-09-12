@@ -1,3 +1,4 @@
+pub mod change_appearance;
 pub mod change_forking;
 pub mod change_visibility;
 pub mod delete_app;

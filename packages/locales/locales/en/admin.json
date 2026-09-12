@@ -915,5 +915,9 @@
 	"worstErrorRate": "Worst error rate",
 	"worstFirst": ", worst first.",
 	"worstScore": "Worst score",
-	"yes": "Yes"
+	"yes": "Yes",
+	"aiCost": "AI cost",
+	"compute": "Compute",
+	"computeIsEstimatedFromRunDuration": "Compute is estimated from run duration and is not covered by limits.",
+	"runtimeCost": "Runtime cost"
 }

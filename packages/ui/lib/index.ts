@@ -11,6 +11,7 @@ export * from "./date";
 export * from "./app-category";
 export * from "./event-sections";
 export * from "./event-type-label";
+export * from "./schedule-config";
 export * from "./add-app-to-profile";
 export * from "./llm/history";
 export * from "./llm/response";

@@ -80,6 +80,7 @@ pub mod notifications;
 pub mod pat;
 pub mod pricing;
 pub mod push_targets;
+pub mod schedules;
 pub mod subscribe;
 pub mod templates;
 pub mod upsert_info;
@@ -111,6 +112,7 @@ pub fn routes() -> Router<AppState> {
         .route("/search/{query}", get(lookup::user_search))
         .route("/invites", get(get_invites::get_invites))
         .route("/templates", get(templates::get_templates))
+        .route("/schedules", get(schedules::get_schedules))
         .route("/groups", get(groups::get_user_groups))
         .route("/widgets", get(widgets::get_widgets))
         .route("/notifications", get(notifications::get_notifications))

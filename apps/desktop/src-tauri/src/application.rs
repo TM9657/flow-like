@@ -1089,6 +1089,8 @@ pub fn run() {
             functions::app::flowpilot_builds::write_app_build,
             functions::app::app_add_package,
             functions::app::app_remove_package,
+            functions::app::app_get_stylesheet,
+            functions::app::app_set_stylesheet,
             functions::app::app_list_packages,
             functions::app::sharing::export_app_to_file,
             functions::app::sharing::import_app_from_file,

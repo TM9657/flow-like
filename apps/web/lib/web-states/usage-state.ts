@@ -1,5 +1,6 @@
 import type {
 	IEmbeddingUsageRecord,
+	IExecutionActivity,
 	IExecutionUsageRecord,
 	ILlmUsageRecord,
 	IPaginatedResponse,
@@ -48,6 +49,15 @@ export class WebUsageState implements IUsageState {
 		});
 		if (appId) params.set("app_id", appId);
 		return apiGet(`usage/executions?${params}`, this.backend.auth);
+	}
+
+	async getExecutionActivity(
+		days = 7,
+		appId?: string,
+	): Promise<IExecutionActivity> {
+		const params = new URLSearchParams({ days: String(days) });
+		if (appId) params.set("app_id", appId);
+		return apiGet(`usage/executions/activity?${params}`, this.backend.auth);
 	}
 
 	async getUsageSummary(): Promise<IUsageSummary> {

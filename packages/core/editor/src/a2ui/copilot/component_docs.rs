@@ -819,6 +819,9 @@ a settings screen.
    keep it exactly as-is. Only include it when you are changing it, and then send the COMPLETE
    stylesheet: the value replaces the previous one, so a fragment silently drops every rule you
    left out.
+   customCss is the PAGE layer and the only stylesheet you write. An app-wide stylesheet may sit
+   above it: human-authored, already reaching every page, and with no write channel of your own in
+   v1. Never reproduce it in a page, and never read an empty page customCss as an unstyled app.
 
 ## Theme Colors (default vocabulary - always correct in light AND dark mode)
 

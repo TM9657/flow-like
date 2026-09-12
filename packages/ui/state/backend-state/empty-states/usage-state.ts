@@ -1,5 +1,6 @@
 import type {
 	IEmbeddingUsageRecord,
+	IExecutionActivity,
 	IExecutionUsageRecord,
 	ILlmUsageRecord,
 	IPaginatedResponse,
@@ -15,6 +16,9 @@ export class EmptyUsageState implements IUsageState {
 		throw new Error("Method not implemented.");
 	}
 	getExecutionHistory(): Promise<IPaginatedResponse<IExecutionUsageRecord>> {
+		throw new Error("Method not implemented.");
+	}
+	getExecutionActivity(): Promise<IExecutionActivity> {
 		throw new Error("Method not implemented.");
 	}
 	getUsageSummary(): Promise<IUsageSummary> {

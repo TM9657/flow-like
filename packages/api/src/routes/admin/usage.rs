@@ -1,4 +1,5 @@
 use crate::{
+    compute_cost::{ComputeCostModel, compute_cost_micro_dollars, compute_cost_model},
     entity::{
         app, app_usage_limit, embedding_usage_tracking, execution_usage_tracking,
         llm_usage_tracking, meta, technical_user, usage_alert, usage_invocation,
@@ -68,6 +69,10 @@ impl UsageAggregate {
 
     fn total_tokens(&self) -> i64 {
         self.llm_tokens + self.embedding_tokens
+    }
+
+    fn compute_cost(&self) -> i64 {
+        compute_cost_micro_dollars(self.execution_microseconds, self.executions as i64)
     }
 
     fn average_execution_ms(&self) -> Option<f64> {
@@ -147,6 +152,8 @@ pub struct AdminUsageTotals {
     pub executions: u64,
     pub execution_microseconds: i64,
     pub average_execution_ms: Option<f64>,
+    /// Estimated serverless runtime cost (micro-dollars)
+    pub compute_cost: i64,
 }
 
 impl From<UsageAggregate> for AdminUsageTotals {
@@ -163,6 +170,7 @@ impl From<UsageAggregate> for AdminUsageTotals {
             executions: value.executions,
             execution_microseconds: value.execution_microseconds,
             average_execution_ms: value.average_execution_ms(),
+            compute_cost: value.compute_cost(),
         }
     }
 }
@@ -277,6 +285,8 @@ pub struct AdminUsageOverview {
     pub technical_users: Vec<AdminTechnicalUserUsage>,
     pub apps: Vec<AdminAppUsage>,
     pub models: Vec<AdminModelUsage>,
+    /// Rate card behind every `computeCost` in this response
+    pub compute_cost_model: ComputeCostModel,
 }
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
@@ -722,8 +732,7 @@ pub async fn overview(
             totals: totals.into(),
         })
         .collect();
-    apps.sort_by_key(|row| std::cmp::Reverse(row.totals.total_price));
-    apps.truncate(10);
+    retain_top_apps_by_either_cost(&mut apps, 10);
 
     let mut models: Vec<AdminModelUsage> = models
         .into_iter()
@@ -754,7 +763,34 @@ pub async fn overview(
         technical_users,
         apps,
         models,
+        compute_cost_model: compute_cost_model(),
     }))
+}
+
+/// The dashboard ranks projects twice, by AI price and by estimated runtime
+/// cost, so the response has to carry every row either ranking can show: an app
+/// that burns compute without ever calling a model never enters the AI top ten,
+/// and a model-heavy app never enters the runtime one. Rows come back ordered by
+/// the two costs combined; the client re-orders them per ranking.
+fn retain_top_apps_by_either_cost(apps: &mut Vec<AdminAppUsage>, limit: usize) {
+    if apps.len() <= limit {
+        apps.sort_by_key(|row| {
+            std::cmp::Reverse(row.totals.total_price + row.totals.compute_cost)
+        });
+        return;
+    }
+
+    let mut keep: HashSet<Option<String>> = HashSet::new();
+    for key in [
+        |row: &AdminAppUsage| row.totals.total_price,
+        |row: &AdminAppUsage| row.totals.compute_cost,
+    ] {
+        apps.sort_by_key(|row| std::cmp::Reverse(key(row)));
+        keep.extend(apps.iter().take(limit).map(|row| row.app_id.clone()));
+    }
+
+    apps.retain(|row| keep.contains(&row.app_id));
+    apps.sort_by_key(|row| std::cmp::Reverse(row.totals.total_price + row.totals.compute_cost));
 }
 
 #[tracing::instrument(name = "GET /admin/usage/apps/{app_id}/limits", skip(state, user))]

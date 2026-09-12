@@ -7,6 +7,7 @@ import {
 	FileCode2Icon,
 	FileIcon,
 	LayoutTemplateIcon,
+	PaletteIcon,
 	PencilLineIcon,
 	PlusIcon,
 	SquareDashedBottomCodeIcon,
@@ -134,6 +135,7 @@ const KIND_ICONS: Record<IEditorDocument["kind"], typeof FileCode2Icon> = {
 	widget: SquareDashedBottomCodeIcon,
 	storage: FileIcon,
 	table: DatabaseIcon,
+	styles: PaletteIcon,
 };
 
 // Extra props (and ref) must reach the root span so `ContextMenuTrigger asChild`
