@@ -43,6 +43,7 @@ const OMNISCIENCE_INDEX_DATASET =
 	"AA-Omniscience Index Across Domains (Normalized)";
 const OMNISCIENCE_ACCURACY_DATASET = "AA-Omniscience Accuracy";
 const OMNISCIENCE_HALLUCINATION_DATASET = "AA-Omniscience Hallucination Rate";
+const OPENNESS_INDEX_DATASET = "Artificial Analysis Openness Index: Score";
 
 type JsonObject = Record<string, unknown>;
 
@@ -325,16 +326,32 @@ async function enrichModelsWithPublicBenchmarks(
 }
 
 async function fetchPublicBenchmarks(): Promise<PublicBenchmarkMaps> {
-	const [modelsHtml, multilingualHtml, omniscienceHtml, ...writingReadmes] =
-		await Promise.all([
-			fetchPageHtml(MODELS_PAGE_URL),
-			fetchPageHtml(MULTILINGUAL_URL),
-			fetchPageHtml(OMNISCIENCE_URL),
-			...WRITING_BENCHMARK_READMES.map((source) => fetchPageHtml(source.url)),
-		]);
+	const sources = [
+		MODELS_PAGE_URL,
+		MULTILINGUAL_URL,
+		OMNISCIENCE_URL,
+		...WRITING_BENCHMARK_READMES.map((source) => source.url),
+	];
 
-	const modelBenchmarks = parseModelsPageBenchmarks(modelsHtml);
+	// The writing repository retires old leaderboard versions as new ones land,
+	// and one retired page must not cost every other benchmark its refresh: a
+	// page that fails is parsed as empty, so its models keep their cached score.
+	const settled = await Promise.allSettled(
+		sources.map((url) => fetchPageHtml(url)),
+	);
+	const pages = settled.map((result, index) => {
+		if (result.status === "fulfilled") return result.value;
+		console.warn(
+			`[fetch] Skipping ${sources[index]}: ${(result.reason as Error).message}`,
+		);
+		return "";
+	});
+
+	const [modelsHtml, multilingualHtml, omniscienceHtml, ...writingReadmes] =
+		pages;
+
 	const creativityBenchmarks = parseWritingBenchmarks(writingReadmes);
+	const modelsDatasets = extractLdJsonDatasets(modelsHtml);
 	const multilingualDatasets = extractLdJsonDatasets(multilingualHtml);
 	const omniscienceDatasets = extractLdJsonDatasets(omniscienceHtml);
 
@@ -344,8 +361,14 @@ async function fetchPublicBenchmarks(): Promise<PublicBenchmarkMaps> {
 			findDataset(multilingualDatasets, MULTILINGUAL_DATASET),
 			"multilingual",
 		),
-		opennessIndex: modelBenchmarks.opennessIndex,
-		openSourceCategorization: modelBenchmarks.openSourceCategorization,
+		// The score is published on a 0-100 scale, and the models page no longer
+		// carries the open-source categorization, which the API returns anyway.
+		opennessIndex: parseNumericDataset(
+			findDataset(modelsDatasets, OPENNESS_INDEX_DATASET),
+			"opennessIndex",
+			false,
+		),
+		openSourceCategorization: new Map(),
 		omniscienceIndex: parseNormalizedPropertyDataset(
 			findDataset(omniscienceDatasets, OMNISCIENCE_INDEX_DATASET),
 			"omniscience",
@@ -661,53 +684,6 @@ function computeCreativitySimilarityDistance(
 	return weightedDistance / totalWeight;
 }
 
-function parseModelsPageBenchmarks(html: string): {
-	opennessIndex: Map<string, number>;
-	openSourceCategorization: Map<string, AAOpenSourceCategorization>;
-} {
-	const opennessIndex = new Map<string, number>();
-	const openSourceCategorization = new Map<
-		string,
-		AAOpenSourceCategorization
-	>();
-	const start = html.indexOf('{\\"additional_text\\":');
-
-	if (start === -1) {
-		return { opennessIndex, openSourceCategorization };
-	}
-
-	const chunks = html
-		.slice(start)
-		.split('},{\\"additional_text\\":')
-		.map((chunk, index) =>
-			index === 0 ? chunk : `{\\"additional_text\\":${chunk}`,
-		);
-
-	for (const chunk of chunks) {
-		const modelUrl = parseEscapedStringField(chunk, "model_url");
-		if (!modelUrl?.startsWith("/models/")) {
-			continue;
-		}
-
-		const slug = modelUrl.slice("/models/".length);
-		const category = parseEscapedStringField(
-			chunk,
-			"open_source_categorization",
-		);
-		const openness = parseEscapedNumericField(chunk, "opennessIndex");
-
-		if (isOpenSourceCategorization(category)) {
-			openSourceCategorization.set(slug, category);
-		}
-
-		if (openness != null) {
-			opennessIndex.set(slug, openness);
-		}
-	}
-
-	return { opennessIndex, openSourceCategorization };
-}
-
 async function fetchPageHtml(url: string): Promise<string> {
 	const res = await fetch(url);
 	if (!res.ok) {
@@ -790,6 +766,7 @@ function parseNormalizedPropertyDataset(
 function parseNumericDataset(
 	dataset: JsonObject | null,
 	valueKey: string,
+	clamp = true,
 ): Map<string, number> {
 	const result = new Map<string, number>();
 	if (!dataset) return result;
@@ -804,7 +781,7 @@ function parseNumericDataset(
 		const value = (row as JsonObject)[valueKey];
 
 		if (slug && typeof value === "number") {
-			result.set(slug, clampUnit(value));
+			result.set(slug, clamp ? clampUnit(value) : value);
 		}
 	}
 
@@ -813,39 +790,10 @@ function parseNumericDataset(
 
 function extractSlugFromDetailsUrl(detailsUrl: string | null): string | null {
 	if (!detailsUrl) return null;
-	const match = detailsUrl.match(/^\/models\/([^/]+)\/providers$/);
+	// Datasets link a model either directly or through its providers tab, and
+	// the site moved several of them from the second form to the first.
+	const match = detailsUrl.match(/^\/models\/([^/]+)(?:\/providers)?$/);
 	return match?.[1] ?? null;
-}
-
-function parseEscapedStringField(
-	chunk: string,
-	fieldName: string,
-): string | null {
-	const match = chunk.match(
-		new RegExp(`\\\\"${fieldName}\\\\":\\\\"([^\\\\"]+)\\\\"`),
-	);
-	return match?.[1] ?? null;
-}
-
-function parseEscapedNumericField(
-	chunk: string,
-	fieldName: string,
-): number | null {
-	const match = chunk.match(new RegExp(`\\\\"${fieldName}\\\\":([0-9.]+)`));
-	if (!match) return null;
-
-	const value = Number(match[1]);
-	return Number.isFinite(value) ? value : null;
-}
-
-function isOpenSourceCategorization(
-	value: string | null,
-): value is AAOpenSourceCategorization {
-	return (
-		value === "Open Weights (License Required for Commercial Use)" ||
-		value === "Open Weights (Permissive License)" ||
-		value === "Proprietary"
-	);
 }
 
 function normalizeCreativityKey(value: string): string {

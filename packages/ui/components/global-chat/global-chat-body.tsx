@@ -68,6 +68,7 @@ import {
 } from "../../index";
 import { cn } from "../../lib";
 import { getApiOrigin } from "../../lib/api-url";
+import { searchAllBitsOfType } from "../../lib/bit/model-listing";
 import { resolveChatPlaceholderTypingMotion } from "../../lib/chat-appearance";
 import { createComposerActivity } from "../../lib/composer-activity";
 import { FLOWPILOT_DEBUG_ENABLED } from "../../lib/flowpilot-debug";
@@ -400,9 +401,9 @@ export function GlobalChatBody({ variant = "page" }: GlobalChatBodyProps) {
 
 	// LLM/VLM bits in the current profile — the selectable models for the "Profile" provider.
 	const llmBits = useInvoke(
-		backend.bitState.searchBits,
+		searchAllBitsOfType,
 		backend.bitState,
-		[{ bit_types: [IBitTypes.Llm, IBitTypes.Vlm] }],
+		[[IBitTypes.Llm, IBitTypes.Vlm]],
 		!!settingsProfile.data,
 		[settingsProfile.data?.hub_profile.id],
 	);

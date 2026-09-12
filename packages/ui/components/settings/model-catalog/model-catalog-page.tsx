@@ -37,6 +37,10 @@ import { useSearch } from "../../../hooks/use-search-index";
 import { Bit } from "../../../lib/bit/bit";
 import { filterHostableLlmModels } from "../../../lib/bit/local-model-filter";
 import { isMlxModelBit } from "../../../lib/bit/mlx-model-pack";
+import {
+	listableModels,
+	searchAllBitsOfType,
+} from "../../../lib/bit/model-listing";
 import type { IBit } from "../../../lib/schema/bit/bit";
 import { IBitTypes } from "../../../lib/schema/bit/bit";
 import type { ILlmParameters } from "../../../lib/schema/bit/bit/llm-parameters";
@@ -224,21 +228,19 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 	);
 
 	const foundBits = useInvoke(
-		backend.bitState.searchBits,
+		searchAllBitsOfType,
 		backend.bitState,
 		[
-			{
-				bit_types: [
-					IBitTypes.Llm,
-					IBitTypes.Vlm,
-					IBitTypes.Tts,
-					IBitTypes.Stt,
-					IBitTypes.Embedding,
-					IBitTypes.ImageEmbedding,
-					IBitTypes.ImageGeneration,
-					IBitTypes.VideoGeneration,
-				],
-			},
+			[
+				IBitTypes.Llm,
+				IBitTypes.Vlm,
+				IBitTypes.Tts,
+				IBitTypes.Stt,
+				IBitTypes.Embedding,
+				IBitTypes.ImageEmbedding,
+				IBitTypes.ImageGeneration,
+				IBitTypes.VideoGeneration,
+			],
 		],
 		typeof profile.data !== "undefined",
 		[profile.data?.id ?? ""],
@@ -259,7 +261,8 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 
 	const allBits = useMemo(() => {
 		const merged = new Map<string, IBit>();
-		for (const bit of foundBits.data ?? []) merged.set(bit.id, bit);
+		for (const bit of listableModels(foundBits.data ?? []))
+			merged.set(bit.id, bit);
 		for (const bit of customBits.data ?? []) merged.set(bit.id, bit);
 		return Array.from(merged.values());
 	}, [foundBits.data, customBits.data]);

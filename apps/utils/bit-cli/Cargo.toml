@@ -1,0 +1,19 @@
+[package]
+name = "bit-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "flow-bits"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5.44", features = ["derive"] }
+dirs-next.workspace = true
+flow-like = { workspace = true, features = ["app"] }
+futures.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

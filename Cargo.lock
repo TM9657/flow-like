@@ -3026,6 +3026,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "dirs-next",
+ "flow-like",
+ "futures 0.3.32",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

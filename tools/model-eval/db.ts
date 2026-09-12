@@ -98,12 +98,16 @@ export async function updateBitParameters(
 		}
 	}
 
+	// `authors` and `dependencies` are text arrays in the database but Json in the
+	// Prisma schema, so returning the whole row fails to deserialize. The update
+	// only needs to happen, not to hand the row back.
 	await db.bit.update({
 		where: { id: bitId },
 		data: {
 			parameters: merged as unknown as Prisma.InputJsonValue,
 			...dateFields,
 		},
+		select: { id: true },
 	});
 }
 
