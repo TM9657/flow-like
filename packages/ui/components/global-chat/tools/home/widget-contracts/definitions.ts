@@ -442,6 +442,10 @@ export const HOME_WIDGET_CONFIG_CONTRACTS = {
 				default: "overview",
 				enum: RUN_STAT_METRICS,
 			}),
+			days: number("UTC time window. Applies to the period statistics.", {
+				default: 7,
+				enum: ACTIVITY_DAYS,
+			}),
 			appId: profileApp("Optional app filter from the current profile.", {
 				field: "metric",
 				in: ["errors", "duration"],

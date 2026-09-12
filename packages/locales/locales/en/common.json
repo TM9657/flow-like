@@ -2779,5 +2779,10 @@
 	"zoomOut": "Zoom out",
 	"lengthMatchingPackages": "{{length}} matching packages",
 	"lengthUpdates": "{{length}} updates",
-	"packageViews": "Package views"
+	"packageViews": "Package views",
+	"appearance": "Appearance",
+	"oneStylesheetForEveryPageInThisApp": "One stylesheet for every page in this app",
+	"labelUnlockable": "{{label}} — you can unlock this",
+	"yourRoleOnThisProjectCannotOpenLabelDescription": "Your role on this project cannot open {{label}}. {{description}}",
+	"unlockLabel": "Unlock {{label}}"
 }

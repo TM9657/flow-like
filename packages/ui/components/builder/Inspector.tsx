@@ -7,6 +7,7 @@ import {
 	validateInputValue,
 } from "@flow-like/widget-sdk";
 import {
+	ArrowUpFromLine,
 	ChevronDown,
 	ChevronUp,
 	Package,
@@ -14,6 +15,7 @@ import {
 	Trash2,
 	Zap,
 } from "lucide-react";
+import Link from "next/link";
 import {
 	type CSSProperties,
 	type ReactNode,
@@ -23,7 +25,8 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import { useInvoke } from "../../hooks";
+import { toast } from "sonner";
+import { useInvalidateInvoke, useInvoke } from "../../hooks";
 import { cn } from "../../lib";
 import {
 	createContractInputValue,
@@ -5251,10 +5254,93 @@ function StyleEditor({ component, onUpdate }: StyleEditorProps) {
 	);
 }
 
+const ROOT_SELECTOR_PATTERN = /:root\b/;
+
+/**
+ * Pushes this page's sheet up to the app stylesheet. The app sheet is appended to, never
+ * replaced, and the page field is cleared only once the write lands — putting a bad result
+ * back is a paste.
+ */
+function PageCssMigration({ appId }: Readonly<{ appId: string }>) {
+	const { t } = useTranslation("flow");
+	const backend = useBackend();
+	const invalidate = useInvalidateInvoke();
+	const { canvasSettings, setCanvasSettings } = useBuilder();
+	const [moving, setMoving] = useState(false);
+	const pageCss = canvasSettings.customCss?.trim() ?? "";
+	// A page sheet is injected unscoped, so its `:root` blocks reach the whole document. The
+	// app layer rewrites `:root` to the app root, so lifting such a sheet repaints less.
+	const usesRootSelector = ROOT_SELECTOR_PATTERN.test(pageCss);
+
+	const move = useCallback(async () => {
+		setMoving(true);
+		try {
+			const appCss = (await backend.appState.getAppStylesheet(appId)) ?? "";
+			const merged = appCss.trim()
+				? `${appCss.trimEnd()}\n\n${pageCss}\n`
+				: `${pageCss}\n`;
+			await backend.appState.setAppStylesheet(appId, merged);
+			// The builders read the sheet off getApp, so that is the query the
+			// canvas re-renders from.
+			await invalidate(backend.appState.getApp, [appId]);
+			setCanvasSettings({ customCss: undefined });
+			toast.success(
+				t(
+					"pageCssCopiedIntoTheAppStylesheet",
+					"Page CSS copied into the app stylesheet",
+				),
+			);
+		} catch (cause) {
+			console.error(
+				"Failed to lift page CSS to the app stylesheet",
+				appId,
+				cause,
+			);
+			toast.error(
+				cause instanceof Error ? cause.message : String(cause ?? "unknown"),
+			);
+		} finally {
+			setMoving(false);
+		}
+	}, [appId, backend.appState, invalidate, pageCss, setCanvasSettings, t]);
+
+	if (!pageCss) return null;
+
+	return (
+		<div className="space-y-1.5 rounded-md border border-dashed p-2">
+			<Button
+				variant="outline"
+				size="sm"
+				className="h-7 w-full text-xs"
+				disabled={usesRootSelector || moving}
+				onClick={move}
+			>
+				<ArrowUpFromLine className="h-3.5 w-3.5" />
+				{t(
+					"moveThisPagesCssToTheAppStylesheet",
+					"Move this page's CSS to the app stylesheet",
+				)}
+			</Button>
+			<p className="text-xs text-muted-foreground">
+				{usesRootSelector
+					? t(
+							"thisSheetUsesRootWhichReachesTheWholeDocumentFromAPageButOnlyTheAppRootAtAppLevelMoveItByHand",
+							"This sheet uses :root, which reaches the whole document from a page but only the app root at app level. Move it by hand.",
+						)
+					: t(
+							"copiesTheSheetIntoTheAppStylesheetAndClearsItHereOtherPagesKeepTheirOwn",
+							"Copies the sheet into the app stylesheet and clears it here. Other pages keep their own.",
+						)}
+			</p>
+		</div>
+	);
+}
+
 // Canvas settings editor - global canvas settings
 function CanvasSettingsEditor() {
 	const { t } = useTranslation("flow");
-	const { canvasSettings, setCanvasSettings } = useBuilder();
+	const { canvasSettings, setCanvasSettings, actionContext } = useBuilder();
+	const appId = actionContext?.appId;
 
 	return (
 		<div className="space-y-4">
@@ -5342,6 +5428,20 @@ function CanvasSettingsEditor() {
 						"CSS is automatically scoped to the canvas. Use class selectors like .my-class",
 					)}
 				</p>
+				{appId && (
+					<p className="text-xs text-muted-foreground">
+						{t(
+							"thisSheetStylesThisCanvasOnly",
+							"This sheet styles this canvas only.",
+						)}{" "}
+						<Link
+							href={`/library/config/appearance?id=${appId}`}
+							className="underline underline-offset-2 hover:text-foreground"
+						>
+							{t("editTheAppWideStylesheet", "Edit the app-wide stylesheet")}
+						</Link>
+					</p>
+				)}
 				<MonacoCodeEditor
 					value={canvasSettings.customCss || ""}
 					onChange={(value) =>
@@ -5351,6 +5451,7 @@ function CanvasSettingsEditor() {
 					height="150px"
 					allowFullscreen
 				/>
+				{appId && <PageCssMigration appId={appId} />}
 			</div>
 		</div>
 	);

@@ -339,7 +339,7 @@ export function VariableOverlay({
 							<p className="rounded-md border border-border/60 bg-muted/40 p-3 text-xs text-muted-foreground">
 								{t(
 									"exposedVariablesTakeTheirValueFromTheAppsConfigurationTab",
-									"Exposed variables take their value from the app's configuration tab, so there is no default to edit here.",
+									"Exposed variables take their value from the app's Setup tab, so there is no default to edit here.",
 								)}
 							</p>
 						) : (
@@ -486,7 +486,7 @@ export function VariableOverlay({
 							label={t("isExposed", "Is Exposed?")}
 							hint={t(
 								"ifYouExposeAVariableItWillBeVisibleInTheConfigurationTabOfYourApp",
-								"If you expose a variable it will be visible in the configuration tab of your App.",
+								"If you expose a variable it will be visible in the Setup tab of your App.",
 							)}
 						/>
 						<FlagRow

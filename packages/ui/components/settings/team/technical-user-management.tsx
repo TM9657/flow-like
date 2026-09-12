@@ -51,6 +51,7 @@ import {
 	useInvalidateInvoke,
 	useInvoke,
 } from "../../../";
+import { PermissionNotice, SectionLockedPanel } from "../permission";
 import {
 	SectionHeading,
 	StatusChip,
@@ -58,12 +59,15 @@ import {
 	TEAM_ROW_DESCRIPTION,
 	TEAM_ROW_META,
 	TEAM_ROW_TITLE,
+	TeamActionLock,
 	TeamCallout,
 	TeamHint,
+	TeamReadError,
 	TeamRowActions,
 	TeamRowIcon,
 	TeamSection,
 	teamRowClass,
+	useTeamAccess,
 } from "./team-shared";
 
 interface TechnicalUserManagementProps {
@@ -76,14 +80,21 @@ export function TechnicalUserManagement({
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	const access = useTeamAccess(appId);
 	const apiKeys = useInvoke(
 		backend.apiKeyState.getApiKeys,
 		backend.apiKeyState,
 		[appId],
+		access.canAdminister && !access.isLoading,
 	);
-	const roles = useInvoke(backend.roleState.getRoles, backend.roleState, [
-		appId,
-	]);
+	const roles = useInvoke(
+		backend.roleState.getRoles,
+		backend.roleState,
+		[appId],
+		access.canReadRoles && !access.isLoading,
+	);
+	const rolesDenied = !access.canReadRoles;
+	const rolesUnknown = rolesDenied || roles.isError;
 
 	const [showCreateDialog, setShowCreateDialog] = useState(false);
 	const [showKeyDialog, setShowKeyDialog] = useState(false);
@@ -175,6 +186,20 @@ export function TechnicalUserManagement({
 		toast.success("API key copied to clipboard!");
 	}, [newApiKey]);
 
+	if (!access.canAdminister && !access.isLoading) {
+		return (
+			<SectionLockedPanel
+				feature={t("apiKeys", "API keys")}
+				description={t(
+					"onlyProjectAdminsCanSeeOrIssueApiKeys",
+					"Only project admins can see or issue API keys.",
+				)}
+				missing={[RolePermissions.Admin]}
+				roleName={access.roleName}
+			/>
+		);
+	}
+
 	return (
 		<div className="space-y-8">
 			<TeamSection>
@@ -187,14 +212,20 @@ export function TechnicalUserManagement({
 						"For scripts and services. A key acts with the role you give it — nothing more.",
 					)}
 					actions={
-						<Button
-							size="sm"
-							className={TEAM_ACTION_GRADIENT}
-							onClick={() => setShowCreateDialog(true)}
+						<TeamActionLock
+							locked={!access.canAdminister}
+							reason={access.adminReason}
 						>
-							<PlusIcon className="size-4" />
-							{t("newKey", "New key")}
-						</Button>
+							<Button
+								size="sm"
+								className={TEAM_ACTION_GRADIENT}
+								disabled={!access.canAdminister}
+								onClick={() => setShowCreateDialog(true)}
+							>
+								<PlusIcon className="size-4" />
+								{t("newKey", "New key")}
+							</Button>
+						</TeamActionLock>
 					}
 				/>
 
@@ -213,7 +244,31 @@ export function TechnicalUserManagement({
 					</TeamCallout>
 				)}
 
-				{!apiKeys.data || apiKeys.data.length === 0 ? (
+				{rolesUnknown &&
+					!access.isLoading &&
+					(rolesDenied ? (
+						<PermissionNotice
+							tone="readOnly"
+							title={t("roleNamesUnavailable", "Role names unavailable")}
+							description={t(
+								"theKeysAreListedButTheRoleEachOneActsWithCannotBeRead",
+								"The keys are listed, but the role each one acts with cannot be read.",
+							)}
+							missing={[RolePermissions.ReadRoles]}
+						/>
+					) : (
+						<TeamReadError
+							title={t("roleNamesUnavailable", "Role names unavailable")}
+							error={roles.error}
+						/>
+					))}
+
+				{apiKeys.isError ? (
+					<TeamReadError
+						title={t("apiKeysUnavailable", "API keys unavailable")}
+						error={apiKeys.error}
+					/>
+				) : !apiKeys.data || apiKeys.data.length === 0 ? (
 					<EmptyState
 						className="max-w-full"
 						icons={[KeyIcon]}
@@ -292,7 +347,11 @@ export function TechnicalUserManagement({
 
 						<div className="space-y-2">
 							<Label htmlFor="role">Role</Label>
-							<Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
+							<Select
+								value={selectedRoleId}
+								onValueChange={setSelectedRoleId}
+								disabled={rolesUnknown}
+							>
 								<SelectTrigger>
 									<SelectValue
 										placeholder={t(
@@ -310,10 +369,15 @@ export function TechnicalUserManagement({
 								</SelectContent>
 							</Select>
 							<p className="text-xs text-muted-foreground">
-								{t(
-									"theRoleDeterminesWhatPermissionsThisApiKeyHas",
-									"The role determines what permissions this API key has",
-								)}
+								{rolesUnknown
+									? t(
+											"theRolesOfThisProjectCouldNotBeReadTheKeyWillBeCreatedWithoutOne",
+											"This project's roles could not be read, so the key can only be created without one.",
+										)
+									: t(
+											"theRoleDeterminesWhatPermissionsThisApiKeyHas",
+											"The role determines what permissions this API key has",
+										)}
 							</p>
 						</div>
 

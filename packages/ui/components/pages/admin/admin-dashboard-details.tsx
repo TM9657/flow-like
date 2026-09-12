@@ -25,6 +25,10 @@ import {
 	YAxis,
 } from "recharts";
 import { useFeatures } from "../../../hooks/use-features";
+import {
+	formatComputeLeg,
+	formatDurationShare,
+} from "../../../lib/compute-cost";
 import type {
 	IAdminAppUsage,
 	IAdminPaginated,
@@ -36,6 +40,7 @@ import type {
 	IUsageLimitPeriod,
 	IUsageReconciliationResult,
 } from "../../../lib/schema/usage";
+import { cn } from "../../../lib/utils";
 import { useBackend } from "../../../state/backend-state";
 import type { IProfile } from "../../../types";
 import { Button } from "../../ui/button";
@@ -315,7 +320,8 @@ function UsageHealthSummary({
 		{
 			title: t("efficiency", "Efficiency"),
 			items: [
-				["Spend", formatCost(totals?.totalPrice ?? 0)],
+				["AI spend", formatCost(totals?.totalPrice ?? 0)],
+				["Compute", formatCost(totals?.computeCost ?? 0)],
 				["/ MAU", formatDollars(stats?.averageCostPerActiveUser ?? null)],
 				["Runtime", formatDuration(totals?.averageExecutionMs ?? null)],
 			],
@@ -343,7 +349,12 @@ function UsageHealthSummary({
 						{groups.map((group) => (
 							<div key={group.title} className="rounded-lg border p-3">
 								<div className="mb-3 text-sm font-medium">{group.title}</div>
-								<div className="grid grid-cols-3 gap-2">
+								<div
+									className={cn(
+										"grid gap-2",
+										group.items.length > 3 ? "grid-cols-2" : "grid-cols-3",
+									)}
+								>
 									{group.items.map(([label, value]) => (
 										<div key={label} className="min-w-0">
 											<div className="truncate text-[11px] text-muted-foreground">
@@ -1140,6 +1151,177 @@ function TopModelsChart({
 	);
 }
 
+type AppCostRanking = "ai" | "runtime";
+
+function appCostValue(app: IAdminAppUsage, ranking: AppCostRanking): number {
+	return ranking === "ai" ? app.totalPrice : app.computeCost;
+}
+
+/**
+ * The two costs answer different questions, so they get their own rankings: AI
+ * spend is billed per token, runtime is estimated from how long runs occupy a
+ * function. The response carries the rows both rankings need; ordering is a
+ * client concern.
+ */
+function TopAppsCard({
+	overview,
+	loading,
+	profile,
+	period,
+}: {
+	overview: IAdminUsageOverview | undefined;
+	loading: boolean;
+	profile: IProfile | undefined;
+	period: IUsageLimitPeriod;
+}) {
+	const { t } = useTranslation("admin");
+	const [ranking, setRanking] = useState<AppCostRanking>("ai");
+	const apps = useMemo(
+		() =>
+			[...(overview?.apps ?? [])]
+				.sort(
+					(left, right) =>
+						appCostValue(right, ranking) - appCostValue(left, ranking),
+				)
+				.slice(0, 10),
+		[overview?.apps, ranking],
+	);
+	const rankings: [AppCostRanking, string][] = [
+		["ai", t("aiCost", "AI cost")],
+		["runtime", t("runtimeCost", "Runtime cost")],
+	];
+	const model = overview?.computeCostModel;
+	const sizing = (model?.legs ?? [])
+		.map(
+			(leg) =>
+				`${formatComputeLeg(leg)} ${formatDurationShare(leg.durationShare)}`,
+		)
+		.join(" + ");
+
+	return (
+		<Card>
+			<CardHeader>
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+					<div>
+						<CardTitle className="text-base">
+							{t("topApps", "Top Apps")}
+						</CardTitle>
+						<CardDescription>
+							{t(
+								"setRollingPeriodCostAndTokenLimitsPerApp",
+								"Set rolling {{period}} cost and token limits per app.",
+								{ period },
+							)}{" "}
+							{t(
+								"computeIsEstimatedFromRunDuration",
+								"Compute is estimated from run duration and is not covered by limits.",
+							)}{" "}
+							{sizing}
+							{model && model.multiplier !== 1 ? ` × ${model.multiplier}` : ""}
+						</CardDescription>
+					</div>
+					<div className="flex shrink-0 rounded-md border p-0.5">
+						{rankings.map(([value, label]) => (
+							<Button
+								key={value}
+								type="button"
+								size="sm"
+								variant={ranking === value ? "secondary" : "ghost"}
+								className="h-7 px-2 text-xs"
+								onClick={() => setRanking(value)}
+							>
+								{label}
+							</Button>
+						))}
+					</div>
+				</div>
+			</CardHeader>
+			<CardContent className="space-y-4">
+				<div className="space-y-2">
+					{loading && <Skeleton className="h-32 w-full" />}
+					{apps.map((app, index) => (
+						<div
+							key={app.appId ?? "unknown"}
+							className="grid gap-3 rounded-md border p-3 lg:grid-cols-[1.1fr_1fr_1.1fr]"
+						>
+							<div className="flex min-w-0 items-baseline gap-2">
+								<span className="w-5 shrink-0 text-xs tabular-nums text-muted-foreground">
+									{index + 1}
+								</span>
+								<div className="min-w-0">
+									<div className="truncate text-sm font-medium">
+										{app.appName ?? app.appId ?? "Unknown app"}
+									</div>
+									<div className="truncate text-xs text-muted-foreground">
+										{app.appId ??
+											t("usageWithoutAppContext", "usage without app context")}
+									</div>
+								</div>
+							</div>
+							<div className="grid grid-cols-2 gap-2 text-xs lg:grid-cols-4">
+								<div>
+									<div className="text-muted-foreground">
+										{t("aiCost", "AI cost")}
+									</div>
+									<div
+										className={cn(
+											"font-medium",
+											ranking === "ai" && "text-primary",
+										)}
+									>
+										{formatCost(app.totalPrice)}
+									</div>
+								</div>
+								<div>
+									<div className="text-muted-foreground">
+										{t("compute", "Compute")}
+									</div>
+									<div
+										className={cn(
+											"font-medium",
+											ranking === "runtime" && "text-primary",
+										)}
+									>
+										{formatCost(app.computeCost)}
+									</div>
+								</div>
+								<div>
+									<div className="text-muted-foreground">
+										{t("tokens", "Tokens")}
+									</div>
+									<div className="font-medium">
+										{formatCount(app.totalTokens)}
+									</div>
+								</div>
+								<div>
+									<div className="text-muted-foreground">
+										{t("runs", "Runs")}
+									</div>
+									<div className="font-medium">
+										{formatCount(app.executions)}
+									</div>
+								</div>
+							</div>
+							{profile && (
+								<LimitEditor app={app} period={period} profile={profile} />
+							)}
+						</div>
+					))}
+					{overview && apps.length === 0 && (
+						<div className="rounded-md border p-4 text-sm text-muted-foreground">
+							{t(
+								"noUsageRecordedForThisPeriod",
+								"No usage recorded for this period.",
+							)}
+						</div>
+					)}
+				</div>
+				{profile && <ManualLimitEditor profile={profile} period={period} />}
+			</CardContent>
+		</Card>
+	);
+}
+
 function LimitUtilization({
 	overview,
 	loading,
@@ -1819,79 +2001,12 @@ export function UsageOverviewSection({
 				/>
 			)}
 
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-base">
-						{t("topApps", "Top Apps")}
-					</CardTitle>
-					<CardDescription>
-						{t(
-							"setRollingPeriodCostAndTokenLimitsPerApp",
-							"Set rolling {{period}} cost and token limits per app.",
-							{ period },
-						)}
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-4">
-					<div className="space-y-2">
-						{overview.isLoading && <Skeleton className="h-32 w-full" />}
-						{overview.data?.apps.map((app) => (
-							<div
-								key={app.appId ?? "unknown"}
-								className="grid gap-3 rounded-md border p-3 lg:grid-cols-[1.2fr_0.8fr_1.2fr]"
-							>
-								<div className="min-w-0">
-									<div className="truncate text-sm font-medium">
-										{app.appName ?? app.appId ?? "Unknown app"}
-									</div>
-									<div className="truncate text-xs text-muted-foreground">
-										{app.appId ??
-											t("usageWithoutAppContext", "usage without app context")}
-									</div>
-								</div>
-								<div className="grid grid-cols-3 gap-2 text-xs">
-									<div>
-										<div className="text-muted-foreground">
-											{t("cost", "Cost")}
-										</div>
-										<div className="font-medium">
-											{formatCost(app.totalPrice)}
-										</div>
-									</div>
-									<div>
-										<div className="text-muted-foreground">
-											{t("tokens", "Tokens")}
-										</div>
-										<div className="font-medium">
-											{formatCount(app.totalTokens)}
-										</div>
-									</div>
-									<div>
-										<div className="text-muted-foreground">
-											{t("runs", "Runs")}
-										</div>
-										<div className="font-medium">
-											{formatCount(app.executions)}
-										</div>
-									</div>
-								</div>
-								{profile && (
-									<LimitEditor app={app} period={period} profile={profile} />
-								)}
-							</div>
-						))}
-						{overview.data && overview.data.apps.length === 0 && (
-							<div className="rounded-md border p-4 text-sm text-muted-foreground">
-								{t(
-									"noUsageRecordedForThisPeriod",
-									"No usage recorded for this period.",
-								)}
-							</div>
-						)}
-					</div>
-					{profile && <ManualLimitEditor profile={profile} period={period} />}
-				</CardContent>
-			</Card>
+			<TopAppsCard
+				overview={overview.data}
+				loading={overview.isLoading}
+				profile={profile}
+				period={period}
+			/>
 
 			<div className="grid gap-4 lg:grid-cols-2">
 				<Card>

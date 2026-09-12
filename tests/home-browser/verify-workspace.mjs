@@ -50,19 +50,14 @@ try {
 		await primary.locator('a[href^="/library/config/analytics?id="]').count(),
 		2,
 	);
-	await primary
-		.getByText("Sample: 60 of 240 account records", { exact: true })
-		.click();
+	const coverage = "Last 7 days · 60 account records";
+	await primary.getByText(coverage, { exact: true }).click();
 	assert.ok(
-		(await primary.innerText()).includes(
-			"Sample counts may omit earlier activity",
-		),
+		(await primary.innerText()).includes("counted in full rather than sampled"),
 	);
-	await primary
-		.getByText("Sample: 60 of 240 account records", { exact: true })
-		.click();
+	await primary.getByText(coverage, { exact: true }).click();
 	report.passed.push(
-		"Real account sample volume and Error/Fatal record counts, app analytics links, optional attention, and disclosed sample coverage",
+		"Real account period volume and Error/Fatal record counts, app analytics links, optional attention, and disclosed period coverage",
 	);
 	for (const width of [320, 390, 768, 1440, 2048]) {
 		await page.setViewportSize({ width, height: 1000 });

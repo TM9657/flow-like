@@ -1,4 +1,7 @@
-import type { IBoard, IVariable } from "../lib/schema/flow/board";
+import { normalizeGeometryValue } from "./geometry";
+import type { IBoard, IVariable } from "./schema/flow/board";
+import { IValueType, IVariableType } from "./schema/flow/pin";
+import { convertJsonToUint8Array, parseUint8ArrayToJson } from "./uint8";
 
 /**
  * A variable whose value is supplied per run rather than stored in the flow.
@@ -7,6 +10,48 @@ import type { IBoard, IVariable } from "../lib/schema/flow/board";
  */
 export function isRuntimeConfigured(variable: IVariable): boolean {
 	return variable.runtime_configured || variable.secret;
+}
+
+/**
+ * A variable the app operator may set from the configuration surface. The
+ * `editable` half is load-bearing: `UpsertVariableCommand` rejects a locked
+ * variable in both validate and execute, so an editor that ignores it offers a
+ * write the engine will refuse.
+ */
+export function isSharedConfigurable(variable: IVariable): boolean {
+	return variable.exposed && variable.editable;
+}
+
+/**
+ * Whether a variable currently holds a usable value. Booleans, numbers and
+ * structured values count as configured as soon as they decode; strings
+ * (including paths) must be non-empty.
+ *
+ * This is the single definition of "configured" for the whole product — the
+ * row indicator, the readiness meter, the save guard and the pre-run gate all
+ * call it. Splitting it is how an empty string ends up creating a stored row
+ * that satisfies the gate and then runs the flow with nothing in it.
+ */
+export function isRuntimeVariableConfigured(
+	variable: IVariable,
+	refs?: Record<string, string>,
+): boolean {
+	const decoded = parseUint8ArrayToJson(variable.default_value);
+	if (decoded === undefined || decoded === null) return false;
+	if (variable.data_type === IVariableType.Geometry) {
+		try {
+			normalizeGeometryValue(decoded, {
+				schema: variable.schema,
+				refs,
+				valueType: variable.value_type,
+			});
+			return true;
+		} catch {
+			return false;
+		}
+	}
+	if (typeof decoded === "string") return decoded.trim().length > 0;
+	return true;
 }
 
 /**
@@ -44,4 +89,25 @@ export function hasOfflineOnlyNodes(board: IBoard): boolean {
  */
 export function getOfflineOnlyNodes(board: IBoard) {
 	return Object.values(board.nodes).filter((node) => node.only_offline);
+}
+
+/**
+ * Resolve the initial value of a runtime variable from a saved value or its
+ * board default. A plain Boolean with no value is seeded to `false` so the
+ * rendered switch (which always shows a definite on/off state) matches the
+ * stored value instead of being counted as "not configured".
+ */
+export function seedRuntimeVariable(
+	variable: IVariable,
+	existingBytes?: number[] | null,
+): IVariable {
+	let bytes = existingBytes ?? variable.default_value ?? null;
+	if (
+		(!bytes || bytes.length === 0) &&
+		variable.value_type === IValueType.Normal &&
+		variable.data_type === IVariableType.Boolean
+	) {
+		bytes = convertJsonToUint8Array(false) ?? null;
+	}
+	return { ...variable, default_value: bytes };
 }

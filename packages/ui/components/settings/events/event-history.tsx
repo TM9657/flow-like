@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useInvalidateInvoke, useInvoke } from "../../../hooks/use-invoke";
 import { formatDuration, formatRelativeTime } from "../../../lib/date";
 import {
@@ -26,6 +27,7 @@ import {
 	aggregateRunsByEventVersion,
 	diffTimelineEntries,
 } from "../../../lib/event-history";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import type { INode } from "../../../lib/schema/flow/board";
 import { cn } from "../../../lib/utils";
 import { useBackend } from "../../../state/backend-state";
@@ -64,6 +66,8 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "../../ui";
+import { SectionLockedPanel } from "../permission/permission-gate";
+import { PermissionNotice } from "../permission/permission-notice";
 
 const RUNS_PAGE_LIMIT = 200;
 
@@ -122,6 +126,17 @@ export function EventHistory({
 }>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
+	// The run list is the compound case: `GET /events/{id}/runs` demands
+	// ReadEvents AND ReadBoards, so a role with only ReadEvents gets versions
+	// but no runs — which must not render as "this version never ran".
+	const permissions = useAppPermissions(appId);
+	const canReadEvents = permissions.can(RolePermissions.ReadEvents);
+	const canReadBoards = permissions.can(RolePermissions.ReadBoards);
+	const canRestore = permissions.can(RolePermissions.WriteEvents);
+	const restoreDeniedMessage = t(
+		"restoringAVersionNeedsEventManagement",
+		"Restoring a version rewrites the live event, which your role cannot do.",
+	);
 
 	const timelineSupported =
 		typeof backend.eventState.getEventTimeline === "function";
@@ -133,7 +148,7 @@ export function EventHistory({
 		backend.eventState.getEventTimeline ?? timelineUnavailable,
 		backend.eventState,
 		[appId, eventId],
-		Boolean(appId && eventId && timelineSupported),
+		Boolean(appId && eventId && timelineSupported && canReadEvents),
 	);
 	const timelineData = timeline.data;
 	const entries = timelineData?.entries ?? [];
@@ -146,7 +161,14 @@ export function EventHistory({
 		backend.eventState.listEventRuns ?? runsUnavailable,
 		backend.eventState,
 		[appId, eventId, boardIds, { limit: RUNS_PAGE_LIMIT }],
-		Boolean(appId && eventId && runsSupported && boardIds.length > 0),
+		Boolean(
+			appId &&
+				eventId &&
+				runsSupported &&
+				boardIds.length > 0 &&
+				canReadEvents &&
+				canReadBoards,
+		),
 	);
 	const runs = useMemo(() => runsQuery.data ?? [], [runsQuery.data]);
 
@@ -187,6 +209,20 @@ export function EventHistory({
 					)}
 				</CardContent>
 			</Card>
+		);
+	}
+
+	if (!canReadEvents && !permissions.isLoading) {
+		return (
+			<SectionLockedPanel
+				feature={t("versionHistory", "Version history")}
+				description={t(
+					"readingAnEventsVersionsAndRunsNeedsEventAccess",
+					"Reading an event's saved versions and the runs behind them needs permission to view this project's events.",
+				)}
+				missing={[RolePermissions.ReadEvents]}
+				roleName={permissions.roleName}
+			/>
 		);
 	}
 
@@ -235,7 +271,10 @@ export function EventHistory({
 								setSelectedKey((current) => (current === key ? null : key))
 							}
 							onRestore={restoreSupported ? setRestoreTarget : undefined}
+							restoreDenied={!canRestore}
+							restoreDeniedMessage={restoreDeniedMessage}
 							runsSupported={runsSupported}
+							runsLocked={!canReadBoards}
 							runsLoading={runsQuery.isLoading}
 							runsFailed={runsQuery.isError}
 						/>
@@ -276,6 +315,7 @@ export function EventHistory({
 									runs={filteredRuns}
 									isLoading={runsQuery.isLoading}
 									runsSupported={runsSupported}
+									runsLocked={!canReadBoards}
 									nodeName={nodeName}
 								/>
 							</TabsContent>
@@ -320,7 +360,10 @@ function VersionTable({
 	selectedKey,
 	onSelect,
 	onRestore,
+	restoreDenied,
+	restoreDeniedMessage,
 	runsSupported,
+	runsLocked,
 	runsLoading,
 	runsFailed,
 }: Readonly<{
@@ -329,7 +372,10 @@ function VersionTable({
 	selectedKey: string | null;
 	onSelect: (key: string) => void;
 	onRestore?: (entry: IEventTimelineEntry) => void;
+	restoreDenied: boolean;
+	restoreDeniedMessage: string;
 	runsSupported: boolean;
+	runsLocked: boolean;
 	runsLoading: boolean;
 	runsFailed: boolean;
 }>) {
@@ -366,7 +412,17 @@ function VersionTable({
 
 	return (
 		<div className="space-y-2">
-			{!runsSupported && (
+			{runsLocked && (
+				<PermissionNotice
+					title={t("runTalliesUnavailable", "Run tallies unavailable")}
+					description={t(
+						"theRunColumnsStayBlankWithoutWorkflowAccess",
+						"Listing this event's runs also needs permission to view this project's flows, so the run, health and latency columns stay blank rather than reading as zero.",
+					)}
+					missing={[RolePermissions.ReadBoards]}
+				/>
+			)}
+			{!runsLocked && !runsSupported && (
 				<p className="text-xs text-muted-foreground">
 					{t(
 						"eventRunHistoryNotAvailableHere",
@@ -534,7 +590,7 @@ function VersionTable({
 																variant="ghost"
 																size="icon"
 																className="size-7 text-muted-foreground hover:text-foreground"
-																disabled={targetMissing}
+																disabled={targetMissing || restoreDenied}
 																aria-label={t(
 																	"restoreThisVersion",
 																	"Restore this version",
@@ -549,12 +605,17 @@ function VersionTable({
 														</span>
 													</TooltipTrigger>
 													<TooltipContent side="left">
-														{targetMissing
-															? t(
-																	"cannotRestoreTargetMissing",
-																	"This version's flow or node no longer exists, so it cannot be restored.",
-																)
-															: t("restoreThisVersion", "Restore this version")}
+														{restoreDenied
+															? restoreDeniedMessage
+															: targetMissing
+																? t(
+																		"cannotRestoreTargetMissing",
+																		"This version's flow or node no longer exists, so it cannot be restored.",
+																	)
+																: t(
+																		"restoreThisVersion",
+																		"Restore this version",
+																	)}
 													</TooltipContent>
 												</Tooltip>
 											)}
@@ -1016,15 +1077,29 @@ function HistoryRuns({
 	runs,
 	isLoading,
 	runsSupported,
+	runsLocked,
 	nodeName,
 }: Readonly<{
 	runs: IEventTimelineRun[];
 	isLoading: boolean;
 	runsSupported: boolean;
+	runsLocked: boolean;
 	nodeName: (nodeId: string) => string;
 }>) {
 	const { t } = useTranslation("settings");
 
+	if (runsLocked) {
+		return (
+			<PermissionNotice
+				title={t("runHistoryUnavailable", "Run history unavailable")}
+				description={t(
+					"readingAnEventsRunsAlsoNeedsWorkflowAccess",
+					"Runs are read through the flow they executed, so listing them also needs permission to view this project's flows.",
+				)}
+				missing={[RolePermissions.ReadBoards]}
+			/>
+		);
+	}
 	if (!runsSupported) {
 		return (
 			<p className="py-6 text-center text-sm text-muted-foreground">

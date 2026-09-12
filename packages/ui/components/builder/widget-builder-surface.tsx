@@ -91,6 +91,19 @@ export function WidgetBuilderSurface({
 		[appId, widgetId],
 	);
 
+	// A widget inherits whatever reaches the surface that hosts it, so the builder previews it
+	// underneath the app-wide sheet. Read-only here; the app stylesheet editor owns it.
+	// Read through getApp, not getAppStylesheet: that route is Owner-gated, so a
+	// non-owner editor would see no app layer and the canvas would quietly lie
+	// about what the visitor gets. getApp carries `frontend` for anyone with
+	// app access.
+	const appStylesheet = useInvoke(
+		backend.appState.getApp,
+		backend.appState,
+		[appId],
+		!!appId,
+	);
+
 	useEffect(() => {
 		const loadWidget = async () => {
 			if (!widgetId || !appId) {
@@ -469,6 +482,7 @@ export function WidgetBuilderSurface({
 						className="h-full"
 						externalAssistant
 						handleRef={builderHandleRef}
+						appCustomCss={appStylesheet.data?.frontend?.custom_css ?? undefined}
 						actionContext={{
 							appId,
 							widgetActions: (widget.actions ?? []).map((a) => ({

@@ -63,6 +63,16 @@ enum AppVisibility {
   OFFLINE = 4;
 }
 
+// Owner-authored presentation config that applies to the whole app, not to a
+// single page or board.
+message FrontendConfiguration {
+  optional string landing_page = 1;
+
+  // App-wide stylesheet, injected above every page surface and scoped to the
+  // app root. Page-level CSS stays later in document order and wins ties.
+  optional string custom_css = 2;
+}
+
 message App {
   string id = 1;
   AppStatus status = 2;
@@ -114,4 +124,9 @@ message App {
   // What kind of app this is. Unset means "not yet classified" — the UI
   // derives a suggestion from the app's contents until the owner picks one.
   optional AppType app_type = 30;
+
+  // Owner-authored presentation config. Absent on apps saved before the field
+  // existed, which is indistinguishable from "never configured" — both mean
+  // the app renders with no app-level styling.
+  optional FrontendConfiguration frontend = 31;
 }

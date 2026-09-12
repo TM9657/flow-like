@@ -17,17 +17,20 @@ import {
 	Button,
 	EmptyState,
 	type IJoinRequest,
+	RolePermissions,
 	Skeleton,
 	useBackend,
 	useInfiniteInvoke,
 	useInvoke,
 } from "../../../";
+import { apiErrorMessage } from "../../../lib/api-error";
 import {
 	userAvatarUrl,
 	userDisplayName,
 	userHandle,
 	userInitials,
 } from "../../../lib/user-display";
+import { SectionLockedPanel } from "../permission";
 import {
 	SectionHeading,
 	StatusChip,
@@ -38,22 +41,42 @@ import {
 	TeamRowNote,
 	TeamSection,
 	teamRowClass,
+	useTeamAccess,
 } from "./team-shared";
 
 export function TeamJoinManagement({ appId }: Readonly<{ appId: string }>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
+	const access = useTeamAccess(appId);
 	const {
 		data: requestsPages,
 		isLoading,
 		fetchNextPage,
 		refetch,
 		hasNextPage,
-	} = useInfiniteInvoke(backend.teamState.getJoinRequests, backend.teamState, [
-		appId,
-	]);
+	} = useInfiniteInvoke(
+		backend.teamState.getJoinRequests,
+		backend.teamState,
+		[appId],
+		50,
+		access.canAdminister && !access.isLoading,
+	);
 
 	const requests = requestsPages?.pages.flat() ?? [];
+
+	if (!access.canAdminister && !access.isLoading) {
+		return (
+			<SectionLockedPanel
+				feature={t("joinRequests", "Join requests")}
+				description={t(
+					"onlyProjectAdminsCanReviewWhoAsksToJoin",
+					"Only project admins can review who asks to join.",
+				)}
+				missing={[RolePermissions.Admin]}
+				roleName={access.roleName}
+			/>
+		);
+	}
 
 	return (
 		<TeamSection>
@@ -120,15 +143,22 @@ function RequestRow({
 	]);
 	const userData = user.data;
 
+	// A revoked role is not a network blip: surface what the server said instead
+	// of inviting the admin to retry an action they no longer hold.
 	const acceptRequest = useCallback(async () => {
 		try {
 			await backend.teamState.acceptJoinRequest(appId, request.id);
 			refresh();
 		} catch (error) {
 			console.error("Failed to accept request:", error);
-			toast.error("Failed to accept request try again later");
+			toast.error(
+				apiErrorMessage(
+					error,
+					t("failedToAcceptRequest", "Failed to accept the request."),
+				),
+			);
 		}
-	}, [backend, appId, request.id, refresh]);
+	}, [backend, appId, request.id, refresh, t]);
 
 	const declineRequest = useCallback(async () => {
 		try {
@@ -136,9 +166,14 @@ function RequestRow({
 			refresh();
 		} catch (error) {
 			console.error("Failed to decline request:", error);
-			toast.error("Failed to decline request try again later");
+			toast.error(
+				apiErrorMessage(
+					error,
+					t("failedToDeclineRequest", "Failed to decline the request."),
+				),
+			);
 		}
-	}, [backend, appId, request.id, refresh]);
+	}, [backend, appId, request.id, refresh, t]);
 
 	if (!userData) {
 		return (

@@ -134,6 +134,13 @@ async fn run_maintenance_job(
             )))
         }
         MaintenanceRunRequest::StateCleanup => {
+            // Storage-accounting tombstones are SQL rows rather than execution
+            // state, but they expire on a daily horizon and no deployment
+            // should need a second trigger for them, the way the channel sweep
+            // rides the cache job. They are swept before the state store is
+            // resolved so a store that cannot be built cannot skip them.
+            let deleted_tombstones = sweep_accounting_tombstones(&state).await;
+
             let store = crate::routes::execution::progress::get_state_store(&state).await?;
 
             let deleted_runs = store.delete_expired_runs().await.map_err(|error| {
@@ -177,6 +184,7 @@ async fn run_maintenance_job(
             tracing::info!(
                 deleted_runs,
                 deleted_events,
+                deleted_tombstones,
                 backend = store.backend_name(),
                 "Maintenance execution-state cleanup completed"
             );
@@ -185,6 +193,7 @@ async fn run_maintenance_job(
                 StateCleanupMaintenanceResult {
                     deleted_runs,
                     deleted_events,
+                    deleted_tombstones,
                 },
             )))
         }
@@ -237,6 +246,32 @@ async fn run_maintenance_job(
                     failed: report.failed,
                 },
             )))
+        }
+    }
+}
+
+/// Prune storage-accounting tombstones past their retention window. A failure
+/// is logged rather than returned: it must not discard the execution-state
+/// cleanup the same job still has to do.
+async fn sweep_accounting_tombstones(state: &AppState) -> u64 {
+    let Some(retention_days) = crate::storage_accounting::tombstone_retention_days() else {
+        return 0;
+    };
+
+    match crate::storage_accounting::sweep_tombstones(&state.db, state.db_dialect, retention_days)
+        .await
+    {
+        Ok(deleted) => {
+            tracing::info!(
+                deleted,
+                retention_days,
+                "Maintenance storage-accounting tombstone sweep completed"
+            );
+            deleted
+        }
+        Err(error) => {
+            tracing::error!(error = %error, "Scheduled storage-accounting tombstone sweep failed");
+            0
         }
     }
 }

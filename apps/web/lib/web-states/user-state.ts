@@ -22,6 +22,7 @@ import type {
 	INotificationsOverview,
 	IProjectContactsPage,
 	IUserLookup,
+	NotificationType,
 } from "@flow-like/flow-like-ui/state/backend-state/types";
 import {
 	type IBillingSession,
@@ -316,6 +317,7 @@ export class WebUserState implements IUserState {
 
 	async listNotifications(
 		unreadOnly?: boolean,
+		notificationType?: NotificationType,
 		offset?: number,
 		limit?: number,
 	): Promise<INotification[]> {
@@ -323,6 +325,7 @@ export class WebUserState implements IUserState {
 		if (unreadOnly !== undefined) params.set("unread_only", String(unreadOnly));
 		if (offset !== undefined) params.set("offset", offset.toString());
 		if (limit !== undefined) params.set("limit", limit.toString());
+		if (notificationType) params.set("notification_type", notificationType);
 
 		if (!this.hasRemoteAccessToken()) {
 			return [];

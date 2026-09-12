@@ -21,6 +21,7 @@ import type {
 	INotificationsOverview,
 	IProjectContactsPage,
 	IUserLookup,
+	NotificationType,
 } from "@flow-like/flow-like-ui/state/backend-state/types";
 import {
 	type IBillingSession,
@@ -215,9 +216,14 @@ export class UserState implements IUserState {
 	private async getMergedLocalNotifications(
 		limit: number,
 		unreadOnly: boolean,
+		notificationType?: NotificationType,
 	): Promise<INotification[]> {
 		const localNotifications = await Promise.all(
 			this.getRelevantLocalUserIds().map((userId) =>
+				// The local store has no kind column to filter on, so the kind is
+				// applied after mapping. `limit` is asked for before that filter, so a
+				// kind-filtered local list can come back short — the remote half of
+				// the merge is the one that has to be complete.
 				getLocalNotifications(userId, limit, 0, unreadOnly),
 			),
 		);
@@ -226,6 +232,11 @@ export class UserState implements IUserState {
 		for (const notification of localNotifications
 			.flat()
 			.map(localToINotification)) {
+			if (
+				notificationType &&
+				notification.notification_type !== notificationType
+			)
+				continue;
 			merged.set(notification.id, notification);
 		}
 
@@ -411,6 +422,7 @@ export class UserState implements IUserState {
 	private async fetchRemoteNotifications(
 		unreadOnly: boolean,
 		count: number,
+		notificationType?: NotificationType,
 	): Promise<INotification[]> {
 		const collected: INotification[] = [];
 		let pageOffset = 0;
@@ -426,6 +438,7 @@ export class UserState implements IUserState {
 				offset: pageOffset.toString(),
 				unread_only: unreadOnly.toString(),
 			});
+			if (notificationType) params.set("notification_type", notificationType);
 
 			const batch = await fetcher<INotification[]>(
 				// biome-ignore lint/style/noNonNullAssertion: callers guard presence
@@ -447,6 +460,7 @@ export class UserState implements IUserState {
 
 	async listNotifications(
 		unreadOnly = false,
+		notificationType?: NotificationType,
 		offset = 0,
 		limit = 20,
 	): Promise<INotification[]> {
@@ -456,6 +470,7 @@ export class UserState implements IUserState {
 			localNotifications = await this.getMergedLocalNotifications(
 				limit + offset,
 				unreadOnly,
+				notificationType,
 			);
 		} catch (e) {
 			console.error(
@@ -475,6 +490,7 @@ export class UserState implements IUserState {
 				remoteResult = await this.fetchRemoteNotifications(
 					unreadOnly,
 					limit + offset,
+					notificationType,
 				);
 			} catch (error) {
 				// Offline / network failures fall back to local history silently. A

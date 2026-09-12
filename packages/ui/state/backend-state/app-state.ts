@@ -121,6 +121,19 @@ export interface IAppState {
 	): Promise<void>;
 	changeAppVisibility(appId: string, visibility: IAppVisibility): Promise<void>;
 	/**
+	 * Read the app-wide stylesheet for editing. Owner-only on the backend
+	 * (GET /apps/{app_id}/settings/appearance). The runtime never calls this —
+	 * a page gets the sheet from its bootstrap, which an ordinary viewer can
+	 * reach. Returns `undefined` when the app has no stylesheet.
+	 */
+	getAppStylesheet(appId: string): Promise<string | undefined>;
+	/**
+	 * Replace the app-wide stylesheet. Send the complete sheet; an empty string
+	 * clears it. Owner-only on the backend
+	 * (PATCH /apps/{app_id}/settings/appearance).
+	 */
+	setAppStylesheet(appId: string, css: string): Promise<void>;
+	/**
 	 * Toggle the project-level Fork-an-app opt-in. Owner-only on the backend
 	 * (PATCH /apps/{app_id}/settings/forking).
 	 */

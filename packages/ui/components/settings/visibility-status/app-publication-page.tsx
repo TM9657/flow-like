@@ -13,7 +13,10 @@ import {
 	XCircle,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useFeatures } from "../../../hooks/use-features";
+import { apiErrorMessage } from "../../../lib/api-error";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import {
 	userAvatarUrl,
 	userDisplayName,
@@ -34,6 +37,7 @@ import {
 	Separator,
 	Skeleton,
 } from "../../ui";
+import { SectionLockedPanel } from "../permission/permission-gate";
 import { AppAiActWizard } from "./app-ai-act-wizard";
 import type {
 	AppPublicationLogItem,
@@ -140,10 +144,17 @@ function getReviewStep(status: string): number {
 	}
 }
 
+/** The server answered "not yours to read" rather than failing. */
+function isPermissionDenied(error: unknown): boolean {
+	const status = (error as { status?: number } | null | undefined)?.status;
+	return status === 401 || status === 403;
+}
+
 interface AppPublicationPageProps {
 	requests: AppPublicationRequestItem[];
 	isLoading?: boolean;
-	error?: string | null;
+	/** The raw query error, so a denial can be told apart from a failure. */
+	error?: Error | string | null;
 	onBack?: () => void;
 	docsUrl?: string;
 	/** When provided and the platform has the AI Act feature on, the EU AI
@@ -162,6 +173,9 @@ export function AppPublicationPage({
 }: Readonly<AppPublicationPageProps>) {
 	const { t } = useTranslation("settings");
 	const features = useFeatures();
+	const permissions = useAppPermissions(appId);
+	/** `GET /apps/{id}/publication` is `ensure_permission!(.., Admin)`. */
+	const canReadReview = permissions.can(RolePermissions.Admin);
 	const showWizard = !!appId && features.data?.ai_act === true;
 
 	const header = (
@@ -187,12 +201,31 @@ export function AppPublicationPage({
 		(r) => r.status === "accepted" || r.status === "rejected",
 	);
 
-	if (isLoading) {
+	if (isLoading || permissions.isLoading) {
 		return (
 			<div className="w-full max-w-4xl mx-auto p-2 md:p-6 pt-0 space-y-6">
 				<Skeleton className="h-8 w-48" />
 				<Skeleton className="h-48 w-full" />
 				<Skeleton className="h-32 w-full" />
+			</div>
+		);
+	}
+
+	// A denial must not fall through to "No publication requests yet" — that
+	// reads as "this app was never submitted", which is the opposite answer.
+	if (!canReadReview || isPermissionDenied(error)) {
+		return (
+			<div className="w-full max-w-4xl mx-auto p-2 md:p-6 pt-0 space-y-6">
+				{header}
+				<SectionLockedPanel
+					feature={t("publicationReview", "Publication Review")}
+					description={t(
+						"yourRoleCannotSeeThisProjectsPublicationRequestsOrAuditorFeedback",
+						"Your role cannot see this project's publication requests or auditor feedback.",
+					)}
+					missing={[RolePermissions.Admin]}
+					roleName={permissions.roleName}
+				/>
 			</div>
 		);
 	}
@@ -204,7 +237,18 @@ export function AppPublicationPage({
 				{wizard}
 				<Card className="border-destructive/30 bg-destructive/5">
 					<CardContent className="pt-6">
-						<p className="text-sm text-destructive">{error}</p>
+						<p className="text-sm text-destructive">
+							{typeof error === "string"
+								? error
+								: apiErrorMessage(
+										error,
+										error.message ||
+											t(
+												"publicationReviewHistoryCouldNotBeLoaded",
+												"Publication review history could not be loaded.",
+											),
+									)}
+						</p>
 					</CardContent>
 				</Card>
 			</div>
@@ -343,7 +387,10 @@ export function AppPublicationPage({
 									{t("reviewActivity", "Review Activity")}
 								</CardTitle>
 								<CardDescription>
-									{`Communication and status updates from auditors`}
+									{t(
+										"communicationAndStatusUpdatesFromAuditors",
+										"Communication and status updates from auditors",
+									)}
 								</CardDescription>
 							</CardHeader>
 							<CardContent>

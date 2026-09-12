@@ -4,10 +4,11 @@ import type {
 	IIntercomEvent,
 	ILogMetadata,
 	IOAuthToken,
-	PageTrigger,
 	IRunPayload,
 	IVersionType,
+	PageTrigger,
 } from "@flow-like/flow-like-ui";
+import type { IUserSchedules } from "../event-state";
 
 export class EmptyEventState implements IEventState {
 	getEvent(
@@ -18,6 +19,9 @@ export class EmptyEventState implements IEventState {
 		throw new Error("Method not implemented.");
 	}
 	getEvents(appId: string, _force?: boolean): Promise<IEvent[]> {
+		throw new Error("Method not implemented.");
+	}
+	getUserSchedules(): Promise<IUserSchedules> {
 		throw new Error("Method not implemented.");
 	}
 	getEventAuthoritative(

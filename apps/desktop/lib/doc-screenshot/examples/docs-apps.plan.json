@@ -92,7 +92,7 @@
 		},
 		{
 			"name": "runtime-variables",
-			"path": "/library/config/runtime-vars",
+			"path": "/library/config/setup",
 			"query": {
 				"id": "docs-app",
 				"capture": "docs"

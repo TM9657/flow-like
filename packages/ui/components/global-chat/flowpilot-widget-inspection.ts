@@ -1,3 +1,4 @@
+import { appCustomCssChars } from "../../lib/flowpilot/ui-page-inspection";
 import type { IPage, IPageState } from "../../state/backend-state/page-state";
 
 const MAX_ITEMS = 64;
@@ -8,6 +9,8 @@ interface PageInspectionTarget {
 	appId: string;
 	pageId: string;
 	boardId?: string;
+	/** App-wide stylesheet the page renders under. Omit it when it was not resolved. */
+	appCustomCss?: string | null;
 }
 
 /** Read persisted page facts without a specialist, builder state, or write capability. */
@@ -15,7 +18,7 @@ export async function inspectFlowPilotWidgetPage(
 	pageState: Pick<IPageState, "getPageAuthoritative">,
 	target: PageInspectionTarget,
 ) {
-	const { appId, pageId, boardId } = target;
+	const { appId, pageId, boardId, appCustomCss } = target;
 	if (!appId || !pageId) {
 		return {
 			status: "error" as const,
@@ -107,6 +110,7 @@ export async function inspectFlowPilotWidgetPage(
 		widget_ref_count: widgetRefs.length,
 		widget_refs: Object.fromEntries(widgetReferences),
 		custom_css_chars: page.canvasSettings?.customCss?.length ?? 0,
+		app_custom_css_chars: appCustomCssChars(appCustomCss),
 	};
 	return {
 		schema: "flowpilot.widget-inspection/v1",

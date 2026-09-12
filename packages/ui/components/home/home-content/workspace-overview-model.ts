@@ -1,10 +1,7 @@
-import type {
-	IExecutionUsageRecord,
-	IPaginatedResponse,
-} from "../../../lib/schema/usage/tracking";
+import type { IExecutionActivity } from "../../../lib/schema/usage/tracking";
 import {
-	hasAttentionSeverity,
-	summarizeHomeExecutions,
+	type HomeActivity,
+	normalizeHomeActivity,
 } from "../home-activity-statistics";
 
 export function workspaceProfileAppCount(
@@ -17,24 +14,17 @@ export function workspaceProfileAppCount(
 }
 
 export function workspacePulseHistory(
-	history: IPaginatedResponse<IExecutionUsageRecord> | undefined,
-	days: unknown,
-	now = Date.now(),
-) {
-	if (!history) return null;
-	const statistics = summarizeHomeExecutions(history, days, now);
-	const attention = statistics.rows.filter((row) =>
-		hasAttentionSeverity(row.status),
-	);
-	return { ...statistics, attention, volume: statistics.rows.length };
+	activity: IExecutionActivity | undefined,
+): HomeActivity | null {
+	return activity ? normalizeHomeActivity(activity) : null;
 }
 
 /** A failed or disabled source must not turn cached history into current metrics. */
 export function workspacePulseMetrics(
-	history: ReturnType<typeof workspacePulseHistory>,
+	history: HomeActivity | null,
 	enabled: boolean,
 	error: boolean,
-) {
+): HomeActivity | null {
 	return enabled && !error ? history : null;
 }
 

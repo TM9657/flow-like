@@ -71,6 +71,13 @@ unchanged. Deleted objects retain a zero-size accounting row so a delayed
 notification cannot count them again. Totals cover current object versions;
 noncurrent versions, incomplete multipart uploads, and S3 overhead are excluded.
 
+A tombstone only guards against a notification the queue can still redeliver,
+so the `state_cleanup` maintenance job deletes tombstones older than 30 days.
+`FILE_ACCOUNTING_TOMBSTONE_RETENTION_DAYS` on the API changes that window and
+`0` switches the sweep off. Values below 14 days are raised to it, because that
+is the longest an S3 notification can sit in SQS. Rows for live objects are
+never swept; they carry the size every later delta is measured against.
+
 Grant the Lambda role `s3:GetObject` on tracked objects and `s3:ListBucket` on
 their buckets. The tracker calls `HeadObject` after acquiring the SQL object
 write intent, with an eight-second timeout, and reads again after a transaction
@@ -103,7 +110,11 @@ Keep the table and both legacy settings until all baseline rows have been
 imported or reconciled. New installations with zero initial totals omit both
 settings. Never resume the old worker after cutover or remove SQL accounting
 tombstones during ordinary app/user cleanup; delayed S3 events can outlive their
-owners.
+owners. Set `FILE_ACCOUNTING_TOMBSTONE_RETENTION_DAYS=0` while the baseline
+import is still configured: the import runs once per object and keys on the
+accounting row being absent, so a pruned row lets a later event for the same key
+re-apply a baseline the totals no longer carry. Re-enable the sweep once
+`FILES_TABLE_NAME` is gone.
 
 Build with `cargo lambda build --release -p file-tracker`. For the accounting
 regression tests, set `FLOW_LIKE_TEST_DATABASE_URL` to a disposable PostgreSQL
@@ -151,7 +162,10 @@ payloads by age. Payloads over 100 KiB are staged before their referencing row
 is written, so a failed insert can leave an orphan object. Set
 `EXECUTION_STAGED_PAYLOAD_MIN_AGE_SECS` on the API to control the minimum age
 (default `172800`; values below one event lifetime are ignored). Logs report
-`scanned`, `deleted`, and `stopped_early` for this sweep.
+`scanned`, `deleted`, and `stopped_early` for this sweep. The same job prunes
+expired storage-accounting tombstones and reports them as `deletedTombstones`;
+a sweep that fails is logged and does not fail the job. One pass removes at most
+100,000 rows, so a large first cleanup finishes over several days.
 
 The Lambda sends `POST /api/v1/maintenance/run` with the bearer token, the job
 body, and an `Idempotency-Key` derived from the job, schedule ARN, and scheduled

@@ -24,6 +24,7 @@ import { useGlobalChatStore } from "../../../state/global-chat/global-chat-store
 import {
 	homeActivityCoverage,
 	homeActivityDays,
+	homeActivityPeriod,
 } from "../home-activity-statistics";
 import { useHomeLibrary } from "./collections";
 import type { HomeContentProps } from "./config";
@@ -51,11 +52,12 @@ export function HomeWorkspacePulse({ widget, editing }: HomeContentProps) {
 	});
 	const setDraft = useGlobalChatStore((state) => state.setDraft);
 	const enabled = auth.isAuthenticated && Boolean(backend.usageState);
+	const days = homeActivityDays(widget.config.days);
 	const executions = useQuery({
-		queryKey: ["home", ...scope, "executions", "", 100],
+		queryKey: ["home", ...scope, "activity", "", days],
 		queryFn: () => {
 			if (!backend.usageState) throw new Error("Usage history is unavailable.");
-			return backend.usageState.getExecutionHistory(0, 100);
+			return backend.usageState.getExecutionActivity(days);
 		},
 		enabled,
 		staleTime: 30_000,
@@ -64,14 +66,13 @@ export function HomeWorkspacePulse({ widget, editing }: HomeContentProps) {
 	});
 	const statistics = workspacePulseHistory(
 		enabled ? executions.data : undefined,
-		widget.config.days,
 	);
 	const state = workspacePulseState({
 		authenticated: auth.isAuthenticated,
 		supported: Boolean(backend.usageState),
 		loading: executions.isLoading,
 		error: executions.isError,
-		volume: statistics?.volume,
+		volume: statistics?.total,
 	});
 	const appCount = workspaceProfileAppCount(
 		library.data?.map(([app]) => app.id),
@@ -85,8 +86,7 @@ export function HomeWorkspacePulse({ widget, editing }: HomeContentProps) {
 			metadata?.name ?? "App execution",
 		]),
 	);
-	const days = homeActivityDays(widget.config.days);
-	const period = days === 1 ? "Today" : `Last ${days} days`;
+	const period = homeActivityPeriod(days);
 	const showAttention = widget.config.showAttention !== false;
 	const maximum = Math.max(
 		1,
@@ -166,16 +166,14 @@ export function HomeWorkspacePulse({ widget, editing }: HomeContentProps) {
 							href="/library"
 						/>
 						<PulseStat
-							value={statistics.volume.toLocaleString()}
-							label={
-								statistics.partial ? "Sampled records" : "Execution records"
-							}
+							value={statistics.total.toLocaleString()}
+							label="Execution records"
 						/>
 						{showAttention && (
 							<PulseStat
-								value={statistics.attention.length.toLocaleString()}
+								value={statistics.attentionTotal.toLocaleString()}
 								label="Flagged records"
-								accent={statistics.attention.length > 0}
+								accent={statistics.attentionTotal > 0}
 							/>
 						)}
 					</div>
@@ -192,7 +190,7 @@ export function HomeWorkspacePulse({ widget, editing }: HomeContentProps) {
 						<div
 							className="flex h-24 items-end gap-1.5 border-b border-border/60 bg-[linear-gradient(to_top,var(--border)_1px,transparent_1px)] bg-[size:100%_50%]"
 							role="img"
-							aria-label={`${statistics.volume} execution records, including ${statistics.attention.length} Error or Fatal records. ${period}, UTC. ${statistics.partial ? "Counts are from a limited sample." : "All available records checked."}`}
+							aria-label={`${statistics.total} execution records, including ${statistics.attentionTotal} Error or Fatal records. ${period}, UTC.`}
 						>
 							{statistics.buckets.map((bucket) => (
 								<div
@@ -218,18 +216,23 @@ export function HomeWorkspacePulse({ widget, editing }: HomeContentProps) {
 								</div>
 							))}
 						</div>
-						<div className="mt-2 flex justify-between text-[10px] tabular-nums text-muted-foreground">
-							<span>{formatDay(statistics.buckets[0].day)}</span>
-							{days > 1 && (
-								<span>
-									{formatDay(
-										statistics.buckets[statistics.buckets.length - 1].day,
-									)}
-								</span>
-							)}
-						</div>
+					{/* An aggregate with counts but no day rows is a source that
+					    answered without them; the axis is dropped rather than read
+					    past its own end. */}
+						{statistics.buckets.length > 0 && (
+							<div className="mt-2 flex justify-between text-[10px] tabular-nums text-muted-foreground">
+								<span>{formatDay(statistics.buckets[0].day)}</span>
+								{statistics.buckets.length > 1 && (
+									<span>
+										{formatDay(
+											statistics.buckets[statistics.buckets.length - 1].day,
+										)}
+									</span>
+								)}
+							</div>
+						)}
 					</figure>
-					{showAttention && statistics.attention.length > 0 && (
+					{showAttention && statistics.attentionTotal > 0 && (
 						<div className="rounded-xl border border-orange-500/15 bg-orange-500/[0.04] p-3">
 							<div className="mb-2 flex items-center gap-2 text-xs font-medium">
 								<CircleAlert className="size-3.5 text-orange-500" />
@@ -265,11 +268,10 @@ export function HomeWorkspacePulse({ widget, editing }: HomeContentProps) {
 						</div>
 					)}
 					<HomeSourceNote
-						label={`${statistics.partial ? "Sample: " : "Checked "}${statistics.scanned.toLocaleString()} of ${statistics.total.toLocaleString()} account records`}
+						label={`${period} · ${statistics.total.toLocaleString()} account records`}
 					>
-						{homeActivityCoverage(statistics)} Flagged counts use recorded Error
-						/ Fatal severity. These are execution records, not a workflow
-						success rate. The library count belongs to this profile.
+						{homeActivityCoverage(statistics)} These are execution records, not
+						a workflow success rate. The library count belongs to this profile.
 					</HomeSourceNote>
 				</>
 			) : (
@@ -393,20 +395,20 @@ function WorkspacePulseAttention({
 					<span
 						className={cn(
 							"size-2 shrink-0 rounded-full",
-							statistics?.attention.length
+							statistics?.attentionTotal
 								? "bg-orange-500"
 								: "bg-[var(--home-accent)]",
 						)}
 					/>
 					{title}
 				</h2>
-				{statistics && statistics.attention.length > 0 && (
+				{statistics && statistics.attentionTotal > 0 && (
 					<span className="rounded-full bg-orange-500/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-orange-600 dark:text-orange-400">
-						{statistics.attention.length.toLocaleString()}
+						{statistics.attentionTotal.toLocaleString()}
 					</span>
 				)}
 			</div>
-			{statistics && statistics.attention.length > 0 ? (
+			{statistics && statistics.attentionTotal > 0 ? (
 				<div className="space-y-2">
 					{statistics.attention.slice(0, 3).map((record) => (
 						<Link
@@ -460,7 +462,7 @@ function WorkspacePulseAttention({
 					<div className="min-w-0 flex-1">
 						<p className="text-xs font-medium leading-5">
 							{statistics
-								? "No flagged records in this sample"
+								? "No flagged records in this period"
 								: state === "loading"
 									? "Checking recent records…"
 									: state === "unavailable"
@@ -503,10 +505,11 @@ function WorkspacePulseAttention({
 			)}
 			{statistics && (
 				<HomeSourceNote
-					label={`${statistics.days === 1 ? "Today" : `Last ${statistics.days} days`} · ${statistics.scanned.toLocaleString()} of ${statistics.total.toLocaleString()} account records checked`}
+					label={`${homeActivityPeriod(statistics.days)} · ${statistics.total.toLocaleString()} account records`}
 				>
-					{homeActivityCoverage(statistics)} Flags use recorded Error / Fatal
-					severity. Multiple records can belong to the same execution.
+					{homeActivityCoverage(statistics)}
+					{statistics.attentionCapped &&
+						" The list shows the newest flagged records."}
 				</HomeSourceNote>
 			)}
 		</section>
@@ -611,9 +614,9 @@ function WorkspacePulseStrip({
 									className="size-3.5 shrink-0 text-[var(--home-surface-accent)]"
 									aria-hidden="true"
 								/>
-								{statistics.partial ? "Sampled records" : "Execution records"}
+								Execution records
 							</span>
-							<StripValue>{statistics.volume.toLocaleString()}</StripValue>
+							<StripValue>{statistics.total.toLocaleString()}</StripValue>
 							<span className={captionClass}>{period} · your account</span>
 						</div>
 						{showAttention && (
@@ -622,14 +625,14 @@ function WorkspacePulseStrip({
 									<CircleAlert
 										className={cn(
 											"size-3.5 shrink-0",
-											statistics.attention.length > 0 && "text-orange-500",
+											statistics.attentionTotal > 0 && "text-orange-500",
 										)}
 										aria-hidden="true"
 									/>
 									Flagged records
 								</span>
-								<StripValue accent={statistics.attention.length > 0}>
-									{statistics.attention.length.toLocaleString()}
+								<StripValue accent={statistics.attentionTotal > 0}>
+									{statistics.attentionTotal.toLocaleString()}
 								</StripValue>
 								<span className={captionClass}>Error / Fatal severity</span>
 							</div>
@@ -642,11 +645,11 @@ function WorkspacePulseStrip({
 							)}
 						>
 							<figcaption className={labelClass}>{period} · UTC</figcaption>
-							{statistics.volume > 0 ? (
+							{statistics.total > 0 ? (
 								<div
 									className="flex h-9 items-end gap-1"
 									role="img"
-									aria-label={`${statistics.volume} execution records, including ${statistics.attention.length} Error or Fatal records. ${homeActivityCoverage(statistics)}`}
+									aria-label={homeActivityCoverage(statistics)}
 								>
 									{statistics.buckets.map((bucket) => (
 										<div
@@ -675,20 +678,19 @@ function WorkspacePulseStrip({
 							) : (
 								<div className="flex min-h-9 items-center gap-2 text-xs font-medium leading-4">
 									<span className="size-1.5 shrink-0 rounded-full bg-[var(--home-accent)]" />
-									No recent records{statistics.partial ? " in sample" : ""}
+									No records in this period
 								</div>
 							)}
 							<details className="group/coverage text-[10px] leading-4 text-muted-foreground">
 								<summary className="flex cursor-pointer list-none items-center justify-between gap-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
 									<span>
-										{statistics.scanned.toLocaleString()} of{" "}
-										{statistics.total.toLocaleString()} records checked
+										{statistics.total.toLocaleString()} records counted
 									</span>
 									<Info className="size-3 shrink-0" aria-hidden="true" />
 								</summary>
 								<p className="mt-2 text-[11px] leading-4">
-									{homeActivityCoverage(statistics)} Flagged records use Error /
-									Fatal severity. The app count belongs to this profile.
+									{homeActivityCoverage(statistics)} The app count belongs to
+									this profile.
 								</p>
 							</details>
 						</figure>

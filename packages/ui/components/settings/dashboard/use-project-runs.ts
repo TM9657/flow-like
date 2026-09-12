@@ -55,6 +55,12 @@ export interface ProjectRunHealth {
 	/** True once the aggregation has resolved at least once. */
 	ready: boolean;
 	isLoading: boolean;
+	/**
+	 * The run log was never read because this account lacks `ReadBoards`. Every
+	 * number below is then a placeholder, not a measurement — callers must say
+	 * so instead of rendering a zero.
+	 */
+	denied: boolean;
 	/** Runs started inside the trailing 24h window. */
 	windowRuns: number;
 	windowFailed: number;
@@ -96,10 +102,16 @@ function percentile(sorted: number[], p: number): number | null {
  * whereas the run log exists wherever the app has actually executed. Every
  * number here is derived from real runs — when there are none the fields go
  * null so callers render an empty state instead of a fabricated zero.
+ *
+ * `canRead` mirrors `ReadBoards`, the guard on `GET /apps/{id}/board/{id}/runs`.
+ * Without it the query never fires and {@link ProjectRunHealth.denied} is set:
+ * the per-board `catch` below cannot tell a 403 from a board that has simply
+ * never run, so a denial has to be decided before the request, not after it.
  */
 export function useProjectRuns(
 	appId: string | undefined,
 	boards: readonly { id: string; name: string }[] | undefined,
+	canRead = true,
 ): ProjectRunHealth {
 	const backend = useBackend();
 	const boardIds = useMemo(
@@ -118,7 +130,7 @@ export function useProjectRuns(
 
 	const query = useQuery<ILogMetadata[]>({
 		queryKey: ["project-runs", appId, boardIds],
-		enabled: !!appId && boardIds.length > 0,
+		enabled: canRead && !!appId && boardIds.length > 0,
 		staleTime: 30_000,
 		refetchInterval: 60_000,
 		queryFn: async () => {
@@ -154,10 +166,11 @@ export function useProjectRuns(
 	return useMemo(
 		() => ({
 			ready: query.isFetched,
-			isLoading: query.isLoading,
+			isLoading: canRead && query.isLoading,
+			denied: !canRead,
 			...summarize(toRuns(query.data ?? [], boardNames)),
 		}),
-		[query.data, query.isFetched, query.isLoading, boardNames],
+		[query.data, query.isFetched, query.isLoading, boardNames, canRead],
 	);
 }
 
@@ -241,7 +254,7 @@ function groupRuns(
 
 export function summarize(
 	runs: ProjectRun[],
-): Omit<ProjectRunHealth, "ready" | "isLoading"> {
+): Omit<ProjectRunHealth, "ready" | "isLoading" | "denied"> {
 	const cutoff = Date.now() - WINDOW_MS;
 	const windowed = runs.filter((run) => run.startedAt >= cutoff);
 	const windowFailed = windowed.filter((run) => run.failed).length;

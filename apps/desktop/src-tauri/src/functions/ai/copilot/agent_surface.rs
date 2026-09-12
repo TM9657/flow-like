@@ -550,6 +550,10 @@ pub(super) fn build_flowpilot_agent_surface(
     }
 
     if matches!(scope, CopilotScope::Frontend | CopilotScope::Both) {
+        system_content.push_str(
+            "\n\n## CSS LAYERS\nStyling arrives in two layers: an app-wide stylesheet that reaches every page, and this surface's own `canvasSettings.customCss`. You own the PAGE layer only. The app-wide stylesheet is human-authored and you have no channel to write it — never restate it in a page, and never treat a page as unstyled because its own customCss is empty.",
+        );
+
         if let Some(components) = current_surface
             && !components.is_empty()
         {

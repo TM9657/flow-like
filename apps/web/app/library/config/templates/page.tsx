@@ -22,6 +22,9 @@ import {
 	IVersionType,
 	Input,
 	Label,
+	PermissionNotice,
+	RolePermissions,
+	SectionLockedPanel,
 	Select,
 	SelectContent,
 	SelectItem,
@@ -31,6 +34,7 @@ import {
 	Textarea,
 	formatRelativeTime,
 	nowSystemTime,
+	useAppPermissions,
 	useBackend,
 	useInvoke,
 	useSearch,
@@ -61,23 +65,32 @@ export default function TemplatesPage() {
 	const [searchTerm, setSearchTerm] = useState("");
 	const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 	const [selectedWorkflow, setSelectedWorkflow] = useState("");
+	const permissions = useAppPermissions(appId);
+	const canReadTemplates = permissions.can(RolePermissions.ReadTemplates);
+	const canWriteTemplates = permissions.can(RolePermissions.WriteTemplates);
+	const canReadBoards = permissions.can(RolePermissions.ReadBoards);
+	// Creating a template runs `upsert_template`, which checks WriteTemplates and
+	// then hard-checks ReadBoards before it may read the source flow. Editing an
+	// existing template's details only writes meta, which needs WriteTemplates
+	// alone — so ReadBoards gates creation, never editing.
+	const canAuthorTemplates = canWriteTemplates && canReadBoards;
 	const boards = useInvoke(
 		backend.boardState.getBoardSummaries,
 		backend.boardState,
 		[appId ?? ""],
-		typeof appId === "string",
+		typeof appId === "string" && canReadBoards,
 	);
 	const templates = useInvoke(
 		backend.templateState.getTemplates,
 		backend.templateState,
 		[appId ?? ""],
-		typeof appId === "string",
+		typeof appId === "string" && canReadTemplates,
 	);
 	const versions = useInvoke(
 		backend.boardState.getBoardVersions,
 		backend.boardState,
 		[appId, selectedWorkflow],
-		(selectedWorkflow ?? "") !== "" && isCreateDialogOpen,
+		(selectedWorkflow ?? "") !== "" && isCreateDialogOpen && canReadBoards,
 	);
 	const [newTemplate, setNewTemplate] = useState<any>({
 		name: "",
@@ -93,6 +106,15 @@ export default function TemplatesPage() {
 	});
 
 	const handleCreateTemplate = useCallback(async () => {
+		if (!canAuthorTemplates) {
+			toast.error(
+				t(
+					"yourRoleCannotCreateTemplatesInThisProject",
+					"Your role cannot create templates in this project.",
+				),
+			);
+			return;
+		}
 		if (!selectedWorkflow || !newTemplate.name) {
 			toast.error("Please select a workflow and enter a template name");
 			return;
@@ -124,7 +146,15 @@ export default function TemplatesPage() {
 			workflowId: "",
 			workflowVersion: undefined,
 		});
-	}, [appId, newTemplate, backend, selectedWorkflow, templates.refetch]);
+	}, [
+		appId,
+		canAuthorTemplates,
+		newTemplate,
+		backend,
+		selectedWorkflow,
+		t,
+		templates.refetch,
+	]);
 
 	const openTemplate = useCallback(
 		(templateId: string) => {
@@ -135,6 +165,15 @@ export default function TemplatesPage() {
 
 	const handleDeleteTemplate = useCallback(
 		async (templateAppId: string, templateId: string) => {
+			if (!canWriteTemplates) {
+				toast.error(
+					t(
+						"yourRoleCannotDeleteTemplatesInThisProject",
+						"Your role cannot delete templates in this project.",
+					),
+				);
+				return;
+			}
 			try {
 				await backend.templateState.deleteTemplate(templateAppId, templateId);
 				await templates.refetch();
@@ -144,12 +183,33 @@ export default function TemplatesPage() {
 				toast.error("Failed to delete template");
 			}
 		},
-		[backend.templateState, templates.refetch],
+		[backend.templateState, canWriteTemplates, t, templates.refetch],
 	);
 
 	if (templateId && templateId !== "")
 		return (
-			<TemplatePreview appId={appId} templateId={templateId} canEdit={true} />
+			<TemplatePreview
+				appId={appId}
+				templateId={templateId}
+				canEdit={canWriteTemplates}
+			/>
+		);
+
+	// A denied list read must not render as "No templates found" plus an
+	// invitation to create one — the read never happened.
+	if (!canReadTemplates)
+		return (
+			<main className="flex flex-col flex-grow max-h-full p-6 pt-0 min-h-0">
+				<SectionLockedPanel
+					feature={t("templates", "Templates")}
+					description={t(
+						"yourRoleCannotListThisProjectaposTemplates",
+						"Your role cannot list this project's templates, so this page cannot tell you whether any exist.",
+					)}
+					missing={[RolePermissions.ReadTemplates]}
+					roleName={permissions.roleName}
+				/>
+			</main>
 		);
 
 	return (
@@ -169,7 +229,7 @@ export default function TemplatesPage() {
 				</div>
 				<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
 					<DialogTrigger asChild>
-						<Button className="shadow-sm">
+						<Button className="shadow-sm" disabled={!canAuthorTemplates}>
 							<Plus className="w-4 h-4 mr-2" />
 							{t("createTemplate", "Create Template")}
 						</Button>
@@ -315,7 +375,11 @@ export default function TemplatesPage() {
 									onClick={async () => {
 										await handleCreateTemplate();
 									}}
-									disabled={!newTemplate.name || !selectedWorkflow}
+									disabled={
+										!newTemplate.name ||
+										!selectedWorkflow ||
+										!canAuthorTemplates
+									}
 									className="flex-1"
 								>
 									{t("createTemplate", "Create Template")}
@@ -331,6 +395,36 @@ export default function TemplatesPage() {
 					</DialogContent>
 				</Dialog>
 			</div>
+
+			{!canWriteTemplates && (
+				<PermissionNotice
+					tone="readOnly"
+					title={t(
+						"templatesAreReadonlyForYourRole",
+						"Templates are read-only for your role",
+					)}
+					description={t(
+						"yourRoleCannotCreateEditOrDeleteTemplatesInThisProject",
+						"Your role cannot create, edit or delete templates in this project.",
+					)}
+					missing={[RolePermissions.WriteTemplates]}
+				/>
+			)}
+
+			{canWriteTemplates && !canReadBoards && (
+				<PermissionNotice
+					tone="readOnly"
+					title={t(
+						"creatingTemplatesIsDisabled",
+						"Creating templates is disabled",
+					)}
+					description={t(
+						"creatingATemplateReadsTheSourceFlowSoItAlsoNeedsReadBoardsExistingTemplateDetailsStayEditable",
+						"Creating a template reads the source flow, so it also needs Read Boards. Existing template details stay editable.",
+					)}
+					missing={[RolePermissions.ReadBoards]}
+				/>
+			)}
 
 			{/* Search and Filter Bar */}
 			<div className="flex items-center gap-4">
@@ -402,6 +496,7 @@ export default function TemplatesPage() {
 											<DropdownMenuSeparator />
 											<DropdownMenuItem
 												className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+												disabled={!canWriteTemplates}
 												onClick={(event) => {
 													event.stopPropagation();
 													void handleDeleteTemplate(templateAppId, templateId);
@@ -462,7 +557,7 @@ export default function TemplatesPage() {
 									"Create your first template to get started",
 								)}
 					</p>
-					{!searchTerm && (
+					{!searchTerm && canAuthorTemplates && (
 						<Button onClick={() => setIsCreateDialogOpen(true)}>
 							<Plus className="w-4 h-4 mr-2" />
 							{t("createYourFirstTemplate", "Create Your First Template")}

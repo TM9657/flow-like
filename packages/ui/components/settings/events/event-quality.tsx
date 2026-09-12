@@ -20,10 +20,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useInvalidateInvoke, useInvoke } from "../../../hooks/use-invoke";
 import { discoverBoardTests } from "../../../lib/board-tests";
 import { formatRelativeTime } from "../../../lib/date";
 import { logLevelToNumber } from "../../../lib/log-level";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import type { INode } from "../../../lib/schema/flow/board";
 import type { IEvent } from "../../../lib/schema/flow/event";
 import type { ILog } from "../../../lib/schema/flow/log";
@@ -73,6 +75,8 @@ import {
 	SelectValue,
 	Switch,
 } from "../../ui";
+import { SectionLockedPanel } from "../permission/permission-gate";
+import { PermissionNotice } from "../permission/permission-notice";
 
 const CAVEAT_REJECTED = "rejected";
 const CAVEAT_TOO_LARGE = "too_large";
@@ -142,11 +146,29 @@ export function EventQuality({
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 
+	// Reading the suite needs ReadEvents; the corpus and a run's case details
+	// are log-derived and need ReadLogs on top; starting a run needs
+	// ExecuteEvents AND ReadLogs, because the runner grades from run logs.
+	const permissions = useAppPermissions(appId);
+	const canReadEvents = permissions.can(RolePermissions.ReadEvents);
+	const canReadLogs = permissions.can(RolePermissions.ReadLogs);
+	const canWriteEvents = permissions.can(RolePermissions.WriteEvents);
+	const canReadBoards = permissions.can(RolePermissions.ReadBoards);
+	const canReadCorpus = canReadEvents && canReadLogs;
+	const canExecuteSuite =
+		permissions.can(RolePermissions.ExecuteEvents) && canReadLogs;
+	const writeDeniedMessage = t(
+		"changingARegressionSuiteNeedsEventManagement",
+		"Promoting, deleting or saving regression settings rewrites the event's suite, which your role cannot do.",
+	);
+
 	const supported = typeof backend.eventState.getRegressionSuite === "function";
 	const isPageEvent = !!event.default_page_id;
 	const isOntologyAction = event.event_type === "ontology_action";
 	const excluded = isPageEvent || isOntologyAction;
-	const enabled = Boolean(appId && event.id && supported && !excluded);
+	const enabled = Boolean(
+		appId && event.id && supported && !excluded && canReadEvents,
+	);
 
 	const suiteQuery = useInvoke<IRegressionSuiteResult | null, [string, string]>(
 		backend.eventState.getRegressionSuite ?? suiteUnavailable,
@@ -160,7 +182,9 @@ export function EventQuality({
 		backend.eventState.getEventCorpus ?? corpusUnavailable,
 		backend.eventState,
 		[appId, event.id],
-		enabled && typeof backend.eventState.getEventCorpus === "function",
+		enabled &&
+			canReadCorpus &&
+			typeof backend.eventState.getEventCorpus === "function",
 	);
 
 	const runsQuery = useInvoke<IRegressionSuiteRunSummary[], [string, string]>(
@@ -225,6 +249,20 @@ export function EventQuality({
 		);
 	}
 
+	if (!canReadEvents && !permissions.isLoading) {
+		return (
+			<SectionLockedPanel
+				feature={t("regressionSuite", "Regression suite")}
+				description={t(
+					"readingTheRegressionSetNeedsEventAccess",
+					"Reading this event's regression set and the runs it graded needs permission to view this project's events.",
+				)}
+				missing={[RolePermissions.ReadEvents]}
+				roleName={permissions.roleName}
+			/>
+		);
+	}
+
 	if (!supported) {
 		return (
 			<Card>
@@ -249,12 +287,27 @@ export function EventQuality({
 
 	return (
 		<div className="space-y-6">
+			{!canWriteEvents && (
+				<PermissionNotice
+					tone="readOnly"
+					title={t(
+						"regressionSetIsReadonly",
+						"The regression set is read-only for you",
+					)}
+					description={writeDeniedMessage}
+					missing={[RolePermissions.WriteEvents]}
+				/>
+			)}
+
 			<CorpusCard
 				appId={appId}
 				eventId={event.id}
 				corpus={corpusQuery.data}
 				loading={corpusQuery.isLoading}
 				error={corpusQuery.isError ? messageOf(corpusQuery.error) : null}
+				locked={!canReadCorpus}
+				canPromote={canWriteEvents}
+				writeDeniedMessage={writeDeniedMessage}
 				suiteExists={suite !== null}
 				nodeName={nodeName}
 				onPromoted={refreshSuite}
@@ -265,6 +318,8 @@ export function EventQuality({
 				eventId={event.id}
 				fixtures={suite?.fixtures ?? []}
 				suiteExists={suite !== null}
+				canDelete={canWriteEvents}
+				writeDeniedMessage={writeDeniedMessage}
 				nodeName={nodeName}
 				onDeleted={refreshSuite}
 			/>
@@ -277,6 +332,8 @@ export function EventQuality({
 				suite={suite}
 				loading={suiteQuery.isLoading}
 				error={suiteQuery.isError ? messageOf(suiteQuery.error) : null}
+				canSave={canWriteEvents}
+				writeDeniedMessage={writeDeniedMessage}
 				onSaved={refreshSuite}
 			/>
 
@@ -286,6 +343,9 @@ export function EventQuality({
 				suite={suite}
 				runs={runsQuery.data ?? []}
 				runsLoading={runsQuery.isLoading}
+				canExecute={canExecuteSuite}
+				canReadRunDetail={canReadCorpus}
+				canReadBoards={canReadBoards}
 				nodeName={nodeName}
 				onRunsChanged={refreshRuns}
 			/>
@@ -358,6 +418,9 @@ function CorpusCard({
 	corpus,
 	loading,
 	error,
+	locked,
+	canPromote,
+	writeDeniedMessage,
 	suiteExists,
 	nodeName,
 	onPromoted,
@@ -367,6 +430,10 @@ function CorpusCard({
 	corpus?: IEventCorpusResult;
 	loading: boolean;
 	error: string | null;
+	/** The corpus endpoint also demands ReadLogs; without it there is nothing to show. */
+	locked: boolean;
+	canPromote: boolean;
+	writeDeniedMessage: string;
 	suiteExists: boolean;
 	nodeName: (nodeId: string) => string;
 	onPromoted: () => Promise<void>;
@@ -392,7 +459,20 @@ function CorpusCard({
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-3">
-				{loading && (
+				{locked && (
+					<PermissionNotice
+						title={t(
+							"recordedInputsUnavailable",
+							"Recorded inputs unavailable",
+						)}
+						description={t(
+							"theCorpusIsReadFromRunLogs",
+							"Recorded inputs are read out of this project's run logs, so listing them also needs permission to view logs — the list is hidden rather than shown as empty.",
+						)}
+						missing={[RolePermissions.ReadLogs]}
+					/>
+				)}
+				{!locked && loading && (
 					<div className="flex items-center gap-2 py-6 justify-center text-sm text-muted-foreground">
 						<Loader2Icon className="h-4 w-4 animate-spin" />
 						{t("corpusLoading", "Scanning recorded runs…")}
@@ -408,7 +488,7 @@ function CorpusCard({
 						</p>
 					</div>
 				)}
-				{!loading && !error && entries.length === 0 && (
+				{!locked && !loading && !error && entries.length === 0 && (
 					<p className="py-6 text-center text-sm text-muted-foreground">
 						{t(
 							"corpusEmpty",
@@ -459,14 +539,16 @@ function CorpusCard({
 												size="sm"
 												variant="outline"
 												className="h-6 gap-1 px-2 text-[11px]"
-												disabled={!suiteExists || tooLarge}
+												disabled={!suiteExists || tooLarge || !canPromote}
 												title={
-													tooLarge
-														? t(
-																"corpusTooLargeToPromote",
-																"The redacted payload exceeds the fixture size cap.",
-															)
-														: undefined
+													!canPromote
+														? writeDeniedMessage
+														: tooLarge
+															? t(
+																	"corpusTooLargeToPromote",
+																	"The redacted payload exceeds the fixture size cap.",
+																)
+															: undefined
 												}
 												onClick={() => setPromoteTarget(entry)}
 											>
@@ -659,6 +741,8 @@ function FixturesCard({
 	eventId,
 	fixtures,
 	suiteExists,
+	canDelete,
+	writeDeniedMessage,
 	nodeName,
 	onDeleted,
 }: Readonly<{
@@ -666,6 +750,8 @@ function FixturesCard({
 	eventId: string;
 	fixtures: IRegressionFixtureSummary[];
 	suiteExists: boolean;
+	canDelete: boolean;
+	writeDeniedMessage: string;
 	nodeName: (nodeId: string) => string;
 	onDeleted: () => Promise<void>;
 }>) {
@@ -781,6 +867,8 @@ function FixturesCard({
 									variant="ghost"
 									className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
 									aria-label={t("deleteFixture", "Delete fixture")}
+									disabled={!canDelete}
+									title={canDelete ? undefined : writeDeniedMessage}
 									onClick={() => setDeleteTarget(fixture)}
 								>
 									<Trash2Icon className="size-3.5" />
@@ -884,6 +972,8 @@ function SuiteConfigCard({
 	suite,
 	loading,
 	error,
+	canSave,
+	writeDeniedMessage,
 	onSaved,
 }: Readonly<{
 	appId: string;
@@ -891,6 +981,8 @@ function SuiteConfigCard({
 	suite: IRegressionSuiteResult | null;
 	loading: boolean;
 	error: string | null;
+	canSave: boolean;
+	writeDeniedMessage: string;
 	onSaved: () => Promise<void>;
 }>) {
 	const { t } = useTranslation("settings");
@@ -1117,7 +1209,12 @@ function SuiteConfigCard({
 						)}
 
 						<div className="flex justify-end">
-							<Button size="sm" disabled={busy} onClick={() => void save()}>
+							<Button
+								size="sm"
+								disabled={busy || !canSave}
+								title={canSave ? undefined : writeDeniedMessage}
+								onClick={() => void save()}
+							>
 								{busy && <Loader2Icon className="mr-1 size-3 animate-spin" />}
 								{suite
 									? t("suiteSave", "Save suite")
@@ -1193,6 +1290,9 @@ function RunPanelCard({
 	suite,
 	runs,
 	runsLoading,
+	canExecute,
+	canReadRunDetail,
+	canReadBoards,
 	nodeName,
 	onRunsChanged,
 }: Readonly<{
@@ -1201,6 +1301,12 @@ function RunPanelCard({
 	suite: IRegressionSuiteResult | null;
 	runs: IRegressionSuiteRunSummary[];
 	runsLoading: boolean;
+	/** Starting a run needs ExecuteEvents and ReadLogs, since grading reads logs. */
+	canExecute: boolean;
+	/** A run's case details are log-derived, so they need ReadLogs too. */
+	canReadRunDetail: boolean;
+	/** The candidate version list is a board read. */
+	canReadBoards: boolean;
 	nodeName: (nodeId: string) => string;
 	onRunsChanged: () => Promise<void>;
 }>) {
@@ -1212,7 +1318,7 @@ function RunPanelCard({
 		backend.boardState.getBoardVersions,
 		backend.boardState,
 		[appId, boardId],
-		Boolean(appId && boardId && suite !== null),
+		Boolean(appId && boardId && suite !== null && canReadBoards),
 	);
 	const versionOptions = useMemo(() => {
 		const versions = [...(versionsQuery.data ?? [])];
@@ -1236,6 +1342,7 @@ function RunPanelCard({
 			appId &&
 				event.id &&
 				selectedRunId &&
+				canReadRunDetail &&
 				typeof backend.eventState.getRegressionRun === "function",
 		),
 	);
@@ -1262,7 +1369,7 @@ function RunPanelCard({
 		previousStatus.current = detailStatus;
 	}, [detailStatus, onRunsChanged]);
 
-	const canRun = suite?.suite.allow_live_side_effects === true;
+	const canRun = suite?.suite.allow_live_side_effects === true && canExecute;
 
 	const startRun = useCallback(async () => {
 		const runRegressionSuite = backend.eventState.runRegressionSuite;
@@ -1347,14 +1454,22 @@ function RunPanelCard({
 						className="h-8 gap-1.5"
 						disabled={!canRun || starting}
 						title={
-							suite === null
-								? t("suiteRunNeedsSuite", "Save the suite configuration first.")
-								: !suite.suite.allow_live_side_effects
+							!canExecute
+								? t(
+										"runningASuiteNeedsTriggerAndLogAccess",
+										"Running a suite replays this event and grades it from its run logs, which your role cannot do.",
+									)
+								: suite === null
 									? t(
-											"suiteRunNeedsAck",
-											"Acknowledge live side effects in the suite configuration first.",
+											"suiteRunNeedsSuite",
+											"Save the suite configuration first.",
 										)
-									: undefined
+									: !suite.suite.allow_live_side_effects
+										? t(
+												"suiteRunNeedsAck",
+												"Acknowledge live side effects in the suite configuration first.",
+											)
+										: undefined
 						}
 						onClick={() => void startRun()}
 					>
@@ -1448,17 +1563,33 @@ function RunPanelCard({
 										{formatIsoTime(run.created_at)}
 									</span>
 								</button>
-								{selectedRunId === run.id && (
-									<RunDetail
-										detail={detailQuery.data}
-										loading={detailQuery.isLoading}
-										error={
-											detailQuery.isError ? messageOf(detailQuery.error) : null
-										}
-										nodeName={nodeName}
-										onOpenLogs={setLogsRunId}
-									/>
-								)}
+								{selectedRunId === run.id &&
+									(canReadRunDetail ? (
+										<RunDetail
+											detail={detailQuery.data}
+											loading={detailQuery.isLoading}
+											error={
+												detailQuery.isError
+													? messageOf(detailQuery.error)
+													: null
+											}
+											nodeName={nodeName}
+											onOpenLogs={setLogsRunId}
+										/>
+									) : (
+										<PermissionNotice
+											className="mt-2"
+											title={t(
+												"caseDetailsUnavailable",
+												"Case details unavailable",
+											)}
+											description={t(
+												"caseDetailsComeFromTheRunLog",
+												"A case's error classes and failed assertions come from the run log, so opening one also needs permission to view logs.",
+											)}
+											missing={[RolePermissions.ReadLogs]}
+										/>
+									))}
 							</li>
 						))}
 					</ul>

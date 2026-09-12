@@ -45,6 +45,37 @@ export interface IPaginatedResponse<T> {
 	page_size: number;
 }
 
+export interface IExecutionActivityBucket {
+	day: string;
+	count: number;
+	attention_count: number;
+}
+
+export interface IExecutionActivityApp {
+	app_id: string | null;
+	count: number;
+	attention_count: number;
+}
+
+/**
+ * Counts for a whole period, aggregated server-side. Unlike a page of
+ * {@link IExecutionUsageRecord}, every number here describes the window rather
+ * than the page size, so `total` is a real count and an empty `buckets` entry
+ * means a quiet day rather than a day the page never reached.
+ */
+export interface IExecutionActivity {
+	days: number;
+	from: string;
+	to: string;
+	buckets: IExecutionActivityBucket[];
+	apps: IExecutionActivityApp[];
+	total: number;
+	attention_total: number;
+	average_microseconds: number | null;
+	/** Newest flagged records in the window, capped for display. */
+	attention: IExecutionUsageRecord[];
+}
+
 export interface IUsageSummary {
 	total_llm_price: number;
 	total_embedding_price: number;
@@ -69,6 +100,23 @@ export interface IAppUsageLimits {
 	yearly: IAppUsageLimitWindow;
 }
 
+/** One serverless function billed for part of an execution. */
+export interface IComputeLeg {
+	architecture: string;
+	memoryGb: number;
+	durationShare: number;
+	microDollarsPerGbSecond: number;
+}
+
+/** Rate card the backend used to estimate runtime cost. */
+export interface IComputeCostModel {
+	legs: IComputeLeg[];
+	requestMicroDollars: number;
+	multiplier: number;
+	microDollarsPerSecond: number;
+	microDollarsPerExecution: number;
+}
+
 export interface IAdminUsageTotals {
 	llmPrice: number;
 	embeddingPrice: number;
@@ -81,6 +129,7 @@ export interface IAdminUsageTotals {
 	executions: number;
 	executionMicroseconds: number;
 	averageExecutionMs: number | null;
+	computeCost: number;
 }
 
 export interface IAdminUserUsage {
@@ -98,6 +147,7 @@ export interface IAdminUserUsage {
 	executions: number;
 	executionMicroseconds: number;
 	averageExecutionMs: number | null;
+	computeCost: number;
 }
 
 export interface IAdminAppUsage {
@@ -114,6 +164,7 @@ export interface IAdminAppUsage {
 	executions: number;
 	executionMicroseconds: number;
 	averageExecutionMs: number | null;
+	computeCost: number;
 	limits: IAppUsageLimits | null;
 }
 
@@ -138,6 +189,7 @@ export interface IAdminTechnicalUserUsage {
 	executions: number;
 	executionMicroseconds: number;
 	averageExecutionMs: number | null;
+	computeCost: number;
 }
 
 export interface IAdminModelUsage {
@@ -204,6 +256,7 @@ export interface IAdminUsageOverview {
 	technicalUsers: IAdminTechnicalUserUsage[];
 	apps: IAdminAppUsage[];
 	models: IAdminModelUsage[];
+	computeCostModel: IComputeCostModel;
 }
 
 export interface IAdminPaginated<T> {

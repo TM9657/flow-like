@@ -17,25 +17,10 @@ import { GeometryVariable } from "./geometry-variable";
 import { VariablesMenuEdit } from "./variables-menu-edit";
 
 /**
- * Resolve the initial value of a runtime variable from a saved value or its
- * board default. A plain Boolean with no value is seeded to `false` so the
- * rendered switch (which always shows a definite on/off state) matches the
- * stored value instead of being counted as "not configured".
+ * Re-exported from the lib, where it lives so that surfaces which only need to
+ * resolve a value can do so without pulling in the editor's component tree.
  */
-export function seedRuntimeVariable(
-	variable: IVariable,
-	existingBytes?: number[] | null,
-): IVariable {
-	let bytes = existingBytes ?? variable.default_value ?? null;
-	if (
-		(!bytes || bytes.length === 0) &&
-		variable.value_type === IValueType.Normal &&
-		variable.data_type === IVariableType.Boolean
-	) {
-		bytes = convertJsonToUint8Array(false) ?? null;
-	}
-	return { ...variable, default_value: bytes };
-}
+export { seedRuntimeVariable } from "../../../lib/runtime-vars-utils";
 
 /**
  * Whether {@link VariablesMenuEdit} renders a dedicated editor for this

@@ -16,6 +16,7 @@ import {
 	IAppVisibility,
 	type IEvent,
 	Input,
+	RolePermissions,
 	ScrollArea,
 	Separator,
 	Sheet,
@@ -30,12 +31,18 @@ import {
 	TooltipTrigger,
 	VisibilityIcon,
 	toastError,
+	useAppPermissions,
 	useBackend,
 	useDeveloperMode,
 	useExecutionServiceOptional,
 	useInvoke,
 	useMobileHeader,
 } from "@flow-like/flow-like-ui";
+import {
+	ConfigNavRow,
+	PermissionLockDialog,
+	SectionLockedPanel,
+} from "@flow-like/flow-like-ui/components/settings/permission";
 import { AppPublicationBanner } from "@flow-like/flow-like-ui/components/settings/visibility-status/app-publication-banner";
 import {
 	type AppPublicationRequestItem,
@@ -43,37 +50,28 @@ import {
 	normalizeAppPublicationRequests,
 } from "@flow-like/flow-like-ui/components/settings/visibility-status/app-publication-review-card";
 import { VisibilityUpgradeDialog } from "@flow-like/flow-like-ui/components/settings/visibility-status/visibility-upgrade-dialog";
+import {
+	type INavigationItem,
+	type INavigationItemState,
+	buildNavigationItems,
+	isConfigRouteActive,
+	resolveNavigationItems,
+} from "@flow-like/flow-like-ui/lib/config-nav";
 import { configRouteFillsHeight } from "@flow-like/flow-like-ui/lib/config-route";
 import { EVENT_CONFIG } from "@flow-like/flow-like-ui/lib/event-config";
 import { useTranslation } from "@flow-like/locales";
 import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
-	ChartAreaIcon,
 	ChevronLeftIcon,
-	CogIcon,
-	CopyIcon,
-	CrownIcon,
-	DatabaseIcon,
-	DollarSignIcon,
 	DownloadIcon,
-	FolderClosedIcon,
-	GlobeIcon,
-	KeyIcon,
-	LayersIcon,
 	LayoutGridIcon,
-	LockIcon,
 	Maximize2Icon,
 	MenuIcon,
 	Minimize2Icon,
-	PackageIcon,
 	PlayCircleIcon,
 	SearchIcon,
-	SendIcon,
 	SparklesIcon,
-	SquarePenIcon,
-	UserIcon,
-	UsersRoundIcon,
 	WorkflowIcon,
 	ZapIcon,
 } from "lucide-react";
@@ -90,269 +88,6 @@ import {
 import { appsDB } from "../../../lib/apps-db";
 import { isIosTauriRuntime } from "../../../lib/platform";
 import ExportAppDialog from "../components/ExportAppDialog";
-
-interface INavigationItem {
-	href: string;
-	label: string;
-	icon: React.ForwardRefExoticComponent<
-		Omit<import("lucide-react").LucideProps, "ref"> &
-			React.RefAttributes<SVGSVGElement>
-	>;
-	description: string;
-	group: string;
-	visibilities?: IAppVisibility[];
-	requiresPaid?: boolean;
-	disabled?: boolean;
-	devOnly?: boolean;
-	/**
-	 * Visibilities where the section stays in the nav but is locked: hiding it
-	 * outright reads as "this feature does not exist". Clicking a locked row
-	 * offers the visibility change that unlocks it.
-	 */
-	lockedVisibilities?: IAppVisibility[];
-	/** Copy for the unlock dialog. */
-	lockedReason?: string;
-	/** Visibility the unlock dialog switches to. */
-	unlockVisibility?: IAppVisibility;
-}
-
-/** Labels are built per render so a language switch relabels the config nav. */
-function buildNavigationItems(
-	t: (key: string, defaultValue: string) => string,
-): INavigationItem[] {
-	const groups = {
-		general: t("general", "General"),
-		build: t("build", "Build"),
-		data: t("data", "Data"),
-		collaborate: t("collaborate", "Collaborate"),
-		insights: t("insights", "Insights"),
-	};
-
-	return [
-		{
-			href: "/library/config",
-			label: t("dashboard", "Dashboard"),
-			icon: SquarePenIcon,
-			description: t(
-				"overviewStatsAndGettingStarted",
-				"Overview, stats, and getting started",
-			),
-			group: groups.general,
-		},
-		{
-			href: "/library/config/configuration",
-			label: t("configuration", "Configuration"),
-			icon: CogIcon,
-			description: t(
-				"appConfigurationAndEnvironmentVariables",
-				"App configuration and environment variables",
-			),
-			group: groups.general,
-		},
-		{
-			href: "/library/config/runtime-vars",
-			label: t("runtimeVariables", "Runtime Variables"),
-			icon: KeyIcon,
-			description: t(
-				"userspecificRuntimeSecretsAndConfigurations",
-				"User-specific runtime secrets and configurations",
-			),
-			group: groups.general,
-		},
-		{
-			href: "/library/config/flows",
-			label: t("flows", "Flows"),
-			icon: WorkflowIcon,
-			description: t(
-				"businessLogicAndWorkflowDefinitions",
-				"Business logic and workflow definitions",
-			),
-			group: groups.build,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/pages",
-			label: t("events", "Events"),
-			icon: SparklesIcon,
-			description: t(
-				"eventsPagesAndPathbasedNavigation",
-				"Events, pages, and path-based navigation",
-			),
-			group: groups.build,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/templates",
-			label: t("templates", "Templates"),
-			icon: CopyIcon,
-			description: t("reusableFlowTemplates", "Reusable Flow templates"),
-			group: groups.build,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/widgets",
-			label: t("widgets", "Widgets"),
-			icon: LayoutGridIcon,
-			description: t(
-				"reusableUiComponentsAndWidgets",
-				"Reusable UI components and widgets",
-			),
-			group: groups.build,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/storage",
-			label: t("storage", "Storage"),
-			icon: FolderClosedIcon,
-			description: t(
-				"dataStorageAndFileManagement",
-				"Data storage and file management",
-			),
-			group: groups.data,
-		},
-		{
-			href: "/library/config/user-storage",
-			label: t("userStorage", "User Storage"),
-			icon: UserIcon,
-			description: t(
-				"browseAndSearchYourPrivateAppFiles",
-				"Browse and search your private app files",
-			),
-			group: groups.data,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/explore",
-			label: t("dataStudio", "Data Studio"),
-			icon: DatabaseIcon,
-			description: t(
-				"modelExploreOperateAndShareProjectData",
-				"Model, explore, operate, and share project data",
-			),
-			group: groups.data,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/packages",
-			label: t("packages", "Packages"),
-			icon: PackageIcon,
-			description: t(
-				"manageWasmPackagesForThisApp",
-				"Manage WASM packages for this app",
-			),
-			group: groups.data,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/team",
-			label: t("team", "Team"),
-			icon: UsersRoundIcon,
-			description: t(
-				"manageTeamMembersAndPermissions",
-				"Manage team members and permissions",
-			),
-			visibilities: [
-				IAppVisibility.Public,
-				IAppVisibility.Prototype,
-				IAppVisibility.PublicRequestAccess,
-			],
-			lockedVisibilities: [IAppVisibility.Private],
-			lockedReason: t(
-				"aPrivateProjectIsSyncedToYourAccountOnlySwitchToPrototypeToInviteCollaboratorsAssignRolesAndShareALink",
-				"A private project is synced to your account only. Switch to Prototype to invite collaborators, assign roles and share a link.",
-			),
-			unlockVisibility: IAppVisibility.Prototype,
-			group: groups.collaborate,
-		},
-		{
-			href: "/library/config/suites",
-			label: t("suites", "Suites"),
-			icon: LayersIcon,
-			description: t(
-				"bundleThisAppWithRelatedAppsIntoOneStoreListing",
-				"Bundle this app with related apps into one store listing",
-			),
-			// A suite is presentation, not membership — private apps curate them too.
-			visibilities: [
-				IAppVisibility.Public,
-				IAppVisibility.Prototype,
-				IAppVisibility.PublicRequestAccess,
-				IAppVisibility.Private,
-			],
-			group: groups.collaborate,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/roles",
-			label: t("roles", "Roles"),
-			icon: CrownIcon,
-			description: t(
-				"defineUserRolesAndAccessLevels",
-				"Define user roles and access levels",
-			),
-			visibilities: [
-				IAppVisibility.Public,
-				IAppVisibility.Prototype,
-				IAppVisibility.PublicRequestAccess,
-			],
-			group: groups.collaborate,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/sales",
-			label: t("sales", "Sales"),
-			icon: DollarSignIcon,
-			description: t(
-				"trackSalesManagePricingAndDiscounts",
-				"Track sales, manage pricing and discounts",
-			),
-			visibilities: [IAppVisibility.Public, IAppVisibility.PublicRequestAccess],
-			requiresPaid: true,
-			group: groups.insights,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/analytics",
-			label: t("analytics", "Analytics"),
-			icon: ChartAreaIcon,
-			description: t(
-				"performanceMetricsAndInsights",
-				"Performance metrics and insights",
-			),
-			group: groups.insights,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/endpoints",
-			label: t("endpoints", "Endpoints"),
-			icon: GlobeIcon,
-			description: t(
-				"apiEndpointsAndIntegrations",
-				"API endpoints and integrations",
-			),
-			group: groups.insights,
-			devOnly: true,
-		},
-		{
-			href: "/library/config/publication",
-			label: t("publication", "Publication"),
-			icon: SendIcon,
-			description: t(
-				"trackPublicationReviewStatusAndAuditorFeedback",
-				"Track publication review status and auditor feedback",
-			),
-			group: groups.insights,
-			devOnly: true,
-		},
-	];
-}
-
-function isRouteActive(itemHref: string, currentRoute: string): boolean {
-	if (itemHref === "/library/config") {
-		return currentRoute === "/library/config";
-	}
-	return currentRoute.startsWith(itemHref);
-}
 
 export default function Id({
 	children,
@@ -392,8 +127,12 @@ export default function Id({
 	const [exportOpen, setExportOpen] = useState(false);
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 	const [mobileNavFilter, setMobileNavFilter] = useState("");
-	const [lockedItem, setLockedItem] = useState<INavigationItem | null>(null);
+	const [lockedItem, setLockedItem] = useState<INavigationItemState | null>(
+		null,
+	);
 	const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+	const permissions = useAppPermissions(id);
 
 	const settingsProfile = useInvoke(
 		backend.userState.getSettingsProfile,
@@ -414,7 +153,11 @@ export default function Id({
 				`apps/${id}/publication`,
 			);
 		},
-		enabled: !!settingsProfile.data && !!id,
+		// Reading publication requests is Admin-only, and this query runs on every
+		// route under /library/config — without the guard every ordinary member
+		// pays a 403 for a badge they will never see.
+		enabled:
+			!!settingsProfile.data && !!id && permissions.can(RolePermissions.Admin),
 		select: normalizeAppPublicationRequests,
 	});
 
@@ -430,36 +173,47 @@ export default function Id({
 
 	const visibility = online?.visibility ?? IAppVisibility.Offline;
 
-	// Nav items visible for this app's visibility + paywall state — shared by the
-	// desktop sidebar and the mobile bottom-sheet switcher (no double filtering).
-	// Items whose visibility gate can be lifted stay in the list as `locked`.
+	const permissionLockReason = useCallback(
+		(item: INavigationItem) =>
+			t(
+				"yourRoleOnThisProjectCannotOpenLabelDescription",
+				"Your role on this project cannot open {{label}}. {{description}}",
+				{ label: item.label, description: item.description },
+			),
+		[t],
+	);
+
+	// Nav items visible for this app's visibility, paywall and role — shared by
+	// the desktop sidebar and the mobile bottom-sheet switcher (no double
+	// filtering). Items behind a gate stay in the list carrying a `lock`.
 	const visibleNavItems = useMemo(
 		() =>
-			buildNavigationItems(t)
-				.filter(
-					(item) =>
-						(!item.devOnly || developerMode) &&
-						(!item.visibilities ||
-							item.visibilities.includes(visibility) ||
-							item.lockedVisibilities?.includes(visibility)) &&
-						(!item.requiresPaid ||
-							(app.data?.price != null && app.data.price > 0)),
-				)
-				.map((item) => ({
-					...item,
-					locked:
-						!!item.visibilities && !item.visibilities.includes(visibility),
-				})),
-		[visibility, app.data?.price, developerMode, t],
+			resolveNavigationItems(buildNavigationItems(t), {
+				visibility,
+				developerMode,
+				isPaid: app.data?.price != null && app.data.price > 0,
+				can: permissions.can,
+				permissionLockReason,
+			}),
+		[
+			visibility,
+			app.data?.price,
+			developerMode,
+			t,
+			permissions.can,
+			permissionLockReason,
+		],
 	);
 
 	const activeItem = useMemo(
 		() =>
-			visibleNavItems.find((item) => isRouteActive(item.href, currentRoute)),
+			visibleNavItems.find((item) =>
+				isConfigRouteActive(item.href, currentRoute),
+			),
 		[visibleNavItems, currentRoute],
 	);
 
-	const openLockedItem = useCallback((item: INavigationItem) => {
+	const openLockedItem = useCallback((item: INavigationItemState) => {
 		setMobileNavOpen(false);
 		setMobileNavFilter("");
 		setLockedItem(item);
@@ -476,6 +230,29 @@ export default function Id({
 		},
 		[id, router],
 	);
+
+	// A section the nav locks must stay locked when reached another way — a
+	// pasted URL, the spotlight palette, a deep link from Home. The nav already
+	// resolved the gate for this route, so reuse its verdict here instead of
+	// letting the page mount and 403 its way to an empty screen.
+	const lockedSection = activeItem?.lock ? (
+		<SectionLockedPanel
+			feature={activeItem.label}
+			kind={activeItem.lock.kind}
+			description={activeItem.lock.reason}
+			missing={
+				activeItem.lock.kind === "permission" ? activeItem.lock.missing : []
+			}
+			roleName={permissions.roleName}
+			action={
+				activeItem.lock.kind === "visibility" ? (
+					<Button onClick={() => openLockedItem(activeItem)}>
+						{t("unlockLabel", "Unlock {{label}}", { label: activeItem.label })}
+					</Button>
+				) : undefined
+			}
+		/>
+	) : null;
 
 	const [isIosTauri, setIsIosTauri] = useState(false);
 	useEffect(() => {
@@ -846,10 +623,8 @@ export default function Id({
 									}
 									let lastGroup = "";
 									return filtered.map((item) => {
-										const Icon = item.icon;
 										const showGroupHeader = item.group !== lastGroup;
 										lastGroup = item.group;
-										const active = isRouteActive(item.href, currentRoute);
 										return (
 											<div key={item.href}>
 												{showGroupHeader && (
@@ -857,49 +632,23 @@ export default function Id({
 														{item.group}
 													</div>
 												)}
-												{item.disabled ? (
-													<div
-														className="flex items-center gap-3 px-3 min-h-11 rounded-lg text-sm text-muted-foreground bg-muted/50 opacity-60"
-														aria-disabled="true"
-													>
-														<Icon className="w-4 h-4 shrink-0" />
-														<span className="truncate">
-															{t("labelSoon", "{{label}} (soon)", {
-																label: item.label,
-															})}
-														</span>
-													</div>
-												) : item.locked ? (
-													<button
-														type="button"
-														className="w-full flex items-center gap-3 px-3 min-h-11 rounded-lg text-sm text-muted-foreground/60 bg-muted/40 transition-colors"
-														onClick={() => openLockedItem(item)}
-													>
-														<Icon className="w-4 h-4 shrink-0" />
-														<span className="truncate">{item.label}</span>
-														<LockIcon className="ml-auto w-3.5 h-3.5 shrink-0" />
-													</button>
-												) : (
-													<Link
-														href={`${item.href}?id=${id}`}
-														className={`flex items-center gap-3 px-3 min-h-11 rounded-lg text-sm transition-colors ${
-															active
-																? "bg-primary/10 text-primary font-medium"
-																: "text-muted-foreground hover:bg-muted hover:text-foreground"
-														}`}
-														onClick={() => {
-															setMobileNavOpen(false);
-															setMobileNavFilter("");
-														}}
-													>
-														<Icon className="w-4 h-4 shrink-0" />
-														<span className="truncate">{item.label}</span>
-														{item.href === "/library/config/publication" &&
-															hasActivePublicationRequest && (
-																<span className="ml-auto w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-															)}
-													</Link>
-												)}
+												<ConfigNavRow
+													item={item}
+													appId={id ?? ""}
+													variant="mobile"
+													active={isConfigRouteActive(item.href, currentRoute)}
+													trailing={
+														item.href === "/library/config/publication" &&
+														hasActivePublicationRequest ? (
+															<span className="ml-auto w-2 h-2 rounded-full bg-primary shrink-0" />
+														) : undefined
+													}
+													onNavigate={() => {
+														setMobileNavOpen(false);
+														setMobileNavFilter("");
+													}}
+													onLockClick={openLockedItem}
+												/>
 											</div>
 										);
 									});
@@ -927,8 +676,9 @@ export default function Id({
 					</SheetContent>
 				</Sheet>
 
-				{/* Unlock dialog for nav sections gated behind a visibility change */}
-				{id && lockedItem && (
+				{/* A visibility lock is a door this account can open; a permission
+				    lock belongs to someone else, so it only explains itself. */}
+				{id && lockedItem?.lock?.kind === "visibility" && (
 					<VisibilityUpgradeDialog
 						appId={id}
 						open
@@ -936,10 +686,23 @@ export default function Id({
 							if (!open) setLockedItem(null);
 						}}
 						feature={lockedItem.label}
-						reason={lockedItem.lockedReason ?? lockedItem.description}
+						reason={lockedItem.lock.reason}
 						current={visibility}
-						target={lockedItem.unlockVisibility ?? IAppVisibility.Prototype}
+						target={lockedItem.lock.target}
 						onChanged={(next) => unlockSection(lockedItem, next)}
+					/>
+				)}
+
+				{lockedItem?.lock?.kind === "permission" && (
+					<PermissionLockDialog
+						open
+						onOpenChange={(open) => {
+							if (!open) setLockedItem(null);
+						}}
+						feature={lockedItem.label}
+						reason={lockedItem.lock.reason}
+						missing={lockedItem.lock.missing}
+						roleName={permissions.roleName}
 					/>
 				)}
 
@@ -961,13 +724,10 @@ export default function Id({
 										key={id + (online?.visibility ?? "")}
 									>
 										{(() => {
-											const filtered = visibleNavItems;
 											let lastGroup = "";
-											return filtered.map((item) => {
-												const Icon = item.icon;
+											return visibleNavItems.map((item) => {
 												const showGroupHeader = item.group !== lastGroup;
 												lastGroup = item.group;
-												const active = isRouteActive(item.href, currentRoute);
 												return (
 													<div key={item.href}>
 														{showGroupHeader && (
@@ -975,98 +735,23 @@ export default function Id({
 																{item.group}
 															</div>
 														)}
-														{item.disabled ? (
-															<Tooltip delayDuration={300}>
-																<TooltipTrigger asChild>
-																	<div
-																		className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground bg-muted/50 opacity-60 cursor-not-allowed"
-																		tabIndex={-1}
-																		aria-disabled="true"
-																	>
-																		<Icon className="w-4 h-4 shrink-0" />
-																		<span className="truncate">
-																			{item.label}
-																		</span>
-																	</div>
-																</TooltipTrigger>
-																<TooltipContent
-																	side="right"
-																	className="max-w-xs"
-																>
-																	<p className="font-bold">
-																		{t(
-																			"labelComingSoon",
-																			"{{label}} (Coming soon!)",
-																			{ label: item.label },
-																		)}
-																	</p>
-																	<p className="text-xs mt-1">
-																		{item.description}
-																	</p>
-																</TooltipContent>
-															</Tooltip>
-														) : item.locked ? (
-															<Tooltip delayDuration={300}>
-																<TooltipTrigger asChild>
-																	<button
-																		type="button"
-																		className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground/60 bg-muted/40 hover:bg-muted hover:text-muted-foreground transition-all"
-																		onClick={() => openLockedItem(item)}
-																	>
-																		<Icon className="w-4 h-4 shrink-0" />
-																		<span className="truncate">
-																			{item.label}
-																		</span>
-																		<LockIcon className="ml-auto w-3.5 h-3.5 shrink-0" />
-																	</button>
-																</TooltipTrigger>
-																<TooltipContent
-																	side="right"
-																	className="max-w-xs"
-																>
-																	<p className="font-bold">
-																		{t("labelLocked", "{{label}} (locked)", {
-																			label: item.label,
-																		})}
-																	</p>
-																	<p className="text-xs mt-1">
-																		{item.lockedReason ?? item.description}
-																	</p>
-																</TooltipContent>
-															</Tooltip>
-														) : (
-															<Tooltip delayDuration={300}>
-																<TooltipTrigger asChild>
-																	<Link
-																		href={`${item.href}?id=${id}`}
-																		className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-																			active
-																				? "bg-primary/10 text-primary font-medium"
-																				: "text-muted-foreground hover:bg-muted hover:text-foreground"
-																		}`}
-																	>
-																		<Icon className="w-4 h-4 shrink-0" />
-																		<span className="truncate">
-																			{item.label}
-																		</span>
-																		{item.href ===
-																			"/library/config/publication" &&
-																			hasActivePublicationRequest && (
-																				<span className="ml-auto w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-																			)}
-																	</Link>
-																</TooltipTrigger>
-																<TooltipContent
-																	side="right"
-																	className="max-w-xs"
-																>
-																	<p className="font-bold">{item.label}</p>
-																	<p className="text-xs mt-1">
-																		{item.description}
-																	</p>
-																</TooltipContent>
-															</Tooltip>
-														)}
+														<ConfigNavRow
+															item={item}
+															appId={id ?? ""}
+															variant="sidebar"
+															withTooltip
+															active={isConfigRouteActive(
+																item.href,
+																currentRoute,
+															)}
+															trailing={
+																item.href === "/library/config/publication" &&
+																hasActivePublicationRequest ? (
+																	<span className="ml-auto w-2 h-2 rounded-full bg-primary shrink-0" />
+																) : undefined
+															}
+															onLockClick={openLockedItem}
+														/>
 													</div>
 												);
 											});
@@ -1231,7 +916,7 @@ export default function Id({
 										}
 									>
 										<div key={id ?? "missing-app"} className="contents">
-											{children}
+											{lockedSection ?? children}
 										</div>
 									</Suspense>
 								</div>

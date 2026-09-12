@@ -2,6 +2,8 @@
 
 import {
 	AppReviewsSection,
+	RolePermissions,
+	useAppPermissions,
 	useBackend,
 	useInvalidateInvoke,
 	useInvoke,
@@ -20,6 +22,11 @@ export default function DashboardPage() {
 	const invalidate = useInvalidateInvoke();
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id") ?? "";
+	const permissions = useAppPermissions(id);
+	// Visibility, forking and the conformity assessment are all `Owner`-guarded
+	// server-side, so the slots get the real answer instead of a literal `true`.
+	// A local-only project has no role table, and `can` degrades open there.
+	const canEditApp = permissions.can(RolePermissions.Owner);
 
 	const app = useInvoke(
 		backend.appState.getApp,
@@ -54,11 +61,13 @@ export default function DashboardPage() {
 					<AppAccessSection
 						localApp={app.data}
 						appName={metadata.data?.name ?? id}
-						canEdit
+						canEdit={canEditApp}
 						refreshApp={refreshApp}
 					/>
 				),
-				compliance: <AppComplianceSection localApp={app.data} canEdit />,
+				compliance: (
+					<AppComplianceSection localApp={app.data} canEdit={canEditApp} />
+				),
 				reviews: <AppReviewsSection appId={id} onReviewChanged={refreshApp} />,
 			}}
 		/>

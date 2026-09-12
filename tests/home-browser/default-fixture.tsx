@@ -404,6 +404,69 @@ function DefaultScenario({
 								page_size: pageSize,
 							};
 						},
+						getExecutionActivity: async (days = 7, appId?: string) => {
+							record("activity");
+							account();
+							const rows = history.filter(
+								(row) => !appId || row.app_id === appId,
+							);
+							const isFlagged = (status: string) =>
+								["error", "fatal"].includes(status.toLowerCase());
+							const flagged = rows.filter((row) => isFlagged(row.status));
+							// The real endpoint always returns one row per day in the
+							// window, zeros included; a stub that skips them hides a
+							// component reading past the end of an empty axis.
+							const now = Date.now();
+							const from =
+								Date.UTC(
+									new Date(now).getUTCFullYear(),
+									new Date(now).getUTCMonth(),
+									new Date(now).getUTCDate(),
+								) -
+								(days - 1) * 86_400_000;
+							const buckets = Array.from({ length: days }, (_, index) => ({
+								day: new Date(from + index * 86_400_000)
+									.toISOString()
+									.slice(0, 10),
+								count: 0,
+								attention_count: 0,
+							}));
+							const apps = new Map<
+								string | null,
+								{ count: number; flagged: number }
+							>();
+							for (const row of rows) {
+								const slot = Math.floor(
+									(Date.parse(row.created_at) - from) / 86_400_000,
+								);
+								const bucket = buckets[slot];
+								if (bucket) {
+									bucket.count += 1;
+									if (isFlagged(row.status)) bucket.attention_count += 1;
+								}
+								const app = apps.get(row.app_id) ?? { count: 0, flagged: 0 };
+								app.count += 1;
+								if (isFlagged(row.status)) app.flagged += 1;
+								apps.set(row.app_id, app);
+							}
+							return {
+								days,
+								from: new Date(from).toISOString(),
+								to: new Date(now).toISOString(),
+								buckets,
+								apps: [...apps.entries()]
+									.map(([app_id, value]) => ({
+										app_id,
+										count: value.count,
+										attention_count: value.flagged,
+									}))
+									.sort((a, b) => b.count - a.count),
+								total: rows.length,
+								attention_total: flagged.length,
+								average_microseconds: rows.length ? 1200 : null,
+								attention: flagged.slice(0, 50),
+							};
+						},
 						getUsageSummary: async () => {
 							record("usage");
 							account();

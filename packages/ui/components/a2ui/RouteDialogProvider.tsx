@@ -535,7 +535,10 @@ function RouteDialogRenderer({
 
 	return (
 		<Dialog open={dialog.isOpen} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+			<DialogContent
+				data-app-id={appId}
+				className="max-w-4xl max-h-[90vh] overflow-auto"
+			>
 				{dialog.title && (
 					<DialogHeader>
 						<DialogTitle>{dialog.title}</DialogTitle>

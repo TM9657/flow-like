@@ -92,6 +92,10 @@ pub struct TelemetryAlertsMaintenanceResult {
 pub struct StateCleanupMaintenanceResult {
     pub deleted_runs: i64,
     pub deleted_events: i64,
+    /// Storage-accounting tombstones removed past their retention window.
+    /// Default tolerates responses from an API without tombstone retention.
+    #[serde(default)]
+    pub deleted_tombstones: u64,
 }
 
 /// Regression-suite maintenance: scheduled suite runs dispatched this tick,
@@ -216,6 +220,7 @@ mod tests {
                 StateCleanupMaintenanceResult {
                     deleted_runs: 3,
                     deleted_events: 41,
+                    deleted_tombstones: 12,
                 }
             ))
             .unwrap(),
@@ -224,8 +229,18 @@ mod tests {
                 "result": {
                     "deletedRuns": 3,
                     "deletedEvents": 41,
+                    "deletedTombstones": 12,
                 }
             })
+        );
+        assert_eq!(
+            serde_json::from_value::<StateCleanupMaintenanceResult>(json!({
+                "deletedRuns": 3,
+                "deletedEvents": 41,
+            }))
+            .unwrap()
+            .deleted_tombstones,
+            0
         );
     }
 

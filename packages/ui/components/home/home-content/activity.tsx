@@ -12,9 +12,8 @@ import {
 	Clock,
 } from "lucide-react";
 import Link from "next/link";
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { toast } from "sonner";
-import { parseUint8ArrayToJson } from "../../../lib/uint8";
 import { cn } from "../../../lib/utils";
 import { useBackend } from "../../../state/backend-state";
 import { Button } from "../../ui/button";
@@ -22,8 +21,11 @@ import {
 	hasAttentionSeverity,
 	homeActivityCoverage,
 	homeActivityDays,
+	homeActivityPeriod,
+	homeActivitySourceLabel,
+	homeDurationMs,
 	homeUsageDollars,
-	summarizeHomeExecutions,
+	normalizeHomeActivity,
 } from "../home-activity-statistics";
 import { useHomeLibrary } from "./collections";
 import {
@@ -42,12 +44,6 @@ import {
 	useHomeScope,
 } from "./shared";
 
-function activitySourceLabel(
-	statistics: ReturnType<typeof summarizeHomeExecutions>,
-) {
-	return `${statistics.partial ? "Sample: latest" : "Your account:"} ${statistics.scanned.toLocaleString()} of ${statistics.total.toLocaleString()} records · ${statistics.days === 1 ? "today" : `${statistics.days} days`} (UTC)`;
-}
-
 export function HomeNotifications({ widget, editing }: HomeContentProps) {
 	const backend = useBackend();
 	const scope = useHomeScope();
@@ -60,14 +56,12 @@ export function HomeNotifications({ widget, editing }: HomeContentProps) {
 		attention ? "WORKFLOW" : "all",
 	);
 	const limit = numberConfig(widget.config, "limit", 8);
+	const kind = type === "WORKFLOW" || type === "SYSTEM" ? type : undefined;
 	const notifications = useQuery({
 		queryKey: ["home", ...scope, "notifications", unread, type, limit],
-		queryFn: () =>
-			backend.userState.listNotifications(
-				unread,
-				0,
-				type === "all" ? limit : 100,
-			),
+		// The kind is applied by the source, so asking for one cannot come back
+		// empty just because the newest rows are all of the other kind.
+		queryFn: () => backend.userState.listNotifications(unread, kind, 0, limit),
 		refetchInterval: editing ? false : 60_000,
 	});
 	if (notifications.isLoading || notifications.isError)
@@ -78,17 +72,12 @@ export function HomeNotifications({ widget, editing }: HomeContentProps) {
 				retry={() => void notifications.refetch()}
 			/>
 		);
-	const rows = (notifications.data ?? [])
-		.filter(
-			(notification) =>
-				type === "all" || notification.notification_type === type,
-		)
-		.slice(0, limit);
+	const rows = (notifications.data ?? []).slice(0, limit);
 	if (!rows.length)
 		return (
 			<HomeEmpty icon={<CheckCircle2 className="size-7 text-emerald-500/70" />}>
 				{attention
-					? "No unread workflow notifications in the latest 100 notifications."
+					? "No unread workflow notifications."
 					: "No notifications match this view."}
 			</HomeEmpty>
 		);
@@ -169,6 +158,7 @@ export function HomeNotifications({ widget, editing }: HomeContentProps) {
 	);
 }
 
+/** Newest N records, for a widget that genuinely wants a list rather than counts. */
 function useHomeExecutions(
 	appId: string,
 	limit: number,
@@ -194,11 +184,43 @@ function useHomeExecutions(
 	});
 }
 
+/**
+ * Counts for a whole period. Every widget showing a total, a per-day bar, a
+ * per-app split or a flagged list reads this rather than a page of records:
+ * a page can only report its own size, which is what made a busy week render
+ * as a single day.
+ */
+export function useHomeActivity(
+	days: unknown,
+	appId = "",
+	enabled = true,
+	editing = false,
+) {
+	const backend = useBackend();
+	const scope = useHomeScope();
+	const window = homeActivityDays(days);
+	return useQuery({
+		queryKey: ["home", ...scope, "activity", appId, window],
+		queryFn: () => {
+			if (!backend.usageState)
+				throw new Error("Usage history is unavailable on this backend.");
+			return backend.usageState.getExecutionActivity(
+				window,
+				appId || undefined,
+			);
+		},
+		select: normalizeHomeActivity,
+		enabled: enabled && Boolean(backend.usageState),
+		staleTime: 30_000,
+		refetchInterval: editing ? false : 60_000,
+	});
+}
+
 export function HomeRunActivity({ widget, editing }: HomeContentProps) {
 	const backend = useBackend();
-	const results = useHomeExecutions(
+	const results = useHomeActivity(
+		widget.config.days,
 		textConfig(widget.config, "appId"),
-		100,
 		true,
 		editing,
 	);
@@ -214,8 +236,8 @@ export function HomeRunActivity({ widget, editing }: HomeContentProps) {
 				retry={() => void results.refetch()}
 			/>
 		);
-	const statistics = summarizeHomeExecutions(results.data, widget.config.days);
-	const maximum = Math.max(1, ...statistics.buckets.map((day) => day.count));
+	const activity = results.data;
+	const maximum = Math.max(1, ...activity.buckets.map((day) => day.count));
 	const formatDay = (day: string) =>
 		new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
 			month: "short",
@@ -226,21 +248,22 @@ export function HomeRunActivity({ widget, editing }: HomeContentProps) {
 		<figure className="flex min-w-0 flex-col gap-3">
 			<figcaption className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
 				<span className="text-muted-foreground">
-					{statistics.days === 1 ? "Today" : `Last ${statistics.days} days`}
+					{homeActivityPeriod(activity.days)}
 					{" · UTC"}
 				</span>
 				<span className="font-medium tabular-nums">
-					{statistics.rows.length.toLocaleString()} sampled records
+					{activity.total.toLocaleString()}{" "}
+					{activity.total === 1 ? "record" : "records"}
 				</span>
 			</figcaption>
 			<div className="flex min-w-0 flex-col">
-				{statistics.rows.length ? (
+				{activity.total ? (
 					<>
 						<div
 							className="flex h-44 min-h-44 items-end gap-1.5 border-b border-border/60 bg-[linear-gradient(to_top,var(--border)_1px,transparent_1px)] bg-[size:100%_25%]"
 							aria-hidden="true"
 						>
-							{statistics.buckets.map((day) => (
+							{activity.buckets.map((day) => (
 								<div
 									key={day.day}
 									className="flex h-full min-w-0 flex-1 flex-col justify-end overflow-hidden rounded-t-sm"
@@ -262,22 +285,26 @@ export function HomeRunActivity({ widget, editing }: HomeContentProps) {
 								</div>
 							))}
 						</div>
-						<div
-							className="mt-2 flex justify-between gap-2 text-[10px] text-muted-foreground"
-							aria-hidden="true"
-						>
-							<span>{formatDay(statistics.buckets[0].day)}</span>
-							{statistics.days > 1 && (
-								<span>
-									{formatDay(statistics.buckets[statistics.days - 1].day)}
-								</span>
-							)}
-						</div>
+						{activity.buckets.length > 0 && (
+							<div
+								className="mt-2 flex justify-between gap-2 text-[10px] text-muted-foreground"
+								aria-hidden="true"
+							>
+								<span>{formatDay(activity.buckets[0].day)}</span>
+								{activity.buckets.length > 1 && (
+									<span>
+										{formatDay(
+											activity.buckets[activity.buckets.length - 1].day,
+										)}
+									</span>
+								)}
+							</div>
+						)}
 					</>
 				) : (
-					<HomeEmpty>No sampled executions fall in this period.</HomeEmpty>
+					<HomeEmpty>No executions were recorded in this period.</HomeEmpty>
 				)}
-				{statistics.rows.length > 0 && (
+				{activity.total > 0 && (
 					<div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
 						<span className="flex items-center gap-1.5">
 							<span className="size-2 rounded-sm bg-[var(--home-accent,var(--primary))] opacity-80" />
@@ -293,7 +320,7 @@ export function HomeRunActivity({ widget, editing }: HomeContentProps) {
 			<div className="sr-only">
 				<table>
 					<caption>
-						Daily execution records in the retrieved sample, grouped in UTC
+						Daily execution records for this period, grouped in UTC
 					</caption>
 					<thead>
 						<tr>
@@ -303,7 +330,7 @@ export function HomeRunActivity({ widget, editing }: HomeContentProps) {
 						</tr>
 					</thead>
 					<tbody>
-						{statistics.buckets.map((day) => (
+						{activity.buckets.map((day) => (
 							<tr key={day.day}>
 								<th scope="row">{day.day}</th>
 								<td>{day.count}</td>
@@ -313,8 +340,8 @@ export function HomeRunActivity({ widget, editing }: HomeContentProps) {
 					</tbody>
 				</table>
 			</div>
-			<HomeSourceNote label={activitySourceLabel(statistics)}>
-				{homeActivityCoverage(statistics)} Your account on this backend.
+			<HomeSourceNote label={homeActivitySourceLabel(activity)}>
+				{homeActivityCoverage(activity)} Your account on this backend.
 			</HomeSourceNote>
 		</figure>
 	);
@@ -323,9 +350,9 @@ export function HomeRunActivity({ widget, editing }: HomeContentProps) {
 export function HomeExecutionsByApp({ widget, editing }: HomeContentProps) {
 	const backend = useBackend();
 	const library = useHomeLibrary();
-	const results = useHomeExecutions(
+	const results = useHomeActivity(
+		widget.config.days,
 		textConfig(widget.config, "appId"),
-		100,
 		true,
 		editing,
 	);
@@ -341,14 +368,11 @@ export function HomeExecutionsByApp({ widget, editing }: HomeContentProps) {
 				retry={() => void results.refetch()}
 			/>
 		);
-	const statistics = summarizeHomeExecutions(results.data, widget.config.days);
+	const activity = results.data;
 	const names = new Map(
 		(library.data ?? []).map(([app, meta]) => [app.id, meta?.name ?? app.id]),
 	);
-	const apps = statistics.apps.slice(
-		0,
-		numberConfig(widget.config, "limit", 5),
-	);
+	const apps = activity.apps.slice(0, numberConfig(widget.config, "limit", 5));
 	const maximum = Math.max(1, ...apps.map((app) => app.count));
 	return (
 		<div className="flex min-w-0 flex-col gap-3">
@@ -399,13 +423,13 @@ export function HomeExecutionsByApp({ widget, editing }: HomeContentProps) {
 						);
 					})
 				) : (
-					<HomeEmpty>No sampled executions fall in this period.</HomeEmpty>
+					<HomeEmpty>No executions were recorded in this period.</HomeEmpty>
 				)}
 			</div>
-			<HomeSourceNote label={activitySourceLabel(statistics)}>
-				{homeActivityCoverage(statistics)} Your account on this backend.
-				{apps.length < statistics.apps.length &&
-					` Showing ${apps.length} of ${statistics.apps.length} app groups.`}
+			<HomeSourceNote label={homeActivitySourceLabel(activity)}>
+				{homeActivityCoverage(activity)} Your account on this backend.
+				{apps.length < activity.apps.length &&
+					` Showing ${apps.length} of ${activity.apps.length} app groups.`}
 			</HomeSourceNote>
 		</div>
 	);
@@ -509,9 +533,9 @@ export function HomeRunStats({ widget }: HomeContentProps) {
 	const scope = useHomeScope();
 	const metric = textConfig(widget.config, "metric", "overview");
 	const sample = metric === "errors" || metric === "duration";
-	const executions = useHomeExecutions(
+	const executions = useHomeActivity(
+		widget.config.days,
 		textConfig(widget.config, "appId"),
-		100,
 		sample,
 	);
 	const summary = useQuery({
@@ -537,7 +561,7 @@ export function HomeRunStats({ widget }: HomeContentProps) {
 				retry={() => void state.refetch()}
 			/>
 		);
-	const rows = executions.data?.items ?? [];
+	const activity = executions.data;
 	const stats = sample
 		? [
 				{
@@ -545,15 +569,11 @@ export function HomeRunStats({ widget }: HomeContentProps) {
 						metric === "errors"
 							? "Error-severity executions"
 							: "Average recorded duration",
-					value: rows.length
-						? metric === "errors"
-							? rows
-									.filter((row) =>
-										["error", "fatal"].includes(row.status.toLowerCase()),
-									)
-									.length.toLocaleString()
-							: `${(rows.reduce((sum, row) => sum + row.microseconds, 0) / rows.length / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })} ms`
-						: "No records",
+					value: !activity
+						? "No records"
+						: metric === "errors"
+							? activity.attentionTotal.toLocaleString()
+							: homeDurationMs(activity.averageMicroseconds),
 				},
 			]
 		: [
@@ -589,13 +609,13 @@ export function HomeRunStats({ widget }: HomeContentProps) {
 			</div>
 			<HomeSourceNote
 				label={
-					sample
-						? `Your account · latest ${rows.length} records`
+					sample && activity
+						? homeActivitySourceLabel(activity)
 						: "Your account · all recorded usage"
 				}
 			>
-				{sample
-					? `Your latest ${rows.length} recorded executions${executions.data && executions.data.total > rows.length ? ` of ${executions.data.total.toLocaleString()}` : ""}.`
+				{sample && activity
+					? homeActivityCoverage(activity)
 					: "Your account's recorded usage across profiles on this backend."}
 			</HomeSourceNote>
 		</div>
@@ -607,12 +627,17 @@ export function HomeRecentRuns({ widget, editing }: HomeContentProps) {
 	const attention = widget.type === "needs-attention";
 	const limit = numberConfig(widget.config, "limit", 8);
 	const appId = textConfig(widget.config, "appId");
-	const results = useHomeExecutions(
+	// Two shapes, two sources. "Recent runs" wants the newest records, which a
+	// page answers exactly. "Needs attention" wants the flagged ones, which a
+	// page of newest records cannot answer: they may all sit past its end.
+	const history = useHomeExecutions(appId, limit, !attention, editing);
+	const flagged = useHomeActivity(
+		widget.config.days,
 		appId,
-		attention ? 100 : limit,
-		true,
+		attention,
 		editing,
 	);
+	const results = attention ? flagged : history;
 	const library = useHomeLibrary();
 	const names = new Map(
 		(library.data ?? []).map(([app, meta]) => [app.id, meta?.name ?? app.id]),
@@ -629,21 +654,17 @@ export function HomeRecentRuns({ widget, editing }: HomeContentProps) {
 				retry={() => void results.refetch()}
 			/>
 		);
-	const statistics = results.data
-		? summarizeHomeExecutions(results.data, widget.config.days)
-		: null;
+	const activity = attention ? (flagged.data ?? null) : null;
 	const rows = attention
-		? (statistics?.rows
-				.filter((row) => hasAttentionSeverity(row.status))
-				.slice(0, limit) ?? [])
-		: (results.data?.items ?? []);
+		? (activity?.attention.slice(0, limit) ?? [])
+		: (history.data?.items ?? []);
 	return (
 		<div className="flex min-w-0 flex-col gap-3">
 			<div className="min-w-0 divide-y divide-border/50">
 				{!rows.length && (
 					<HomeEmpty icon={<Activity className="size-7 opacity-50" />}>
 						{attention
-							? `No Error / Fatal records in the sample for ${homeActivityDays(widget.config.days) === 1 ? "today" : `the last ${homeActivityDays(widget.config.days)} days`}.`
+							? `No Error / Fatal records were recorded for ${homeActivityPeriod(homeActivityDays(widget.config.days)).toLowerCase()}.`
 							: "No execution records are available for your account yet."}
 					</HomeEmpty>
 				)}
@@ -703,13 +724,17 @@ export function HomeRecentRuns({ widget, editing }: HomeContentProps) {
 			</div>
 			<HomeSourceNote
 				label={
-					attention && statistics
-						? activitySourceLabel(statistics)
+					activity
+						? homeActivitySourceLabel(activity)
 						: "Your account · recorded log severity"
 				}
 			>
-				{attention && statistics
-					? homeActivityCoverage(statistics)
+				{activity
+					? `${homeActivityCoverage(activity)}${
+							activity.attentionCapped
+								? ` Showing the newest ${rows.length.toLocaleString()}.`
+								: ""
+						}`
 					: "Your recorded executions. Badges show the recorded log severity."}
 			</HomeSourceNote>
 		</div>
@@ -721,66 +746,51 @@ export function HomeSchedules({ widget }: HomeContentProps) {
 	const scope = useHomeScope();
 	const library = useHomeLibrary();
 	const chosen = stringList(widget.config, "appIds");
-	const appIds = (library.data ?? [])
-		.filter(([app]) => !chosen.length || chosen.includes(app.id))
-		.map(([app]) => app.id);
 	const names = new Map(
 		(library.data ?? []).map(([app, metadata]) => [
 			app.id,
 			metadata?.name ?? app.id,
 		]),
 	);
+	const limit = numberConfig(widget.config, "limit", 8);
 	const schedules = useQuery({
-		queryKey: ["home", ...scope, "schedules", appIds],
-		enabled: Boolean(library.data),
-		queryFn: async () => {
-			const rows: {
-				id: string;
-				appId: string;
-				title: string;
-				next: Date;
-				timezone: string;
-			}[] = [];
-			let unavailable = 0;
-			for (let start = 0; start < appIds.length; start += 5) {
-				const batch = await Promise.allSettled(
-					appIds.slice(start, start + 5).map(async (appId) => ({
-						appId,
-						events: await backend.eventState.getEvents(appId),
-					})),
-				);
-				for (const result of batch) {
-					if (result.status === "rejected") {
-						unavailable++;
-						continue;
-					}
-					for (const event of result.value.events) {
-						if (!event.active || event.event_type !== "cron") continue;
-						try {
-							const config = parseUint8ArrayToJson(event.config) ?? {};
-							const next = nextHomeSchedule(config);
-							if (next)
-								rows.push({
-									id: event.id,
-									appId: result.value.appId,
-									title: event.name,
-									next,
-									timezone: config.timezone || "UTC",
-								});
-						} catch {
-							unavailable++;
-						}
-					}
-				}
-			}
-			return {
-				rows: rows.sort((a, b) => a.next.getTime() - b.next.getTime()),
-				unavailable,
-			};
-		},
+		queryKey: ["home", ...scope, "schedules"],
+		queryFn: () => backend.eventState.getUserSchedules(),
 		staleTime: 60_000,
 		refetchInterval: 60_000,
 	});
+	// The response covers every app whose events this account can read, which is
+	// a wider set than the widget shows: it is narrowed to the profile library
+	// so an app outside this profile cannot appear, and then to the widget's own
+	// app picker. Both filters stay here because neither is a property of the
+	// account.
+	const visible = useMemo(() => {
+		const inLibrary = new Set((library.data ?? []).map(([app]) => app.id));
+		const rows = (schedules.data?.schedules ?? [])
+			.filter((schedule) => inLibrary.has(schedule.app_id))
+			.filter((schedule) => !chosen.length || chosen.includes(schedule.app_id))
+			.flatMap((schedule) => {
+				try {
+					const next = nextHomeSchedule(
+						(schedule.config ?? {}) as Record<string, unknown>,
+					);
+					return next
+						? [
+								{
+									id: schedule.event_id,
+									appId: schedule.app_id,
+									title: schedule.name,
+									next,
+									timezone: schedule.config?.timezone || "UTC",
+								},
+							]
+						: [];
+				} catch {
+					return [];
+				}
+			});
+		return rows.sort((a, b) => a.next.getTime() - b.next.getTime());
+	}, [schedules.data, library.data, chosen]);
 	if (
 		library.isLoading ||
 		library.isError ||
@@ -797,9 +807,7 @@ export function HomeSchedules({ widget }: HomeContentProps) {
 				}}
 			/>
 		);
-	const rows =
-		schedules.data?.rows.slice(0, numberConfig(widget.config, "limit", 8)) ??
-		[];
+	const rows = visible.slice(0, limit);
 	return (
 		<div className="flex min-w-0 flex-col gap-3">
 			<div className="min-w-0 divide-y divide-border/50">
@@ -839,9 +847,12 @@ export function HomeSchedules({ widget }: HomeContentProps) {
 				)}
 			</div>
 			<HomeSourceNote label="Active app schedules · your local time">
-				Calculated from active app schedules. Times use your device timezone.
-				{Boolean(schedules.data?.unavailable) &&
-					" Some schedules could not be loaded."}
+				Calculated from the active schedules of{" "}
+				{(schedules.data?.apps_checked ?? 0).toLocaleString()} apps you can read
+				events for. Times use your device timezone.
+				{Boolean(schedules.data?.unreadable) &&
+					" Some schedules could not be read."}
+				{schedules.data?.truncated && " More schedules exist than were listed."}
 			</HomeSourceNote>
 		</div>
 	);

@@ -4,6 +4,8 @@ import { useTranslation } from "@flow-like/locales";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useInvalidateInvoke, useInvoke } from "../../../hooks";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import type { IForkPolicy } from "../../../lib/schema/app/fork";
 import { useBackend } from "../../../state/backend-state";
 import type { IApp } from "../../../types";
@@ -38,13 +40,21 @@ export function AllowForkingCard({
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	const permissions = useAppPermissions(localApp.id);
 	const allowForking = Boolean(localApp.allow_forking);
+
+	/**
+	 * Reading and writing the fork settings are both
+	 * `ensure_permission!(.., Owner)` (`internal/change_forking.rs`), so the
+	 * caller's own role — not the mount site's assumption — decides.
+	 */
+	const canManageForking = canEdit && permissions.can(RolePermissions.Owner);
 
 	const settings = useInvoke(
 		backend.appState.getForkSettings,
 		backend.appState,
 		[localApp.id],
-		canEdit && typeof localApp.id === "string",
+		canManageForking && typeof localApp.id === "string",
 	);
 
 	const [policy, setPolicy] = useState<IForkPolicy | undefined>(undefined);
@@ -88,17 +98,17 @@ export function AllowForkingCard({
 				setSaving(false);
 			}
 		},
-		[backend.appState, invalidate, localApp.id, policy, saving],
+		[backend.appState, invalidate, localApp.id, policy, saving, t],
 	);
 
 	return (
 		<div className="space-y-0">
 			<AllowForkingSwitcher
 				localApp={localApp}
-				canEdit={canEdit}
+				canEdit={canManageForking}
 				onAllowForkingChange={handleChange}
 			>
-				{canEdit && allowForking && policy && (
+				{canManageForking && allowForking && policy && (
 					<ForkPolicyEditor
 						policy={policy}
 						disabled={saving}
@@ -110,11 +120,11 @@ export function AllowForkingCard({
 			    permissions are actually required — otherwise it briefly lists
 			    ones an excluded category doesn't need. A failed fetch settles
 			    too, falling back to the permissive set. */}
-			{(!canEdit || !settings.isPending) && (
+			{(!canManageForking || !settings.isPending) && (
 				<ForkPermissionWarning
 					appId={localApp.id}
 					enabled={allowForking}
-					canEdit={canEdit}
+					canEdit={canManageForking}
 					policy={policy}
 				/>
 			)}

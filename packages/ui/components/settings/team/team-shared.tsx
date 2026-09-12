@@ -1,14 +1,18 @@
 "use client";
 
+import { useTranslation } from "@flow-like/locales";
 import type { LucideIcon } from "lucide-react";
-import { SearchIcon } from "lucide-react";
+import { SearchIcon, TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useInfiniteInvoke, useInvoke } from "../../../hooks/use-invoke";
+import { apiErrorMessage } from "../../../lib/api-error";
 import { RolePermissions } from "../../../lib/permission/role-permission";
 import { cn } from "../../../lib/utils";
 import { useBackend } from "../../../state/backend-state";
 import { Input } from "../../ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 
 export const TEAM_SECTION_KEYS = [
 	"members",
@@ -29,6 +33,49 @@ export type TeamTone = "neutral" | "attention" | "success" | "danger" | "owner";
 export const TEAM_ACTION_GRADIENT =
 	"bg-linear-to-r from-primary to-tertiary hover:from-primary/85 hover:to-tertiary/85";
 
+/**
+ * What the signed-in account may do on this project, resolved once per section
+ * and threaded down instead of re-asked in every leaf.
+ *
+ * The three levels the access surface mixes: `ReadTeam` (members, connections,
+ * suites), `ReadRoles` (role names) and `Admin` (join requests, invites, API
+ * keys, every write). Owner-only reads sit behind {@link ITeamAccess.canOwn}.
+ */
+export interface ITeamAccess {
+	/** The role is still resolving — render a skeleton, not a denial. */
+	isLoading: boolean;
+	/** The role resolved; the flags below are real server bits. */
+	known: boolean;
+	roleName?: string;
+	canReadTeam: boolean;
+	canReadRoles: boolean;
+	canAdminister: boolean;
+	/** Passes an `Owner` check — `Admin` satisfies it, exactly as the server does. */
+	canOwn: boolean;
+	/** Ready-made explanations for a control this role may not use. */
+	adminReason: string;
+	ownerReason: string;
+}
+
+/**
+ * Reads the overview could not make. A denied read is not a zero, so anything
+ * derived from one has to render as unknown rather than as a count.
+ */
+export interface ITeamOverviewGaps {
+	/** Member list — `ReadTeam`. */
+	members: boolean;
+	/** Role names, and with them the editor/viewer split — `ReadRoles`. */
+	roles: boolean;
+	/** Join requests — `Admin`. */
+	joinRequests: boolean;
+	/** Invite links — `Admin`. */
+	inviteLinks: boolean;
+	/** API keys — `Admin`. */
+	apiKeys: boolean;
+	/** Connected apps — `ReadTeam`. */
+	connections: boolean;
+}
+
 export interface ITeamOverview {
 	/** Members loaded so far. `memberCountExact` says whether more pages remain. */
 	memberCount: number;
@@ -44,6 +91,15 @@ export interface ITeamOverview {
 	/** Join requests plus incoming app access requests — everything awaiting a decision. */
 	needsReviewCount: number;
 	isLoading: boolean;
+	access: ITeamAccess;
+	/** Every count whose source is listed here is unknown, not zero. */
+	unavailable: ITeamOverviewGaps;
+	/**
+	 * The subset of {@link ITeamOverview.unavailable} the role itself explains.
+	 * The rest failed to load, which is a different sentence: telling an admin
+	 * whose request timed out that their role is too low is its own lie.
+	 */
+	denied: ITeamOverviewGaps;
 }
 
 const WRITE_PERMISSIONS = [
@@ -56,51 +112,164 @@ const WRITE_PERMISSIONS = [
 ];
 
 /**
+ * Resolves what this account may do on the project once, for the whole
+ * section. The underlying role request is shared by react-query, so calling
+ * this at the top of each section costs one request for the page.
+ */
+export function useTeamAccess(appId: string): ITeamAccess {
+	const { t } = useTranslation("settings");
+	const permissions = useAppPermissions(appId);
+
+	return useMemo(
+		() => ({
+			isLoading: permissions.isLoading,
+			known: permissions.known,
+			roleName: permissions.roleName,
+			canReadTeam: permissions.can(RolePermissions.ReadTeam),
+			canReadRoles: permissions.can(RolePermissions.ReadRoles),
+			canAdminister: permissions.can(RolePermissions.Admin),
+			canOwn: permissions.can(RolePermissions.Owner),
+			adminReason: t(
+				"onlyProjectAdminsCanChangeThisAskAnOwnerOrAdminToUpdateYourRole",
+				"Only project admins can change this. Ask an owner or admin to update your role.",
+			),
+			ownerReason: t(
+				"onlyTheProjectOwnerCanChangeThis",
+				"Only the project owner can change this.",
+			),
+		}),
+		[permissions, t],
+	);
+}
+
+/**
+ * Wraps a control this role may not use so the reason is discoverable.
+ *
+ * A disabled button emits no pointer events at all, so the tooltip hangs on a
+ * wrapper and the locked control is taken out of the hit test entirely —
+ * otherwise the wrapper never sees the hover that should explain the lock.
+ */
+export function TeamActionLock({
+	locked,
+	reason,
+	children,
+	className,
+}: Readonly<{
+	locked: boolean;
+	reason: string;
+	children: ReactNode;
+	className?: string;
+}>) {
+	if (!locked) return <>{children}</>;
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<span
+					className={cn(
+						"inline-flex cursor-not-allowed *:pointer-events-none",
+						className,
+					)}
+				>
+					{children}
+				</span>
+			</TooltipTrigger>
+			<TooltipContent>{reason}</TooltipContent>
+		</Tooltip>
+	);
+}
+
+/**
+ * A read that failed rather than one that was refused.
+ *
+ * `PermissionNotice` names a missing permission, which is the wrong diagnosis
+ * for a dropped connection or a project this device cannot reach — and it
+ * sends the reader to an admin who has nothing to grant. This keeps the same
+ * shape and says what the server actually said.
+ */
+export function TeamReadError({
+	title,
+	error,
+	className,
+}: Readonly<{
+	title: string;
+	error: unknown;
+	className?: string;
+}>) {
+	const { t } = useTranslation("settings");
+	return (
+		<div
+			className={cn(
+				"flex items-start gap-3 rounded-lg border bg-muted/30 p-3 text-sm",
+				className,
+			)}
+		>
+			<TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+			<div className="min-w-0 flex-1 space-y-1">
+				<p className="font-medium text-foreground">{title}</p>
+				<p className="text-xs text-muted-foreground">
+					{apiErrorMessage(
+						error,
+						t(
+							"thisCouldNotBeLoadedRightNow",
+							"This could not be loaded right now. Check your connection and try again.",
+						),
+					)}
+				</p>
+			</div>
+		</div>
+	);
+}
+
+/**
  * Aggregates every access-related count the team page shows above the fold.
  * Every query here is also used by the individual sections, so react-query
  * serves them from one cache entry instead of refetching per section.
+ *
+ * Each read fires only when the role may make it: a denial would otherwise
+ * come back as a 403 and land in the tiles as a confident zero.
  */
 export function useTeamOverview(appId: string): ITeamOverview {
 	const backend = useBackend();
-	const enabled = appId.length > 0;
+	const access = useTeamAccess(appId);
+	const enabled = appId.length > 0 && !access.isLoading;
 
 	const team = useInfiniteInvoke(
 		backend.teamState.getTeam,
 		backend.teamState,
 		[appId],
 		50,
-		enabled,
+		enabled && access.canReadTeam,
 	);
 	const joinRequests = useInfiniteInvoke(
 		backend.teamState.getJoinRequests,
 		backend.teamState,
 		[appId],
 		50,
-		enabled,
+		enabled && access.canAdminister,
 	);
 	const roles = useInvoke(
 		backend.roleState.getRoles,
 		backend.roleState,
 		[appId],
-		enabled,
+		enabled && access.canReadRoles,
 	);
 	const links = useInvoke(
 		backend.teamState.getInviteLinks,
 		backend.teamState,
 		[appId],
-		enabled,
+		enabled && access.canAdminister,
 	);
 	const apiKeys = useInvoke(
 		backend.apiKeyState.getApiKeys,
 		backend.apiKeyState,
 		[appId],
-		enabled,
+		enabled && access.canAdminister,
 	);
 	const connections = useInvoke(
 		backend.teamState.getAppConnections,
 		backend.teamState,
 		[appId],
-		enabled,
+		enabled && access.canReadTeam,
 	);
 
 	return useMemo(() => {
@@ -146,25 +315,50 @@ export function useTeamOverview(appId: string): ITeamOverview {
 			pendingAppRequestCount,
 			needsReviewCount: joinRequestCount + pendingAppRequestCount,
 			isLoading:
+				access.isLoading ||
 				team.isLoading ||
 				roles.isLoading ||
 				links.isLoading ||
 				apiKeys.isLoading ||
 				connections.isLoading,
+			access,
+			unavailable: {
+				members: !access.canReadTeam || team.isError,
+				roles: !access.canReadRoles || roles.isError,
+				joinRequests: !access.canAdminister || joinRequests.isError,
+				inviteLinks: !access.canAdminister || links.isError,
+				apiKeys: !access.canAdminister || apiKeys.isError,
+				connections: !access.canReadTeam || connections.isError,
+			},
+			denied: {
+				members: !access.canReadTeam,
+				roles: !access.canReadRoles,
+				joinRequests: !access.canAdminister,
+				inviteLinks: !access.canAdminister,
+				apiKeys: !access.canAdminister,
+				connections: !access.canReadTeam,
+			},
 		};
 	}, [
+		access,
 		team.data,
 		team.hasNextPage,
 		team.isLoading,
+		team.isError,
 		joinRequests.data,
+		joinRequests.isError,
 		roles.data,
 		roles.isLoading,
+		roles.isError,
 		links.data,
 		links.isLoading,
+		links.isError,
 		apiKeys.data,
 		apiKeys.isLoading,
+		apiKeys.isError,
 		connections.data,
 		connections.isLoading,
+		connections.isError,
 	]);
 }
 

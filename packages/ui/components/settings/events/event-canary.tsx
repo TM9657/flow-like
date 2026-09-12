@@ -19,8 +19,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useInvalidateInvoke, useInvoke } from "../../../hooks/use-invoke";
 import { formatDuration } from "../../../lib/date";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import type { IBoardSummary } from "../../../lib/schema/flow/board-summary";
 import {
 	type BoardVersion,
@@ -81,6 +83,8 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "../../ui";
+import { SectionLockedPanel } from "../permission/permission-gate";
+import { PermissionNotice } from "../permission/permission-notice";
 
 const MAX_LIVE_VARIANTS = 2;
 const VARIANT_NAME_PATTERN = /^[a-z0-9-]+$/;
@@ -187,6 +191,17 @@ export function EventCanary({
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	// The `*Supported` flags below only answer "does this platform implement
+	// the call" — they say nothing about whether this account may make it, so
+	// every one of them is paired with the permission the server checks.
+	const permissions = useAppPermissions(appId);
+	const canReadEvents = permissions.can(RolePermissions.ReadEvents);
+	const canWriteEvents = permissions.can(RolePermissions.WriteEvents);
+	const canReadBoards = permissions.can(RolePermissions.ReadBoards);
+	const writeDeniedMessage = t(
+		"changingACanaryNeedsEventManagement",
+		"Changing traffic, promoting, aborting or re-running setup rewrites the event, which your role cannot do.",
+	);
 
 	// Canary is a cloud feature: the desktop provider does not implement these,
 	// which is exactly how the History section detects its platform too.
@@ -216,7 +231,7 @@ export function EventCanary({
 		backend.boardState.getBoardSummaries,
 		backend.boardState,
 		[appId],
-		Boolean(appId && variantsSupported),
+		Boolean(appId && variantsSupported && canReadBoards),
 	);
 	const boardsMap = useMemo(() => {
 		const map = new Map<string, string>();
@@ -227,7 +242,7 @@ export function EventCanary({
 		backend.pageState.getPages,
 		backend.pageState,
 		[appId],
-		Boolean(appId && variantsSupported && isPageEvent),
+		Boolean(appId && variantsSupported && isPageEvent && canReadBoards),
 	);
 	const pagesMap = useMemo(() => {
 		const map = new Map<string, PageListItem>();
@@ -244,14 +259,27 @@ export function EventCanary({
 		backend.eventState.getCanaryStats ?? statsUnavailable,
 		backend.eventState,
 		[appId, event.id, statsWindow],
-		Boolean(appId && event.id && statsSupported && variants.length > 0),
+		Boolean(
+			appId &&
+				event.id &&
+				statsSupported &&
+				variants.length > 0 &&
+				canReadEvents,
+		),
 	);
 
 	const setups = useInvoke<IEventSetupInfo[], [string, string]>(
 		backend.eventState.listEventSetups ?? setupsUnavailable,
 		backend.eventState,
 		[appId, event.id],
-		Boolean(appId && event.id && setupsSupported && isInbound && !isPageEvent),
+		Boolean(
+			appId &&
+				event.id &&
+				setupsSupported &&
+				isInbound &&
+				!isPageEvent &&
+				canReadEvents,
+		),
 	);
 
 	// Page canaries are assigned at bootstrap by caller subject and pinned by
@@ -557,6 +585,20 @@ export function EventCanary({
 		[variants, putVariants, t],
 	);
 
+	if (!canReadEvents && !permissions.isLoading) {
+		return (
+			<SectionLockedPanel
+				feature={t("canaryReleases", "Canary releases")}
+				description={t(
+					"readingVariantsAndTheirTrafficNeedsEventAccess",
+					"Reading this event's variants and the traffic they serve needs permission to view this project's events.",
+				)}
+				missing={[RolePermissions.ReadEvents]}
+				roleName={permissions.roleName}
+			/>
+		);
+	}
+
 	if (!variantsSupported) {
 		return (
 			<Card>
@@ -578,6 +620,24 @@ export function EventCanary({
 
 	return (
 		<div className="space-y-6">
+			{!canWriteEvents && (
+				<PermissionNotice
+					tone="readOnly"
+					title={t("canaryIsReadonly", "This canary is read-only for you")}
+					description={writeDeniedMessage}
+					missing={[RolePermissions.WriteEvents]}
+				/>
+			)}
+			{!canReadBoards && (
+				<PermissionNotice
+					title={t("variantTargetsUnavailable", "Variant targets unavailable")}
+					description={t(
+						"variantFlowAndPageNamesNeedWorkflowAccess",
+						"Your role cannot read this project's flows and pages, so each variant shows its target as missing rather than by name.",
+					)}
+					missing={[RolePermissions.ReadBoards]}
+				/>
+			)}
 			{isInbound && setupsSupported && (
 				<InboundSetupCard
 					variants={variants}
@@ -585,7 +645,8 @@ export function EventCanary({
 					loading={setups.isLoading}
 					error={setups.isError ? (setups.error?.message ?? "") : null}
 					setupBusyFor={setupBusyFor}
-					canRunSetup={setupRunSupported && !busy}
+					canRunSetup={setupRunSupported && !busy && canWriteEvents}
+					runSetupDeniedReason={canWriteEvents ? undefined : writeDeniedMessage}
 					onRunSetup={(variantName) => void handleRunSetup(variantName)}
 				/>
 			)}
@@ -600,7 +661,10 @@ export function EventCanary({
 						<Button
 							size="sm"
 							className="gap-2"
-							disabled={busy || liveCount >= MAX_LIVE_VARIANTS}
+							disabled={
+								busy || liveCount >= MAX_LIVE_VARIANTS || !canWriteEvents
+							}
+							title={canWriteEvents ? undefined : writeDeniedMessage}
 							onClick={() => setEditorTarget("new")}
 						>
 							<PlusIcon className="h-4 w-4" />
@@ -675,9 +739,10 @@ export function EventCanary({
 									boardsMap={boardsMap}
 									pagesMap={pagesMap}
 									pageEvent={isPageEvent}
+									targetNamesLocked={!canReadBoards}
 									draftWeight={draftWeights[variant.name]}
-									disabled={busy}
-									sliderEnabled={patchSupported}
+									disabled={busy || !canWriteEvents}
+									sliderEnabled={patchSupported && canWriteEvents}
 									onWeightDraft={(weight) =>
 										setDraftWeights((previous) => ({
 											...previous,
@@ -868,6 +933,7 @@ function VariantRow({
 	boardsMap,
 	pagesMap,
 	pageEvent,
+	targetNamesLocked,
 	draftWeight,
 	disabled,
 	sliderEnabled,
@@ -882,6 +948,8 @@ function VariantRow({
 	boardsMap: Map<string, string>;
 	pagesMap: Map<string, PageListItem>;
 	pageEvent: boolean;
+	/** The flow and page names could not be read, so "missing" would be a lie. */
+	targetNamesLocked: boolean;
 	draftWeight?: number;
 	disabled: boolean;
 	sliderEnabled: boolean;
@@ -898,8 +966,10 @@ function VariantRow({
 	const weight = draftWeight ?? storedWeight;
 	const pinned = normalizeBoardVersion(variant.board_version);
 	const overrideCount = Object.keys(variant.variables ?? {}).length;
+	const hiddenName = t("targetNameHidden", "name hidden");
 	const boardName =
-		boardsMap.get(variant.board_id) ?? t("boardNotFound", "BOARD NOT FOUND!");
+		boardsMap.get(variant.board_id) ??
+		(targetNamesLocked ? hiddenName : t("boardNotFound", "BOARD NOT FOUND!"));
 	// A page-less Live variant on a page event is not a page target: the
 	// bootstrap resolver hands anyone hashed onto it the primary instead.
 	const pageMissing = pageEvent && !variant.default_page_id;
@@ -988,7 +1058,9 @@ function VariantRow({
 					<span className="truncate">
 						{variant.default_page_id
 							? (pagesMap.get(variant.default_page_id)?.name ??
-								t("pageNotFound", "Page not found"))
+								(targetNamesLocked
+									? hiddenName
+									: t("pageNotFound", "Page not found")))
 							: t(
 									"variantNoPageTarget",
 									"No page — viewers hashed onto this variant stay on the primary",
@@ -1096,6 +1168,7 @@ function InboundSetupCard({
 	error,
 	setupBusyFor,
 	canRunSetup,
+	runSetupDeniedReason,
 	onRunSetup,
 }: Readonly<{
 	variants: IEventVariant[];
@@ -1104,6 +1177,7 @@ function InboundSetupCard({
 	error: string | null;
 	setupBusyFor: string | null;
 	canRunSetup: boolean;
+	runSetupDeniedReason?: string;
 	onRunSetup: (variant: string | null) => void;
 }>) {
 	const { t } = useTranslation("settings");
@@ -1193,6 +1267,7 @@ function InboundSetupCard({
 											size="sm"
 											className="h-7 gap-1.5 px-2 text-xs"
 											disabled={!canRunSetup || setupBusyFor !== null}
+											title={canRunSetup ? undefined : runSetupDeniedReason}
 											onClick={() =>
 												onRunSetup(name === STABLE_SETUP_NAME ? null : name)
 											}

@@ -20,13 +20,13 @@ synced with the app.
 3. Enable **Runtime Configured**.
 4. Enable **Secret** as well when the value should be masked and excluded from
    remote execution.
-5. Open the app and select **Runtime Variables**.
+5. Open the app and select **Setup**.
 6. Expand the Flow, enter the value, and select **Save**.
 
-Variables marked **Secret** also appear on the Runtime Variables screen, even
+Variables marked **Secret** also appear on the Setup screen, even
 when **Runtime Configured** is off.
 
-![The Runtime Variables workspace in Flow-Like Desktop, showing a configured local endpoint and a masked secret](../../../assets/RuntimeVariables.webp)
+![The Setup screen in Flow-Like Desktop, showing a configured local endpoint and a masked secret](../../../assets/RuntimeVariables.webp)
 
 :::note[First run]
 When an interactive run needs a value that has not been saved, Flow-Like opens
@@ -105,7 +105,7 @@ Flow's execution mode:
 - Add a description that tells the runner what to provide, without including
   the value itself.
 - Give each environment its own local configuration.
-- Delete a saved value from **Runtime Variables** when a device should no longer
+- Delete a saved value from **Setup** when a device should no longer
   use it.
 - Do not copy or share Flow-Like's local application-data directory as a way to
   distribute credentials.

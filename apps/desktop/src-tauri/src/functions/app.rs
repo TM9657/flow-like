@@ -897,6 +897,42 @@ pub async fn app_remove_package(
 }
 
 #[tauri::command(async)]
+pub async fn app_get_stylesheet(
+    app_handle: AppHandle,
+    app_id: String,
+) -> Result<Option<String>, TauriFunctionError> {
+    let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
+    let app = App::load(app_id, flow_like_state).await?;
+    Ok(app.frontend.and_then(|frontend| frontend.custom_css))
+}
+
+/// Always writes a `FrontendConfiguration`, clearing via `custom_css: None`
+/// rather than `frontend: None`. `preserve_local_manifest_fields` resurrects a
+/// previous `frontend` whenever the incoming app has none, so clearing the whole
+/// struct would bring the old stylesheet back on desktop only.
+#[tauri::command(async)]
+pub async fn app_set_stylesheet(
+    app_handle: AppHandle,
+    app_id: String,
+    css: String,
+) -> Result<(), TauriFunctionError> {
+    let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
+    let mut app = App::load(app_id, flow_like_state).await?;
+    let next = (!css.trim().is_empty()).then_some(css);
+    match app.frontend.as_mut() {
+        Some(frontend) => frontend.custom_css = next,
+        None => {
+            app.frontend = Some(flow_like::app::FrontendConfiguration {
+                landing_page: None,
+                custom_css: next,
+            })
+        }
+    }
+    app.save().await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
 pub async fn app_list_packages(
     app_handle: AppHandle,
     app_id: String,

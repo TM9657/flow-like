@@ -313,6 +313,7 @@ async fn run_job(
             tracing::info!(
                 deleted_runs = result.deleted_runs,
                 deleted_events = result.deleted_events,
+                deleted_tombstones = result.deleted_tombstones,
                 "State cleanup maintenance completed"
             )
         }

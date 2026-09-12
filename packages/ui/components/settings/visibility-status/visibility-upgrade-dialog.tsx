@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslation } from "@flow-like/locales";
-import { ArrowRightIcon, LockIcon } from "lucide-react";
+import { ArrowRightIcon, KeyRoundIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { useInvalidateInvoke } from "../../../hooks";
@@ -33,9 +33,13 @@ export interface VisibilityUpgradeDialogProps {
 }
 
 /**
- * Confirm dialog behind a locked configuration section: instead of hiding the
- * section for apps that are not shared yet, the nav keeps it visible and this
- * dialog offers the one visibility change that unlocks it.
+ * Confirm dialog behind a visibility-locked configuration section: instead of
+ * hiding the section for apps that are not shared yet, the nav keeps it visible
+ * and this dialog offers the one visibility change that unlocks it.
+ *
+ * The key glyph is load-bearing. A section locked by the caller's role shows a
+ * padlock and offers nothing to click; this one is a door the reader holds the
+ * key to, so it carries the primary accent and a verb in the confirm button.
  */
 export function VisibilityUpgradeDialog({
 	appId,
@@ -102,7 +106,7 @@ export function VisibilityUpgradeDialog({
 				<AlertDialogHeader>
 					<div className="flex items-center gap-3">
 						<div className="p-2 rounded-full bg-primary/10">
-							<LockIcon className="h-5 w-5 text-primary" />
+							<KeyRoundIcon className="h-5 w-5 text-primary" />
 						</div>
 						<AlertDialogTitle className="text-left">
 							{t("featureNeedsTitle", "{{feature}} needs {{title}}", {
@@ -125,10 +129,13 @@ export function VisibilityUpgradeDialog({
 						<span className="text-sm font-medium">{targetMeta.title}</span>
 					</div>
 					<p className="text-xs text-muted-foreground">
-						{`${targetMeta.description}. You can switch back to ${currentMeta.title}`}{" "}
 						{t(
-							"atAnyTimeThatRemovesEveryoneYouInvited",
-							"at any time — that removes everyone you invited.",
+							"descriptionYouCanSwitchBackToTitleAtAnyTimeThatRemovesEveryoneYouInvited",
+							"{{description}}. You can switch back to {{title}} at any time — that removes everyone you invited.",
+							{
+								description: targetMeta.description,
+								title: currentMeta.title,
+							},
 						)}
 					</p>
 				</div>
@@ -148,7 +155,7 @@ export function VisibilityUpgradeDialog({
 						onClick={confirm}
 					>
 						{pending
-							? "Switching…"
+							? t("switching", "Switching…")
 							: t("switchToTitle", "Switch to {{title}}", {
 									title: targetMeta.title,
 								})}
