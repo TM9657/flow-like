@@ -215,3 +215,37 @@ describe("selectProfileLlmModels", () => {
 		).toEqual([]);
 	});
 });
+
+describe("non-generation models on a host without local runtimes", () => {
+	const browser = { canHostLlamaCPP: false, canHostMLX: false };
+
+	function model(type: IBitTypes, remote?: boolean): IBit {
+		return {
+			id: `${type}-${remote ? "remote" : "local"}`,
+			hub: "hub",
+			type,
+			parameters: {
+				provider: { provider_name: "Local" },
+				...(remote ? { remote: { implementation: "Internal" } } : {}),
+			},
+		} as unknown as IBit;
+	}
+
+	test("an embedding the hub can serve stays available", () => {
+		expect(isHostableLlmModel(model(IBitTypes.Embedding, true), browser)).toBe(
+			true,
+		);
+		expect(
+			isHostableLlmModel(model(IBitTypes.ImageEmbedding, true), browser),
+		).toBe(true);
+	});
+
+	test("an embedding with no remote implementation does not", () => {
+		expect(isHostableLlmModel(model(IBitTypes.Embedding), browser)).toBe(false);
+	});
+
+	test("a local text model is still gated on its runtime", () => {
+		expect(isHostableLlmModel(model(IBitTypes.Llm, true), browser)).toBe(false);
+		expect(isHostableLlmModel(model(IBitTypes.Vlm, true), browser)).toBe(false);
+	});
+});

@@ -55,6 +55,7 @@ pub async fn push_meta(
         updated_meta.website = Set(meta.website.or(existing_meta.website.clone()));
         updated_meta.updated_at = Set(chrono::Utc::now().fixed_offset());
         updated_meta.update(&state.db).await?;
+        invalidate_bit_reads(&state, &bit_id, &language);
 
         return Ok(Json(()));
     }
@@ -62,7 +63,7 @@ pub async fn push_meta(
     let new_meta = meta::ActiveModel {
         id: Set(create_id()),
         bit_id: Set(Some(bit_id.clone())),
-        lang: Set(language),
+        lang: Set(language.clone()),
         description: Set(Some(meta.description)),
         name: Set(meta.name),
         long_description: Set(meta.long_description),
@@ -91,6 +92,16 @@ pub async fn push_meta(
     };
 
     new_meta.insert(&state.db).await?;
+    invalidate_bit_reads(&state, &bit_id, &language);
 
     Ok(Json(()))
+}
+
+/// Drop the reader caches that embed a copy of this bit's metadata.
+///
+/// Without this an edit lands in the database and stays invisible until the
+/// entries expire, so the admin UI keeps showing what was there before.
+fn invalidate_bit_reads(state: &AppState, bit_id: &str, language: &str) {
+    state.invalidate_cache(&format!("get_bit:{bit_id}:{language}"));
+    state.invalidate_cache(&format!("get_with_dependencies:{bit_id}"));
 }

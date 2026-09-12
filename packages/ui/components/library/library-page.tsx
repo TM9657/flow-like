@@ -21,6 +21,10 @@ import { useInvoke } from "../../hooks/use-invoke";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { useSearch } from "../../hooks/use-search-index";
 import { useAppCategoryLabel } from "../../lib/app-category";
+import {
+	listableModels,
+	searchAllBitsOfType,
+} from "../../lib/bit/model-listing";
 import { IBitTypes } from "../../lib/schema/hub/bit-search-query";
 import type { IProfileApp } from "../../lib/schema/profile/profile";
 import { nowSystemTime } from "../../lib/time/now";
@@ -81,10 +85,8 @@ export function LibraryPage({
 		backend.appState,
 		[],
 	);
-	const bits = useInvoke(backend.bitState.searchBits, backend.bitState, [
-		{
-			bit_types: [IBitTypes.Embedding, IBitTypes.ImageEmbedding],
-		},
+	const bits = useInvoke(searchAllBitsOfType, backend.bitState, [
+		[IBitTypes.Embedding, IBitTypes.ImageEmbedding],
 	]);
 	const router = useRouter();
 	const [searchQuery, setSearchQuery] = useState("");
@@ -342,7 +344,11 @@ export function LibraryPage({
 			};
 
 			const profileBits = new Set(currentProfile.data.hub_profile.bits ?? []);
-			const allBits = embeddingBits.filter((bit) => profileBits.has(bit.id));
+			// A retired model stays resolvable for the boards that already use it,
+			// but a project created today must not start out depending on one.
+			const allBits = listableModels(embeddingBits).filter((bit) =>
+				profileBits.has(bit.id),
+			);
 
 			const app = await backend.appState.createApp(
 				meta,

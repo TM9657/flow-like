@@ -446,11 +446,22 @@ async fn download_and_hash(
         .map(|v| v.to_str().unwrap_or("").contains("bytes"))
         .unwrap_or(false);
 
+    // The validator becomes the object key, so anything that is not a single path
+    // segment has to be rejected. A weak validator arrives as `W/"<value>"`, and a
+    // base64 validator can carry a `/` of its own; either one silently turns the key
+    // into a nested path and the mirrored artifact answers 404 on download.
     let e_tag = response
         .headers()
         .get(ETAG)
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim().trim_matches('"').to_string())
+        .map(|s| {
+            s.trim()
+                .strip_prefix("W/")
+                .unwrap_or(s.trim())
+                .trim_matches('"')
+                .to_string()
+        })
+        .filter(|tag| !tag.is_empty() && !tag.contains('/'))
         .unwrap_or_else(create_id);
 
     if let Some(tx) = &tx {

@@ -6,6 +6,8 @@
 	},
 	"bundle": {
 		"externalBin": [
+			"binaries/mac/arm/libllama-server-impl.dylib",
+			"binaries/mac/arm/libllama-common.dylib",
 			"binaries/mac/arm/libggml-base.dylib",
 			"binaries/mac/arm/libggml-blas.dylib",
 			"binaries/mac/arm/libggml-cpu.dylib",
