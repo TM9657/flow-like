@@ -12,6 +12,8 @@ import {
 	Workflow,
 } from "lucide-react";
 import { useState } from "react";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import type { IMetadata } from "../../../types";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -35,6 +37,7 @@ import {
 	SelectValue,
 } from "../../ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
+import { PermissionNotice } from "../permission/permission-notice";
 
 export type RouteTargetType = "page" | "event";
 
@@ -110,6 +113,14 @@ export function RoutesSection({
 }: RoutesSectionProps) {
 	const { t } = useTranslation("settings");
 	const [isCreateOpen, setIsCreateOpen] = useState(false);
+	// A route lives on the event row, so creating or deleting one is an event
+	// write server-side.
+	const permissions = useAppPermissions(appId);
+	const canEdit = permissions.can(RolePermissions.WriteEvents);
+	const editDeniedMessage = t(
+		"yourRoleCannotChangeThisProjectsRoutes",
+		"Your role cannot change this project's routes.",
+	);
 
 	return (
 		<div className="space-y-4">
@@ -125,11 +136,25 @@ export function RoutesSection({
 						)}
 					</p>
 				</div>
-				<Button onClick={() => setIsCreateOpen(true)} size="sm">
+				<Button
+					onClick={() => setIsCreateOpen(true)}
+					size="sm"
+					disabled={!canEdit}
+					title={canEdit ? undefined : editDeniedMessage}
+				>
 					<Plus className="h-4 w-4 mr-2" />
 					{t("addRoute", "Add Route")}
 				</Button>
 			</div>
+
+			{!canEdit && (
+				<PermissionNotice
+					tone="readOnly"
+					title={t("routesAreReadonly", "Routes are read-only for you")}
+					description={editDeniedMessage}
+					missing={[RolePermissions.WriteEvents]}
+				/>
+			)}
 
 			{routes.length > 0 ? (
 				<div className="space-y-3">
@@ -139,6 +164,8 @@ export function RoutesSection({
 							route={route}
 							pages={pages}
 							events={events}
+							canDelete={canEdit}
+							deleteDeniedReason={editDeniedMessage}
 							onDelete={onDelete}
 							onOpenPage={onOpenPage}
 							onOpenBoard={onOpenBoard}
@@ -153,10 +180,14 @@ export function RoutesSection({
 						"routesMapUrlPathsToPagesOrEventsCreateYourFirstRouteToDefineHowUsersNavigateYourApp",
 						"Routes map URL paths to pages or events. Create your first route to define how users navigate your app.",
 					)}
-					action={{
-						label: "Create Route",
-						onClick: () => setIsCreateOpen(true),
-					}}
+					action={
+						canEdit
+							? {
+									label: "Create Route",
+									onClick: () => setIsCreateOpen(true),
+								}
+							: undefined
+					}
 					className="w-full"
 				/>
 			)}
@@ -177,6 +208,9 @@ export interface RouteCardProps {
 	route: IAppRoute;
 	pages: PageData[];
 	events: EventData[];
+	/** Defaults to true so embedding callers keep the previous behaviour. */
+	canDelete?: boolean;
+	deleteDeniedReason?: string;
 	onDelete: (routeId: string) => Promise<void>;
 	onOpenPage: (pageId: string, boardId?: string) => void;
 	onOpenBoard: (boardId: string) => void;
@@ -186,6 +220,8 @@ export function RouteCard({
 	route,
 	pages,
 	events,
+	canDelete = true,
+	deleteDeniedReason,
 	onDelete,
 	onOpenPage,
 	onOpenBoard,
@@ -311,17 +347,27 @@ export function RouteCard({
 						)}
 						<Tooltip>
 							<TooltipTrigger asChild>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
-									onClick={() => onDelete(route.id)}
-								>
-									<Trash2 className="h-4 w-4" />
-								</Button>
+								{/* span keeps the tooltip alive on the disabled button */}
+								<span className="inline-flex">
+									<Button
+										variant="ghost"
+										size="icon"
+										className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+										disabled={!canDelete}
+										onClick={() => onDelete(route.id)}
+									>
+										<Trash2 className="h-4 w-4" />
+									</Button>
+								</span>
 							</TooltipTrigger>
 							<TooltipContent>
-								{t("deleteRoute", "Delete Route")}
+								{canDelete
+									? t("deleteRoute", "Delete Route")
+									: (deleteDeniedReason ??
+										t(
+											"yourRoleCannotChangeThisProjectsRoutes",
+											"Your role cannot change this project's routes.",
+										))}
 							</TooltipContent>
 						</Tooltip>
 					</div>

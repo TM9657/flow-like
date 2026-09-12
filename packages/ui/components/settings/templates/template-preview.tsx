@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useInvoke } from "../../../hooks";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { formatRelativeTime, useSetQueryParams } from "../../../lib";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import { useBackend } from "../../../state/backend-state";
 import { FlowPreview } from "../../flow";
 import {
@@ -50,6 +52,8 @@ import {
 } from "../../ui/select";
 import { Separator } from "../../ui/separator";
 import { Textarea } from "../../ui/textarea";
+import { SectionLockedPanel } from "../permission/permission-gate";
+import { PermissionNotice } from "../permission/permission-notice";
 
 const QualityMetric = ({
 	label,
@@ -219,27 +223,40 @@ export function TemplatePreview({
 	const [editState, setEditState] = useState<EditState | null>(null);
 	const setQueryParams = useSetQueryParams();
 
+	const permissions = useAppPermissions(appId);
+	const canReadTemplates = permissions.can(RolePermissions.ReadTemplates);
+	const canReadBoards = permissions.can(RolePermissions.ReadBoards);
+	// Template details are written through `PUT /meta?template_id=`, whose
+	// `ensure_write_permission` asks for WriteTemplates alone. Only importing a
+	// new source version runs `upsert_template`, which additionally hard-checks
+	// ReadBoards — so ReadBoards must not gate ordinary editing.
+	const canEditMeta =
+		canEdit && permissions.can(RolePermissions.WriteTemplates);
+	const canChangeSource = canEditMeta && canReadBoards;
+
 	const template = useInvoke(
 		backend.templateState.getTemplate,
 		backend.templateState,
 		[appId, templateId],
+		canReadTemplates,
 	);
 	const metadata = useInvoke(
 		backend.templateState.getTemplateMeta,
 		backend.templateState,
 		[appId, templateId],
+		canReadTemplates,
 	);
 	const boards = useInvoke(
 		backend.boardState.getBoardSummaries,
 		backend.boardState,
 		[appId],
-		isEditing,
+		isEditing && canReadBoards,
 	);
 	const versions = useInvoke(
 		backend.boardState.getBoardVersions,
 		backend.boardState,
 		[appId, editState?.selectedWorkflow ?? ""],
-		isEditing && !!editState?.selectedWorkflow,
+		isEditing && !!editState?.selectedWorkflow && canReadBoards,
 	);
 
 	const currentData = useMemo(
@@ -278,7 +295,7 @@ export function TemplatePreview({
 	}, [isEditing, metadata.data]);
 
 	const handleSave = useCallback(async () => {
-		if (!editState || !metadata.data) return;
+		if (!editState || !metadata.data || !canEditMeta) return;
 
 		await backend.templateState.pushTemplateMeta(appId, templateId, {
 			...metadata.data,
@@ -294,7 +311,7 @@ export function TemplatePreview({
 			release_notes: editState.release_notes,
 		});
 
-		if (editState.selectedWorkflow) {
+		if (canChangeSource && editState.selectedWorkflow) {
 			await backend.templateState.upsertTemplate(
 				appId,
 				editState.selectedWorkflow,
@@ -307,11 +324,34 @@ export function TemplatePreview({
 		await template.refetch();
 		setIsEditing(false);
 		setEditState(null);
-	}, [editState, metadata.data, appId, templateId, backend.templateState]);
+	}, [
+		canChangeSource,
+		canEditMeta,
+		editState,
+		metadata.data,
+		appId,
+		templateId,
+		backend.templateState,
+	]);
 
 	const updateEditState = useCallback((updates: Partial<EditState>) => {
 		setEditState((prev) => (prev ? { ...prev, ...updates } : null));
 	}, []);
+
+	// Ahead of the loading check: with the reads disabled they never resolve, so
+	// a denied role would otherwise sit on the loading screen forever.
+	if (!canReadTemplates)
+		return (
+			<SectionLockedPanel
+				feature={t("template", "Template")}
+				description={t(
+					"yourRoleCannotOpenThisProjectaposTemplates",
+					"Your role cannot open this project's templates.",
+				)}
+				missing={[RolePermissions.ReadTemplates]}
+				roleName={permissions.roleName}
+			/>
+		);
 
 	if (!template.data || !metadata.data) return <LoadingScreen />;
 
@@ -429,7 +469,7 @@ export function TemplatePreview({
 							</div>
 						</div>
 
-						{canEdit && (
+						{canEditMeta ? (
 							<div className="flex gap-2">
 								<Button
 									variant={isEditing ? "default" : "outline"}
@@ -450,6 +490,17 @@ export function TemplatePreview({
 									</Button>
 								)}
 							</div>
+						) : (
+							<PermissionNotice
+								tone="readOnly"
+								title={t("readOnly", "Read-only")}
+								description={t(
+									"yourRoleCannotChangeThisTemplateaposDetails",
+									"Your role cannot change this template's details.",
+								)}
+								missing={[RolePermissions.WriteTemplates]}
+								className="max-w-xs"
+							/>
 						)}
 					</div>
 
@@ -489,7 +540,19 @@ export function TemplatePreview({
 						</div>
 					)}
 
-					{isEditing && (
+					{isEditing && !canChangeSource && (
+						<PermissionNotice
+							tone="readOnly"
+							title={t("templateSourceIsLocked", "Template source is locked")}
+							description={t(
+								"importingANewFlowVersionIntoThisTemplateAlsoNeedsReadBoardsTheDetailsAboveStayEditable",
+								"Importing a new flow version into this template also needs Read Boards. The details above stay editable.",
+							)}
+							missing={[RolePermissions.ReadBoards]}
+						/>
+					)}
+
+					{isEditing && canChangeSource && (
 						<Card>
 							<CardHeader>
 								<CardTitle>

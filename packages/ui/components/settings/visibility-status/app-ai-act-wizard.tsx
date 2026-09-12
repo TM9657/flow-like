@@ -14,7 +14,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useInvoke } from "../../../hooks/use-invoke";
+import { apiErrorMessage } from "../../../lib/api-error";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import { useBackend } from "../../../state/backend-state";
 import {
 	ConformityRecommendations,
@@ -39,6 +42,7 @@ import {
 	Skeleton,
 	Textarea,
 } from "../../ui";
+import { PermissionNotice } from "../permission/permission-notice";
 
 // ---------------------------------------------------------------------------
 // Types mirroring the backend EU AI Act schema (camelCase JSON).
@@ -166,6 +170,12 @@ const RISK_META: Record<
 	},
 };
 
+/** The server answered "not yours to read" rather than failing. */
+function isPermissionDenied(error: unknown): boolean {
+	const status = (error as { status?: number } | null | undefined)?.status;
+	return status === 401 || status === 403;
+}
+
 function bandColor(band: Classification["conformityBand"]): string {
 	switch (band) {
 		case "green":
@@ -198,6 +208,9 @@ export function AppAiActWizard({
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const queryClient = useQueryClient();
+	const permissions = useAppPermissions(appId);
+	/** Every `apps/{id}/ai-act/*` route is `ensure_permission!(.., Owner)`. */
+	const canAssess = permissions.can(RolePermissions.Owner);
 	const profile = useInvoke(
 		backend.userState.getSettingsProfile,
 		backend.userState,
@@ -223,7 +236,7 @@ export function AppAiActWizard({
 				`apps/${appId}/ai-act/questionnaire`,
 			);
 		},
-		enabled: !!profile.data && !!appId,
+		enabled: !!profile.data && !!appId && canAssess,
 	});
 
 	// Seed local state once the questionnaire loads.
@@ -238,7 +251,7 @@ export function AppAiActWizard({
 
 	// Debounced live classification preview (authoritative, server-side).
 	useEffect(() => {
-		if (!profile.data || !initialised.current) return;
+		if (!profile.data || !initialised.current || !canAssess) return;
 		const hubProfile = profile.data.hub_profile;
 		const handle = setTimeout(async () => {
 			try {
@@ -256,7 +269,7 @@ export function AppAiActWizard({
 			}
 		}, 400);
 		return () => clearTimeout(handle);
-	}, [answers, appId, backend.apiState, profile.data]);
+	}, [answers, appId, backend.apiState, profile.data, canAssess]);
 
 	const suggestMutation = useMutation({
 		mutationFn: async () => {
@@ -400,6 +413,32 @@ export function AppAiActWizard({
 		return missing;
 	}, [visibleScreens, answers]);
 
+	if (permissions.isLoading) {
+		return (
+			<div className={className}>
+				<Skeleton className="h-8 w-64 mb-4" />
+				<Skeleton className="h-48 w-full" />
+			</div>
+		);
+	}
+
+	if (!canAssess || isPermissionDenied(questionnaire.error)) {
+		return (
+			<PermissionNotice
+				className={className}
+				title={t(
+					"theAiActAssessmentIsOwnerOnly",
+					"The AI Act assessment is owner-only",
+				)}
+				description={t(
+					"onlyAnOwnerOfThisProjectCanAnswerTheConformityQuestionnaireOrSubmitItForReview",
+					"Only an owner of this project can answer the conformity questionnaire or submit it for review.",
+				)}
+				missing={[RolePermissions.Owner]}
+			/>
+		);
+	}
+
 	if (questionnaire.isLoading) {
 		return (
 			<div className={className}>
@@ -421,7 +460,14 @@ export function AppAiActWizard({
 					)}
 				</AlertTitle>
 				<AlertDescription>
-					{questionnaire.error?.message ?? "Unknown error"}
+					{apiErrorMessage(
+						questionnaire.error,
+						questionnaire.error?.message ??
+							t(
+								"theServerDidNotSayWhyTryAgainInAMoment",
+								"The server did not say why. Try again in a moment.",
+							),
+					)}
 				</AlertDescription>
 			</Alert>
 		);

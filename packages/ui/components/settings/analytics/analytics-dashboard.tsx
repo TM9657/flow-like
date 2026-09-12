@@ -31,11 +31,13 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import type { IEvent } from "../../../lib";
 import {
 	formatComputeLeg,
 	formatDurationShare,
 } from "../../../lib/compute-cost";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import { cn } from "../../../lib/utils";
 import { useBackend } from "../../../state/backend-state";
 import type {
@@ -69,6 +71,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "../../ui/table";
+import { SectionLockedPanel } from "../permission/permission-gate";
 
 const MICRO_DOLLARS_PER_DOLLAR = 1_000_000;
 
@@ -983,6 +986,10 @@ export function AnalyticsDashboard() {
 	const appId = searchParams.get("id");
 	const eventIdParam = searchParams.get("eventId")?.trim() || "all";
 
+	const permissions = useAppPermissions(appId);
+	const canReadAnalytics = permissions.can(RolePermissions.ReadAnalytics);
+	const canListEvents = permissions.can(RolePermissions.ListEvents);
+
 	const [loading, setLoading] = useState(true);
 	const [overview, setOverview] = useState<IAnalyticsOverview | null>(null);
 	const [dailyStats, setDailyStats] = useState<IDailyAnalyticsStat[]>([]);
@@ -1001,6 +1008,14 @@ export function AnalyticsDashboard() {
 
 	const loadData = useCallback(async () => {
 		if (!appId || !analyticsState) return;
+		// Wait for the role answer rather than spending a 403 on the first paint.
+		if (permissions.isLoading) return;
+		// Every read below is ReadAnalytics. Firing them without the bit turns a
+		// 403 into a dashboard of zeros, which reads as "nobody uses this app".
+		if (!canReadAnalytics) {
+			setLoading(false);
+			return;
+		}
 
 		setLoading(true);
 		try {
@@ -1033,7 +1048,9 @@ export function AnalyticsDashboard() {
 					maxRating,
 					eventFilter,
 				),
-				eventState.getEvents(appId).catch(() => []),
+				canListEvents
+					? eventState.getEvents(appId).catch(() => [])
+					: Promise.resolve<IEvent[]>([]),
 			]);
 
 			setOverview(dashboardData.stats.summary ?? dashboardData.overview);
@@ -1056,6 +1073,9 @@ export function AnalyticsDashboard() {
 		}
 	}, [
 		appId,
+		canListEvents,
+		canReadAnalytics,
+		permissions.isLoading,
 		dateRange,
 		feedbackFilter,
 		feedbackPage,
@@ -1181,7 +1201,23 @@ export function AnalyticsDashboard() {
 		);
 	}
 
-	if (loading) {
+	// Ahead of the loading branch: `loadData` never runs without the bit, so a
+	// denied role would otherwise sit on the skeleton forever.
+	if (!canReadAnalytics) {
+		return (
+			<SectionLockedPanel
+				feature={t("analytics", "Analytics")}
+				description={t(
+					"yourRoleCannotReadThisProjectaposUsageCostAndFeedbackNumbers",
+					"Your role cannot read this project's usage, cost and feedback numbers.",
+				)}
+				missing={[RolePermissions.ReadAnalytics]}
+				roleName={permissions.roleName}
+			/>
+		);
+	}
+
+	if (loading || permissions.isLoading) {
 		return (
 			<div className="space-y-5 p-6">
 				<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
@@ -1254,6 +1290,14 @@ export function AnalyticsDashboard() {
 										"Untitled event"}
 								</SelectItem>
 							))}
+							{!canListEvents && (
+								<p className="px-2 py-1.5 text-xs text-muted-foreground">
+									{t(
+										"yourRoleCannotListThisProjectaposEventsSoTheyCannotBeFilteredHere",
+										"Your role cannot list this project's events, so they cannot be filtered here.",
+									)}
+								</p>
+							)}
 						</SelectContent>
 					</Select>
 					{selectedEventId !== "all" && (

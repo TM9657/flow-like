@@ -69,17 +69,22 @@ import {
 	deriveConnectionCapabilities,
 } from "../connections/capabilities";
 import { ProcessGraph } from "../connections/process-graph";
+import { PermissionNotice, SectionLockedPanel } from "../permission";
 import {
+	type ITeamAccess,
 	SectionHeading,
 	StatusChip,
 	TEAM_ACTION_GRADIENT,
 	TEAM_ROW_DESCRIPTION,
 	TEAM_ROW_META,
 	TEAM_ROW_TITLE,
+	TeamActionLock,
+	TeamReadError,
 	TeamRowActions,
 	TeamRowNote,
 	TeamSection,
 	teamRowClass,
+	useTeamAccess,
 } from "./team-shared";
 
 interface AppConnectionManagementProps {
@@ -92,29 +97,39 @@ export function AppConnectionManagement({
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	const access = useTeamAccess(appId);
 	const [view, setView] = useState<"list" | "graph">("list");
 	const [days, setDays] = useState(30);
 	const connections = useInvoke(
 		backend.teamState.getAppConnections,
 		backend.teamState,
 		[appId],
+		access.canReadTeam && !access.isLoading,
 	);
-	const roles = useInvoke(backend.roleState.getRoles, backend.roleState, [
-		appId,
-	]);
+	const roles = useInvoke(
+		backend.roleState.getRoles,
+		backend.roleState,
+		[appId],
+		access.canReadRoles && !access.isLoading,
+	);
+	// The process graph and its cases are owner-only reads, so the toggle that
+	// fires them stays shut for everyone else instead of 403-ing on click.
+	const canSeeProcessGraph = access.canOwn;
 	const graph = useInvoke(
 		backend.teamState.getConnectionGraph,
 		backend.teamState,
 		[appId, days],
-		view === "graph",
+		view === "graph" && canSeeProcessGraph,
 	);
 
 	const cases = useInvoke(
 		backend.teamState.getProcessCases,
 		backend.teamState,
 		[appId, days],
-		view === "graph",
+		view === "graph" && canSeeProcessGraph,
 	);
+	const rolesDenied = !access.canReadRoles;
+	const rolesUnknown = rolesDenied || roles.isError;
 
 	const availableRoles = useMemo(
 		() =>
@@ -330,6 +345,20 @@ export function AppConnectionManagement({
 		[appId, backend, refresh],
 	);
 
+	if (!access.canReadTeam && !access.isLoading) {
+		return (
+			<SectionLockedPanel
+				feature={t("connectedApps", "Connected apps")}
+				description={t(
+					"yourRoleCannotSeeWhichAppsAreConnectedToThisOne",
+					"Your role cannot see which apps are connected to this one.",
+				)}
+				missing={[RolePermissions.ReadTeam]}
+				roleName={access.roleName}
+			/>
+		);
+	}
+
 	return (
 		<div className="space-y-8">
 			<div className="inline-flex items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1">
@@ -341,14 +370,23 @@ export function AppConnectionManagement({
 					<ListIcon className="size-4" />
 					{t("list", "List")}
 				</Button>
-				<Button
-					variant={view === "graph" ? "secondary" : "ghost"}
-					size="sm"
-					onClick={() => setView("graph")}
+				<TeamActionLock
+					locked={!canSeeProcessGraph}
+					reason={t(
+						"onlyTheProjectOwnerCanOpenTheProcessGraph",
+						"Only the project owner can open the process graph.",
+					)}
 				>
-					<WaypointsIcon className="size-4" />
-					{t("processGraph", "Process graph")}
-				</Button>
+					<Button
+						variant={view === "graph" ? "secondary" : "ghost"}
+						size="sm"
+						disabled={!canSeeProcessGraph}
+						onClick={() => setView("graph")}
+					>
+						<WaypointsIcon className="size-4" />
+						{t("processGraph", "Process graph")}
+					</Button>
+				</TeamActionLock>
 			</div>
 
 			{view === "graph" && (
@@ -362,9 +400,9 @@ export function AppConnectionManagement({
 					days={days}
 					onDaysChange={setDays}
 					onRefresh={handleRefreshGraph}
-					onCreateNote={handleCreateNote}
-					onUpdateNote={handleUpdateNote}
-					onDeleteNote={handleDeleteNote}
+					onCreateNote={access.canAdminister ? handleCreateNote : undefined}
+					onUpdateNote={access.canAdminister ? handleUpdateNote : undefined}
+					onDeleteNote={access.canAdminister ? handleDeleteNote : undefined}
 				/>
 			)}
 
@@ -384,18 +422,48 @@ export function AppConnectionManagement({
 								"They can work with this app's tables, files and events under the role you grant.",
 							)}
 							actions={
-								<Button
-									size="sm"
-									onClick={() => setShowGrantDialog(true)}
-									className={TEAM_ACTION_GRADIENT}
+								<TeamActionLock
+									locked={!access.canAdminister}
+									reason={access.adminReason}
 								>
-									<PlusIcon className="size-4" />
-									{t("grantAccess", "Grant access")}
-								</Button>
+									<Button
+										size="sm"
+										disabled={!access.canAdminister}
+										onClick={() => setShowGrantDialog(true)}
+										className={TEAM_ACTION_GRADIENT}
+									>
+										<PlusIcon className="size-4" />
+										{t("grantAccess", "Grant access")}
+									</Button>
+								</TeamActionLock>
 							}
 						/>
 
-						{incoming.length === 0 ? (
+						{rolesUnknown &&
+							!access.isLoading &&
+							(rolesDenied ? (
+								<PermissionNotice
+									tone="readOnly"
+									title={t("roleNamesUnavailable", "Role names unavailable")}
+									description={t(
+										"connectionsAreListedButTheRoleEachConnectedAppActsWithCannotBeRead",
+										"Connections are listed, but the role each connected app acts with cannot be read.",
+									)}
+									missing={[RolePermissions.ReadRoles]}
+								/>
+							) : (
+								<TeamReadError
+									title={t("roleNamesUnavailable", "Role names unavailable")}
+									error={roles.error}
+								/>
+							))}
+
+						{connections.isError ? (
+							<TeamReadError
+								title={t("connectionsUnavailable", "Connections unavailable")}
+								error={connections.error}
+							/>
+						) : incoming.length === 0 ? (
 							<EmptyState
 								className="max-w-full"
 								icons={[BlocksIcon]}
@@ -408,6 +476,7 @@ export function AppConnectionManagement({
 									<PendingRequestCard
 										key={connection.id}
 										connection={connection}
+										access={access}
 										onApprove={() => setApproveTarget(connection)}
 										onReject={() => handleReject(connection)}
 									/>
@@ -416,6 +485,7 @@ export function AppConnectionManagement({
 									<ConnectionRow
 										key={connection.id}
 										connection={connection}
+										access={access}
 										otherAppId={connection.source_app_id}
 										onChangeRole={() => setChangeRoleTarget(connection)}
 										onRemove={() => handleRemove(connection)}
@@ -437,18 +507,29 @@ export function AppConnectionManagement({
 								"Access this app has asked for elsewhere.",
 							)}
 							actions={
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => setShowRequestDialog(true)}
+								<TeamActionLock
+									locked={!access.canAdminister}
+									reason={access.adminReason}
 								>
-									<SendIcon className="size-4" />
-									{t("requestAccess", "Request access")}
-								</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={!access.canAdminister}
+										onClick={() => setShowRequestDialog(true)}
+									>
+										<SendIcon className="size-4" />
+										{t("requestAccess", "Request access")}
+									</Button>
+								</TeamActionLock>
 							}
 						/>
 
-						{outgoing.length === 0 ? (
+						{connections.isError ? (
+							<TeamReadError
+								title={t("connectionsUnavailable", "Connections unavailable")}
+								error={connections.error}
+							/>
+						) : outgoing.length === 0 ? (
 							<EmptyState
 								className="max-w-full"
 								icons={[SendIcon]}
@@ -461,6 +542,7 @@ export function AppConnectionManagement({
 									<ConnectionRow
 										key={connection.id}
 										connection={connection}
+										access={access}
 										otherAppId={connection.target_app_id}
 										onRemove={() => handleRemove(connection)}
 										removeLabel={
@@ -522,7 +604,11 @@ export function AppConnectionManagement({
 
 						<div className="space-y-2">
 							<Label htmlFor="grant-role">{t("role", "Role *")}</Label>
-							<Select value={grantRoleId} onValueChange={setGrantRoleId}>
+							<Select
+								value={grantRoleId}
+								onValueChange={setGrantRoleId}
+								disabled={rolesUnknown}
+							>
 								<SelectTrigger>
 									<SelectValue
 										placeholder={t("selectARole", "Select a role")}
@@ -537,10 +623,15 @@ export function AppConnectionManagement({
 								</SelectContent>
 							</Select>
 							<p className="text-xs text-muted-foreground">
-								{t(
-									"theRoleDeterminesWhatTheConnectedAppIsAllowedToDo",
-									"The role determines what the connected app is allowed to do",
-								)}
+								{rolesUnknown
+									? t(
+											"theRolesOfThisProjectCouldNotBeReadSoNoAccessCanBeGranted",
+											"This project's roles could not be read, so no access can be granted.",
+										)
+									: t(
+											"theRoleDeterminesWhatTheConnectedAppIsAllowedToDo",
+											"The role determines what the connected app is allowed to do",
+										)}
 							</p>
 						</div>
 					</div>
@@ -839,12 +930,14 @@ function AppSearchAvatar({
 
 interface PendingRequestCardProps {
 	connection: IAppConnection;
+	access: ITeamAccess;
 	onApprove: () => void;
 	onReject: () => void;
 }
 
 function PendingRequestCard({
 	connection,
+	access,
 	onApprove,
 	onReject,
 }: Readonly<PendingRequestCardProps>) {
@@ -884,17 +977,35 @@ function PendingRequestCard({
 			</div>
 
 			<TeamRowActions always>
-				<Button size="sm" onClick={onApprove}>
-					<CheckIcon className="size-3.5" />
-					{t("approve", "Approve")}
-				</Button>
+				<TeamActionLock
+					locked={!access.canAdminister}
+					reason={access.adminReason}
+				>
+					<Button
+						size="sm"
+						disabled={!access.canAdminister}
+						onClick={onApprove}
+					>
+						<CheckIcon className="size-3.5" />
+						{t("approve", "Approve")}
+					</Button>
+				</TeamActionLock>
 				<AlertDialog>
-					<AlertDialogTrigger asChild>
-						<Button size="sm" variant="outline">
-							<XIcon className="size-3.5" />
-							{t("reject", "Reject")}
-						</Button>
-					</AlertDialogTrigger>
+					<TeamActionLock
+						locked={!access.canAdminister}
+						reason={access.adminReason}
+					>
+						<AlertDialogTrigger asChild>
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={!access.canAdminister}
+							>
+								<XIcon className="size-3.5" />
+								{t("reject", "Reject")}
+							</Button>
+						</AlertDialogTrigger>
+					</TeamActionLock>
 					<AlertDialogContent>
 						<AlertDialogHeader>
 							<AlertDialogTitle>
@@ -924,6 +1035,7 @@ function PendingRequestCard({
 
 interface ConnectionRowProps {
 	connection: IAppConnection;
+	access: ITeamAccess;
 	otherAppId: string;
 	onChangeRole?: () => void;
 	onRemove: () => void;
@@ -933,6 +1045,7 @@ interface ConnectionRowProps {
 
 function ConnectionRow({
 	connection,
+	access,
 	otherAppId,
 	onChangeRole,
 	onRemove,
@@ -989,11 +1102,22 @@ function ConnectionRow({
 
 			<TeamRowActions>
 				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button variant="ghost" size="icon" className="size-8">
-							<MoreVerticalIcon className="size-4" />
-						</Button>
-					</DropdownMenuTrigger>
+					<TeamActionLock
+						locked={!access.canAdminister}
+						reason={access.adminReason}
+					>
+						<DropdownMenuTrigger asChild>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-8"
+								disabled={!access.canAdminister}
+								aria-label={t("connectionOptions", "Connection options")}
+							>
+								<MoreVerticalIcon className="size-4" />
+							</Button>
+						</DropdownMenuTrigger>
+					</TeamActionLock>
 					<DropdownMenuContent align="end">
 						{onChangeRole && (
 							<DropdownMenuItem onClick={onChangeRole}>

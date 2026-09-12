@@ -14,7 +14,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ImperativePanelHandle, Panel } from "react-resizable-panels";
+import { toast } from "sonner";
+import { useAppPermissions } from "../../../../hooks/use-app-permissions";
 import { useInvoke } from "../../../../hooks/use-invoke";
+import { RolePermissions } from "../../../../lib/permission/role-permission";
 import { cn } from "../../../../lib/utils";
 import { useBackend } from "../../../../state/backend-state";
 import type {
@@ -47,6 +50,8 @@ import {
 	extractReferencedTables,
 } from "../../../ui/sql-editor";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../ui/tooltip";
+import { SectionLockedPanel } from "../../permission/permission-gate";
+import { PermissionNotice } from "../../permission/permission-notice";
 import {
 	OntologyActionParameterForm,
 	humanizeIdentifier,
@@ -57,6 +62,8 @@ import { SaveQueryDialog } from "./save-query-dialog";
 import { SavedQuerySidebar } from "./saved-query-sidebar";
 
 const DEFAULT_LIMIT = 1000;
+const READ_DATA = [RolePermissions.ReadFiles, RolePermissions.ReadDatabase];
+const WRITE_DATA = [RolePermissions.WriteFiles, RolePermissions.WriteDatabase];
 
 function jsonValuesEqual(left: unknown, right: unknown): boolean {
 	return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
@@ -144,12 +151,26 @@ export function QueryWorkbench({
 }>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
+	// Running a query reads data; saving, renaming and deleting one writes it.
+	// Nothing in the toolbar distinguished the two, so an analyst who may only
+	// read got a live Save button that answered 403.
+	const permissions = useAppPermissions(appId);
+	const canReadData = permissions.can(...READ_DATA);
+	const canWriteData = permissions.can(...WRITE_DATA);
+	const writeDeniedMessage = t(
+		"savingQueriesNeedsWriteAccessToThisProjectsData",
+		"Saving, duplicating or deleting a query writes to this project's data, which your role cannot do.",
+	);
 	const savedQueriesQuery = useInvoke(
 		backend.queryState.listSavedQueries,
 		backend.queryState,
 		[appId, userScoped],
+		canReadData,
 	);
-	const savedQueries = savedQueriesQuery.data ?? [];
+	const savedQueries = useMemo(
+		() => savedQueriesQuery.data ?? [],
+		[savedQueriesQuery.data],
+	);
 
 	const [sql, setSql] = useState("SELECT 1");
 	const [surface, setSurface] = useState<WorkbenchSurfaceKind>("native");
@@ -227,7 +248,7 @@ export function QueryWorkbench({
 	// via a ref so cache writes don't re-trigger the effect (which would restart
 	// the fetch loop and re-request the still-missing tables — O(n²) calls).
 	useEffect(() => {
-		if (surface !== "native") return;
+		if (surface !== "native" || !canReadData) return;
 		const missing = referencedTables.filter(
 			(table) =>
 				activeNativeTables.includes(table) &&
@@ -259,6 +280,7 @@ export function QueryWorkbench({
 			cancelled = true;
 		};
 	}, [
+		canReadData,
 		referencedTables,
 		surface,
 		activeNativeTables,
@@ -318,7 +340,7 @@ export function QueryWorkbench({
 	]);
 
 	const runQuery = useCallback(async () => {
-		if (!sql.trim()) return;
+		if (!sql.trim() || !canReadData) return;
 		setRunning(true);
 		setRunError(null);
 		setLiveMessage("Running query…");
@@ -372,6 +394,7 @@ export function QueryWorkbench({
 		appId,
 		backend.queryState,
 		backend.graphState,
+		canReadData,
 		limit,
 		overlayId,
 		remoteImportId,
@@ -443,7 +466,7 @@ export function QueryWorkbench({
 			kind: "query" | "view";
 		}) => {
 			// Remote queries are ad-hoc read-through previews; they are not persisted.
-			if (surface === "remote") return;
+			if (surface === "remote" || !canWriteData) return;
 			setSaveBusy(true);
 			setSaveError(null);
 			const payload: CreateSavedQueryPayload = {
@@ -524,6 +547,7 @@ export function QueryWorkbench({
 		[
 			appId,
 			backend.queryState,
+			canWriteData,
 			editing,
 			limit,
 			overlayId,
@@ -537,24 +561,42 @@ export function QueryWorkbench({
 		],
 	);
 
-	const disabledReason = running
-		? "Running…"
-		: !sql.trim()
-			? t("writeAQueryFirst", "Write a query first")
-			: surface === "overlay" && !overlayId
-				? t("selectAnOntology", "Select an ontology")
-				: surface === "remote" && !remoteImportId
-					? t("selectARemoteOntology", "Select a remote ontology")
-					: paramNames.length > 0 && !paramsValid
-						? t("fixParameterValues", "Fix parameter values")
-						: null;
+	const disabledReason = !canReadData
+		? t(
+				"yourRoleCannotRunQueriesOnThisProject",
+				"Your role cannot run queries on this project",
+			)
+		: running
+			? "Running…"
+			: !sql.trim()
+				? t("writeAQueryFirst", "Write a query first")
+				: surface === "overlay" && !overlayId
+					? t("selectAnOntology", "Select an ontology")
+					: surface === "remote" && !remoteImportId
+						? t("selectARemoteOntology", "Select a remote ontology")
+						: paramNames.length > 0 && !paramsValid
+							? t("fixParameterValues", "Fix parameter values")
+							: null;
 	const runDisabled = disabledReason !== null;
 
+	const saveDisabledReason = !canWriteData
+		? writeDeniedMessage
+		: surface === "remote"
+			? t(
+					"remoteQueriesAreReadonlyPreviewsAndCannotBeSaved",
+					"Remote queries are read-only previews and cannot be saved",
+				)
+			: null;
+
 	const openSave = useCallback(() => {
-		if (!sql.trim() || surface === "remote") return;
+		if (!sql.trim() || surface === "remote" || !canWriteData) return;
 		setSaveError(null);
 		setSaveOpen(true);
-	}, [sql, surface]);
+	}, [sql, surface, canWriteData]);
+
+	const denyWrite = useCallback(() => {
+		toast.error(writeDeniedMessage);
+	}, [writeDeniedMessage]);
 
 	const toggleSidebar = useCallback(() => {
 		const panel = sidebarPanelRef.current;
@@ -585,6 +627,22 @@ export function QueryWorkbench({
 		[runDisabled, runQuery, openSave],
 	);
 
+	if (!canReadData && !permissions.isLoading) {
+		return (
+			<div className="flex h-full min-h-0 flex-col overflow-auto p-6">
+				<SectionLockedPanel
+					feature={t("queries", "Queries")}
+					description={t(
+						"runningSqlHereReadsThisProjectsData",
+						"Running SQL here reads this project's tables and ontologies, which your role cannot do.",
+					)}
+					missing={READ_DATA}
+					roleName={permissions.roleName}
+				/>
+			</div>
+		);
+	}
+
 	return (
 		<div
 			className="flex h-full min-h-0 flex-col overflow-hidden"
@@ -613,32 +671,52 @@ export function QueryWorkbench({
 					className="min-w-0"
 				>
 					{!sidebarCollapsed && (
-						<SavedQuerySidebar
-							queries={savedQueries}
-							activeId={editing?.id}
-							loading={savedQueriesQuery.isLoading}
-							onSelect={loadSavedQuery}
-							onNew={startNewQuery}
-							onDelete={deleteSavedQuery}
-							onDuplicate={async (query) => {
-								await backend.queryState.createSavedQuery(
-									appId,
-									{
-										name: `${query.name} copy`,
-										description: query.description,
-										kind: query.kind,
-										surface: query.surface,
-										overlay_id: query.overlay_id,
-										sql: query.sql,
-										param_schema: query.param_schema,
-										viz_config: query.viz_config,
-										default_limit: query.default_limit,
-									},
-									userScoped,
-								);
-								await savedQueriesQuery.refetch();
-							}}
-						/>
+						<div className="flex h-full min-h-0 flex-col">
+							{!canWriteData && (
+								<PermissionNotice
+									tone="readOnly"
+									className="m-2 mb-0"
+									title={t(
+										"savedQueriesAreReadonly",
+										"Saved queries are read-only",
+									)}
+									description={writeDeniedMessage}
+									missing={WRITE_DATA}
+								/>
+							)}
+							<div className="min-h-0 flex-1">
+								<SavedQuerySidebar
+									queries={savedQueries}
+									activeId={editing?.id}
+									loading={savedQueriesQuery.isLoading}
+									onSelect={loadSavedQuery}
+									onNew={startNewQuery}
+									onDelete={canWriteData ? deleteSavedQuery : denyWrite}
+									onDuplicate={
+										canWriteData
+											? async (query) => {
+													await backend.queryState.createSavedQuery(
+														appId,
+														{
+															name: `${query.name} copy`,
+															description: query.description,
+															kind: query.kind,
+															surface: query.surface,
+															overlay_id: query.overlay_id,
+															sql: query.sql,
+															param_schema: query.param_schema,
+															viz_config: query.viz_config,
+															default_limit: query.default_limit,
+														},
+														userScoped,
+													);
+													await savedQueriesQuery.refetch();
+												}
+											: denyWrite
+									}
+								/>
+							</div>
+						</div>
 					)}
 				</Panel>
 
@@ -811,15 +889,8 @@ export function QueryWorkbench({
 									variant="outline"
 									size="sm"
 									className="h-8 gap-1.5"
-									disabled={!sql.trim() || surface === "remote"}
-									title={
-										surface === "remote"
-											? t(
-													"remoteQueriesAreReadonlyPreviewsAndCannotBeSaved",
-													"Remote queries are read-only previews and cannot be saved",
-												)
-											: undefined
-									}
+									disabled={!sql.trim() || saveDisabledReason !== null}
+									title={saveDisabledReason ?? undefined}
 									onClick={openSave}
 								>
 									<Save className="h-4 w-4" /> {t("save", "Save")}

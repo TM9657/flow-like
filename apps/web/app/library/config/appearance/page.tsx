@@ -10,7 +10,7 @@ export default function Page() {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<AppStylesDocument appId={id} className="flex-1" />
+			<AppStylesDocument appId={id} className="flex-1 rounded-xl border" />
 		</div>
 	);
 }

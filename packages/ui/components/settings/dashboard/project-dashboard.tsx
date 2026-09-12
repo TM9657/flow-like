@@ -29,12 +29,18 @@ import { useProjectRuns } from "./use-project-runs";
 import {
 	type InspectorPanel,
 	useAiActStatus,
+	useDashboardPermissions,
 	useListingChecklist,
 	useProjectSignals,
 } from "./use-project-signals";
 
 export interface ProjectDashboardProps {
 	appId: string;
+	/**
+	 * Deployment-level veto on editing. It can only take rights away — what the
+	 * account may actually do is resolved from its role, so a host that leaves
+	 * this at `true` still cannot hand a member controls the server refuses.
+	 */
 	canEdit?: boolean;
 	/**
 	 * Fired once the app has left the user's library — deleted outright, or
@@ -132,7 +138,13 @@ export function ProjectDashboard({
 }: Readonly<ProjectDashboardProps>) {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	const permissions = useDashboardPermissions(appId, canEdit);
 	const enabled = appId.length > 0;
+	// Nothing app-scoped is asked for until the role is known: firing a read the
+	// role forbids answers 403, and every consumer here would render that as a
+	// zero. `useDashboardPermissions` degrades open once resolution finishes, so
+	// a local project with no permission model still reads everything.
+	const enabledWithRole = enabled && !permissions.isLoading;
 
 	const app = useInvoke(
 		backend.appState.getApp,
@@ -150,7 +162,7 @@ export function ProjectDashboard({
 		backend.boardState.getBoardSummaries,
 		backend.boardState,
 		[appId],
-		enabled,
+		enabledWithRole && permissions.canReadBoards,
 	);
 	// The dashboard only ever needs names and node counts, so it reads summaries — served from
 	// the database — instead of every board's full graph.
@@ -165,26 +177,34 @@ export function ProjectDashboard({
 		backend.eventState.getEvents,
 		backend.eventState,
 		[appId],
-		enabled,
+		enabledWithRole && permissions.canListEvents,
 	);
 	const pages = useInvoke(
 		backend.pageState.getPages,
 		backend.pageState,
 		[appId],
-		enabled,
+		enabledWithRole && permissions.canReadBoards,
 	);
 	const routes = useInvoke(
 		backend.routeState.getRoutes,
 		backend.routeState,
 		[appId],
-		enabled,
+		enabledWithRole && permissions.canListEvents,
 	);
 
 	const [inspectorOpen, setInspectorOpen] = useState(false);
 	const [panel, setPanel] = useState<InspectorPanel>("identity");
 
-	const runs = useProjectRuns(appId, boards.data);
-	const aiAct = useAiActStatus(appId, app.data?.visibility);
+	const runs = useProjectRuns(
+		appId,
+		boards.data,
+		enabledWithRole && permissions.canReadBoards,
+	);
+	const aiAct = useAiActStatus(
+		appId,
+		app.data?.visibility,
+		enabledWithRole && permissions.canReadCompliance,
+	);
 	const surfaces = useProjectSurfaces(
 		events.data,
 		pages.data,
@@ -211,12 +231,17 @@ export function ProjectDashboard({
 		listingDone: listing.done,
 		listingTotal: listing.total,
 		boardNames,
+		permissions,
 	});
 
+	// A role that cannot read the run log can never satisfy "has succeeded", so
+	// the auto rule would park every such account on the Launch Path — the
+	// onboarding view — for a project that has been live for months. When the
+	// history is unreadable, Operate is the honest default.
 	const { mode, setPreference } = useDashboardMode(
 		appId,
-		runs.hasEverSucceeded,
-		runs.ready,
+		runs.denied || runs.hasEverSucceeded,
+		runs.denied || runs.ready,
 	);
 
 	const refreshApp = useCallback(async () => {
@@ -225,7 +250,13 @@ export function ProjectDashboard({
 		await invalidate(backend.appState.getApps, []);
 	}, [app, metadata, invalidate, backend.appState]);
 
-	const draft = useProjectDraft(appId, app.data, metadata.data, refreshApp);
+	const draft = useProjectDraft(
+		appId,
+		app.data,
+		metadata.data,
+		refreshApp,
+		permissions,
+	);
 
 	const openPanel = useCallback((next: InspectorPanel) => {
 		setPanel(next);
@@ -251,7 +282,7 @@ export function ProjectDashboard({
 		await onDeleted();
 	}, [appId, backend, invalidate, onDeleted]);
 
-	if (!app.data || !metadata.data) {
+	if (!app.data || !metadata.data || permissions.isLoading) {
 		return (
 			<div className="mx-auto w-full max-w-6xl px-1 py-4">
 				<DashboardSkeleton />
@@ -265,7 +296,7 @@ export function ProjectDashboard({
 				<ProjectIdentityRow
 					app={app.data}
 					metadata={metadata.data}
-					canEdit={canEdit}
+					permissions={permissions}
 					onOpenPanel={openPanel}
 					actions={
 						<>
@@ -287,6 +318,7 @@ export function ProjectDashboard({
 						aiAct={aiAct}
 						listing={listing.items}
 						listingDone={listing.done}
+						permissions={permissions}
 						onOpenPanel={openPanel}
 					/>
 				) : (
@@ -300,6 +332,7 @@ export function ProjectDashboard({
 						listing={listing.items}
 						listingDone={listing.done}
 						signals={signals}
+						permissions={permissions}
 						onOpenPanel={openPanel}
 					/>
 				)}
@@ -308,7 +341,7 @@ export function ProjectDashboard({
 					appId={appId}
 					app={app.data}
 					metadata={metadata.data}
-					canEdit={canEdit}
+					permissions={permissions}
 					draft={draft}
 					open={inspectorOpen}
 					panel={panel}

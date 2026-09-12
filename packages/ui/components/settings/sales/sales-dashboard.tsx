@@ -20,6 +20,8 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import { useBackend } from "../../../state/backend-state";
 import type {
 	ICreateDiscountRequest,
@@ -67,6 +69,7 @@ import {
 } from "../../ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { Textarea } from "../../ui/textarea";
+import { SectionLockedPanel } from "../permission/permission-gate";
 
 function formatCurrency(cents: number): string {
 	return new Intl.NumberFormat("en-US", {
@@ -645,6 +648,19 @@ export function SalesDashboard() {
 	const searchParams = useSearchParams();
 	const appId = searchParams.get("id");
 
+	const permissions = useAppPermissions(appId);
+	// Every sales route is guarded by `verify_sales_access`, which is NOT a
+	// permission bit: it admits the app's owner role, or any role literally named
+	// "owner", and never calls `has_permission`. The client cannot reproduce the
+	// first branch (the caller's own role carries no `app.owner_role_id`), so it
+	// mirrors the Owner check plus the role-name branch — a role named "Owner"
+	// that somehow lacks the bit still passes server-side and must not be locked
+	// out here. The residual gap runs the other way: an Admin-bit role passes
+	// this gate and is still refused by the server (overview.rs:632-639 TODO).
+	const canReadSales =
+		permissions.can(RolePermissions.Owner) ||
+		permissions.roleName?.toLowerCase() === "owner";
+
 	const [loading, setLoading] = useState(true);
 	const [overview, setOverview] = useState<ISalesOverview | null>(null);
 	const [dailyStats, setDailyStats] = useState<IDailyStat[]>([]);
@@ -663,6 +679,12 @@ export function SalesDashboard() {
 	// Load data
 	const loadData = useCallback(async () => {
 		if (!appId || !salesState) return;
+		// Wait for the role answer rather than spending a 403 on the first paint.
+		if (permissions.isLoading) return;
+		if (!canReadSales) {
+			setLoading(false);
+			return;
+		}
 
 		setLoading(true);
 		try {
@@ -694,7 +716,7 @@ export function SalesDashboard() {
 		} finally {
 			setLoading(false);
 		}
-	}, [appId, dateRange, salesState]);
+	}, [appId, canReadSales, permissions.isLoading, dateRange, salesState]);
 
 	useEffect(() => {
 		loadData();
@@ -774,7 +796,24 @@ export function SalesDashboard() {
 		);
 	}
 
-	if (loading) {
+	// Ahead of the loading branch: `loadData` never runs without the Owner
+	// check, so a denied role would otherwise sit on the skeleton forever — and
+	// before that, on a revenue dashboard reading a confident $0.00.
+	if (!canReadSales) {
+		return (
+			<SectionLockedPanel
+				feature={t("sales", "Sales")}
+				description={t(
+					"onlyThisProjectaposOwnerCanSeeItsRevenuePurchasesAndDiscounts",
+					"Only this project's owner can see its revenue, purchases and discounts.",
+				)}
+				missing={[RolePermissions.Owner]}
+				roleName={permissions.roleName}
+			/>
+		);
+	}
+
+	if (loading || permissions.isLoading) {
 		return (
 			<div className="p-6 space-y-6">
 				<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

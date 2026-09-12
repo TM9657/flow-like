@@ -14,10 +14,14 @@ import {
 	Card,
 	Input,
 	Label,
+	PermissionNotice,
+	RolePermissions,
+	SectionLockedPanel,
 	Tabs,
 	TabsContent,
 	TabsList,
 	TabsTrigger,
+	useAppPermissions,
 	useAssistantSurface,
 	useBackend,
 	useInvalidateInvoke,
@@ -89,6 +93,9 @@ import { DEFAULT_TABLE_PAGE_SIZE, TableInspector } from "./table-inspector";
 export interface ExploreDataPageProps {
 	appId: string;
 }
+
+const READ_DATA = [RolePermissions.ReadFiles, RolePermissions.ReadDatabase];
+const WRITE_DATA = [RolePermissions.WriteFiles, RolePermissions.WriteDatabase];
 
 // Mirrors the server-side cascade matcher: bare name, case sensitive, one
 // optional trailing `.lance` tolerated on either side.
@@ -326,14 +333,32 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 	// The overview tab is a landing page with its own primary actions — the launcher only crowds it.
 	useRequestFabBubble(activeView !== "overview");
 
+	// Every read on this page is `ReadFiles` OR `ReadDatabase`; the board,
+	// connection and action surfaces add one permission each. A denial used to
+	// arrive as an empty source grid, which reads as "this project has no data".
+	const permissions = useAppPermissions(appId);
+	const canReadData = permissions.can(...READ_DATA);
+	const canWriteData = permissions.can(...WRITE_DATA);
+	const canReadBoards = permissions.can(RolePermissions.ReadBoards);
+	const canReadTeam = permissions.can(RolePermissions.ReadTeam);
+	const canExecuteEvents = permissions.can(RolePermissions.ExecuteEvents);
+	// Overlays carrying executable actions are additionally checked against
+	// WriteEvents server-side, so authoring one needs both bits.
+	const canWriteActions =
+		canWriteData && permissions.can(RolePermissions.WriteEvents);
+
 	const [actionBoardsRequested, setActionBoardsRequested] = useState(false);
-	const tables = useInvoke(backend.dbState.listTables, backend.dbState, [
-		appId,
-	]);
+	const tables = useInvoke(
+		backend.dbState.listTables,
+		backend.dbState,
+		[appId],
+		canReadData,
+	);
 	const userTables = useInvoke(
 		backend.dbState.listTablesUser,
 		backend.dbState,
 		[appId],
+		canReadData,
 	);
 	// Summaries open every table to read its manifest, so they stay behind the
 	// tab that shows them. Names arrive first and the cards hydrate.
@@ -342,30 +367,31 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 		backend.dbState.listTableSummaries,
 		backend.dbState,
 		[appId],
-		sourcesActive,
+		sourcesActive && canReadData,
 	);
 	const userTableSummaries = useInvoke(
 		backend.dbState.listTableSummaries,
 		backend.dbState,
 		[appId, true],
-		sourcesActive,
+		sourcesActive && canReadData,
 	);
 	const ontologies = useInvoke(
 		backend.graphState.listOverlays,
 		backend.graphState,
 		[appId],
+		canReadData,
 	);
 	const userOntologies = useInvoke(
 		backend.graphState.listOverlays,
 		backend.graphState,
 		[appId, true],
-		activeView === "queries",
+		activeView === "queries" && canReadData,
 	);
 	const boards = useInvoke(
 		backend.boardState.getBoardSummaries,
 		backend.boardState,
 		[appId],
-		activeView === "actions" && actionBoardsRequested,
+		activeView === "actions" && actionBoardsRequested && canReadBoards,
 	);
 	// Remote/installed ontologies are a first-class data source: they show up as
 	// objects, sources, and a query surface — not just in the sharing/model tabs.
@@ -374,13 +400,13 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 		backend.teamState.getAppConnections,
 		backend.teamState,
 		[appId],
-		remoteDataNeeded,
+		remoteDataNeeded && canReadTeam,
 	);
 	const installedOntologies = useInvoke(
 		backend.graphState.listRemoteOntologyImports,
 		backend.graphState,
 		[appId],
-		remoteDataNeeded,
+		remoteDataNeeded && canReadData,
 	);
 
 	const [query, setQuery] = useState<string>("");
@@ -530,14 +556,32 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 		[router, pathname, searchParams],
 	);
 
+	const writeDeniedMessage = t(
+		"yourRoleCannotChangeThisProjectsData",
+		"Your role cannot change this project's data.",
+	);
+	const actionWriteDeniedMessage = t(
+		"authoringOntologyActionsNeedsEventManagement",
+		"Authoring an ontology action also needs permission to manage this project's events.",
+	);
+
 	const createOntology = useCallback(
 		async (payload: CreateOverlayPayload) => {
+			if (!canWriteData) throw new Error(writeDeniedMessage);
 			await backend.graphState.createOverlay(appId, payload);
 			await ontologies.refetch();
 			await invalidate(backend.boardState.getCatalog, [appId]);
 			toast.success(`Created ${payload.name}`);
 		},
-		[appId, backend.graphState, backend.boardState, invalidate, ontologies],
+		[
+			appId,
+			backend.graphState,
+			backend.boardState,
+			canWriteData,
+			invalidate,
+			ontologies,
+			writeDeniedMessage,
+		],
 	);
 
 	const saveActions = useCallback(
@@ -545,6 +589,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			ontologyId: string,
 			actions: NonNullable<GraphOverlay["actions"]>,
 		) => {
+			if (!canWriteActions) throw new Error(actionWriteDeniedMessage);
 			const ontology = ontologies.data?.find(
 				(candidate) => candidate.id === ontologyId,
 			);
@@ -556,11 +601,20 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			await invalidate(backend.boardState.getCatalog, [appId]);
 			toast.success("Action binding saved");
 		},
-		[appId, backend.graphState, backend.boardState, invalidate, ontologies],
+		[
+			actionWriteDeniedMessage,
+			appId,
+			backend.graphState,
+			backend.boardState,
+			canWriteActions,
+			invalidate,
+			ontologies,
+		],
 	);
 
 	const saveEdges = useCallback(
 		async (ontologyId: string, edges: EdgeLabelMapping[]) => {
+			if (!canWriteData) throw new Error(writeDeniedMessage);
 			// Relationship controls can enqueue several edits in quick succession.
 			// Resolve the current concurrency token for each serialized write instead
 			// of capturing the ontology list from the render that started the queue.
@@ -577,7 +631,15 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			]);
 			toast.success("Ontology model saved");
 		},
-		[appId, backend.graphState, backend.boardState, invalidate, ontologies],
+		[
+			appId,
+			backend.graphState,
+			backend.boardState,
+			canWriteData,
+			invalidate,
+			ontologies,
+			writeDeniedMessage,
+		],
 	);
 
 	const updateSharing = useCallback(
@@ -585,6 +647,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			ontologyId: string,
 			patch: Partial<Pick<GraphOverlay, "exposed" | "bindings_enabled">>,
 		) => {
+			if (!canWriteData) throw new Error(writeDeniedMessage);
 			const ontology = ontologies.data?.find(
 				(candidate) => candidate.id === ontologyId,
 			);
@@ -595,7 +658,15 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			await ontologies.refetch();
 			await invalidate(backend.boardState.getCatalog, [appId]);
 		},
-		[appId, backend.graphState, backend.boardState, invalidate, ontologies],
+		[
+			appId,
+			backend.graphState,
+			backend.boardState,
+			canWriteData,
+			invalidate,
+			ontologies,
+			writeDeniedMessage,
+		],
 	);
 
 	const sampleObjects = useCallback(
@@ -617,6 +688,14 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			payload: Parameters<typeof backend.graphState.invokeOntologyAction>[3],
 			onStatus?: Parameters<typeof backend.graphState.invokeOntologyAction>[4],
 		) => {
+			if (!canExecuteEvents) {
+				throw new Error(
+					t(
+						"yourRoleCannotRunOntologyActions",
+						"Your role cannot run ontology actions on this project.",
+					),
+				);
+			}
 			let governedPayload = payload;
 			const isOffline = await backend.isOffline(appId);
 			const action = ontologies.data
@@ -663,7 +742,15 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 				onStatus,
 			);
 		},
-		[appId, backend, backend.eventState, backend.graphState, ontologies.data],
+		[
+			appId,
+			backend,
+			backend.eventState,
+			backend.graphState,
+			canExecuteEvents,
+			ontologies.data,
+			t,
+		],
 	);
 
 	const loadRemoteOntologies = useCallback(
@@ -674,6 +761,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 
 	const installRemoteOntology = useCallback(
 		async (targetAppId: string, ontologyId: string) => {
+			if (!canWriteData) throw new Error(writeDeniedMessage);
 			await backend.graphState.installRemoteOntology(
 				appId,
 				targetAppId,
@@ -687,13 +775,16 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			appId,
 			backend.boardState,
 			backend.graphState,
+			canWriteData,
 			installedOntologies,
 			invalidate,
+			writeDeniedMessage,
 		],
 	);
 
 	const uninstallRemoteOntology = useCallback(
 		async (targetAppId: string, ontologyId: string) => {
+			if (!canWriteData) throw new Error(writeDeniedMessage);
 			await backend.graphState.uninstallRemoteOntology(
 				appId,
 				targetAppId,
@@ -707,8 +798,10 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			appId,
 			backend.boardState,
 			backend.graphState,
+			canWriteData,
 			installedOntologies,
 			invalidate,
+			writeDeniedMessage,
 		],
 	);
 
@@ -742,7 +835,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 	}, []);
 
 	const dropTable = useCallback(async () => {
-		if (!deleteTarget || deleting) return;
+		if (!deleteTarget || deleting || !canWriteData) return;
 		setDeleting(true);
 		setDeleteError(null);
 		try {
@@ -835,6 +928,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 		appId,
 		backend.dbState,
 		backend.boardState,
+		canWriteData,
 		closeDeleteDialog,
 		deleteTarget,
 		deleting,
@@ -856,13 +950,52 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 		setSortAsc((prev) => !prev);
 	}, []);
 
+	// Every entry point into the two authoring dialogs funnels through here, so
+	// a role that cannot write never reaches a wizard whose last step 403s.
+	const requestOntologySetup = useCallback(() => {
+		if (!canWriteData) {
+			toast.error(writeDeniedMessage);
+			return;
+		}
+		setSetupOpen(true);
+	}, [canWriteData, writeDeniedMessage]);
+
+	const requestTableDesigner = useCallback(() => {
+		if (!canWriteData) {
+			toast.error(writeDeniedMessage);
+			return;
+		}
+		setDesignerOpen(true);
+	}, [canWriteData, writeDeniedMessage]);
+
 	const isLoading =
-		(tables.isLoading || userTables.isLoading || ontologies.isLoading) &&
+		(permissions.isLoading ||
+			tables.isLoading ||
+			userTables.isLoading ||
+			ontologies.isLoading) &&
 		!processedTables.length &&
 		!(ontologies.data?.length ?? 0);
 
 	if (isLoading) {
 		return <LoadingState />;
+	}
+
+	// Without this the same screen renders "No tables yet" for a role that is
+	// simply not allowed to look.
+	if (!canReadData) {
+		return (
+			<div className="p-6">
+				<SectionLockedPanel
+					feature={t("dataStudio", "Data Studio")}
+					description={t(
+						"yourRoleCannotReadThisProjectsTablesAndOntologies",
+						"Your role cannot read this project's tables and ontologies, so there is nothing to model, explore or query here.",
+					)}
+					missing={READ_DATA}
+					roleName={permissions.roleName}
+				/>
+			</div>
+		);
 	}
 
 	if (tables.error && userTables.error && ontologies.error) {
@@ -937,7 +1070,12 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 						<Button variant="outline" size="sm" onClick={refreshStudio}>
 							<RefreshCw className="h-4 w-4" /> {t("refresh", "Refresh")}
 						</Button>
-						<Button size="sm" onClick={() => setSetupOpen(true)}>
+						<Button
+							size="sm"
+							disabled={!canWriteData}
+							title={canWriteData ? undefined : writeDeniedMessage}
+							onClick={requestOntologySetup}
+						>
 							<Plus className="h-4 w-4" />{" "}
 							{t("setUpOntology", "Set up ontology")}
 						</Button>
@@ -989,44 +1127,123 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 						ontologies={ontologyData}
 						tableCount={processedTables.length}
 						remoteCount={installedData.length}
-						onCreateOntology={() => setSetupOpen(true)}
+						onCreateOntology={requestOntologySetup}
 						onOpenOntology={navigateToOntology}
 						onNavigate={setActiveView}
 					/>
 				</TabsContent>
-				<TabsContent value="objects" className="min-h-0 flex-1 p-6">
-					<ObjectExplorerPanel
-						ontologies={ontologyData}
-						remoteImports={usableImports}
-						initialSourceValue={searchParams.get("source") ?? undefined}
-						onCreateOntology={() => setSetupOpen(true)}
-						onSample={sampleObjects}
-						onSampleRemote={sampleRemoteObjects}
-						onInvokeAction={invokeOntologyAction}
-						resolveSourceName={resolveSourceName}
-					/>
+				<TabsContent
+					value="objects"
+					className="flex min-h-0 flex-1 flex-col gap-4 p-6"
+				>
+					{!canExecuteEvents && (
+						<PermissionNotice
+							tone="readOnly"
+							title={t("actionsCannotBeRunHere", "Actions cannot be run here")}
+							description={t(
+								"browsingObjectsIsReadonlyForYourRole",
+								"You can browse objects, but running an ontology action needs permission to trigger this project's events.",
+							)}
+							missing={[RolePermissions.ExecuteEvents]}
+						/>
+					)}
+					<div className="min-h-0 flex-1">
+						<ObjectExplorerPanel
+							ontologies={ontologyData}
+							remoteImports={usableImports}
+							initialSourceValue={searchParams.get("source") ?? undefined}
+							onCreateOntology={requestOntologySetup}
+							onSample={sampleObjects}
+							onSampleRemote={sampleRemoteObjects}
+							onInvokeAction={invokeOntologyAction}
+							resolveSourceName={resolveSourceName}
+						/>
+					</div>
 				</TabsContent>
-				<TabsContent value="model" className="flex-1 overflow-y-auto p-6">
+				<TabsContent
+					value="model"
+					className="flex-1 space-y-4 overflow-y-auto p-6"
+				>
+					{!canWriteData && (
+						<PermissionNotice
+							tone="readOnly"
+							title={t("theModelIsReadonly", "The model is read-only for you")}
+							description={writeDeniedMessage}
+							missing={WRITE_DATA}
+						/>
+					)}
 					<OntologyModelPanel
 						appId={appId}
 						ontologies={ontologyData}
 						installedOntologies={installedOntologies.data ?? []}
-						onCreateOntology={() => setSetupOpen(true)}
+						onCreateOntology={requestOntologySetup}
 						onOpenOntology={navigateToOntology}
-						onSaveEdges={saveEdges}
+						onSaveEdges={canWriteData ? saveEdges : undefined}
 					/>
 				</TabsContent>
-				<TabsContent value="actions" className="flex-1 overflow-y-auto p-6">
+				<TabsContent
+					value="actions"
+					className="flex-1 space-y-4 overflow-y-auto p-6"
+				>
+					{!canWriteActions && (
+						<PermissionNotice
+							tone="readOnly"
+							title={t(
+								"actionBindingsAreReadonly",
+								"Action bindings are read-only for you",
+							)}
+							description={
+								canWriteData ? actionWriteDeniedMessage : writeDeniedMessage
+							}
+							missing={
+								canWriteData ? [RolePermissions.WriteEvents] : WRITE_DATA
+							}
+						/>
+					)}
+					{!canReadBoards && (
+						<PermissionNotice
+							title={t("flowListUnavailable", "Flow list unavailable")}
+							description={t(
+								"bindingAnActionNeedsToReadThisProjectsFlows",
+								"Binding an action needs to read this project's flows, which your role cannot do — the picker stays empty for that reason, not because there are no flows.",
+							)}
+							missing={[RolePermissions.ReadBoards]}
+						/>
+					)}
 					<OntologyActionsPanel
 						ontologies={ontologyData}
 						boards={boards.data ?? []}
 						appId={appId}
-						onCreateOntology={() => setSetupOpen(true)}
+						onCreateOntology={requestOntologySetup}
 						onNeedBoards={() => setActionBoardsRequested(true)}
 						onSaveActions={saveActions}
 					/>
 				</TabsContent>
-				<TabsContent value="sharing" className="flex-1 overflow-y-auto p-6">
+				<TabsContent
+					value="sharing"
+					className="flex-1 space-y-4 overflow-y-auto p-6"
+				>
+					{!canWriteData && (
+						<PermissionNotice
+							tone="readOnly"
+							title={t("sharingIsReadonly", "Sharing is read-only for you")}
+							description={writeDeniedMessage}
+							missing={WRITE_DATA}
+						/>
+					)}
+					{!canReadTeam && (
+						<PermissionNotice
+							title={t(
+								"connectedProjectsUnavailable",
+								"Connected projects unavailable",
+							)}
+							description={t(
+								"readingThisProjectsConnectionsNeedsTeamAccess",
+								"Reading this project's connections needs team access, so the connection list is hidden rather than shown as empty.",
+							)}
+							missing={[RolePermissions.ReadTeam]}
+						/>
+					)}
 					<OntologySharingPanel
 						ontologies={ontologyData}
 						connections={connections}
@@ -1034,7 +1251,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 						installedOntologies={installedOntologies.data ?? []}
 						installedOntologiesLoading={installedOntologies.isLoading}
 						installedOntologiesError={installedOntologies.error?.message}
-						onCreateOntology={() => setSetupOpen(true)}
+						onCreateOntology={requestOntologySetup}
 						onUpdateOntology={updateSharing}
 						onLoadRemoteOntologies={loadRemoteOntologies}
 						onInstallRemoteOntology={installRemoteOntology}
@@ -1072,7 +1289,12 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 									<ArrowDownAZ className="h-4 w-4" />
 								)}
 							</Button>
-							<Button size="sm" onClick={() => setDesignerOpen(true)}>
+							<Button
+								size="sm"
+								disabled={!canWriteData}
+								title={canWriteData ? undefined : writeDeniedMessage}
+								onClick={requestTableDesigner}
+							>
 								<Plus className="h-4 w-4" /> {t("newTable", "New table")}
 							</Button>
 						</div>
@@ -1113,6 +1335,10 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 						searchQuery={query}
 						onSelectTable={navigateToTable}
 						onRequestDelete={(target) => {
+							if (!canWriteData) {
+								toast.error(writeDeniedMessage);
+								return;
+							}
 							setDeleteConfirm("");
 							setDeleteError(null);
 							setDeleteTarget(target);
@@ -1120,7 +1346,7 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 						onResolveAlert={(target) =>
 							navigateToTable(target.name, target.userScoped)
 						}
-						onCreate={() => setDesignerOpen(true)}
+						onCreate={requestTableDesigner}
 					/>
 					{usableImports.length > 0 && (
 						<div className="space-y-4 pt-4">

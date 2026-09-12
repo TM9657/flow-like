@@ -27,9 +27,11 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useBoardFormat } from "../../../hooks/use-board-format";
 import { cn } from "../../../lib";
 import { GEOMETRY_BOARD_FORMAT_VERSION } from "../../../lib/board-format";
+import { RolePermissions } from "../../../lib/permission/role-permission";
 import { useBackend } from "../../../state/backend-state";
 import type { IDatabaseSchemaField } from "../../../state/backend-state/db-state";
 import { Badge } from "../../ui/badge";
@@ -62,6 +64,9 @@ import {
 	validateColumnName,
 	validateTableName,
 } from "../../ui/table-schema";
+import { PermissionNotice } from "../permission/permission-notice";
+
+const WRITE_DATA = [RolePermissions.WriteFiles, RolePermissions.WriteDatabase];
 
 interface ColumnDraft {
 	id: string;
@@ -102,6 +107,8 @@ export function TableDesignerDialog({
 }: Readonly<TableDesignerDialogProps>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
+	const permissions = useAppPermissions(appId);
+	const canWrite = permissions.can(...WRITE_DATA);
 	const geometryEnabled =
 		useBoardFormat(appId) >= GEOMETRY_BOARD_FORMAT_VERSION;
 	const [tableName, setTableName] = useState("");
@@ -212,13 +219,14 @@ export function TableDesignerDialog({
 	);
 
 	const canSubmit = useMemo(() => {
+		if (!canWrite) return false;
 		if (validateTableName(tableName)) return false;
 		if (tableNameError) return false;
 		if (!columns.length) return false;
 		return columns.every(
 			(column) => column.name.trim() && columnError(column) === null,
 		);
-	}, [tableName, tableNameError, columns, columnError]);
+	}, [canWrite, tableName, tableNameError, columns, columnError]);
 
 	const handleCreate = useCallback(async () => {
 		if (!canSubmit) return;
@@ -308,6 +316,18 @@ export function TableDesignerDialog({
 					</DialogDescription>
 				</DialogHeader>
 
+				{!canWrite && (
+					<PermissionNotice
+						className="shrink-0"
+						title={t("cannotCreateTables", "You cannot create tables here")}
+						description={t(
+							"creatingATableWritesToThisProjectsDatabase",
+							"Creating a table writes to this project's database, which your role cannot do.",
+						)}
+						missing={WRITE_DATA}
+					/>
+				)}
+
 				<div className="grid gap-4 shrink-0 sm:grid-cols-[1fr_200px]">
 					<div className="space-y-1.5">
 						<Label htmlFor="table-designer-name">
@@ -387,7 +407,18 @@ export function TableDesignerDialog({
 					>
 						{t("cancel", "Cancel")}
 					</Button>
-					<Button onClick={handleCreate} disabled={!canSubmit || submitting}>
+					<Button
+						onClick={handleCreate}
+						disabled={!canSubmit || submitting}
+						title={
+							canWrite
+								? undefined
+								: t(
+										"creatingATableWritesToThisProjectsDatabase",
+										"Creating a table writes to this project's database, which your role cannot do.",
+									)
+						}
+					>
 						{submitting ? (
 							<Loader2 className="h-4 w-4 animate-spin" />
 						) : (

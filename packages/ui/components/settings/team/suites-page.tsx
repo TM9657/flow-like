@@ -2,6 +2,8 @@
 
 import { useTranslation } from "@flow-like/locales";
 import { useSearchParams } from "next/navigation";
+import { RolePermissions } from "../../../lib/permission/role-permission";
+import { PermissionGate } from "../permission";
 import { GroupManagement } from "./group-management";
 
 /**
@@ -24,7 +26,17 @@ export function SuitesPage() {
 
 	return (
 		<div className="h-full overflow-y-auto px-1">
-			<GroupManagement appId={appId} />
+			<PermissionGate
+				appId={appId}
+				require={[RolePermissions.ReadTeam]}
+				feature={t("suites", "Suites")}
+				description={t(
+					"yourRoleCannotSeeWhichSuitesThisAppBelongsTo",
+					"Your role cannot see which suites this app belongs to.",
+				)}
+			>
+				<GroupManagement appId={appId} />
+			</PermissionGate>
 		</div>
 	);
 }

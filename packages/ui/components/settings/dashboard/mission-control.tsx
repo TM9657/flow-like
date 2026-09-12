@@ -8,6 +8,8 @@ import {
 	CheckCircle2Icon,
 	ClockIcon,
 	DollarSignIcon,
+	KeyRoundIcon,
+	LockIcon,
 	PlayCircleIcon,
 	PlusIcon,
 	SendIcon,
@@ -19,13 +21,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { IApp, IBoardListing } from "../../../lib";
-import { IAppVisibility } from "../../../lib";
+import { IAppVisibility, RolePermissions } from "../../../lib";
 import { formatDuration, formatRelativeTime } from "../../../lib/date";
 import { cn } from "../../../lib/utils";
 import { useBackend } from "../../../state/backend-state";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
+import { LockBadge, PermissionNotice } from "../permission";
 import {
 	EmptyHint,
 	Meter,
@@ -34,10 +38,12 @@ import {
 	StateDot,
 	VisibilityBadge,
 } from "./dashboard-primitives";
+import { GuardedAction } from "./project-identity-row";
 import { type ProjectSurface, SurfacesTable } from "./surfaces-table";
 import type { ProjectRunHealth } from "./use-project-runs";
 import {
 	type AiActStatus,
+	type DashboardPermissions,
 	type InspectorPanel,
 	type ListingChecklistItem,
 	isOnlineVisibility,
@@ -75,15 +81,22 @@ function MetricTile({
 
 /**
  * Model spend comes from the analytics API, which only exists for projects
- * that are synced to a hub. Offline projects fall back to a local metric
- * rather than showing a fabricated zero.
+ * that are synced to a hub and is guarded by `ReadAnalytics`. Offline projects
+ * fall back to a local metric rather than showing a fabricated zero; a member
+ * without the permission keeps the tile but sees it locked, so the dashboard
+ * does not quietly change shape from one account to the next.
  */
-function useProjectSpend(appId: string, visibility: IAppVisibility) {
+function useProjectSpend(
+	appId: string,
+	visibility: IAppVisibility,
+	canRead: boolean,
+) {
 	const backend = useBackend();
 	const analytics = backend.analyticsState;
-	return useQuery({
+	const applicable = !!analytics && visibility !== IAppVisibility.Offline;
+	const query = useQuery({
 		queryKey: ["project-spend", appId],
-		enabled: !!appId && !!analytics && visibility !== IAppVisibility.Offline,
+		enabled: !!appId && applicable && canRead,
 		staleTime: 5 * 60 * 1000,
 		retry: false,
 		queryFn: () => {
@@ -91,6 +104,19 @@ function useProjectSpend(appId: string, visibility: IAppVisibility) {
 			return analytics.getAnalyticsOverview(appId);
 		},
 	});
+
+	const dollars = query.data
+		? (query.data.totalLlmCost + query.data.totalEmbeddingCost) /
+			MICRO_DOLLARS_PER_DOLLAR
+		: null;
+
+	return {
+		applicable,
+		locked: applicable && !canRead,
+		isLoading: query.isLoading,
+		isError: query.isError,
+		dollars,
+	};
 }
 
 /**
@@ -107,6 +133,7 @@ export function MissionControl({
 	aiAct,
 	listing,
 	listingDone,
+	permissions,
 	onOpenPanel,
 }: Readonly<{
 	appId: string;
@@ -117,122 +144,180 @@ export function MissionControl({
 	aiAct: AiActStatus;
 	listing: ListingChecklistItem[];
 	listingDone: number;
+	permissions: DashboardPermissions;
 	onOpenPanel: (panel: InspectorPanel) => void;
 }>) {
 	const { t } = useTranslation("settings");
-	const spend = useProjectSpend(appId, app.visibility);
+	const spend = useProjectSpend(
+		appId,
+		app.visibility,
+		permissions.canReadAnalytics,
+	);
 	const listed = isOnlineVisibility(app.visibility);
-	const spendDollars =
-		spend.data != null
-			? (spend.data.totalLlmCost + spend.data.totalEmbeddingCost) /
-				MICRO_DOLLARS_PER_DOLLAR
-			: null;
+	const ownerOnly = t(
+		"onlyAnOwnerCanChangeThis",
+		"Only an owner can change this.",
+	);
+
+	const spendTile = spend.applicable ? (
+		spend.locked ? (
+			<MetricTile
+				label={t("modelSpend", "Model spend")}
+				icon={LockIcon}
+				value="—"
+				hint={t("needsAnalyticsAccess", "needs analytics access")}
+			/>
+		) : (
+			<MetricTile
+				label={t("modelSpend", "Model spend")}
+				icon={DollarSignIcon}
+				value={spend.dollars === null ? "—" : `$${spend.dollars.toFixed(2)}`}
+				hint={
+					spend.dollars !== null
+						? t("allTimeLlmEmbeddings", "all time, LLM + embeddings")
+						: spend.isError
+							? t("spendCouldNotBeRead", "spend could not be read")
+							: t("loading", "loading…")
+				}
+			/>
+		)
+	) : runs.denied ? null : (
+		<MetricTile
+			label={t("lastRun", "Last run")}
+			icon={ActivityIcon}
+			value={
+				runs.lastRunAt ? formatRelativeTime(runs.lastRunAt, "narrow") : "—"
+			}
+			hint={
+				runs.lastRunAt
+					? t("mostRecentExecution", "most recent execution")
+					: t("neverRun", "never run")
+			}
+		/>
+	);
 
 	return (
 		<div className="space-y-4">
 			<div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 lg:grid-cols-4">
-				<MetricTile
-					label={t("runs24h2", "Runs · 24h")}
-					icon={PlayCircleIcon}
-					value={runs.windowRuns.toLocaleString()}
-					hint={
-						runs.windowFailed > 0
-							? t("windowfailedFailed", "{{windowFailed}} failed", {
-									windowFailed: runs.windowFailed,
-								})
-							: runs.windowRuns > 0
-								? t("allSucceeded", "all succeeded")
-								: t("noRunsInTheLastDay", "no runs in the last day")
-					}
-				>
-					{runs.windowRuns > 0 && (
-						<Sparkline
-							values={runs.trend}
-							tone={runs.windowFailed > 0 ? "warn" : "ok"}
-							className="mt-1"
-						/>
-					)}
-				</MetricTile>
-
-				<MetricTile
-					label={t("successRate", "Success rate")}
-					icon={CheckCircle2Icon}
-					value={
-						runs.successRate === null ? "—" : `${runs.successRate.toFixed(1)}%`
-					}
-					hint={
-						runs.successRate === null
-							? t("needsARunToMeasure", "needs a run to measure")
-							: t("valOfWindowrunsOk", "{{val}} of {{windowRuns}} ok", {
-									val: runs.windowRuns - runs.windowFailed,
-									windowRuns: runs.windowRuns,
-								})
-					}
-				/>
-
-				<MetricTile
-					label={t("p95Duration", "p95 duration")}
-					icon={ClockIcon}
-					value={runs.p95Micros === null ? "—" : formatDuration(runs.p95Micros)}
-					hint={
-						runs.p95Micros === null
-							? t("noRunsYet", "no runs yet")
-							: t("slowest5OfRuns", "slowest 5% of runs")
-					}
-				/>
-
-				{spendDollars !== null ? (
-					<MetricTile
-						label={t("modelSpend", "Model spend")}
-						icon={DollarSignIcon}
-						value={`$${spendDollars.toFixed(2)}`}
-						hint="all time, LLM + embeddings"
+				{runs.denied ? (
+					<PermissionNotice
+						className={cn(
+							"min-[400px]:col-span-2",
+							spendTile ? "lg:col-span-3" : "lg:col-span-4",
+						)}
+						title={t("runHealthIsHidden", "Run health is hidden")}
+						description={t(
+							"yourRoleCannotReadThisProjectsFlowsSoRunVolumeSuccessRateAndDurationAreUnavailable",
+							"Your role cannot read this project's flows, so run volume, success rate and duration are unavailable — they are not zero.",
+						)}
+						missing={[RolePermissions.ReadBoards]}
 					/>
 				) : (
-					<MetricTile
-						label={t("lastRun", "Last run")}
-						icon={ActivityIcon}
-						value={
-							runs.lastRunAt
-								? formatRelativeTime(runs.lastRunAt, "narrow")
-								: "—"
-						}
-						hint={
-							runs.lastRunAt
-								? t("mostRecentExecution", "most recent execution")
-								: "never run"
-						}
-					/>
+					<>
+						<MetricTile
+							label={t("runs24h2", "Runs · 24h")}
+							icon={PlayCircleIcon}
+							value={runs.windowRuns.toLocaleString()}
+							hint={
+								runs.windowFailed > 0
+									? t("windowfailedFailed", "{{windowFailed}} failed", {
+											windowFailed: runs.windowFailed,
+										})
+									: runs.windowRuns > 0
+										? t("allSucceeded", "all succeeded")
+										: t("noRunsInTheLastDay", "no runs in the last day")
+							}
+						>
+							{runs.windowRuns > 0 && (
+								<Sparkline
+									values={runs.trend}
+									tone={runs.windowFailed > 0 ? "warn" : "ok"}
+									className="mt-1"
+								/>
+							)}
+						</MetricTile>
+
+						<MetricTile
+							label={t("successRate", "Success rate")}
+							icon={CheckCircle2Icon}
+							value={
+								runs.successRate === null
+									? "—"
+									: `${runs.successRate.toFixed(1)}%`
+							}
+							hint={
+								runs.successRate === null
+									? t("needsARunToMeasure", "needs a run to measure")
+									: t("valOfWindowrunsOk", "{{val}} of {{windowRuns}} ok", {
+											val: runs.windowRuns - runs.windowFailed,
+											windowRuns: runs.windowRuns,
+										})
+							}
+						/>
+
+						<MetricTile
+							label={t("p95Duration", "p95 duration")}
+							icon={ClockIcon}
+							value={
+								runs.p95Micros === null ? "—" : formatDuration(runs.p95Micros)
+							}
+							hint={
+								runs.p95Micros === null
+									? t("noRunsYet", "no runs yet")
+									: t("slowest5OfRuns", "slowest 5% of runs")
+							}
+						/>
+					</>
 				)}
+
+				{spendTile}
 			</div>
 
 			<div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
 				<div className="space-y-4">
-					<SurfacesTable appId={appId} surfaces={surfaces} limit={6} />
+					<SurfacesTable
+						appId={appId}
+						surfaces={surfaces}
+						limit={6}
+						permissions={permissions}
+					/>
 
 					<SectionCard
-						title="Flows"
+						title={t("flows", "Flows")}
 						icon={WorkflowIcon}
-						count={boards.length}
+						count={permissions.canReadBoards ? boards.length : undefined}
 						contentClassName="p-2"
 						action={
-							<Link href={`/library/config/flows?id=${appId}`}>
-								<Button variant="ghost" size="sm" className="gap-1 text-xs">
-									View all
-									<ArrowRightIcon className="h-3 w-3" />
-								</Button>
-							</Link>
+							permissions.canReadBoards && (
+								<Link href={`/library/config/flows?id=${appId}`}>
+									<Button variant="ghost" size="sm" className="gap-1 text-xs">
+										{t("viewAll", "View all")}
+										<ArrowRightIcon className="h-3 w-3" />
+									</Button>
+								</Link>
+							)
 						}
 					>
-						{boards.length === 0 ? (
+						{!permissions.canReadBoards ? (
+							<PermissionNotice
+								title={t("flowsAreHidden", "Flows are hidden")}
+								description={t(
+									"yourRoleCannotListThisProjectsFlowsThisIsNotAnEmptyProject",
+									"Your role cannot list this project's flows. This is not an empty project.",
+								)}
+								missing={[RolePermissions.ReadBoards]}
+							/>
+						) : boards.length === 0 ? (
 							<EmptyHint>
 								{t("noFlowsYet", "No flows yet.")}{" "}
-								<Link
-									href={`/library/config/flows?id=${appId}`}
-									className="text-primary hover:underline"
-								>
-									{t("createYourFirstFlow", "Create your first flow")}
-								</Link>
+								{permissions.canWriteBoards && (
+									<Link
+										href={`/library/config/flows?id=${appId}`}
+										className="text-primary hover:underline"
+									>
+										{t("createYourFirstFlow", "Create your first flow")}
+									</Link>
+								)}
 							</EmptyHint>
 						) : (
 							<div className="space-y-0.5">
@@ -305,7 +390,16 @@ export function MissionControl({
 						icon={ActivityIcon}
 						contentClassName="p-2"
 					>
-						{runs.recent.length === 0 ? (
+						{runs.denied ? (
+							<PermissionNotice
+								title={t("activityIsHidden", "Activity is hidden")}
+								description={t(
+									"theRunLogIsPartOfThisProjectsFlowsWhichYourRoleCannotRead",
+									"The run log is part of this project's flows, which your role cannot read.",
+								)}
+								missing={[RolePermissions.ReadBoards]}
+							/>
+						) : runs.recent.length === 0 ? (
 							<EmptyHint>
 								{t("noRunsRecordedYet", "No runs recorded yet.")}
 							</EmptyHint>
@@ -353,15 +447,21 @@ export function MissionControl({
 						title={t("access", "Access")}
 						icon={ShieldIcon}
 						action={
-							<Button
-								variant="ghost"
-								size="sm"
-								className="gap-1 text-xs"
-								onClick={() => onOpenPanel("access")}
+							<GuardedAction
+								allowed={permissions.canWriteApp}
+								reason={ownerOnly}
 							>
-								Edit
-								<ArrowRightIcon className="h-3 w-3" />
-							</Button>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="gap-1 text-xs"
+									disabled={!permissions.canWriteApp}
+									onClick={() => onOpenPanel("access")}
+								>
+									{t("edit", "Edit")}
+									<ArrowRightIcon className="h-3 w-3" />
+								</Button>
+							</GuardedAction>
 						}
 					>
 						<div className="space-y-2.5 text-xs">
@@ -379,7 +479,11 @@ export function MissionControl({
 									{t("teamRoles", "Team & Roles")}
 								</span>
 								<span className="ml-auto">
-									{listed ? (
+									{!listed ? (
+										<LockBadge kind="visibility">
+											{t("needsPrototype", "Needs Prototype")}
+										</LockBadge>
+									) : permissions.canReadTeam ? (
 										<Link
 											href={`/library/config/team?id=${appId}`}
 											className="text-primary hover:underline"
@@ -387,9 +491,21 @@ export function MissionControl({
 											{t("manage", "Manage")}
 										</Link>
 									) : (
-										<Badge variant="outline" className="text-[10px]">
-											{t("needsPrototype", "Needs Prototype")}
-										</Badge>
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<span>
+													<LockBadge kind="permission">
+														{t("locked", "Locked")}
+													</LockBadge>
+												</span>
+											</TooltipTrigger>
+											<TooltipContent side="bottom">
+												{t(
+													"yourRoleCannotSeeThisProjectsMembers",
+													"Your role cannot see this project's members.",
+												)}
+											</TooltipContent>
+										</Tooltip>
 									)}
 								</span>
 							</div>
@@ -401,19 +517,21 @@ export function MissionControl({
 									{app.allow_forking ? "Allowed" : "Off"}
 								</span>
 							</div>
-							{app.visibility === IAppVisibility.Private && (
-								<Button
-									variant="outline"
-									size="sm"
-									className="w-full"
-									onClick={() => onOpenPanel("access")}
-								>
-									{t(
-										"switchToPrototypeToUnlockTeamFeatures",
-										"Switch to Prototype to unlock team features",
-									)}
-								</Button>
-							)}
+							{app.visibility === IAppVisibility.Private &&
+								permissions.canWriteApp && (
+									<Button
+										variant="outline"
+										size="sm"
+										className="w-full"
+										onClick={() => onOpenPanel("access")}
+									>
+										<KeyRoundIcon className="size-3.5" />
+										{t(
+											"switchToPrototypeToUnlockTeamFeatures",
+											"Switch to Prototype to unlock team features",
+										)}
+									</Button>
+								)}
 						</div>
 					</SectionCard>
 
@@ -506,12 +624,14 @@ export function MissionControl({
 						</div>
 					</SectionCard>
 
-					<Link href={`/library/config/flows?id=${appId}`}>
-						<Button variant="outline" size="sm" className="w-full">
-							<PlusIcon className="mr-1.5 h-3 w-3" />
-							{t("newFlow", "New flow")}
-						</Button>
-					</Link>
+					{permissions.canWriteBoards && (
+						<Link href={`/library/config/flows?id=${appId}`}>
+							<Button variant="outline" size="sm" className="w-full">
+								<PlusIcon className="mr-1.5 h-3 w-3" />
+								{t("newFlow", "New flow")}
+							</Button>
+						</Link>
+					)}
 				</div>
 			</div>
 		</div>
