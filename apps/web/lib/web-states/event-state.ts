@@ -50,6 +50,7 @@ import type {
 	IRegressionSuiteRunSummary,
 	IRestorePlanResult,
 	ISetupEventResponse,
+	IUserSchedules,
 } from "@flow-like/flow-like-ui/state/backend-state/event-state";
 import type { IPrerunEventResponse } from "@flow-like/flow-like-ui/state/backend-state/types";
 import { toast } from "sonner";
@@ -202,6 +203,15 @@ export class WebEventState implements IEventState {
 
 	async getEventsAuthoritative(appId: string): Promise<IEvent[]> {
 		return apiGet<IEvent[]>(`apps/${appId}/events`, this.backend.auth);
+	}
+
+	async getUserSchedules(limit = 100, appId?: string): Promise<IUserSchedules> {
+		const params = new URLSearchParams({ limit: String(limit) });
+		if (appId) params.set("app_id", appId);
+		return apiGet<IUserSchedules>(
+			`user/schedules?${params}`,
+			this.backend.auth,
+		);
 	}
 
 	async getEventVersions(

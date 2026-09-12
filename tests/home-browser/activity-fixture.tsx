@@ -40,6 +40,68 @@ const notifications: INotification[] = [
 	},
 ];
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const isFlagged = (status: string) =>
+	["error", "fatal"].includes(status.toLowerCase());
+
+/**
+ * The shape the server aggregate returns, derived from the fixture rows. The
+ * real endpoint counts a whole period in SQL; this counts the whole fixture set,
+ * so neither is bounded by a page size.
+ */
+function activityFrom(scoped: IExecutionUsageRecord[], days: number) {
+	const todayStart = Date.UTC(
+		new Date(now).getUTCFullYear(),
+		new Date(now).getUTCMonth(),
+		new Date(now).getUTCDate(),
+	);
+	const from = todayStart - (days - 1) * DAY_MS;
+	const buckets = Array.from({ length: days }, (_, index) => ({
+		day: new Date(from + index * DAY_MS).toISOString().slice(0, 10),
+		count: 0,
+		attention_count: 0,
+	}));
+	const apps = new Map<string | null, { count: number; flagged: number }>();
+	const inWindow = scoped.filter((row) => {
+		const at = Date.parse(row.created_at);
+		return at >= from && at <= now;
+	});
+	for (const row of inWindow) {
+		const bucket =
+			buckets[Math.floor((Date.parse(row.created_at) - from) / DAY_MS)];
+		const flagged = isFlagged(row.status) ? 1 : 0;
+		if (bucket) {
+			bucket.count += 1;
+			bucket.attention_count += flagged;
+		}
+		const app = apps.get(row.app_id) ?? { count: 0, flagged: 0 };
+		app.count += 1;
+		app.flagged += flagged;
+		apps.set(row.app_id, app);
+	}
+	const attention = inWindow.filter((row) => isFlagged(row.status));
+	return {
+		days,
+		from: new Date(from).toISOString(),
+		to: new Date(now).toISOString(),
+		buckets,
+		apps: [...apps.entries()]
+			.map(([app_id, value]) => ({
+				app_id,
+				count: value.count,
+				attention_count: value.flagged,
+			}))
+			.sort((a, b) => b.count - a.count),
+		total: inWindow.length,
+		attention_total: attention.length,
+		average_microseconds: inWindow.length
+			? inWindow.reduce((sum, row) => sum + row.microseconds, 0) /
+				inWindow.length
+			: null,
+		attention: attention.slice(0, 50),
+	};
+}
+
 function widget(type: string, days: number): IHomeWidget {
 	return {
 		id: type,
@@ -85,11 +147,15 @@ export default function ActivityFixture() {
 					notifications_count: notifications.length,
 					unread_count: notifications.filter((item) => !item.read).length,
 				}),
-				listNotifications: async (unreadOnly) => {
+				listNotifications: async (unreadOnly, kind) => {
 					checkScenario();
+					// The real source filters by kind; the fixture must too, or a
+					// widget asking for one kind silently renders the others.
 					return scenarioRef.current === "empty"
 						? []
-						: notifications.filter((item) => !unreadOnly || !item.read);
+						: notifications
+								.filter((item) => !unreadOnly || !item.read)
+								.filter((item) => !kind || item.notification_type === kind);
 				},
 				markNotificationRead: async (id) => {
 					const item = notifications.find(
@@ -99,6 +165,14 @@ export default function ActivityFixture() {
 				},
 			},
 			usageState: {
+				getExecutionActivity: async (window = 7, appId?: string) => {
+					checkScenario();
+					const empty = scenarioRef.current === "empty";
+					const scoped = empty
+						? []
+						: rows.filter((row) => !appId || row.app_id === appId);
+					return activityFrom(scoped, window);
+				},
 				getExecutionHistory: async (
 					_page?: number,
 					pageSize = 100,

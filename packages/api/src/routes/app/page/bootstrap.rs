@@ -72,6 +72,10 @@ pub struct BootstrapResponse {
     /// Revision of the Page execution authority map. Clients return this with
     /// lifecycle and static action invocations.
     pub execution_revision: Option<String>,
+    /// The app-wide stylesheet, injected above every page surface and scoped to
+    /// the app root. Delivered here rather than read from the owner-gated
+    /// appearance route, because an ordinary viewer holds only `ExecuteEvents`.
+    pub app_custom_css: Option<String>,
     /// The live variant this bootstrap was served from, or `null` for the primary.
     /// Informational: the server pins this session's page triggers itself — lifecycle and
     /// static actions through the `execution_revision` they echo back, dynamic actions
@@ -195,6 +199,7 @@ fn resolve_served_target(
 fn bootstrap_response(
     event: Event,
     page: Option<Page>,
+    app_custom_css: Option<String>,
     execution_revision: Option<String>,
     served_variant: Option<String>,
     canonical_route: Option<String>,
@@ -217,6 +222,7 @@ fn bootstrap_response(
         event,
         page,
         revision,
+        app_custom_css,
         execution_revision,
         served_variant,
     })
@@ -366,6 +372,9 @@ pub async fn bootstrap(
     bootstrap_response(
         event,
         page,
+        app.frontend
+            .as_ref()
+            .and_then(|frontend| frontend.custom_css.clone()),
         execution_revision,
         served_variant,
         canonical_route,
@@ -467,6 +476,7 @@ mod tests {
         let response = bootstrap_response(
             event("event", Some("/"), true),
             Some(page.clone()),
+            None,
             Some("per1_test".to_string()),
             None,
             Some("/".to_string()),
@@ -489,6 +499,7 @@ mod tests {
         let unchanged = bootstrap_response(
             event("event", Some("/"), true),
             Some(page.clone()),
+            None,
             Some("per1_test".to_string()),
             None,
             Some("/".to_string()),
@@ -501,6 +512,7 @@ mod tests {
         let not_modified = bootstrap_response(
             event("renamed", Some("/"), true),
             Some(page),
+            None,
             Some("per1_test".to_string()),
             None,
             Some("/".to_string()),
@@ -602,6 +614,7 @@ mod tests {
             event: event("chat", Some("/chat"), false),
             page: None,
             revision: None,
+            app_custom_css: None,
             execution_revision: None,
             served_variant: None,
         };

@@ -1266,6 +1266,8 @@ export function FlowBoard({
 					return t("page", "Page");
 				case "widget":
 					return t("widget", "Widget");
+				case "styles":
+					return "app.css";
 			}
 		},
 		[board.data, documentTitles, t],
@@ -4906,6 +4908,10 @@ export function FlowBoard({
 		(widgetId: string) => openDocument({ kind: "widget", widgetId }),
 		[openDocument],
 	);
+	const openStylesDocument = useCallback(
+		() => openDocument({ kind: "styles" }),
+		[openDocument],
+	);
 	const openStorageDocument = useCallback(
 		(scope: IEditorScope, location: string) =>
 			openDocument({ kind: "storage", scope, location }),
@@ -4986,6 +4992,7 @@ export function FlowBoard({
 				currentFileId={currentFileId}
 				onSelectFile={handleSelectModule}
 				onOpenPage={openPageDocument}
+				onOpenStyles={openStylesDocument}
 				onOpenWidget={openWidgetDocument}
 				onOpenStorageFile={openStorageDocument}
 				onOpenTable={openTableDocument}

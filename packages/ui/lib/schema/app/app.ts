@@ -46,6 +46,12 @@ export enum IAppExecutionMode {
 
 export interface IFrontendConfiguration {
 	landing_page?: null | string;
+	/**
+	 * App-wide stylesheet. Hand-maintained alongside the Rust
+	 * `FrontendConfiguration` — schema generation from the JsonSchema derives is
+	 * manual in this repo and never runs in CI.
+	 */
+	custom_css?: null | string;
 	[property: string]: any;
 }
 

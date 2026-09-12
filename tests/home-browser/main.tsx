@@ -1,19 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { lazy, Suspense, useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthContext } from "react-oidc-context";
-import { HomeEditor } from "../../packages/ui/components/home/home-editor";
+import { Toaster } from "sonner";
 import {
 	createDefaultHomeLayout,
 	createHomeWidget,
 } from "../../packages/ui/components/home/catalog";
+import { HomeEditor } from "../../packages/ui/components/home/home-editor";
+import { MobileHeaderProvider } from "../../packages/ui/components/ui/mobile-header";
+import { TooltipProvider } from "../../packages/ui/components/ui/tooltip";
 import {
 	useBackend,
 	useBackendStore,
 } from "../../packages/ui/state/backend-state";
-import { TooltipProvider } from "../../packages/ui/components/ui/tooltip";
-import { MobileHeaderProvider } from "../../packages/ui/components/ui/mobile-header";
-import { Toaster } from "sonner";
 import "../../packages/ui/global.css";
 
 import { personalFixtureLayout } from "./personal-layout";
@@ -271,6 +271,17 @@ function Harness() {
 					total: 0,
 					page: 0,
 					page_size: 10,
+				}),
+				getExecutionActivity: async (days = 7) => ({
+					days,
+					from: new Date().toISOString(),
+					to: new Date().toISOString(),
+					buckets: [],
+					apps: [],
+					total: 0,
+					attention_total: 0,
+					average_microseconds: null,
+					attention: [],
 				}),
 				getUsageSummary: async () => ({
 					total_executions: 0,

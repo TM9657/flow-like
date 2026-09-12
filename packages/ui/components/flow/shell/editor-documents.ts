@@ -17,7 +17,12 @@ export type IEditorDocument =
 	| { kind: "page"; pageId: string }
 	| { kind: "widget"; widgetId: string }
 	| { kind: "storage"; scope: IEditorScope; location: string }
-	| { kind: "table"; scope: IEditorScope; table: string };
+	| { kind: "table"; scope: IEditorScope; table: string }
+	/**
+	 * The app-wide stylesheet. App-scoped rather than board-scoped, so it has no
+	 * id and its document key is constant — one app has exactly one.
+	 */
+	| { kind: "styles" };
 
 export type IEditorDocumentKind = IEditorDocument["kind"];
 
@@ -45,6 +50,8 @@ export function documentKey(doc: IEditorDocument): string {
 			return `storage:${doc.scope}:${doc.location}`;
 		case "table":
 			return `table:${doc.scope}:${doc.table}`;
+		case "styles":
+			return "styles:app";
 	}
 }
 
@@ -262,6 +269,8 @@ function isDocument(value: unknown): value is IEditorDocument {
 			return scoped && typeof doc.location === "string";
 		case "table":
 			return scoped && typeof doc.table === "string";
+		case "styles":
+			return true;
 		default:
 			return false;
 	}

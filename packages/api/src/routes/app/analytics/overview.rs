@@ -1,4 +1,5 @@
 use crate::{
+    compute_cost::{ComputeCostModel, compute_cost_from_avg_latency, compute_cost_model},
     ensure_permission,
     entity::{
         app_analytics_daily, embedding_usage_tracking, event, execution_usage_tracking, feedback,
@@ -144,6 +145,10 @@ pub struct AnalyticsOverview {
     pub total_llm_cost: i64,
     /// Total embedding cost (micro-dollars)
     pub total_embedding_cost: i64,
+    /// Estimated serverless runtime cost (micro-dollars)
+    pub total_compute_cost: i64,
+    /// Rate card behind `total_compute_cost`
+    pub compute_cost_model: ComputeCostModel,
     /// Average latency (ms)
     pub avg_latency_ms: Option<f64>,
     /// Executions in the current period
@@ -168,6 +173,7 @@ pub struct DailyAnalyticsStat {
     pub avg_rating: Option<f64>,
     pub llm_cost: i64,
     pub embedding_cost: i64,
+    pub compute_cost: i64,
     pub avg_latency: Option<f64>,
     pub p95_latency: Option<f64>,
     pub positive_feedback: i64,
@@ -357,6 +363,8 @@ pub async fn get_analytics_overview(
         negative_feedback,
         total_llm_cost,
         total_embedding_cost,
+        total_compute_cost: compute_cost_from_avg_latency(avg_latency_ms, total_executions),
+        compute_cost_model: compute_cost_model(),
         avg_latency_ms,
         period_executions,
         period_unique_users,
@@ -454,6 +462,10 @@ pub async fn get_analytics_stats(
                 avg_rating: d.avg_feedback_rating,
                 llm_cost: d.total_llm_cost,
                 embedding_cost: d.total_embedding_cost,
+                compute_cost: compute_cost_from_avg_latency(
+                    d.avg_latency_ms,
+                    d.total_executions,
+                ),
                 avg_latency: d.avg_latency_ms,
                 p95_latency: d.p95_latency_ms,
                 positive_feedback: d.positive_feedback,
@@ -519,6 +531,7 @@ pub async fn get_analytics_stats(
     let negative_feedback: i64 = daily_stats.iter().map(|d| d.negative_feedback).sum();
     let total_llm_cost: i64 = daily_stats.iter().map(|d| d.llm_cost).sum();
     let total_embedding_cost: i64 = daily_stats.iter().map(|d| d.embedding_cost).sum();
+    let total_compute_cost: i64 = daily_stats.iter().map(|d| d.compute_cost).sum();
 
     Ok(Json(AnalyticsStats {
         daily_stats,
@@ -533,6 +546,8 @@ pub async fn get_analytics_stats(
             negative_feedback,
             total_llm_cost,
             total_embedding_cost,
+            total_compute_cost,
+            compute_cost_model: compute_cost_model(),
             avg_latency_ms,
             period_executions: total_executions,
             period_unique_users: unique_users,
@@ -713,6 +728,7 @@ fn merge_daily_stat(target: &mut DailyAnalyticsStat, source: &DailyAnalyticsStat
     target.negative_feedback += source.negative_feedback;
     target.llm_cost += source.llm_cost;
     target.embedding_cost += source.embedding_cost;
+    target.compute_cost += source.compute_cost;
     target.unique_users = target.unique_users.max(source.unique_users);
 }
 
@@ -882,6 +898,8 @@ async fn compute_overview_from_raw(
         negative_feedback,
         total_llm_cost,
         total_embedding_cost,
+        total_compute_cost: compute_cost_from_avg_latency(avg_latency_ms, total_executions),
+        compute_cost_model: compute_cost_model(),
         avg_latency_ms,
         period_executions,
         period_unique_users,
@@ -1029,6 +1047,7 @@ async fn compute_daily_stats_from_raw(
             avg_rating,
             llm_cost: day_llm.iter().map(|l| l.price).sum(),
             embedding_cost: day_embeddings.iter().map(|e| e.price).sum(),
+            compute_cost: compute_cost_from_avg_latency(avg_latency, day_execs.len() as i64),
             avg_latency,
             p95_latency,
             positive_feedback: day_feedback.iter().filter(|f| f.rating > 0).count() as i64,
@@ -1161,6 +1180,7 @@ impl TodayLiveData {
             avg_rating: self.avg_rating,
             llm_cost: self.llm_cost,
             embedding_cost: self.embedding_cost,
+            compute_cost: compute_cost_from_avg_latency(self.avg_latency, self.executions),
             avg_latency: self.avg_latency,
             p95_latency: self.p95_latency,
             positive_feedback: self.positive_feedback,
@@ -1184,6 +1204,7 @@ mod tests {
             avg_rating: None,
             llm_cost: 10,
             embedding_cost: 1,
+            compute_cost: compute_cost_from_avg_latency(Some(avg_latency), executions),
             avg_latency: Some(avg_latency),
             p95_latency: Some(avg_latency * 2.0),
             positive_feedback: 0,

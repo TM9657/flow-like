@@ -29,6 +29,7 @@ pub mod alerting;
 pub mod audit;
 pub mod cache;
 pub mod channel;
+pub mod compute_cost;
 #[cfg(feature = "cosmos")]
 pub(crate) use flow_like_azure_data::cosmos;
 pub mod credentials;
@@ -44,6 +45,7 @@ pub mod push_notifications;
 pub mod realtime_ice;
 mod runtime_config;
 pub mod state;
+pub mod storage_accounting;
 pub mod storage_config;
 pub mod storage_identity;
 #[cfg(feature = "storage-queue")]

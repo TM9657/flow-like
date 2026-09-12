@@ -1,3 +1,7 @@
+import type { IComputeCostModel } from "../../lib/schema/usage/tracking";
+
+export type { IComputeCostModel };
+
 export interface IAnalyticsOverview {
 	totalExecutions: number;
 	successfulExecutions: number;
@@ -9,6 +13,8 @@ export interface IAnalyticsOverview {
 	negativeFeedback: number;
 	totalLlmCost: number;
 	totalEmbeddingCost: number;
+	totalComputeCost: number;
+	computeCostModel: IComputeCostModel;
 	avgLatencyMs: number | null;
 	periodExecutions: number;
 	periodUniqueUsers: number;
@@ -26,6 +32,7 @@ export interface IDailyAnalyticsStat {
 	avgRating: number | null;
 	llmCost: number;
 	embeddingCost: number;
+	computeCost: number;
 	avgLatency: number | null;
 	p95Latency: number | null;
 	positiveFeedback: number;

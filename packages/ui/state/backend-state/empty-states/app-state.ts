@@ -113,6 +113,12 @@ export class EmptyAppState implements IAppState {
 	): Promise<void> {
 		throw new Error("Method not implemented.");
 	}
+	getAppStylesheet(appId: string): Promise<string | undefined> {
+		throw new Error("Method not implemented.");
+	}
+	setAppStylesheet(appId: string, css: string): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
 	changeAppAllowForking(appId: string, allow: boolean): Promise<void> {
 		throw new Error("Method not implemented.");
 	}

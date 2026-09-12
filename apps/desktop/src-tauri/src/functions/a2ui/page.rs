@@ -62,6 +62,9 @@ pub struct LocalPageBootstrap {
     pub page: Option<Page>,
     /// Hash of the projected Page returned to the client.
     pub revision: Option<String>,
+    /// The app-wide stylesheet, mirroring the cloud bootstrap field so the same
+    /// client injection path serves offline apps.
+    pub app_custom_css: Option<String>,
     pub execution_revision: Option<String>,
     pub canonical_route: Option<String>,
     pub route_miss: bool,
@@ -154,6 +157,10 @@ pub async fn get_local_page_bootstrap(
 ) -> Result<LocalPageBootstrap, TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&handler).await?;
     let app = App::load(app_id, state).await?;
+    let app_custom_css = app
+        .frontend
+        .as_ref()
+        .and_then(|frontend| frontend.custom_css.clone());
     let events = load_local_runtime_events(&app).await;
 
     let (event, route_miss) = if let Some(route) = route.as_deref() {
@@ -187,6 +194,7 @@ pub async fn get_local_page_bootstrap(
             event,
             page: None,
             revision: None,
+            app_custom_css,
             execution_revision: None,
             canonical_route,
             route_miss,
@@ -245,6 +253,7 @@ pub async fn get_local_page_bootstrap(
         event,
         page: Some(page),
         revision: Some(revision),
+        app_custom_css,
         execution_revision: Some(execution_revision),
         canonical_route,
         route_miss,

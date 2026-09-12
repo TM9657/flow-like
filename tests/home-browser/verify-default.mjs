@@ -88,7 +88,7 @@ try {
 	await page
 		.locator('[data-widget-type="workspace-pulse"] [data-workspace-pulse]')
 		.waitFor();
-	await page.waitForFunction(() => window.defaultHomeQa.calls.history === 1);
+	await page.waitForFunction(() => window.defaultHomeQa.calls.activity === 1);
 	assert.equal(await page.locator("[data-home-section-heading]").count(), 1);
 	assert.equal(await widgets().count(), 11);
 	assert.equal(
@@ -133,9 +133,14 @@ try {
 		"Useful guides form one readable vertical list",
 	);
 	assert.equal(
-		await page.evaluate(() => window.defaultHomeQa.calls.history),
+		await page.evaluate(() => window.defaultHomeQa.calls.activity),
 		1,
-		"The workspace overview uses one execution history read",
+		"The workspace overview uses one period aggregate read",
+	);
+	assert.equal(
+		await page.evaluate(() => window.defaultHomeQa.calls.history ?? 0),
+		0,
+		"The workspace overview no longer pages raw execution records",
 	);
 	report.passed.push(
 		"The workspace overview combines metrics and flagged records in one widget, with one editable discovery heading",
@@ -310,7 +315,7 @@ try {
 		report.scenarios[scenario] = state;
 		if (scenario === "offline" || scenario === "guest") {
 			assert.equal(
-				state.calls.history ?? 0,
+				(state.calls.history ?? 0) + (state.calls.activity ?? 0),
 				0,
 				`${scenario}: account history is never queried`,
 			);

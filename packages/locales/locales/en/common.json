@@ -2779,5 +2779,7 @@
 	"zoomOut": "Zoom out",
 	"lengthMatchingPackages": "{{length}} matching packages",
 	"lengthUpdates": "{{length}} updates",
-	"packageViews": "Package views"
+	"packageViews": "Package views",
+	"appearance": "Appearance",
+	"oneStylesheetForEveryPageInThisApp": "One stylesheet for every page in this app"
 }

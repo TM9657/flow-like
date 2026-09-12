@@ -49,8 +49,12 @@ try {
 	);
 	const chart = await page.getByTestId("activity-run-activity").innerText();
 	assert.ok(
-		chart.includes("100") && chart.includes("243"),
-		"Coverage states sampled and total execution counts",
+		chart.includes("100") && chart.includes("Last 7 days"),
+		"Coverage states the counted total and the period it covers",
+	);
+	assert.ok(
+		!/sampl/i.test(chart),
+		"Counted totals are not described as a sample",
 	);
 	assert.ok(
 		!/success rate|succeeded|failed/i.test(chart),
@@ -82,7 +86,7 @@ try {
 		fullPage: true,
 	});
 	report.passed.push(
-		"Personal activity and app ranking show sample coverage; AI usage renders recorded costs; needs-attention combines severity records and notifications",
+		"Personal activity and app ranking show counted period coverage; AI usage renders recorded costs; needs-attention combines severity records and notifications",
 	);
 	await page.getByLabel("Period", { exact: true }).selectOption("1");
 	await page
@@ -92,17 +96,14 @@ try {
 	await page.getByLabel("Scenario", { exact: true }).selectOption("empty");
 	await page
 		.getByTestId("activity-run-activity")
-		.getByText("No sampled executions fall in this period.", { exact: true })
+		.getByText("No executions were recorded in this period.", { exact: true })
 		.waitFor();
 	await page
 		.getByTestId("activity-executions-by-app")
-		.getByText("No sampled executions fall in this period.", { exact: true })
+		.getByText("No executions were recorded in this period.", { exact: true })
 		.waitFor();
 	await page
-		.getByText(
-			"No unread workflow notifications in the latest 100 notifications.",
-			{ exact: true },
-		)
+		.getByText("No unread workflow notifications.", { exact: true })
 		.waitFor();
 	await page.screenshot({
 		path: "/private/tmp/home-qa-activity-empty.png",

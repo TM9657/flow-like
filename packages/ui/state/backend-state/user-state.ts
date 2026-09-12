@@ -11,6 +11,7 @@ import type {
 	INotificationsOverview,
 	IProjectContactsPage,
 	IUserLookup,
+	NotificationType,
 } from "./types";
 
 export interface IUserUpdate {
@@ -306,8 +307,18 @@ export interface IUserState {
 		after?: string,
 	): Promise<IProjectContactsPage>;
 	getNotifications(): Promise<INotificationsOverview>;
+	/**
+	 * `notificationType` is applied by the source, not over the returned page, so
+	 * asking for one kind cannot come back empty just because the newest rows are
+	 * all of the other kind. Omit it for every kind.
+	 *
+	 * It sits before the pagination pair because `useInfiniteInvoke` appends
+	 * `offset` and `limit` as the last two arguments; a parameter after them
+	 * would be handed a page number.
+	 */
 	listNotifications(
 		unreadOnly?: boolean,
+		notificationType?: NotificationType,
 		offset?: number,
 		limit?: number,
 	): Promise<INotification[]>;

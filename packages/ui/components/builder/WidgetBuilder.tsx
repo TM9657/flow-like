@@ -115,6 +115,10 @@ function isBackgroundClass(value: string | undefined): value is string {
 	return value?.startsWith("bg-") ?? false;
 }
 
+// Mirrors the runtime injection at `use-page-content.tsx`: `:root` in an app-wide sheet
+// addresses the app root, never the host document.
+const APP_CSS_SCOPE_OPTIONS = { scopeRoot: true } as const;
+
 // Create the default root component
 function createRootComponent(): SurfaceComponent {
 	return {
@@ -160,6 +164,12 @@ export interface WidgetBuilderProps {
 		padding: string;
 		customCss?: string;
 	}) => void;
+	/**
+	 * App-wide stylesheet, rendered underneath the page sheet so the canvas shows what the
+	 * runtime will. Read-only: it never enters `canvasSettings`, which is written back into
+	 * the page on the first edit.
+	 */
+	appCustomCss?: string;
 	/** Context for action editor (pages, events, etc.) */
 	actionContext?: {
 		appId?: string;
@@ -224,6 +234,7 @@ export function WidgetBuilder({
 	onChange,
 	initialCanvasSettings,
 	onCanvasSettingsChange,
+	appCustomCss,
 	actionContext,
 	currentPageId,
 	onPageChange,
@@ -271,6 +282,7 @@ export function WidgetBuilder({
 				setPendingComponents={setPendingComponents}
 				onSave={onSave}
 				onExport={onExport}
+				appCustomCss={appCustomCss}
 				currentPageId={currentPageId}
 				onPageChange={onPageChange}
 				externalAssistant={externalAssistant}
@@ -296,6 +308,7 @@ interface WidgetBuilderContentProps {
 		widgetRefs?: Record<string, IWidgetRef>,
 	) => void;
 	onExport?: (components: SurfaceComponent[]) => void;
+	appCustomCss?: string;
 	currentPageId?: string;
 	onPageChange?: (pageId: string) => void;
 	externalAssistant?: boolean;
@@ -327,6 +340,7 @@ function WidgetBuilderContent({
 	setPendingComponents,
 	onSave,
 	onExport,
+	appCustomCss,
 	currentPageId,
 	onPageChange,
 	externalAssistant,
@@ -633,10 +647,16 @@ function WidgetBuilderContent({
 					>
 						<div ref={canvasContainerRef} className="h-full w-full">
 							{mode === "edit" ? (
-								<VisualCanvas surfaceId={surfaceId} />
+								<VisualCanvas
+									surfaceId={surfaceId}
+									appCustomCss={appCustomCss}
+								/>
 							) : (
 								<ResponsivePreview>
-									<BuilderPreview surfaceId={surfaceId} />
+									<BuilderPreview
+										surfaceId={surfaceId}
+										appCustomCss={appCustomCss}
+									/>
 								</ResponsivePreview>
 							)}
 						</div>
@@ -741,7 +761,13 @@ function PendingComponentsBar({
 }
 
 // Visual Canvas - shows live preview with drop overlays
-function VisualCanvas({ surfaceId }: { surfaceId: string }) {
+function VisualCanvas({
+	surfaceId,
+	appCustomCss,
+}: {
+	surfaceId: string;
+	appCustomCss?: string;
+}) {
 	const { t } = useTranslation("flow");
 	const backend = useBackend();
 	const {
@@ -932,7 +958,13 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 			)}
 			style={{ userSelect: isDragging ? "none" : undefined }}
 		>
-			{/* Custom CSS injection (scoped and sanitized) */}
+			{/* Custom CSS injection (scoped and sanitized). The app sheet goes first so a tie
+			    on specificity resolves to the page, exactly as it does at runtime. */}
+			<ScopedCustomCss
+				css={appCustomCss}
+				scopeSelector={`[data-canvas-id="${canvasId}"]`}
+				options={APP_CSS_SCOPE_OPTIONS}
+			/>
 			<ScopedCustomCss
 				css={canvasSettings.customCss}
 				scopeSelector={`[data-canvas-id="${canvasId}"]`}
@@ -1023,9 +1055,10 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 
 interface BuilderPreviewProps {
 	surfaceId: string;
+	appCustomCss?: string;
 }
 
-function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
+function BuilderPreview({ surfaceId, appCustomCss }: BuilderPreviewProps) {
 	const { t } = useTranslation("flow");
 	const backend = useBackend();
 	const executionService = useExecutionServiceOptional();
@@ -1299,7 +1332,13 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 				padding: liveCanvasSettings.padding,
 			}}
 		>
-			{/* Custom CSS injection (scoped and sanitized) */}
+			{/* Custom CSS injection (scoped and sanitized). Both sheets live inside this element,
+			    so they travel into the ResponsivePreview iframe with the rest of the subtree. */}
+			<ScopedCustomCss
+				css={appCustomCss}
+				scopeSelector={`[data-canvas-id="${previewCanvasId}"]`}
+				options={APP_CSS_SCOPE_OPTIONS}
+			/>
 			<ScopedCustomCss
 				css={liveCanvasSettings.customCss}
 				scopeSelector={`[data-canvas-id="${previewCanvasId}"]`}

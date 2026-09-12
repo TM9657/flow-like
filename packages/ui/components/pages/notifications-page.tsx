@@ -158,7 +158,9 @@ export function NotificationsPageScreen() {
 	const notificationsQuery = useInfiniteInvoke(
 		backend.userState.listNotifications,
 		backend.userState,
-		[false],
+		// [unreadOnly, notificationType]; the hook appends offset and limit. The
+		// inbox shows every kind, so the kind slot is held open.
+		[false, undefined],
 		50,
 		true,
 		authQueryDeps,

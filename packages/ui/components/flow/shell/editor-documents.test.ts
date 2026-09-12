@@ -47,6 +47,22 @@ describe("documentKey", () => {
 			documentKey({ kind: "widget", widgetId: "x" }),
 		);
 	});
+
+	// One app has exactly one stylesheet, so its key carries no id and every
+	// reference to it collapses onto the same tab.
+	test("the app stylesheet is a single document", () => {
+		expect(documentKey({ kind: "styles" })).toBe("styles:app");
+		expect(sameDocument({ kind: "styles" }, { kind: "styles" })).toBe(true);
+	});
+});
+
+describe("styles document persistence", () => {
+	test("survives a serialize/deserialize round trip", () => {
+		const tabs = withDocumentOpened([], { kind: "styles" }).tabs;
+		const restored = deserializeTabs(serializeTabs(tabs, "styles:app"));
+		expect(restored.tabs.map((tab) => tab.doc)).toEqual([{ kind: "styles" }]);
+		expect(restored.activeKey).toBe("styles:app");
+	});
 });
 
 describe("withDocumentOpened", () => {

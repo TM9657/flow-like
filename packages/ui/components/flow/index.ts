@@ -3,6 +3,7 @@ export * from "./board-sync-recovery";
 export * from "./flow-history";
 export * from "./flow-preview";
 export * from "./flow-node-shell";
+export { AppStylesDocument } from "./shell/documents/styles-document";
 export * from "./flow-template-selector";
 export * from "./variables/variables-menu-edit";
 export * from "./variables/runtime-variable-editor";

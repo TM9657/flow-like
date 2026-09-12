@@ -6,10 +6,28 @@ import type {
 	IOAuthProvider,
 	IOAuthToken,
 	IRunPayload,
+	IScheduleConfig,
 	IVersionType,
 	PageTrigger,
 } from "../../lib";
 import type { IPrerunEventResponse } from "./types";
+
+export interface IUserSchedule {
+	event_id: string;
+	app_id: string;
+	name: string;
+	description?: string | null;
+	config: IScheduleConfig;
+}
+
+export interface IUserSchedules {
+	schedules: IUserSchedule[];
+	/** Apps the caller can read events for that were considered. */
+	apps_checked: number;
+	/** Schedule rows whose configuration could not be read. */
+	unreadable: number;
+	truncated: boolean;
+}
 
 export interface IOAuthCheckResult {
 	tokens?: Record<string, IOAuthToken>;
@@ -423,6 +441,12 @@ export interface IEventState {
 		version?: [number, number, number],
 	): Promise<IEvent>;
 	getEvents(appId: string, force?: boolean): Promise<IEvent[]>;
+	/**
+	 * Active scheduled events across every app whose events the signed-in user can
+	 * read, in one call. Asking {@link getEvents} per app answers the same question
+	 * with a fan-out that grows with the library and repeats on every refresh.
+	 */
+	getUserSchedules(limit?: number, appId?: string): Promise<IUserSchedules>;
 	/** Read exactly one Event revision from the authoritative store without cache repair. */
 	getEventAuthoritative(
 		appId: string,

@@ -1,4 +1,6 @@
 import {
+	type IApp,
+	IAppVisibility,
 	type IBoard,
 	type IEvent,
 	IEventExecutionMode,
@@ -7,6 +9,7 @@ import {
 	type IHub,
 	type IIntercomEvent,
 	type ILogMetadata,
+	type IMetadata,
 	type INode,
 	type IOAuthProvider,
 	type IOAuthToken,
@@ -23,6 +26,7 @@ import {
 	getCurrentPageContext,
 	injectDataFunction,
 	notifyPageContractRejected,
+	scheduleConfigFromEvent,
 	serializePageTrigger,
 	showProgressToast,
 	withCurrentManifestRevision,
@@ -44,6 +48,8 @@ import type {
 	IRegressionSuiteRunSummary,
 	IRestorePlanResult,
 	ISetupEventResponse,
+	IUserSchedule,
+	IUserSchedules,
 } from "@flow-like/flow-like-ui/state/backend-state/event-state";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
@@ -593,6 +599,84 @@ export class EventState implements IEventState {
 
 		this.backend.backgroundTaskHandler(promise);
 		return events;
+	}
+
+	/**
+	 * Offline apps exist only on this machine, so the hub cannot answer for them.
+	 * They are read over local IPC and merged into the hub's answer — a fan-out,
+	 * but one that costs no network and only covers the offline slice.
+	 */
+	private async offlineSchedules(
+		appId?: string,
+	): Promise<{ schedules: IUserSchedule[]; appsChecked: number }> {
+		let apps: [IApp, IMetadata | undefined][];
+		try {
+			apps = await invoke<[IApp, IMetadata | undefined][]>("get_apps");
+		} catch {
+			return { schedules: [], appsChecked: 0 };
+		}
+
+		const offline = apps
+			.map(([app]) => app)
+			.filter((app) => app.visibility === IAppVisibility.Offline)
+			.filter((app) => !appId || app.id === appId);
+
+		const batches = await Promise.allSettled(
+			offline.map(async (app) => {
+				const events = await invoke<IEvent[]>("get_events", { appId: app.id });
+				return events.flatMap((event) => {
+					const config = scheduleConfigFromEvent(event);
+					return config
+						? [
+								{
+									event_id: event.id,
+									app_id: app.id,
+									name: event.name,
+									description: event.description,
+									config,
+								},
+							]
+						: [];
+				});
+			}),
+		);
+
+		return {
+			schedules: batches.flatMap((batch) =>
+				batch.status === "fulfilled" ? batch.value : [],
+			),
+			appsChecked: offline.length,
+		};
+	}
+
+	async getUserSchedules(limit = 100, appId?: string): Promise<IUserSchedules> {
+		const params = new URLSearchParams({ limit: String(limit) });
+		if (appId) params.set("app_id", appId);
+
+		const [remote, local] = await Promise.all([
+			this.backend.profile && this.backend.auth
+				? fetcher<IUserSchedules>(
+						this.backend.profile,
+						`user/schedules?${params}`,
+						{ method: "GET" },
+						this.backend.auth,
+					).catch(() => null)
+				: Promise.resolve(null),
+			this.offlineSchedules(appId),
+		]);
+
+		const byKey = new Map<string, IUserSchedule>();
+		for (const schedule of [...(remote?.schedules ?? []), ...local.schedules]) {
+			byKey.set(`${schedule.app_id}:${schedule.event_id}`, schedule);
+		}
+		const schedules = [...byKey.values()];
+
+		return {
+			schedules: schedules.slice(0, limit),
+			apps_checked: (remote?.apps_checked ?? 0) + local.appsChecked,
+			unreadable: remote?.unreadable ?? 0,
+			truncated: (remote?.truncated ?? false) || schedules.length > limit,
+		};
 	}
 
 	async getEventsAuthoritative(appId: string): Promise<IEvent[]> {

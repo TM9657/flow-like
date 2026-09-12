@@ -1,5 +1,6 @@
 import type {
 	IEmbeddingUsageRecord,
+	IExecutionActivity,
 	IExecutionUsageRecord,
 	ILlmUsageRecord,
 	IPaginatedResponse,
@@ -24,6 +25,17 @@ export interface IUsageState {
 		pageSize?: number,
 		appId?: string,
 	): Promise<IPaginatedResponse<IExecutionUsageRecord>>;
+
+	/**
+	 * Counts for a whole period rather than a page of it. Prefer this over
+	 * paging {@link getExecutionHistory} whenever a caller needs totals, per-day
+	 * buckets or a per-app split: a page cannot answer those without dropping
+	 * everything past its own size limit.
+	 */
+	getExecutionActivity(
+		days?: number,
+		appId?: string,
+	): Promise<IExecutionActivity>;
 
 	getUsageSummary(): Promise<IUsageSummary>;
 }

@@ -210,6 +210,23 @@ pub struct ExecutionUsageRecord {
     pub created_at: String,
 }
 
+impl From<execution_usage_tracking::Model> for ExecutionUsageRecord {
+    fn from(r: execution_usage_tracking::Model) -> Self {
+        Self {
+            id: r.id,
+            instance: r.instance,
+            board_id: r.board_id,
+            node_id: r.node_id,
+            version: r.version,
+            microseconds: r.microseconds,
+            status: format!("{:?}", r.status),
+            app_id: r.app_id,
+            technical_user_id: r.technical_user_id,
+            created_at: r.created_at.to_rfc3339(),
+        }
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/usage/executions",
@@ -250,18 +267,7 @@ pub async fn get_execution_history(
 
     let items: Vec<ExecutionUsageRecord> = records
         .into_iter()
-        .map(|r| ExecutionUsageRecord {
-            id: r.id,
-            instance: r.instance,
-            board_id: r.board_id,
-            node_id: r.node_id,
-            version: r.version,
-            microseconds: r.microseconds,
-            status: format!("{:?}", r.status),
-            app_id: r.app_id,
-            technical_user_id: r.technical_user_id,
-            created_at: r.created_at.to_rfc3339(),
-        })
+        .map(ExecutionUsageRecord::from)
         .collect();
 
     Ok(Json(PaginatedResponse {

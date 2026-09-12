@@ -312,6 +312,22 @@ export class WebAppState implements IAppState {
 		);
 	}
 
+	async getAppStylesheet(appId: string): Promise<string | undefined> {
+		const response = await apiGet<{ custom_css?: string | null }>(
+			`apps/${appId}/settings/appearance`,
+			this.backend.auth,
+		);
+		return response.custom_css ?? undefined;
+	}
+
+	async setAppStylesheet(appId: string, css: string): Promise<void> {
+		await apiPatch(
+			`apps/${appId}/settings/appearance`,
+			{ custom_css: css },
+			this.backend.auth,
+		);
+	}
+
 	async changeAppAllowForking(appId: string, allow: boolean): Promise<void> {
 		await apiPatch(
 			`apps/${appId}/settings/forking`,

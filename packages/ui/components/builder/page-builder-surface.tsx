@@ -102,6 +102,19 @@ export function PageBuilderSurface({
 		[appId],
 	);
 
+	// The app-wide sheet the runtime will put underneath this page, so the canvas and the
+	// preview show what the visitor sees. Read-only here; the app stylesheet editor owns it.
+	// Read through getApp, not getAppStylesheet: that route is Owner-gated, so a
+	// non-owner editor would see no app layer and the canvas would quietly lie
+	// about what the visitor gets. getApp carries `frontend` for anyone with
+	// app access.
+	const appStylesheet = useInvoke(
+		backend.appState.getApp,
+		backend.appState,
+		[appId],
+		!!appId,
+	);
+
 	// Fetch board to extract workflow events (simple event nodes)
 	const board = useInvoke(
 		backend.boardState.getBoard,
@@ -542,6 +555,7 @@ export function PageBuilderSurface({
 						className="h-full"
 						externalAssistant
 						actionContext={actionContext}
+						appCustomCss={appStylesheet.data?.frontend?.custom_css ?? undefined}
 						currentPageId={pageId}
 						onPageChange={(newPageId) => {
 							if (newPageId === pageId) return; // Skip if same page

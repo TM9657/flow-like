@@ -1,24 +1,24 @@
 import { describe, expect, it } from "vitest";
-import type { IExecutionUsageRecord } from "../../lib/schema/usage/tracking";
+import type {
+	IExecutionActivity,
+	IExecutionUsageRecord,
+} from "../../lib/schema/usage/tracking";
 import {
 	hasAttentionSeverity,
 	homeActivityCoverage,
 	homeActivityDays,
+	homeActivityPeriod,
+	homeActivitySourceLabel,
+	homeDurationMs,
 	homeUsageDollars,
-	summarizeHomeExecutions,
+	normalizeHomeActivity,
 } from "./home-activity-statistics";
 
-const now = Date.parse("2026-09-05T14:00:00Z");
-const run = (
-	id: string,
-	created_at: string,
-	status = "Info",
-	app_id: string | null = "app-a",
-): IExecutionUsageRecord => ({
+const flagged = (id: string): IExecutionUsageRecord => ({
 	id,
-	created_at,
-	status,
-	app_id,
+	created_at: "2026-09-11T10:00:00Z",
+	status: "Error",
+	app_id: "app-a",
 	instance: null,
 	board_id: "board",
 	node_id: "node",
@@ -27,72 +27,112 @@ const run = (
 	technical_user_id: null,
 });
 
-function summarize(
-	items: IExecutionUsageRecord[],
-	days: unknown = 7,
-	total = items.length,
-) {
-	return summarizeHomeExecutions(
-		{ items, total, page: 0, page_size: 100 },
-		days,
-		now,
-	);
-}
+const response = (
+	overrides: Partial<IExecutionActivity> = {},
+): IExecutionActivity => ({
+	days: 7,
+	from: "2026-09-05T00:00:00Z",
+	to: "2026-09-11T14:00:00Z",
+	buckets: [
+		{ day: "2026-09-10", count: 4_000, attention_count: 12 },
+		{ day: "2026-09-11", count: 861, attention_count: 3 },
+	],
+	apps: [
+		{ app_id: "app-a", count: 4_800, attention_count: 15 },
+		{ app_id: null, count: 61, attention_count: 0 },
+	],
+	total: 4_861,
+	attention_total: 15,
+	average_microseconds: 2_500,
+	attention: [flagged("a"), flagged("b")],
+	...overrides,
+});
 
-describe("home execution statistics", () => {
-	it("groups UTC days, excludes older/future/invalid dates and deduplicates records", () => {
-		const data = summarize([
-			run("first", "2026-08-30T00:00:00Z", "Error"),
-			run("last", "2026-09-05T13:00:00Z", "Warn"),
-			run("last", "2026-09-05T13:00:00Z", "Warn"),
-			run("old", "2026-08-29T23:59:59Z"),
-			run("future", "2026-09-05T15:00:00Z"),
-			run("invalid", "invalid"),
-		]);
-		expect(data.rows.map((item) => item.id)).toEqual(["last", "first"]);
-		expect(data.buckets).toHaveLength(7);
-		expect(data.buckets[0]).toEqual({
-			day: "2026-08-30",
-			count: 1,
-			attentionCount: 1,
+describe("home execution activity", () => {
+	it("renames the wire shape without moving a number", () => {
+		const activity = normalizeHomeActivity(response());
+		expect(activity.total).toBe(4_861);
+		expect(activity.attentionTotal).toBe(15);
+		expect(activity.averageMicroseconds).toBe(2_500);
+		expect(activity.buckets[0]).toEqual({
+			day: "2026-09-10",
+			count: 4_000,
+			attentionCount: 12,
 		});
-		expect(data.buckets[6]).toEqual({
-			day: "2026-09-05",
-			count: 1,
+		expect(activity.apps[1]).toEqual({
+			appId: null,
+			count: 61,
 			attentionCount: 0,
 		});
-		expect(data.invalidDates).toBe(1);
 	});
 
-	it("keeps missing app associations and treats only Error/Fatal as attention severity", () => {
-		const data = summarize([
-			run("a", "2026-09-05T10:00:00Z", "Debug"),
-			run("b", "2026-09-05T11:00:00Z", "Fatal", null),
-			run("c", "2026-09-05T12:00:00Z", "Warn"),
-		]);
-		expect(data.apps).toEqual([
-			{ appId: "app-a", count: 2, attentionCount: 0 },
-			{ appId: null, count: 1, attentionCount: 1 },
-		]);
-		expect(hasAttentionSeverity("ERROR")).toBe(true);
-		expect(hasAttentionSeverity("Warn")).toBe(false);
-		expect(hasAttentionSeverity("success")).toBe(false);
+	it("reports a flagged list shorter than its own total as capped", () => {
+		expect(normalizeHomeActivity(response()).attentionCapped).toBe(true);
+		expect(
+			normalizeHomeActivity(
+				response({
+					attention_total: 2,
+					attention: [flagged("a"), flagged("b")],
+				}),
+			).attentionCapped,
+		).toBe(false);
+		expect(
+			normalizeHomeActivity(response({ attention_total: 0, attention: [] }))
+				.attentionCapped,
+		).toBe(false);
 	});
 
-	it("labels bounded samples even if their period contains no records", () => {
-		const data = summarize([run("old", "2026-08-01T00:00:00Z")], 1, 500);
-		expect(data.partial).toBe(true);
-		expect(homeActivityCoverage(data)).toContain(
-			"0 records in the latest 1 of 500",
+	it("survives a response missing its optional collections", () => {
+		const activity = normalizeHomeActivity({
+			days: 1,
+			from: "2026-09-11T00:00:00Z",
+			to: "2026-09-11T14:00:00Z",
+			total: 0,
+			attention_total: 0,
+			average_microseconds: null,
+		} as unknown as IExecutionActivity);
+		expect(activity.buckets).toEqual([]);
+		expect(activity.apps).toEqual([]);
+		expect(activity.attention).toEqual([]);
+		expect(activity.attentionCapped).toBe(false);
+	});
+
+	it("describes a counted period rather than a sampled one", () => {
+		const coverage = homeActivityCoverage(normalizeHomeActivity(response()));
+		expect(coverage).toContain("Last 7 days (UTC)");
+		expect(coverage).toContain("4,861 execution records");
+		expect(coverage).toContain("counted in full rather than sampled");
+		expect(coverage).toContain("15");
+		expect(coverage).not.toContain("sample counts");
+	});
+
+	it("keeps singular and plural record labels honest", () => {
+		const one = normalizeHomeActivity(response({ total: 1, days: 1 }));
+		expect(homeActivityCoverage(one)).toContain("1 execution record,");
+		expect(homeActivityCoverage(one)).toContain("Today (UTC)");
+		expect(homeActivitySourceLabel(one)).toBe(
+			"Your account · 1 record · today (UTC)",
 		);
-		expect(homeActivityCoverage(data)).toContain("may omit earlier activity");
-		expect(homeActivityCoverage(summarize([], 1))).toContain("All available");
+		expect(homeActivitySourceLabel(normalizeHomeActivity(response()))).toBe(
+			"Your account · 4,861 records · last 7 days (UTC)",
+		);
 	});
 
-	it("uses bounded timeframes and converts the documented microdollar unit", () => {
+	it("uses bounded timeframes and converts the documented units", () => {
 		expect(homeActivityDays(1)).toBe(1);
 		expect(homeActivityDays(30)).toBe(30);
 		expect(homeActivityDays(365)).toBe(7);
+		expect(homeActivityPeriod(1)).toBe("Today");
+		expect(homeActivityPeriod(30)).toBe("Last 30 days");
 		expect(homeUsageDollars(1_500_000)).toContain("1.50");
+		expect(homeDurationMs(2_500)).toBe("3 ms");
+		expect(homeDurationMs(null)).toBe("No records");
+	});
+
+	it("treats only Error and Fatal as attention severity", () => {
+		expect(hasAttentionSeverity("ERROR")).toBe(true);
+		expect(hasAttentionSeverity("Fatal")).toBe(true);
+		expect(hasAttentionSeverity("Warn")).toBe(false);
+		expect(hasAttentionSeverity("success")).toBe(false);
 	});
 });

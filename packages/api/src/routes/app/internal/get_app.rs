@@ -43,6 +43,10 @@ pub async fn get_app(
         app.boards = scoped_app.boards.clone();
         app.templates = scoped_app.templates.clone();
         app.events = scoped_app.events.clone();
+        // `From<app::Model> for App` hardcodes `frontend: None` and there is no
+        // DB column behind it, so without this overlay the appearance editor
+        // loads blank on every cloud app and the next save writes that blank back.
+        app.frontend = scoped_app.frontend.clone();
 
         return Ok(Json(app));
     }
