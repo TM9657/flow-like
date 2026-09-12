@@ -165,7 +165,7 @@ impl HTTPClient {
         let string_hash = format!("http/{}", request_hash);
         let file_exists = cache_file_exists(&string_hash);
         if !file_exists {
-            println!("Cache file does not exist: {}", string_hash);
+            tracing::debug!("Cache file does not exist: {}", string_hash);
             return Err(flow_like_types::anyhow!("Cache file does not exist"));
         }
 

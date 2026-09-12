@@ -773,8 +773,12 @@ impl PlatformCopilot {
         let mut session_stats = LLMUsageStats::default();
         let mut current_prompt = prompt_message;
         let web_research_session = Arc::new(WebResearchSession::new(&user_prompt));
-        let mut local_app_discovery_complete = false;
+        let mut local_app_discovery_returned = false;
         let mut sealed_research_used = false;
+        // Set once a private/local tool has actually RUN — not merely been named. A wave that pairs
+        // research with a private call refuses both, and latching on the declared name there would
+        // re-block research on exactly the retry wave the model is told to use.
+        let mut private_tool_executed = false;
 
         // Tool rounds and answer generation have separate budgets. The last iteration deliberately
         // advertises no tools, guaranteeing that a search/open chain cannot consume the final turn
@@ -1028,32 +1032,14 @@ impl PlatformCopilot {
                 }
                 let prepared = match tool_name {
                     RESEARCH_AGENT_TOOL => {
-                        let output = if round_has_private_call {
-                            json!({
-                                "status": "error",
-                                "code": "sealed_research_must_be_separate_wave",
-                                "retryable": true,
-                                "message": "Run sealed public research in its own assistant wave before any local app, data, memory, file, or interactive call."
-                            })
-                            .to_string()
-                        } else if !local_app_discovery_complete {
-                            json!({
-                                "status": "error",
-                                "code": "local_app_discovery_required",
-                                "retryable": true,
-                                "message": "Call list_apps in an earlier round and wait for a complete inventory before using public-web fallback."
-                            })
-                            .to_string()
-                        } else if sealed_research_used {
-                            json!({
-                                "status": "error",
-                                "code": "sealed_research_already_used",
-                                "retryable": false,
-                                "message": "The sealed public researcher is one-shot for this run; synthesize its findings and disclose remaining gaps."
-                            })
-                            .to_string()
+                        let output = if let Some(refusal) = sealed_research_gate_error(
+                            round_has_private_call,
+                            private_tool_executed,
+                            local_app_discovery_returned,
+                            sealed_research_used,
+                        ) {
+                            refusal.to_string()
                         } else {
-                            sealed_research_used = true;
                             let timeout_secs = find_global_tool_spec(RESEARCH_AGENT_TOOL)
                                 .map(|spec| spec.timeout_secs)
                                 .unwrap_or(900);
@@ -1067,34 +1053,47 @@ impl PlatformCopilot {
                             )
                             .await
                             {
-                                Ok(Ok((findings, research_stats))) => {
-                                    for call in &research_stats.calls {
+                                Ok(Ok(outcome)) => {
+                                    sealed_research_used = true;
+                                    for call in &outcome.stats.calls {
                                         session_stats.accumulate(
                                             &call.usage,
                                             Some(call.model.as_str()),
                                         );
                                     }
+                                    // The researcher's verified pages become citable here: its
+                                    // findings are about to enter this context, and a synthesis
+                                    // that may cite nothing behind them is worse than no research.
+                                    web_research_session
+                                        .adopt_opened_urls(&outcome.opened_urls);
                                     json!({
                                         "status": "ok",
                                         "sealed_to_source_request": true,
-                                        "findings": findings,
+                                        "findings": outcome.findings,
+                                        "citable_urls": outcome.opened_urls,
                                     })
                                     .to_string()
                                 }
+                                // An immediate failure is cheap to retry and leaves the run with no
+                                // research at all, so it does not burn the one shot. A timeout does:
+                                // the user already waited the full budget for it.
                                 Ok(Err(error)) => json!({
                                     "status": "error",
                                     "code": "sealed_research_failed",
-                                    "retryable": false,
+                                    "retryable": true,
                                     "message": error.to_string(),
                                 })
                                 .to_string(),
-                                Err(_) => json!({
-                                    "status": "timeout",
-                                    "code": "sealed_research_timeout",
-                                    "retryable": false,
-                                    "message": format!("The sealed researcher exceeded its {timeout_secs}-second execution limit."),
-                                })
-                                .to_string(),
+                                Err(_) => {
+                                    sealed_research_used = true;
+                                    json!({
+                                        "status": "timeout",
+                                        "code": "sealed_research_timeout",
+                                        "retryable": false,
+                                        "message": format!("The sealed researcher exceeded its {timeout_secs}-second execution limit."),
+                                    })
+                                    .to_string()
+                                }
                             }
                         };
                         // A prepared error is an already-computed tool result in this loop.
@@ -1251,15 +1250,25 @@ impl PlatformCopilot {
             // app, memory, or interactive data, later model rounds lose public-network access so
             // private values cannot be transformed into a new query or outbound URL.
             if tool_results.iter().any(|(_id, name, output, _images)| {
-                name == "list_apps" && complete_app_inventory_result(output)
+                name == "list_apps" && returned_app_inventory_result(output)
             }) {
-                local_app_discovery_complete = true;
+                local_app_discovery_returned = true;
             }
             let round_entered_private_context = tool_calls
                 .iter()
                 .any(|tool_call| platform_tool_enters_private_context(&tool_call.function.name));
             if round_entered_private_context {
                 web_research_session.close_public_web_phase();
+            }
+            // Narrower than the web-phase latch above on purpose: a private call that the loop
+            // refused — deferred behind research, or never advertised on this surface — put nothing
+            // into the context and must not cost the run its public fallback.
+            if !round_has_research_fallback {
+                private_tool_executed |= tool_calls.iter().any(|tool_call| {
+                    let name = tool_call.function.name.as_str();
+                    advertised_tool_names.contains(name)
+                        && platform_tool_enters_private_context(name)
+                });
             }
 
             for (i, (_id, name, output, _images)) in tool_results.iter().enumerate() {
@@ -1442,6 +1451,15 @@ fn platform_loop_tool_specs(memory_enabled: bool) -> Vec<PlatformToolSpec> {
 
 const MAX_SEALED_RESEARCH_ROUNDS: usize = 6;
 
+/// What a completed sealed research run hands back to the root loop. `opened_urls` are the pages
+/// the researcher actually fetched; the root adopts them so its synthesis may cite the sources its
+/// own findings rest on.
+struct SealedResearchOutcome {
+    findings: String,
+    stats: LLMUsageStats,
+    opened_urls: Vec<String>,
+}
+
 /// Run public research in a context that can see only the immutable source request and public-web
 /// tools. This is the rig/Bits equivalent of the frontend-managed Research specialist. The root
 /// model cannot supply arguments, history, recalled memory, attachments, or app inventory to this
@@ -1450,7 +1468,7 @@ async fn run_sealed_research_agent(
     completion_client: &(dyn CompletionClientDyn + Send + Sync),
     model_name: &str,
     source_user_prompt: &str,
-) -> Result<(String, LLMUsageStats)> {
+) -> Result<SealedResearchOutcome> {
     let research_date = format!(
         "Current UTC date: {}.",
         chrono::Utc::now().format("%Y-%m-%d")
@@ -1531,7 +1549,11 @@ async fn run_sealed_research_agent(
                     unverified.join(", ")
                 ));
             }
-            return Ok((round_text, research_stats));
+            return Ok(SealedResearchOutcome {
+                findings: round_text,
+                stats: research_stats,
+                opened_urls: web_session.opened_urls(),
+            });
         }
         if iteration == MAX_SEALED_RESEARCH_ROUNDS {
             return Err(flow_like_types::anyhow!(
@@ -1627,13 +1649,69 @@ fn platform_tool_enters_private_context(name: &str) -> bool {
     !is_public_web_tool(name) && !matches!(name, "list_apps" | RESEARCH_AGENT_TOOL)
 }
 
-fn complete_app_inventory_result(output: &str) -> bool {
+/// Why the sealed public researcher may not run right now, or `None` when it may.
+///
+/// Public research is a everyday capability, not a privileged one: a plainly public question should
+/// be answerable in the first wave without spending a round on `list_apps` first. What the host
+/// still enforces is the part the model cannot be trusted to self-police — ordering and spend:
+///
+/// - it never shares a wave with a private call, so untrusted page text and private data cannot
+///   land in one batch;
+/// - once private data HAS entered the run, local routing must have happened, because a run already
+///   working inside the user's apps should answer from them rather than reach for the public web;
+/// - it runs once per run.
+///
+/// The gate deliberately does not try to judge whether a request "is public". It cannot: the tool
+/// takes no arguments and the researcher sees only the immutable user prompt, so what goes out is
+/// identical in wave 1 and wave 5. That seal, not this gate, is what protects the user's data.
+fn sealed_research_gate_error(
+    round_has_private_call: bool,
+    private_tool_executed: bool,
+    local_app_discovery_returned: bool,
+    sealed_research_used: bool,
+) -> Option<Value> {
+    if round_has_private_call {
+        return Some(json!({
+            "status": "error",
+            "code": "sealed_research_must_be_separate_wave",
+            "retryable": true,
+            "message": "Run sealed public research in its own assistant wave before any local app, data, memory, file, or interactive call."
+        }));
+    }
+    if private_tool_executed && !local_app_discovery_returned {
+        return Some(json!({
+            "status": "error",
+            "code": "local_app_discovery_required",
+            "retryable": true,
+            "message": "This run already works with local app or user data, so call list_apps and wait for its result before the public-web fallback. A partial inventory satisfies this; a failed one does not."
+        }));
+    }
+    if sealed_research_used {
+        return Some(json!({
+            "status": "error",
+            "code": "sealed_research_already_used",
+            "retryable": false,
+            "message": "The sealed public researcher is one-shot for this run; synthesize its findings and disclose remaining gaps."
+        }));
+    }
+    None
+}
+
+/// Whether a `list_apps` result opens the sealed public-web fallback. The question is only whether
+/// a local inventory came back, never whether every app in it read cleanly: an app whose Events
+/// cannot be loaded, a profile app the backend does not return, and a listing capped by the safety
+/// bound all report `partial`, and each is still evidence about what exists locally. Requiring
+/// `complete` sealed the fallback off permanently on any profile the inventory cannot fully read —
+/// notably every web profile holding an offline app, which the server inventory can never return.
+/// A failed, timed-out, or unparseable result is not an inventory and keeps the gate shut.
+fn returned_app_inventory_result(output: &str) -> bool {
     let Ok(value) = serde_json::from_str::<Value>(output) else {
         return false;
     };
-    value.get("status").and_then(Value::as_str) == Some("ok")
-        && value.get("complete").and_then(Value::as_bool) == Some(true)
-        && value.get("truncated").and_then(Value::as_bool) != Some(true)
+    matches!(
+        value.get("status").and_then(Value::as_str),
+        Some("ok") | Some("partial")
+    )
 }
 
 /// Dispatch a tool call: memory and safe public-page reads run locally; everything else goes to the
@@ -2273,20 +2351,115 @@ mod tests {
     }
 
     #[test]
-    fn public_fallback_requires_a_complete_app_inventory() {
-        assert!(complete_app_inventory_result(
+    fn public_fallback_requires_a_returned_app_inventory() {
+        assert!(returned_app_inventory_result(
             &json!({ "status": "ok", "complete": true, "apps": [] }).to_string()
         ));
-        assert!(!complete_app_inventory_result(
-            &json!({ "status": "ok", "complete": false, "apps": [] }).to_string()
-        ));
-        assert!(!complete_app_inventory_result(
+        assert!(returned_app_inventory_result(
             &json!({ "status": "ok", "apps": [] }).to_string()
         ));
-        assert!(!complete_app_inventory_result(
-            &json!({ "status": "ok", "truncated": true, "apps": [] }).to_string()
+        assert!(!returned_app_inventory_result(
+            &json!({ "status": "error", "message": "inventory unavailable" }).to_string()
         ));
-        assert!(!complete_app_inventory_result("not json"));
+        assert!(!returned_app_inventory_result(
+            &json!({ "status": "timeout" }).to_string()
+        ));
+        assert!(!returned_app_inventory_result(
+            &json!({ "apps": [] }).to_string()
+        ));
+        assert!(!returned_app_inventory_result("not json"));
+    }
+
+    fn gate_code(
+        round_has_private_call: bool,
+        private_tool_executed: bool,
+        local_app_discovery_returned: bool,
+        sealed_research_used: bool,
+    ) -> Option<String> {
+        sealed_research_gate_error(
+            round_has_private_call,
+            private_tool_executed,
+            local_app_discovery_returned,
+            sealed_research_used,
+        )
+        .map(|refusal| {
+            refusal
+                .get("code")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        })
+    }
+
+    /// The point of the whole change: a plainly public question is answerable in the first wave,
+    /// with no `list_apps` round spent first.
+    #[test]
+    fn public_research_runs_in_the_first_wave_without_listing_apps() {
+        assert_eq!(gate_code(false, false, false, false), None);
+    }
+
+    #[test]
+    fn sealed_research_gate_refuses_in_priority_order() {
+        // Sharing a wave with a private call outranks every other reason.
+        assert_eq!(
+            gate_code(true, true, false, true).as_deref(),
+            Some("sealed_research_must_be_separate_wave")
+        );
+        // Once private data is in the run, local routing has to have happened.
+        assert_eq!(
+            gate_code(false, true, false, false).as_deref(),
+            Some("local_app_discovery_required")
+        );
+        // ...and an inventory clears it.
+        assert_eq!(gate_code(false, true, true, false), None);
+        // One shot per run, however it was earned.
+        assert_eq!(
+            gate_code(false, false, false, true).as_deref(),
+            Some("sealed_research_already_used")
+        );
+        assert_eq!(
+            gate_code(false, true, true, true).as_deref(),
+            Some("sealed_research_already_used")
+        );
+    }
+
+    /// Every refusal the model is expected to act on must say so; the one-shot refusal must not,
+    /// or the model burns rounds retrying a call that can never succeed.
+    #[test]
+    fn only_the_recoverable_sealed_research_refusals_are_retryable() {
+        for (args, retryable) in [
+            ((true, false, false, false), true),
+            ((false, true, false, false), true),
+            ((false, false, false, true), false),
+        ] {
+            let refusal =
+                sealed_research_gate_error(args.0, args.1, args.2, args.3).expect("a refusal");
+            assert_eq!(
+                refusal.get("retryable").and_then(Value::as_bool),
+                Some(retryable),
+                "wrong retryability for {refusal}"
+            );
+            assert_eq!(refusal.get("status").and_then(Value::as_str), Some("error"));
+        }
+    }
+
+    /// A listing the host could only partly read is still a listing. Sealing the public fallback on
+    /// it left `research_agent` unreachable for the whole run — one unreadable app, one profile app
+    /// the backend does not return, or the 250-app cap was enough to block it forever.
+    #[test]
+    fn a_partial_app_inventory_still_opens_the_public_fallback() {
+        for partial in [
+            json!({ "status": "partial", "complete": false, "apps": [] }),
+            json!({ "status": "partial", "complete": false, "truncated": true, "apps": [] }),
+            json!({
+                "status": "partial",
+                "complete": false,
+                "missing_profile_app_count": 2,
+                "apps": [{ "app_id": "a", "events_status": "error" }]
+            }),
+        ] {
+            assert!(returned_app_inventory_result(&partial.to_string()));
+        }
     }
 
     #[test]

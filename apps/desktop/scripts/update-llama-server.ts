@@ -1,15 +1,21 @@
 /**
- * Downloads the latest (or pinned) llama.cpp release binaries for all supported platforms
- * and places them in the correct Tauri binaries directories with proper naming.
+ * Downloads the pinned (or a requested) llama.cpp release build for all supported
+ * platforms and places the binaries in the Tauri binaries directories with the
+ * naming each platform config expects.
  *
  * Usage:
- *   bun run scripts/update-llama-server.ts                  # uses pinned version
- *   bun run scripts/update-llama-server.ts --latest         # fetches latest release
- *   bun run scripts/update-llama-server.ts --tag b8660      # fetches specific tag
+ *   bun run scripts/update-llama-server.ts                  # uses pinned build
+ *   bun run scripts/update-llama-server.ts --latest         # follows the newest stable release
+ *   bun run scripts/update-llama-server.ts --tag b10809     # fetches a specific build
  *   bun run scripts/update-llama-server.ts --platform mac-arm  # single platform
  *
  * Environment:
  *   GITHUB_TOKEN  — optional, avoids rate limits
+ *
+ * Upstream ships two kinds of tags: `vX.Y.Z` stable releases, which carry no
+ * binaries and exist to name a build, and `bNNNN` nightlies, which carry the
+ * archives. `--latest` resolves the stable release and then follows its
+ * `nightly-tag.txt` asset to the build that belongs to it.
  */
 
 import { execSync } from "node:child_process";
@@ -17,10 +23,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PINNED_TAG = "b8660";
+const PINNED_TAG = "b10809"; // stable v0.4.0
 const GITHUB_API = "https://api.github.com";
 const OWNER = "ggml-org";
 const REPO = "llama.cpp";
+const NIGHTLY_TAG_ASSET = "nightly-tag.txt";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const BINARIES_DIR = path.resolve(SCRIPT_DIR, "../src-tauri/binaries");
 
@@ -48,11 +55,22 @@ interface FileMapping {
 	executable?: boolean;
 }
 
+/**
+ * macOS dylibs ship as a symlink chain (libfoo.dylib → libfoo.0.dylib →
+ * libfoo.0.X.Y.dylib). Copying the unversioned name follows it to the real file;
+ * fixMacOsDylibNames then rewrites the install names to match.
+ */
 function macDylib(name: string): FileMapping {
 	return { src: `${name}.dylib`, dst: `${name}.dylib-{TRIPLE}` };
 }
 
-function linuxSo(name: string): FileMapping {
+/** Core Linux libraries are resolved through their soname, so ship that name. */
+function linuxSoname(name: string): FileMapping {
+	return { src: `${name}.so.0`, dst: `${name}.so.0` };
+}
+
+/** Backend plugins and the server implementation carry no version in their soname. */
+function linuxPlain(name: string): FileMapping {
 	return { src: `${name}.so`, dst: `${name}.so` };
 }
 
@@ -64,6 +82,24 @@ function winDllSuffixed(name: string): FileMapping {
 	return { src: `${name}.dll`, dst: `${name}.dll-{TRIPLE}` };
 }
 
+/** x86-64 ships one CPU backend per microarchitecture; ggml picks at runtime. */
+const X64_CPU_VARIANTS = [
+	"alderlake",
+	"cannonlake",
+	"cascadelake",
+	"cooperlake",
+	"haswell",
+	"icelake",
+	"ivybridge",
+	"piledriver",
+	"sandybridge",
+	"sapphirerapids",
+	"skylakex",
+	"sse42",
+	"x64",
+	"zen4",
+] as const;
+
 const PLATFORMS: Record<string, PlatformConfig> = {
 	"mac-arm": {
 		assetName: "llama-{TAG}-bin-macos-arm64.tar.gz",
@@ -72,6 +108,8 @@ const PLATFORMS: Record<string, PlatformConfig> = {
 		tauriTriple: "aarch64-apple-darwin",
 		files: [
 			{ src: "llama-server", dst: "llama-server-{TRIPLE}", executable: true },
+			macDylib("libllama-server-impl"),
+			macDylib("libllama-common"),
 			macDylib("libllama"),
 			macDylib("libggml"),
 			macDylib("libggml-base"),
@@ -89,6 +127,8 @@ const PLATFORMS: Record<string, PlatformConfig> = {
 		tauriTriple: "x86_64-apple-darwin",
 		files: [
 			{ src: "llama-server", dst: "llama-server-{TRIPLE}", executable: true },
+			macDylib("libllama-server-impl"),
+			macDylib("libllama-common"),
 			macDylib("libllama"),
 			macDylib("libggml"),
 			macDylib("libggml-base"),
@@ -109,27 +149,17 @@ const PLATFORMS: Record<string, PlatformConfig> = {
 				dst: "llama-server-{TRIPLE}.exe",
 				executable: true,
 			},
+			winDll("llama-server-impl"),
+			winDll("llama-common"),
 			winDll("llama"),
 			winDll("mtmd"),
 			winDll("ggml"),
 			winDll("ggml-base"),
 			winDll("ggml-rpc"),
 			winDll("ggml-vulkan"),
-			winDll("ggml-cpu-alderlake"),
-			winDll("ggml-cpu-cannonlake"),
-			winDll("ggml-cpu-cascadelake"),
-			winDll("ggml-cpu-cooperlake"),
-			winDll("ggml-cpu-haswell"),
-			winDll("ggml-cpu-icelake"),
-			winDll("ggml-cpu-ivybridge"),
-			winDll("ggml-cpu-piledriver"),
-			winDll("ggml-cpu-sandybridge"),
-			winDll("ggml-cpu-sapphirerapids"),
-			winDll("ggml-cpu-skylakex"),
-			winDll("ggml-cpu-sse42"),
-			winDll("ggml-cpu-x64"),
-			winDll("ggml-cpu-zen4"),
-			winDll("libomp140.x86_64"),
+			...X64_CPU_VARIANTS.map((variant) => winDll(`ggml-cpu-${variant}`)),
+			winDll("libomp"),
+			{ src: "LICENSE-LLVM-OpenMP", dst: "LICENSE-LLVM-OpenMP" },
 		],
 	},
 	"win-arm": {
@@ -140,16 +170,19 @@ const PLATFORMS: Record<string, PlatformConfig> = {
 		files: [
 			{
 				src: "llama-server.exe",
-				dst: "llama-server.exe-{TRIPLE}",
+				dst: "llama-server-{TRIPLE}.exe",
 				executable: true,
 			},
+			winDllSuffixed("llama-server-impl"),
+			winDllSuffixed("llama-common"),
 			winDllSuffixed("llama"),
 			winDllSuffixed("mtmd"),
 			winDllSuffixed("ggml"),
 			winDllSuffixed("ggml-base"),
 			winDllSuffixed("ggml-cpu"),
 			winDllSuffixed("ggml-rpc"),
-			winDllSuffixed("libomp140.aarch64"),
+			winDllSuffixed("libomp"),
+			{ src: "LICENSE-LLVM-OpenMP", dst: "LICENSE-LLVM-OpenMP" },
 		],
 	},
 	"linux-x64": {
@@ -163,29 +196,39 @@ const PLATFORMS: Record<string, PlatformConfig> = {
 				dst: "llama-server-{TRIPLE}",
 				executable: true,
 			},
-			linuxSo("libllama"),
-			linuxSo("libmtmd"),
-			linuxSo("libggml"),
-			linuxSo("libggml-base"),
-			linuxSo("libggml-rpc"),
-			linuxSo("libggml-vulkan"),
-			linuxSo("libggml-cpu-alderlake"),
-			linuxSo("libggml-cpu-cannonlake"),
-			linuxSo("libggml-cpu-cascadelake"),
-			linuxSo("libggml-cpu-cooperlake"),
-			linuxSo("libggml-cpu-haswell"),
-			linuxSo("libggml-cpu-icelake"),
-			linuxSo("libggml-cpu-ivybridge"),
-			linuxSo("libggml-cpu-piledriver"),
-			linuxSo("libggml-cpu-sandybridge"),
-			linuxSo("libggml-cpu-sapphirerapids"),
-			linuxSo("libggml-cpu-skylakex"),
-			linuxSo("libggml-cpu-sse42"),
-			linuxSo("libggml-cpu-x64"),
-			linuxSo("libggml-cpu-zen4"),
+			linuxPlain("libllama-server-impl"),
+			linuxSoname("libllama-common"),
+			linuxSoname("libllama"),
+			linuxSoname("libmtmd"),
+			linuxSoname("libggml"),
+			linuxSoname("libggml-base"),
+			linuxPlain("libggml-rpc"),
+			linuxPlain("libggml-vulkan"),
+			...X64_CPU_VARIANTS.map((variant) =>
+				linuxPlain(`libggml-cpu-${variant}`),
+			),
 		],
 	},
 };
+
+/**
+ * Files this script owns in an output directory. Everything else there is
+ * produced by a sibling script — prepare-mlx.ts writes the MLX sidecar next to
+ * the llama binaries, prepare-windows-prereqs.ts writes the MSVC runtime — and
+ * must survive an update.
+ */
+const OWNED_ARTIFACT_PATTERNS: readonly RegExp[] = [
+	/^_download\./,
+	/^(lib)?llama[-.]/,
+	/^(lib)?ggml[-.]/,
+	/^(lib)?mtmd[-.]/,
+	/^libomp/,
+	/^LICENSE-LLVM-OpenMP$/,
+];
+
+function isOwnedArtifact(fileName: string): boolean {
+	return OWNED_ARTIFACT_PATTERNS.some((pattern) => pattern.test(fileName));
+}
 
 function getHeaders(): Record<string, string> {
 	const headers: Record<string, string> = {
@@ -198,6 +241,11 @@ function getHeaders(): Record<string, string> {
 	return headers;
 }
 
+interface ReleaseResponse {
+	tag_name: string;
+	assets?: { name: string; browser_download_url: string }[];
+}
+
 async function resolveTag(requested: string | "latest"): Promise<string> {
 	if (requested !== "latest") return requested;
 
@@ -205,8 +253,30 @@ async function resolveTag(requested: string | "latest"): Promise<string> {
 	const resp = await fetch(url, { headers: getHeaders() });
 	if (!resp.ok)
 		throw new Error(`Failed to fetch latest release: ${resp.status}`);
-	const data = (await resp.json()) as { tag_name: string };
-	return data.tag_name;
+	const data = (await resp.json()) as ReleaseResponse;
+
+	if (/^b\d+$/.test(data.tag_name)) return data.tag_name;
+
+	const pointer = data.assets?.find(
+		(asset) => asset.name === NIGHTLY_TAG_ASSET,
+	);
+	if (!pointer) {
+		throw new Error(
+			`Stable release ${data.tag_name} has no ${NIGHTLY_TAG_ASSET} asset; cannot resolve a build with binaries`,
+		);
+	}
+
+	const nightly = await fetch(pointer.browser_download_url, {
+		headers: getHeaders(),
+		redirect: "follow",
+	});
+	if (!nightly.ok)
+		throw new Error(
+			`Failed to read ${NIGHTLY_TAG_ASSET} for ${data.tag_name}: ${nightly.status}`,
+		);
+	const tag = (await nightly.text()).trim();
+	console.log(`Stable release ${data.tag_name} → build ${tag}`);
+	return tag;
 }
 
 async function downloadArchive(url: string, dest: string): Promise<void> {
@@ -250,23 +320,43 @@ function extractFiles(
 			}
 		}
 
+		const missing: string[] = [];
 		for (const [srcName, dstName] of fileMap) {
 			const srcPath = path.join(extractRoot, srcName);
 			const dstPath = path.join(outDir, dstName);
 
 			if (!fs.existsSync(srcPath)) {
-				console.warn(`  ⚠ Missing in archive: ${srcName}`);
+				missing.push(srcName);
 				continue;
 			}
 
 			fs.copyFileSync(srcPath, dstPath);
 			console.log(`  ✓ ${dstName}`);
 		}
+
+		if (missing.length > 0) {
+			throw new Error(
+				`Release archive is missing expected files: ${missing.join(", ")}. Upstream packaging changed — update the platform file list before bumping the tag.`,
+			);
+		}
 	} finally {
 		fs.rmSync(tmpDir, { recursive: true, force: true });
 	}
 }
 
+/**
+ * Strips the version from a Mach-O library file name:
+ * libllama.0.4.0.dylib → libllama, libggml-base.dylib → libggml-base.
+ */
+function machOStem(fileName: string): string {
+	return path.basename(fileName).replace(/(\.\d+)*\.dylib$/, "");
+}
+
+/**
+ * Upstream links its dylibs through versioned install names (@rpath/libllama.0.dylib).
+ * The bundle flattens them to unversioned names, so both the ids and every
+ * reference to them have to be rewritten.
+ */
 function fixMacOsDylibNames(outDir: string, config: PlatformConfig): void {
 	if (!config.tauriTriple.includes("apple-darwin")) return;
 	if (process.platform !== "darwin") return;
@@ -276,7 +366,11 @@ function fixMacOsDylibNames(outDir: string, config: PlatformConfig): void {
 		.filter((f) => f.executable || f.src.endsWith(".dylib"))
 		.map((f) => path.join(outDir, f.dst.replace("{TRIPLE}", triple)))
 		.filter((filePath) => fs.existsSync(filePath));
-	const dependencyMappings = new Map<string, string>();
+	const bundledStems = new Set(
+		config.files
+			.filter((f) => f.src.endsWith(".dylib"))
+			.map((f) => machOStem(f.src)),
+	);
 
 	for (const fm of config.files) {
 		if (!fm.src.endsWith(".dylib")) continue;
@@ -289,13 +383,7 @@ function fixMacOsDylibNames(outDir: string, config: PlatformConfig): void {
 		const lines = otoolOut.trim().split("\n");
 		if (lines.length < 2) continue;
 		const currentId = lines[1].trim();
-		const desiredId = `@rpath/${path.basename(fm.src)}`;
-		const legacyId = desiredId.replace(/\.dylib$/, ".0.dylib");
-
-		dependencyMappings.set(currentId, desiredId);
-		if (legacyId !== desiredId) {
-			dependencyMappings.set(legacyId, desiredId);
-		}
+		const desiredId = `@rpath/${machOStem(fm.src)}.dylib`;
 
 		if (currentId !== desiredId) {
 			execSync(`install_name_tool -id "${desiredId}" "${dstPath}"`, {
@@ -314,48 +402,32 @@ function fixMacOsDylibNames(outDir: string, config: PlatformConfig): void {
 			.map((line) => line.trim().split(" ")[0])
 			.filter(Boolean);
 
-		for (const [oldName, newName] of dependencyMappings) {
-			if (oldName === newName || !linkedLibraries.includes(oldName)) continue;
+		for (const linked of linkedLibraries) {
+			const stem = machOStem(linked);
+			if (!bundledStems.has(stem)) continue;
+			const desired = `@rpath/${stem}.dylib`;
+			if (linked === desired) continue;
 			execSync(
-				`install_name_tool -change "${oldName}" "${newName}" "${machOPath}"`,
+				`install_name_tool -change "${linked}" "${desired}" "${machOPath}"`,
 				{ stdio: "pipe" },
 			);
 			console.log(
-				`  🔗 Fixed dependency in ${path.basename(machOPath)}: ${oldName} → ${newName}`,
+				`  🔗 Fixed dependency in ${path.basename(machOPath)}: ${linked} → ${desired}`,
 			);
 		}
 	}
 }
 
-function createLinuxSoVersionAliases(
-	outDir: string,
-	config: PlatformConfig,
-): void {
-	if (!config.tauriTriple.includes("unknown-linux-gnu")) return;
-
-	for (const file of fs.readdirSync(outDir)) {
-		if (!file.endsWith(".so")) continue;
-
-		const sourcePath = path.join(outDir, file);
-		if (!fs.statSync(sourcePath).isFile()) continue;
-
-		const aliasPath = path.join(outDir, `${file}.0`);
-		fs.copyFileSync(sourcePath, aliasPath);
-		console.log(`  ↺ Created soname alias: ${path.basename(aliasPath)}`);
-	}
-}
-
-function cleanDirectory(dir: string): void {
+function cleanOwnedArtifacts(dir: string): void {
 	if (!fs.existsSync(dir)) {
 		fs.mkdirSync(dir, { recursive: true });
 		return;
 	}
 	for (const file of fs.readdirSync(dir)) {
-		if (file === ".DS_Store") continue;
 		const full = path.join(dir, file);
-		if (fs.statSync(full).isFile()) {
-			fs.unlinkSync(full);
-		}
+		if (!fs.statSync(full).isFile()) continue;
+		if (!isOwnedArtifact(file)) continue;
+		fs.unlinkSync(full);
 	}
 }
 
@@ -380,10 +452,9 @@ async function updatePlatform(
 		fileMap.set(fm.src, fm.dst.replace("{TRIPLE}", config.tauriTriple));
 	}
 
-	cleanDirectory(outDir);
+	cleanOwnedArtifacts(outDir);
 	await downloadArchive(downloadUrl, archivePath);
 	extractFiles(archivePath, config.archiveType, fileMap, outDir);
-	createLinuxSoVersionAliases(outDir, config);
 
 	// Set executable bits
 	for (const fm of config.files) {
@@ -398,7 +469,6 @@ async function updatePlatform(
 		}
 	}
 
-	// Fix macOS dylib versioned install names (@rpath/libfoo.0.dylib → @rpath/libfoo.dylib)
 	fixMacOsDylibNames(outDir, config);
 
 	// Clean up archive

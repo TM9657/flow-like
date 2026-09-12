@@ -986,8 +986,8 @@ Event `id`, so never pass them as `event_id`. An `unavailable` event has no cons
 called. Use this before acting on any app. Only apps in the current profile are returned.
 Pass `query` to filter app ids, names, and descriptions before the 250-item cap. `complete: false`,
 truncation, or an app's `events_status: "error"` means the inventory cannot prove that no suitable
-local interface exists. Refine `query` before concluding that an app is absent, and do not use
-public-web fallback from a partial result."#,
+local interface exists. Refine `query` before concluding that an app is absent; a partial
+listing is still usable evidence about what exists locally."#,
             schema: || {
                 json!({
                     "type": "object",
@@ -1467,8 +1467,10 @@ Call before a from-scratch app/workflow, except for a small existing-target edit
             name: RESEARCH_AGENT_TOOL,
             description: r#"Run FlowPilot's sealed PUBLIC-WEB fallback for the current top-level user request.
 
-Use only after `list_apps` found no suitable local app/interface, or no useful, nonredundant local
-research candidate produced a usable public answer. This tool accepts no question or context
+Call this in the first wave for plainly public reference work that names no app, person, or private
+data — no inventory round first. Otherwise use it after `list_apps` found no suitable local
+app/interface, or no useful, nonredundant local research candidate produced a usable public answer.
+Once app, memory, or user data is in the run, list apps before it. This tool accepts no question or context
 arguments: the host gives an isolated read-only researcher the immutable user request and date. It
 receives no root history, memory, attachments, app inventory/results, or model-authored arguments;
 from a mixed source request it extracts only safe public factual subquestions and never searches for

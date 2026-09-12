@@ -1,6 +1,11 @@
 import type { IBit } from "../schema";
 import { IBitTypes } from "../schema";
 
+const LLM_BIT_TYPES: ReadonlySet<string> = new Set([
+	IBitTypes.Llm,
+	IBitTypes.Vlm,
+]);
+
 /** Provider names whose LLM/VLM models start an embedded llama.cpp runtime. */
 export const LLAMA_CPP_PROVIDER_NAMES: ReadonlySet<string> = new Set(["local"]);
 
@@ -42,13 +47,24 @@ export function isLocalLlmModel(bit: IBit): boolean {
 	return isLlamaCppLlmModel(bit) || isMlxLlmModel(bit);
 }
 
+/** Whether the hub can run this model itself, whatever the client can host. */
+export function hasRemoteImplementation(bit: IBit): boolean {
+	return Boolean(bit.parameters?.remote);
+}
+
 export function isHostableLlmModel(
 	bit: IBit,
 	capabilities: LocalModelHostCapabilities,
 ): boolean {
 	if (isMlxLlmModel(bit)) return capabilities.canHostMLX;
-	if (isLlamaCppLlmModel(bit)) return capabilities.canHostLlamaCPP;
-	return true;
+	if (!isLlamaCppLlmModel(bit)) return true;
+	if (capabilities.canHostLlamaCPP) return true;
+
+	// The llama.cpp and MLX capabilities describe text-generation runtimes. An
+	// embedding or speech model declares the same `Local` provider but runs
+	// somewhere else entirely, and a browser can still use it when the model
+	// names a remote implementation the hub serves.
+	return !LLM_BIT_TYPES.has(bit.type) && hasRemoteImplementation(bit);
 }
 
 /** Return the normalized access tier declared by a hosted LLM/VLM bit. */
@@ -102,11 +118,6 @@ export function profileBitIds(
 ): Set<string> {
 	return new Set((refs ?? []).map((ref) => ref.split(":").pop() ?? ref));
 }
-
-const LLM_BIT_TYPES: ReadonlySet<string> = new Set([
-	IBitTypes.Llm,
-	IBitTypes.Vlm,
-]);
 
 /**
  * The LLM/VLM models a FlowPilot surface may offer: the profile's own models

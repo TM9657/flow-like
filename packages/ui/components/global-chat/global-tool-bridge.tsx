@@ -202,6 +202,11 @@ import {
 	InlineAppPageRuntimeHost,
 	presentInlineAppPage,
 } from "./inline-app-page-runtime";
+import {
+	entersPrivateContext,
+	isReturnedAppInventory,
+	sealedResearchRefusal,
+} from "./local-app-discovery";
 import { readFlowScriptSource } from "./read-flowscript-source";
 import {
 	scoutForkPreview,
@@ -581,14 +586,17 @@ export interface RunScope {
 
 interface SolveRoutingState {
 	appInventoryReturned: boolean;
+	/** Set once a tool carrying private or user-controlled data has been dispatched in this run. */
+	privateContextEntered: boolean;
 	sealedResearchUsed: boolean;
 }
 
-// Routing state is host-owned, not model-authored: public fallback is unavailable until a local
-// inventory has actually returned, and is one-shot afterwards. The gate is "an inventory came
-// back", never "every app in it read cleanly" — one app whose Events cannot be loaded makes the
-// listing partial, not absent, and must not permanently seal off public research. Keep it bounded
-// so abandoned run ids cannot accumulate for the lifetime of the desktop process.
+// Routing state is host-owned, not model-authored. Public research is an everyday capability: a
+// plainly public request may run it in the first wave. What stays enforced is that a run already
+// holding private data routes locally first, and that the researcher runs once. The inventory gate
+// is "an inventory came back", never "every app in it read cleanly" — one app whose Events cannot
+// be loaded makes the listing partial, not absent, and must not seal off public research. Keep it
+// bounded so abandoned run ids cannot accumulate for the lifetime of the desktop process.
 const solveRoutingStateByRun = new Map<string, SolveRoutingState>();
 const MAX_SOLVE_ROUTING_STATES = 256;
 
@@ -2598,6 +2606,18 @@ export function GlobalToolBridge() {
 						profileAppIds,
 						apps.map(([app]) => app.id),
 					);
+					// A listing the host could only partly read is still a listing, but one that came
+					// back with nothing while the profile expects apps is a failed read, not an empty
+					// workspace — the web backend turns any /apps error into an empty array. Reporting
+					// it as a partial listing would let the public-web fallback open on a discovery
+					// that never actually happened.
+					if (profileAppIds.size > 0 && apps.length === 0)
+						return {
+							status: "error",
+							code: "app_inventory_unavailable",
+							retryable: true,
+							message: `The app inventory came back empty while this profile references ${profileAppIds.size} app${profileAppIds.size === 1 ? "" : "s"}, so it could not be read. App absence is unproven; retry before concluding that an app does not exist.`,
+						};
 					const query = argString(args, "query").toLowerCase();
 					// Sort by display name so the output is stable across calls (getApps returns
 					// object-store order, i.e. app id) and truncation, if any, is deterministic.
@@ -4105,27 +4125,17 @@ export function GlobalToolBridge() {
 					}
 				}
 				case "research_agent": {
-					// This boundary is deliberately sealed. The root model has already seen local app
+					// This boundary is deliberately sealed. The root model may have seen local app
 					// metadata (and may have recalled memory), so accepting a model-authored question or
 					// context here would let it encode private text into an outbound query. Bind the
-					// researcher only to the immutable top-level user request carried by the host.
+					// researcher only to the immutable top-level user request carried by the host. That
+					// seal, not the ordering gate below, is what keeps private data out of the query —
+					// which is why research may run before any local discovery.
 					const routingState = scope.runId
 						? solveRoutingStateByRun.get(scope.runId)
 						: undefined;
-					if (!routingState?.appInventoryReturned)
-						return {
-							status: "error",
-							code: "local_app_discovery_required",
-							message:
-								"A list_apps result is required before sealed public research.",
-						};
-					if (routingState.sealedResearchUsed)
-						return {
-							status: "error",
-							code: "sealed_research_already_used",
-							message:
-								"The sealed public researcher is one-shot for this run; synthesize its findings and disclose remaining gaps.",
-						};
+					const refusal = sealedResearchRefusal(scope.runId, routingState);
+					if (refusal) return { status: "error", ...refusal };
 
 					const owningUserPrompt = sealedSourceUserPrompt(request);
 					if (!owningUserPrompt)
@@ -4136,7 +4146,8 @@ export function GlobalToolBridge() {
 								"The immutable top-level user request is unavailable; sealed public research was not started.",
 						};
 					setSolveRoutingState(scope.runId, {
-						...routingState,
+						appInventoryReturned: routingState?.appInventoryReturned ?? false,
+						privateContextEntered: routingState?.privateContextEntered ?? false,
 						sealedResearchUsed: true,
 					});
 					const instruction = owningUserPrompt;
@@ -7555,6 +7566,17 @@ Completion contract: build complete helper logic first and add the Event entry l
 					: "Frontend tool request received.",
 			});
 
+			// Marked before dispatch, not after: a private tool that is still in flight has already
+			// committed this run to private data, and sealed research must not slip in alongside it.
+			if (scope.runId && entersPrivateContext(request.toolName)) {
+				const previous = solveRoutingStateByRun.get(scope.runId);
+				setSolveRoutingState(scope.runId, {
+					appInventoryReturned: previous?.appInventoryReturned ?? false,
+					privateContextEntered: true,
+					sealedResearchUsed: previous?.sealedResearchUsed ?? false,
+				});
+			}
+
 			const deadline = requestDeadline(request);
 			const executionLease = requestExecutionFenceRef.current.begin({
 				request,
@@ -7703,7 +7725,13 @@ Completion contract: build complete helper logic first and add the Event entry l
 					? solveRoutingStateByRun.get(scope.runId)
 					: undefined;
 				setSolveRoutingState(scope.runId, {
-					appInventoryReturned: inventory?.status === "ok",
+					// Latch-only, matching the Rust loop: a later failed listing must not re-seal
+					// research that an earlier successful one opened.
+					appInventoryReturned:
+						(previousRoutingState?.appInventoryReturned ?? false) ||
+						isReturnedAppInventory(inventory),
+					privateContextEntered:
+						previousRoutingState?.privateContextEntered ?? false,
 					sealedResearchUsed: previousRoutingState?.sealedResearchUsed ?? false,
 				});
 			}

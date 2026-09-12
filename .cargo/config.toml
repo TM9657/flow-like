@@ -37,6 +37,7 @@ clippy-all = "clippy --workspace"
 # Cargo aliases expand to Cargo subcommands, not arbitrary shell commands. Run
 # `tools/check-feature-boundaries.sh` and `tools/compile-times.sh` directly.
 run-desktop = "run --package flow-like-desktop --profile dev-run"
+bits = "run --package bit-cli --"
 
 # Do not set build.jobs here. Cargo detects the host/runner CPU quota and a
 # repository-wide value either oversubscribes laptops or exhausts small CI

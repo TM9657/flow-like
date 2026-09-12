@@ -279,6 +279,21 @@ impl WebResearchSession {
         urls
     }
 
+    /// Adopt the pages another session successfully opened, so this session may cite them. A sealed
+    /// researcher runs in its own session for isolation, but its findings land in this context, and
+    /// an answer that cannot cite the pages behind it is worse than useless. Only the opened set
+    /// crosses: the other session's authorization set stays its own, so this session gains no power
+    /// to open anything new.
+    pub fn adopt_opened_urls(&self, urls: &[String]) {
+        let mut opened = self
+            .opened_urls
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        for url in urls {
+            opened.insert(url.clone());
+        }
+    }
+
     fn validate_open_call(&self, args: &Value) -> Result<(), FetchFailure> {
         let raw = args.get("url").and_then(Value::as_str).unwrap_or("");
         let url = parse_public_url(raw)?;

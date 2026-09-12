@@ -2,6 +2,8 @@
 	"identifier": "com.flow-like.app",
 	"bundle": {
 		"externalBin": [
+			"binaries/mac/intel/libllama-server-impl.dylib",
+			"binaries/mac/intel/libllama-common.dylib",
 			"binaries/mac/intel/libggml-base.dylib",
 			"binaries/mac/intel/libggml-blas.dylib",
 			"binaries/mac/intel/libggml-cpu.dylib",
