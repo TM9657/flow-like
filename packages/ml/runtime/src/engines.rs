@@ -2,7 +2,9 @@
 use crate::{worker::*, *};
 #[cfg(feature = "burn")]
 use flow_like_ml_core::ComputeBackend;
-use flow_like_ml_core::{Annotation, ComputeConfig, Sample, TensorData};
+use flow_like_ml_core::{Annotation, ComputeConfig, PreprocessingStep, Sample, TensorData};
+use rusqlite::{Connection, OptionalExtension};
+use std::collections::HashSet;
 use std::sync::Arc;
 mod inference;
 pub use inference::LoadedArtifactPredictor;
@@ -19,8 +21,9 @@ mod efficient_ad_adapter;
 mod sam2_adapter;
 #[cfg(feature = "burn")]
 pub use burn_adapter::{
-    BurnEngineRecipe, pretrained_source_features, publish_burn_pretrained_source,
-    register_burn_engine, validate_burn_pretrained_source,
+    BurnEngineRecipe, CheckpointObserver, pretrained_source_features,
+    publish_burn_pretrained_source, register_burn_engine, register_observed_burn_engine,
+    validate_burn_pretrained_preprocessing, validate_burn_pretrained_source,
 };
 #[cfg(feature = "burn")]
 pub use efficient_ad_adapter::{EfficientAdEngineRecipe, register_efficient_ad_engine};
@@ -78,6 +81,304 @@ pub fn export_artifact_onnx(
 
 fn engine_error(error: impl std::fmt::Display) -> Error {
     Error::Engine(error.to_string())
+}
+
+/// Model and image steps that produced embeddings. Memory banks fitted in one extractor's
+/// feature space give arbitrary anomaly scores for features from another extractor.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct FeatureExtractor {
+    /// Training artifact or pretrained source that computed the features.
+    pub source_id: String,
+    pub blob_sha256: String,
+    #[serde(default)]
+    pub image_steps: Vec<PreprocessingStep>,
+}
+
+impl FeatureExtractor {
+    pub fn from_artifact(artifact: &ModelArtifact) -> Result<Self> {
+        Ok(Self {
+            source_id: artifact.id.clone(),
+            blob_sha256: artifact.blob.sha256.clone(),
+            image_steps: expected_image_steps(&artifact.manifest)?,
+        })
+    }
+
+    pub fn from_source(source: &PretrainedSource) -> Result<Self> {
+        Ok(Self {
+            source_id: source.id.clone(),
+            blob_sha256: source.blob.sha256.clone(),
+            image_steps: expected_image_steps(&source.manifest)?,
+        })
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.source_id.trim().is_empty()
+            || self.blob_sha256.len() != 64
+            || !self.blob_sha256.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(invalid(
+                "feature extractor needs a source ID and a SHA-256 weights digest",
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn is_image_step(step: &PreprocessingStep) -> bool {
+    matches!(
+        step,
+        PreprocessingStep::Resize { .. } | PreprocessingStep::Normalize { .. }
+    )
+}
+
+/// Image steps a model expects: the steps declared when it was trained, otherwise the
+/// recommendation of the weights it was imported or fine-tuned from.
+fn expected_image_steps(manifest: &Value) -> Result<Vec<PreprocessingStep>> {
+    for key in ["preprocessing", "recommended_preprocessing"] {
+        let Some(steps) = manifest.get(key).filter(|value| !value.is_null()) else {
+            continue;
+        };
+        let steps: Vec<PreprocessingStep> = serde_json::from_value(steps.clone())?;
+        if steps.iter().any(is_image_step) {
+            return Ok(steps);
+        }
+    }
+    Ok(Vec::new())
+}
+
+const MAXIMUM_INITIALIZATION_DEPTH: usize = 32;
+
+#[derive(Deserialize)]
+struct SampleIdentity {
+    group_id: String,
+    content_digest: String,
+}
+
+/// Sample identities of a snapshot's partitions, decoded without the sample payloads.
+#[derive(Deserialize)]
+struct PartitionIdentities {
+    train: Vec<SampleIdentity>,
+    validation: Vec<SampleIdentity>,
+    test: Vec<SampleIdentity>,
+}
+
+impl PartitionIdentities {
+    fn of(snapshot: &DatasetSnapshot) -> Self {
+        let identities = |samples: &[TrainingSample]| -> Vec<SampleIdentity> {
+            samples
+                .iter()
+                .map(|sample| SampleIdentity {
+                    group_id: sample.group_id.clone(),
+                    content_digest: sample.content_digest.clone(),
+                })
+                .collect()
+        };
+        Self {
+            train: identities(&snapshot.train),
+            validation: identities(&snapshot.validation),
+            test: identities(&snapshot.test),
+        }
+    }
+
+    fn fitted(&self) -> impl Iterator<Item = &SampleIdentity> {
+        self.train.iter().chain(&self.validation)
+    }
+
+    fn all(&self) -> impl Iterator<Item = &SampleIdentity> {
+        self.fitted().chain(&self.test)
+    }
+
+    fn links(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.all()
+            .map(|sample| (sample.group_id.as_str(), sample.content_digest.as_str()))
+    }
+}
+
+fn stored_partitions(connection: &Connection, snapshot_id: &str) -> Result<PartitionIdentities> {
+    let body: String = connection
+        .query_row(
+            "SELECT body FROM snapshots WHERE id=?",
+            [snapshot_id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .ok_or_else(|| Error::NotFound(format!("snapshot {snapshot_id}")))?;
+    Ok(serde_json::from_str(&body)?)
+}
+
+/// Partitions a training run saw. Experiment trials train on a filtered snapshot, while
+/// selection also scores the validation partition of the trial's full dataset snapshot.
+fn run_partitions(
+    connection: &Connection,
+    job_id: &str,
+    snapshot_id: &str,
+    own: PartitionIdentities,
+) -> Result<Vec<PartitionIdentities>> {
+    let full: Option<String> = connection
+        .query_row(
+            "SELECT json_extract(body,'$.dataset_snapshot_id') FROM experiment_trials WHERE job_id=?",
+            [job_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten();
+    let mut runs = vec![own];
+    if let Some(full) = full.filter(|full| full != snapshot_id) {
+        runs.push(stored_partitions(connection, &full)?);
+    }
+    Ok(runs)
+}
+
+/// In-project training artifact a model was fine-tuned from, if any.
+fn initialization_artifact(manifest: &Value) -> Result<Option<String>> {
+    let Some(pretrained) = manifest.get("pretrained").filter(|value| !value.is_null()) else {
+        return Ok(None);
+    };
+    let kind = pretrained
+        .get("source_kind")
+        .map(|kind| serde_json::from_value::<PretrainedSourceKind>(kind.clone()))
+        .transpose()?;
+    if kind != Some(PretrainedSourceKind::TrainingArtifact) {
+        return Ok(None);
+    }
+    pretrained["source_id"]
+        .as_str()
+        .map(|id| Some(id.to_owned()))
+        .ok_or_else(|| invalid("training-artifact initialization has no source ID"))
+}
+
+/// Content digests that a training artifact, and every training artifact it was initialized
+/// from, consumed for fitting or selection.
+pub(crate) fn lineage_digests(
+    connection: &Connection,
+    artifact_id: &str,
+) -> Result<HashSet<String>> {
+    let mut digests = HashSet::new();
+    let mut visited = HashSet::new();
+    let mut next = Some(artifact_id.to_owned());
+    while let Some(id) = next {
+        if visited.len() == MAXIMUM_INITIALIZATION_DEPTH || !visited.insert(id.clone()) {
+            return Err(invalid(format!(
+                "initialization lineage of {artifact_id} exceeds {MAXIMUM_INITIALIZATION_DEPTH} models"
+            )));
+        }
+        let body: String = connection
+            .query_row(
+                "SELECT body FROM artifacts WHERE id=?",
+                [&id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| Error::NotFound(format!("initialization artifact {id}")))?;
+        let artifact: ModelArtifact = serde_json::from_str(&body)?;
+        let own = stored_partitions(connection, &artifact.snapshot_id)?;
+        for run in run_partitions(connection, &artifact.job_id, &artifact.snapshot_id, own)? {
+            digests.extend(run.fitted().map(|sample| sample.content_digest.clone()));
+        }
+        next = initialization_artifact(&artifact.manifest)?;
+    }
+    Ok(digests)
+}
+
+/// Group IDs belong to one stream, so lineage from other streams links into this stream's
+/// groups through identical content digests.
+fn linked_groups<'a>(
+    samples: impl IntoIterator<Item = (&'a str, &'a str)>,
+    lineage: &HashSet<String>,
+) -> impl Iterator<Item = &'a str> {
+    samples
+        .into_iter()
+        .filter(move |(_, digest)| lineage.contains(*digest))
+        .map(|(group, _)| group)
+}
+
+/// Groups that fitting or selecting an artifact consumed, including groups holding content
+/// its initialization lineage consumed. Snapshots are immutable and can be large, so load
+/// this before taking a write lock.
+#[cfg(feature = "native")]
+pub(crate) struct ConsumedGroups {
+    groups: HashSet<String>,
+    lineage: HashSet<String>,
+}
+
+#[cfg(feature = "native")]
+impl ConsumedGroups {
+    pub(crate) fn load(
+        connection: &Connection,
+        artifact: &ModelArtifact,
+        snapshot: &DatasetSnapshot,
+    ) -> Result<Self> {
+        let runs = run_partitions(
+            connection,
+            &artifact.job_id,
+            &snapshot.id,
+            PartitionIdentities::of(snapshot),
+        )?;
+        let lineage = match initialization_artifact(&artifact.manifest)? {
+            Some(source) => lineage_digests(connection, &source)?,
+            None => HashSet::new(),
+        };
+        let mut groups: HashSet<String> = runs
+            .iter()
+            .flat_map(|run| run.fitted())
+            .map(|sample| sample.group_id.clone())
+            .collect();
+        groups.extend(
+            linked_groups(runs.iter().flat_map(|run| run.links()), &lineage).map(str::to_owned),
+        );
+        Ok(Self { groups, lineage })
+    }
+
+    /// Audited samples must lie outside every consumed group. An audited sample holding
+    /// lineage content also consumes its own group for the other audited samples.
+    pub(crate) fn ensure_independent<'a>(
+        &self,
+        audited: impl IntoIterator<Item = &'a TrainingSample>,
+    ) -> Result<()> {
+        let audited: Vec<&TrainingSample> = audited.into_iter().collect();
+        let linked: HashSet<&str> = linked_groups(
+            audited
+                .iter()
+                .map(|sample| (sample.group_id.as_str(), sample.content_digest.as_str())),
+            &self.lineage,
+        )
+        .collect();
+        if let Some(sample) = audited.iter().find(|sample| {
+            self.groups.contains(&sample.group_id) || linked.contains(sample.group_id.as_str())
+        }) {
+            return Err(invalid(format!(
+                "audited sample {} shares a training/validation group with this model or a model it was initialized from",
+                sample.id
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// Held-out groups of a run (validation and test, including an experiment trial's full
+/// snapshot) that hold content `lineage` consumed.
+#[cfg(feature = "burn")]
+fn contaminated_groups(
+    connection: &Connection,
+    job_id: &str,
+    snapshot: &DatasetSnapshot,
+    lineage: &HashSet<String>,
+) -> Result<std::collections::BTreeSet<String>> {
+    let runs = run_partitions(
+        connection,
+        job_id,
+        &snapshot.id,
+        PartitionIdentities::of(snapshot),
+    )?;
+    let linked: HashSet<&str> =
+        linked_groups(runs.iter().flat_map(|run| run.links()), lineage).collect();
+    Ok(runs
+        .iter()
+        .flat_map(|run| run.validation.iter().chain(&run.test))
+        .map(|sample| sample.group_id.as_str())
+        .filter(|group| linked.contains(group))
+        .map(str::to_owned)
+        .collect())
 }
 
 fn serialized_size<T: Serialize + ?Sized>(value: &T) -> Result<u64> {
@@ -233,6 +534,7 @@ impl TrainingEngine for NativeEngine {
         validate_native_compute(&work.job.request.compute)?;
         control.check_cancel()?;
         let labels = labels(&work.job.request.recipe)?;
+        let extractor = recipe_feature_extractor(&work.job.request.recipe)?;
         let samples: Vec<_> = work
             .snapshot
             .train
@@ -277,11 +579,7 @@ impl TrainingEngine for NativeEngine {
                     serde_json::from_value(work.job.request.recipe["config"].clone())?;
                 let targets = samples
                     .iter()
-                    .map(|s| match s.annotation {
-                        Annotation::Class { class_id } => Ok(class_id as f64),
-                        Annotation::Scalar { value } => Ok(value),
-                        _ => Err(invalid("boosting needs class or scalar annotations")),
-                    })
+                    .map(|s| boost_target(&s.annotation))
                     .collect::<Result<Vec<_>>>()?;
                 HistogramGradientBoosting::fit_with_progress(&rows, &targets, &config, progress)
                     .map(NativeModel::HistogramGradientBoosting)
@@ -314,11 +612,48 @@ impl TrainingEngine for NativeEngine {
             1,
             serde_json::json!({"engine":self.name,"resume_mode":"completed_model"}),
         )?;
+        let mut manifest = serde_json::json!({"engine":self.name,"format_version":1,"labels":labels,"input_shape":input_shape,"recipe":work.job.request.recipe,"backend":"cpu"});
+        if self.name == "histogram_gradient_boosting"
+            && samples
+                .iter()
+                .any(|sample| matches!(sample.annotation, Annotation::Values { .. }))
+        {
+            manifest["output_shape"] = serde_json::json!([1]);
+        }
+        if let Some(extractor) = extractor {
+            manifest["feature_extractor"] = serde_json::to_value(extractor)?;
+        }
         Ok(EngineOutput {
             model_bytes,
-            manifest: serde_json::json!({"engine":self.name,"format_version":1,"labels":labels,"input_shape":input_shape,"recipe":work.job.request.recipe,"backend":"cpu"}),
+            manifest,
         })
     }
+}
+
+/// Single-step forecasts carry one-element value targets, which boosting fits as scalars.
+#[cfg(feature = "native")]
+fn boost_target(annotation: &Annotation) -> Result<f64> {
+    match annotation {
+        Annotation::Class { class_id } => Ok(*class_id as f64),
+        Annotation::Scalar { value } => Ok(*value),
+        Annotation::Values { values } if values.len() == 1 => Ok(values[0] as f64),
+        _ => Err(invalid(
+            "boosting needs class, scalar or single-value annotations",
+        )),
+    }
+}
+
+#[cfg(feature = "native")]
+fn recipe_feature_extractor(recipe: &Value) -> Result<Option<FeatureExtractor>> {
+    recipe
+        .get("feature_extractor")
+        .filter(|value| !value.is_null())
+        .map(|value| -> Result<FeatureExtractor> {
+            let extractor: FeatureExtractor = serde_json::from_value(value.clone())?;
+            extractor.validate()?;
+            Ok(extractor)
+        })
+        .transpose()
 }
 
 #[cfg(feature = "native")]
@@ -393,6 +728,260 @@ mod native_compute_tests {
         }
         assert!(validate_native_compute(&serde_json::json!({"backend":"unknown"})).is_err());
         assert!(validate_native_compute(&serde_json::json!({"memory_limit_bytes":0})).is_err());
+    }
+
+    #[test]
+    fn boosting_targets_accept_single_step_value_annotations_only() {
+        assert_eq!(
+            boost_target(&Annotation::Values { values: vec![2.5] }).unwrap(),
+            2.5
+        );
+        assert_eq!(boost_target(&Annotation::Scalar { value: -1. }).unwrap(), -1.);
+        assert_eq!(boost_target(&Annotation::Class { class_id: 1 }).unwrap(), 1.);
+        assert!(
+            boost_target(&Annotation::Values {
+                values: vec![1., 2.]
+            })
+            .is_err()
+        );
+        assert!(boost_target(&Annotation::Anomaly { is_anomaly: true }).is_err());
+    }
+}
+
+#[cfg(all(test, feature = "native"))]
+mod independence_tests {
+    use super::*;
+
+    fn sample(id: &str, group: &str, content: u32) -> TrainingSample {
+        TrainingSample {
+            id: id.into(),
+            annotation_revision: 1,
+            group_id: group.into(),
+            captured_at_ms: 0,
+            label_available_at_ms: 0,
+            content_digest: format!("{content:064x}"),
+            source: LabelSource::Reviewed,
+            accepted: true,
+            payload: serde_json::json!({}),
+        }
+    }
+
+    fn stream(id: &str) -> StreamKey {
+        StreamKey {
+            project_id: "factory".into(),
+            stream_id: id.into(),
+            inspection_version: "v1".into(),
+        }
+    }
+
+    fn snapshot(
+        id: &str,
+        train: Vec<TrainingSample>,
+        validation: Vec<TrainingSample>,
+        test: Vec<TrainingSample>,
+    ) -> DatasetSnapshot {
+        DatasetSnapshot {
+            id: id.into(),
+            digest: String::new(),
+            stream: stream(id),
+            as_of_ms: 0,
+            cutoff_sequence: 0,
+            policy: SplitPolicy::Group {
+                train_fraction: 0.6,
+                validation_fraction: 0.2,
+                seed: 1,
+            },
+            train,
+            validation,
+            test,
+            excluded: Vec::new(),
+        }
+    }
+
+    fn store_snapshot(connection: &Connection, snapshot: &DatasetSnapshot) {
+        connection
+            .execute(
+                "INSERT INTO snapshots(id,scope,body) VALUES (?,?,?)",
+                rusqlite::params![
+                    snapshot.id,
+                    "test",
+                    serde_json::to_string(snapshot).unwrap()
+                ],
+            )
+            .unwrap();
+    }
+
+    fn artifact(id: &str, snapshot_id: &str, manifest: Value) -> ModelArtifact {
+        ModelArtifact {
+            id: id.into(),
+            job_id: format!("job-{id}"),
+            stream: stream(id),
+            snapshot_id: snapshot_id.into(),
+            dataset_digest: String::new(),
+            blob: BlobRef {
+                sha256: "0".repeat(64),
+                bytes: 1,
+                path: format!("{}.blob", "0".repeat(64)),
+            },
+            manifest,
+            created_at_ms: 0,
+        }
+    }
+
+    fn store_artifact(connection: &Connection, artifact: &ModelArtifact) {
+        connection
+            .execute(
+                "INSERT INTO artifacts(id,scope,body) VALUES (?,?,?)",
+                rusqlite::params![
+                    artifact.id,
+                    "test",
+                    serde_json::to_string(artifact).unwrap()
+                ],
+            )
+            .unwrap();
+    }
+
+    fn fine_tuned_from(source: &str) -> Value {
+        serde_json::json!({"pretrained":{"source_kind":"training_artifact","source_id":source}})
+    }
+
+    fn repository() -> (tempfile::TempDir, Connection) {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let connection = repository.connection().unwrap();
+        (directory, connection)
+    }
+
+    fn ensure_independent_audit(
+        connection: &Connection,
+        artifact: &ModelArtifact,
+        snapshot: &DatasetSnapshot,
+        audited: &[&TrainingSample],
+    ) -> Result<()> {
+        ConsumedGroups::load(connection, artifact, snapshot)?
+            .ensure_independent(audited.iter().copied())
+    }
+
+    #[test]
+    fn experiment_selection_anomalies_are_consumed_by_the_trained_artifact() {
+        let (_directory, connection) = repository();
+        let training = snapshot(
+            "training",
+            vec![sample("a", "g-a", 1)],
+            vec![sample("b", "g-b", 2)],
+            Vec::new(),
+        );
+        let full = snapshot(
+            "full",
+            vec![sample("a", "g-a", 1)],
+            vec![sample("b", "g-b", 2), sample("c", "g-anomaly", 3)],
+            vec![sample("d", "g-d", 4)],
+        );
+        store_snapshot(&connection, &training);
+        store_snapshot(&connection, &full);
+        let model = artifact("model", "training", serde_json::json!({}));
+        let leaked = sample("c-review", "g-anomaly", 5);
+        ensure_independent_audit(&connection, &model, &training, &[&leaked]).unwrap();
+        connection
+            .execute(
+                "INSERT INTO experiment_trials(id,experiment_id,job_id,idempotency_key,candidate_index,body) VALUES ('trial','experiment',?,'key',0,?)",
+                rusqlite::params![
+                    model.job_id,
+                    serde_json::json!({"dataset_snapshot_id":"full"}).to_string()
+                ],
+            )
+            .unwrap();
+        let error = ensure_independent_audit(&connection, &model, &training, &[&leaked])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("c-review"), "{error}");
+        ensure_independent_audit(&connection, &model, &training, &[&sample("d", "g-d", 4)])
+            .unwrap();
+    }
+
+    #[test]
+    fn initialization_lineage_links_audit_groups_through_shared_content_only() {
+        let (_directory, connection) = repository();
+        let origin = snapshot(
+            "origin",
+            vec![sample("o1", "lot-1", 10)],
+            vec![sample("o2", "lot-2", 11)],
+            vec![sample("o3", "lot-3", 12)],
+        );
+        store_snapshot(&connection, &origin);
+        store_artifact(
+            &connection,
+            &artifact("origin-model", "origin", serde_json::json!({})),
+        );
+        let middle = snapshot("middle", vec![sample("m1", "lot-1", 20)], Vec::new(), Vec::new());
+        store_snapshot(&connection, &middle);
+        store_artifact(
+            &connection,
+            &artifact("middle-model", "middle", fine_tuned_from("origin-model")),
+        );
+        let target = snapshot(
+            "target",
+            vec![sample("t1", "lot-1", 30)],
+            vec![sample("t2", "lot-4", 31)],
+            vec![sample("copy", "lot-7", 10), sample("mate", "lot-7", 32)],
+        );
+        let model = artifact("target-model", "target", fine_tuned_from("middle-model"));
+        // Equal group names from another stream are unrelated without shared content.
+        ensure_independent_audit(&connection, &model, &target, &[&sample("t3", "lot-2", 33)])
+            .unwrap();
+        ensure_independent_audit(&connection, &model, &target, &[&sample("t4", "lot-3", 12)])
+            .unwrap();
+        for leaked in [sample("copy", "lot-7", 10), sample("mate", "lot-7", 32)] {
+            assert!(
+                ensure_independent_audit(&connection, &model, &target, &[&leaked]).is_err(),
+                "{} shares a group with content the origin model trained on",
+                leaked.id
+            );
+        }
+        let unseen = sample("late", "lot-9", 11);
+        assert!(ensure_independent_audit(&connection, &model, &target, &[&unseen]).is_err());
+        let mate = sample("late-mate", "lot-9", 34);
+        ensure_independent_audit(&connection, &model, &target, &[&mate]).unwrap();
+        let error = ensure_independent_audit(&connection, &model, &target, &[&mate, &unseen])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("late-mate"), "{error}");
+    }
+
+    #[test]
+    fn feature_extractor_identity_requires_a_digest_and_prefers_declared_steps() {
+        let mut manifest = serde_json::json!({
+            "preprocessing":[{"kind":"features","names":["a"]}],
+            "recommended_preprocessing":[{"kind":"resize","width":4,"height":4}],
+        });
+        assert_eq!(
+            expected_image_steps(&manifest).unwrap(),
+            vec![PreprocessingStep::Resize {
+                width: 4,
+                height: 4
+            }]
+        );
+        manifest["preprocessing"] = serde_json::json!([{"kind":"normalize","mean":[0.5],"std":[0.25]}]);
+        assert_eq!(
+            expected_image_steps(&manifest).unwrap(),
+            vec![PreprocessingStep::Normalize {
+                mean: vec![0.5],
+                std: vec![0.25]
+            }]
+        );
+        let model = artifact("model", "snapshot", manifest);
+        let extractor = FeatureExtractor::from_artifact(&model).unwrap();
+        extractor.validate().unwrap();
+        assert_eq!(extractor.source_id, "model");
+        assert!(
+            FeatureExtractor {
+                blob_sha256: "short".into(),
+                ..extractor
+            }
+            .validate()
+            .is_err()
+        );
     }
 }
 

@@ -306,6 +306,14 @@ fn interrupted_artifact_write_cannot_replace_checkpoint() {
     .unwrap();
     drop(repo);
     let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    assert!(
+        !repo
+            .path()
+            .with_extension("artifacts")
+            .join("crash.part")
+            .exists(),
+        "reopening sweeps staging files left by a crashed writer"
+    );
     assert_eq!(
         repo.get_job(&job.id).unwrap().checkpoint,
         Some(checkpoint.clone())
@@ -830,4 +838,456 @@ fn snapshot_byte_limit_precedes_deserialization_and_worker_admission() {
         repo.get_snapshot_limited(&snapshot.id, bytes),
         Err(Error::Json(_))
     ));
+}
+
+fn fixture_worker(repo: &TrainingRepository, engine: impl TrainingEngine + 'static) -> TrainingWorker {
+    let mut worker = TrainingWorker::new(repo.clone(), WorkerLimits::default()).unwrap();
+    worker.register("fixture", Arc::new(engine)).unwrap();
+    worker
+}
+
+#[test]
+fn pre_claim_failures_are_recorded_until_a_claim_succeeds() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let job = queued(&repo);
+    let oversized = fixture_worker(
+        &repo,
+        FixtureEngine {
+            cancel: None,
+            memory: 2_000_000,
+        },
+    );
+    assert!(matches!(oversized.run(&job.id), Err(Error::Engine(_))));
+    let waiting = repo.get_job(&job.id).unwrap();
+    assert_eq!(waiting.status, JobStatus::Queued);
+    assert!(
+        waiting
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("training needs an estimated 2000000 bytes")),
+        "{:?}",
+        waiting.error
+    );
+    fixture_worker(
+        &repo,
+        FixtureEngine {
+            cancel: None,
+            memory: 100,
+        },
+    )
+    .run(&job.id)
+    .unwrap();
+    let finished = repo.get_job(&job.id).unwrap();
+    assert_eq!(finished.status, JobStatus::Succeeded);
+    assert!(finished.error.is_none());
+}
+
+#[test]
+fn expired_leases_are_settled_by_cancel_recovery_and_resume() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let crashed = queued(&repo);
+    repo.claim_job_with_resources(
+        &crashed.id,
+        "crashed",
+        10,
+        1000,
+        Some(ResourceRequest {
+            key: "cpu:0".into(),
+            estimated_bytes: 10,
+            budget_bytes: 100,
+        }),
+    )
+    .unwrap();
+    let cancelled = repo.request_cancel(&crashed.id, 2000).unwrap();
+    assert_eq!(cancelled.status, JobStatus::Cancelled);
+    assert!(cancelled.lease_owner.is_none());
+    let reservations: i64 = rusqlite::Connection::open(repo.path())
+        .unwrap()
+        .query_row("SELECT count(*) FROM resource_reservations", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(reservations, 0);
+
+    populate(&repo, 12..15);
+    let stopping = repo
+        .trigger_after_n(&stream(), 1, request(), policy(), 2001)
+        .unwrap()
+        .expect("a settled cancellation frees the stream");
+    repo.claim_job(&stopping.id, "crashed", 10, 2002).unwrap();
+    assert_eq!(
+        repo.request_cancel(&stopping.id, 2003).unwrap().status,
+        JobStatus::CancelRequested
+    );
+    assert!(repo.recover_expired_jobs(&stream(), 2005).unwrap().is_empty());
+    let recovered = repo.recover_expired_jobs(&stream(), 2012).unwrap();
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].status, JobStatus::Cancelled);
+    assert!(repo.recover_expired_jobs(&stream(), 2013).unwrap().is_empty());
+
+    populate(&repo, 15..18);
+    let interrupted = repo
+        .trigger_after_n(&stream(), 1, request(), policy(), 2020)
+        .unwrap()
+        .unwrap();
+    let stale = repo.claim_job(&interrupted.id, "crashed", 10, 2021).unwrap();
+    let recovered = repo.recover_expired_jobs(&stream(), 2040).unwrap();
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].status, JobStatus::Interrupted);
+    assert!(recovered[0].generation > stale.generation);
+    assert_eq!(
+        repo.resume_job(&interrupted.id, 2041).unwrap().status,
+        JobStatus::Queued
+    );
+    let crashed_again = repo
+        .claim_job(&interrupted.id, "crashed-again", 10, 2042)
+        .unwrap();
+    let requeued = repo.resume_job(&interrupted.id, 2100).unwrap();
+    assert_eq!(requeued.status, JobStatus::Queued);
+    assert!(requeued.generation > crashed_again.generation);
+}
+
+#[test]
+fn reservations_of_dead_workers_are_reclaimed_by_the_next_claim() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let crashed = queued(&repo);
+    let other = StreamKey {
+        stream_id: "line-2".into(),
+        ..stream()
+    };
+    for i in 0..12 {
+        repo.record_sample(&other, &sample(i)).unwrap();
+    }
+    let next = repo
+        .trigger_after_n(&other, 12, request(), policy(), 1000)
+        .unwrap()
+        .unwrap();
+    let resource = ResourceRequest {
+        key: "cpu:0".into(),
+        estimated_bytes: 600,
+        budget_bytes: 1000,
+    };
+    repo.claim_job_with_resources(&crashed.id, "crashed", 10, 1000, Some(resource.clone()))
+        .unwrap();
+    assert!(matches!(
+        repo.claim_job_with_resources(&next.id, "next", 1000, 1005, Some(resource.clone())),
+        Err(Error::Conflict(message)) if message.contains(&crashed.id) && message.contains("cpu:0")
+    ));
+    repo.claim_job_with_resources(&next.id, "next", 1000, 1010, Some(resource))
+        .unwrap();
+    assert_eq!(
+        repo.get_job(&crashed.id).unwrap().status,
+        JobStatus::Interrupted
+    );
+}
+
+struct PanickingEngine {
+    message: &'static str,
+    formatted: bool,
+}
+impl TrainingEngine for PanickingEngine {
+    fn estimated_memory_bytes(&self, _: &TrainingWork) -> Result<u64> {
+        Ok(1)
+    }
+    fn train(&self, _: &TrainingWork, _: &WorkerControl) -> Result<EngineOutput> {
+        if self.formatted {
+            panic!("{}", self.message);
+        }
+        std::panic::panic_any(self.message)
+    }
+}
+
+#[test]
+fn engine_panics_keep_their_message_and_name_device_memory_exhaustion() {
+    for (engine, expected) in [
+        (
+            PanickingEngine {
+                message: "tensor shapes [2, 3] and [4] differ",
+                formatted: false,
+            },
+            "training engine panicked: tensor shapes [2, 3] and [4] differ",
+        ),
+        (
+            PanickingEngine {
+                message: "CUDA_ERROR_OUT_OF_MEMORY while allocating 3221225472 bytes",
+                formatted: true,
+            },
+            "out of device memory; reduce the batch size or input resolution",
+        ),
+    ] {
+        let (_dir, repo) = repo();
+        populate(&repo, 0..12);
+        let job = queued(&repo);
+        let error = fixture_worker(&repo, engine)
+            .run(&job.id)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(expected), "{error}");
+        let failed = repo.get_job(&job.id).unwrap();
+        assert_eq!(failed.status, JobStatus::Failed);
+        assert!(failed.error.unwrap().contains(expected));
+    }
+}
+
+#[test]
+fn engines_reject_snapshots_by_stored_size_before_parsing() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    struct DatasetScaled(Arc<AtomicUsize>);
+    impl TrainingEngine for DatasetScaled {
+        fn estimated_memory_bytes(&self, _: &TrainingWork) -> Result<u64> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(1)
+        }
+        fn snapshot_byte_limit(&self, budget: u64) -> u64 {
+            budget / 12
+        }
+        fn train(&self, _: &TrainingWork, _: &WorkerControl) -> Result<EngineOutput> {
+            panic!("snapshots above the engine limit must never be parsed")
+        }
+    }
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let job = queued(&repo);
+    let bytes = serde_json::to_vec(&repo.get_snapshot(&job.snapshot_id).unwrap())
+        .unwrap()
+        .len() as u64;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut worker = TrainingWorker::new(
+        repo.clone(),
+        WorkerLimits {
+            memory_budget_bytes: bytes * 6,
+            ..WorkerLimits::default()
+        },
+    )
+    .unwrap();
+    worker
+        .register("fixture", Arc::new(DatasetScaled(calls.clone())))
+        .unwrap();
+    assert!(matches!(worker.run(&job.id), Err(Error::Invalid(_))));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert!(repo.get_job(&job.id).unwrap().error.is_some());
+}
+
+struct ProgressProbe;
+impl TrainingEngine for ProgressProbe {
+    fn estimated_memory_bytes(&self, _: &TrainingWork) -> Result<u64> {
+        Ok(1)
+    }
+    fn train(&self, work: &TrainingWork, control: &WorkerControl) -> Result<EngineOutput> {
+        let stored = || work.repository.get_job(&work.job.id).map(|job| job.progress);
+        for batch in 0..50 {
+            control.progress(json!({"epoch":0,"batch":batch,"validation_loss":null}))?;
+        }
+        if stored()? != serde_json::Value::Null {
+            return Err(Error::Engine("batch progress reached the ledger".into()));
+        }
+        control.progress(json!({"epoch":0,"batch":50,"validation_loss":0.5}))?;
+        if stored()?["validation_loss"] != json!(0.5) {
+            return Err(Error::Engine("epoch-end progress was not stored".into()));
+        }
+        control.progress(json!({"epoch":1,"batch":3,"validation_loss":null}))?;
+        Ok(EngineOutput {
+            model_bytes: b"probe-model".to_vec(),
+            manifest: json!({}),
+        })
+    }
+}
+
+#[test]
+fn batch_progress_is_buffered_while_epoch_ends_and_completion_are_stored() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let job = queued(&repo);
+    fixture_worker(&repo, ProgressProbe).run(&job.id).unwrap();
+    assert_eq!(
+        repo.get_job(&job.id).unwrap().progress,
+        json!({"epoch":1,"batch":3,"validation_loss":null})
+    );
+}
+
+struct EpochCheckpoints;
+impl TrainingEngine for EpochCheckpoints {
+    fn estimated_memory_bytes(&self, _: &TrainingWork) -> Result<u64> {
+        Ok(1)
+    }
+    fn train(&self, _: &TrainingWork, control: &WorkerControl) -> Result<EngineOutput> {
+        for epoch in 1..=3u64 {
+            control.checkpoint(
+                format!("optimizer-state-{epoch}").as_bytes(),
+                epoch,
+                json!({"epoch":epoch}),
+            )?;
+        }
+        Ok(EngineOutput {
+            model_bytes: b"weights".to_vec(),
+            manifest: json!({}),
+        })
+    }
+}
+
+#[test]
+fn finished_jobs_leave_only_their_model_in_the_blob_store() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let job = queued(&repo);
+    let artifact = fixture_worker(&repo, EpochCheckpoints).run(&job.id).unwrap();
+    let blobs: Vec<String> = std::fs::read_dir(repo.path().with_extension("artifacts"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect();
+    assert_eq!(blobs, vec![artifact.blob.path.clone()]);
+    assert_eq!(
+        artifact.dataset_digest,
+        repo.get_snapshot(&job.snapshot_id).unwrap().digest
+    );
+}
+
+#[test]
+fn label_corrections_replace_evaluation_truth_instead_of_blocking_it() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let artifact = candidate(&repo);
+    let report = evaluate(&repo, &artifact);
+    assert_eq!(report.metrics["accuracy"], 1.0);
+    let corrected = repo.get_snapshot(&artifact.snapshot_id).unwrap().test[0].clone();
+    let original = corrected.payload["label"].as_str().unwrap().to_owned();
+    let mut revision = corrected.clone();
+    revision.annotation_revision = 2;
+    revision.label_available_at_ms = 1150;
+    revision.payload["label"] = json!(if original == "good" { "defect" } else { "good" });
+    repo.record_sample(&stream(), &revision).unwrap();
+    assert!(matches!(
+        repo.promote("production", 0, &report.id, promotion_policy(), 1200),
+        Err(Error::Conflict(_))
+    ));
+    let reevaluated = repo.evaluate_classification(&artifact.id, 1200).unwrap();
+    assert_eq!(reevaluated.audited_samples, report.audited_samples);
+    assert!(reevaluated.metrics["accuracy"] < 1.0);
+    let outdated = PredictionRecord {
+        sample_id: corrected.id.clone(),
+        artifact_id: artifact.id.clone(),
+        predicted_label: Some(original.clone()),
+        teacher_label: None,
+        actual_label: Some(original),
+        actual_source: Some(LabelSource::Reviewed),
+        latency_ms: 5.,
+        failed: false,
+        recorded_at_ms: 1300,
+        details: json!({}),
+    };
+    assert!(
+        matches!(repo.record_prediction(&outdated), Err(Error::Invalid(_))),
+        "evidence recorded after a correction must carry the corrected truth"
+    );
+    let mut withdrawn = revision;
+    withdrawn.annotation_revision = 3;
+    withdrawn.accepted = false;
+    withdrawn.label_available_at_ms = 1250;
+    repo.record_sample(&stream(), &withdrawn).unwrap();
+    let pruned = repo.evaluate_classification(&artifact.id, 1300).unwrap();
+    assert_eq!(pruned.audited_samples, report.audited_samples - 1);
+    assert_eq!(pruned.metrics["accuracy"], 1.0);
+    repo.promote("production", 0, &pruned.id, promotion_policy(), 1301)
+        .unwrap();
+}
+
+#[cfg(feature = "native")]
+#[test]
+fn failed_audited_predictions_count_as_misses_instead_of_dropping_class_metrics() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let job = queued(&repo);
+    let lease = repo.claim_job(&job.id, "worker", 1000, 1000).unwrap();
+    let artifact = repo
+        .finish_training(
+            &lease,
+            b"labelled-model",
+            json!({"labels":["defect","good"]}),
+            1001,
+        )
+        .unwrap();
+    let snapshot = repo.get_snapshot(&artifact.snapshot_id).unwrap();
+    for (index, sample) in snapshot.test.iter().enumerate() {
+        let label = sample.payload["label"].as_str().unwrap().to_owned();
+        repo.record_prediction(&PredictionRecord {
+            sample_id: sample.id.clone(),
+            artifact_id: artifact.id.clone(),
+            predicted_label: (index != 0).then(|| label.clone()),
+            teacher_label: None,
+            actual_label: Some(label),
+            actual_source: Some(LabelSource::Reviewed),
+            latency_ms: 1.,
+            failed: index == 0,
+            recorded_at_ms: 1100,
+            details: json!({}),
+        })
+        .unwrap();
+    }
+    let report = repo.evaluate_classification(&artifact.id, 1101).unwrap();
+    for metric in [
+        "macro_f1",
+        "balanced_accuracy",
+        "mean_rank_error",
+        "quadratic_kappa",
+    ] {
+        assert!(report.metrics.contains_key(metric), "{metric} was dropped");
+    }
+    assert!(report.metrics["balanced_accuracy"] < 1.0);
+}
+
+#[test]
+fn received_ledgers_with_foreign_schema_objects_are_rejected() {
+    for statement in [
+        "CREATE TRIGGER inflate AFTER INSERT ON evaluations BEGIN UPDATE evaluations SET body=json_set(body,'$.metrics.accuracy',0.99) WHERE id=NEW.id; END",
+        "CREATE VIEW audited AS SELECT body FROM evaluations",
+        "CREATE TABLE smuggled(value TEXT)",
+    ] {
+        let (_dir, repo) = repo();
+        let path = repo.path().to_owned();
+        drop(repo);
+        rusqlite::Connection::open(&path)
+            .unwrap()
+            .execute_batch(statement)
+            .unwrap();
+        assert!(
+            matches!(TrainingRepository::open(&path), Err(Error::Invalid(_))),
+            "{statement}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn derived_storage_paths_cannot_be_redirected_through_symlinks() {
+    let outside = tempfile::tempdir().unwrap();
+    for entry in ["training.artifacts", ".training-locks", "training.sqlite-wal"] {
+        let directory = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path(), directory.path().join(entry)).unwrap();
+        assert!(
+            matches!(
+                TrainingRepository::open(directory.path().join("training.sqlite")),
+                Err(Error::Invalid(_))
+            ),
+            "{entry}"
+        );
+    }
+    assert!(std::fs::read_dir(outside.path()).unwrap().next().is_none());
+}
+
+#[cfg(all(feature = "native", feature = "burn"))]
+#[test]
+fn worker_cli_refuses_to_create_a_missing_ledger() {
+    let directory = tempfile::tempdir().unwrap();
+    let missing = directory.path().join("unmounted").join("jobs.sqlite");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_flow-like-ml-worker"))
+        .arg("--repository")
+        .arg(&missing)
+        .arg("--list-pending")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(!directory.path().join("unmounted").exists());
 }

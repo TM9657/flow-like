@@ -1,7 +1,7 @@
 use crate::runtime::Session;
 use flow_like_industrial::opcua::{
-    OpcUaBrowseRequest, OpcUaBrowseResult, OpcUaReadRequest, OpcUaReading, OpcUaSecurityMode,
-    OpcUaSubscribeRequest, OpcUaWriteItem, OpcUaWriteResult,
+    OpcUaBrowseRequest, OpcUaBrowseResult, OpcUaCertificates, OpcUaReadRequest, OpcUaReading,
+    OpcUaSecurityMode, OpcUaSubscribeRequest, OpcUaWriteItem, OpcUaWriteResult,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,9 @@ pub struct ConnectRequest {
     pub security_policy: String,
     pub security_mode: OpcUaSecurityMode,
     pub timeout_ms: u64,
+    /// Omit to use the executor app certificate store.
+    #[serde(default)]
+    pub certificates: Option<OpcUaCertificates>,
     #[serde(default)]
     pub username: Option<String>,
     #[serde(default)]
@@ -48,13 +51,14 @@ crate::operation!(
     OpcUaConnectNode,
     "industrial_opcua_connect",
     "Connect OPC UA",
-    "Open a persistent OPC UA session using the app certificate store",
+    "Open an OPC UA session with app certificates or a custom application identity and server trust",
     "opcua",
     "connect",
     "Industrial/OPC UA",
     ConnectRequest,
     Session,
-    connect
+    connect,
+    sensitive
 );
 #[crate::register_node]
 #[derive(Default)]
@@ -146,6 +150,7 @@ async fn connect(context: &mut ExecutionContext, input: ConnectRequest) -> Resul
         security_policy: input.security_policy,
         security_mode: input.security_mode,
         timeout_ms: input.timeout_ms,
+        certificates: input.certificates,
         pki_dir: runtime::local_storage_directory(context, "opcua-pki")?
             .to_string_lossy()
             .into_owned(),

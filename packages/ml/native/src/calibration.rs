@@ -265,17 +265,7 @@ pub fn select_threshold(
         positives > 0 && negatives > 0,
         "Threshold selection requires positives and negatives",
     )?;
-    let mut candidates = scores.to_vec();
-    candidates.push(1.0);
-    candidates.sort_by(|a, b| b.total_cmp(a));
-    candidates.dedup();
-    for threshold in candidates {
-        let (mut tp, mut fp) = (0usize, 0usize);
-        for (a, s) in actual.iter().zip(scores) {
-            if *s >= threshold {
-                if *a { tp += 1 } else { fp += 1 }
-            }
-        }
+    let evaluate = |threshold: f64, tp: usize, fp: usize| {
         let recall = tp as f64 / positives as f64;
         let precision = if tp + fp > 0 {
             tp as f64 / (tp + fp) as f64
@@ -283,18 +273,38 @@ pub fn select_threshold(
             0.0
         };
         let fpr = fp as f64 / negatives as f64;
-        if recall >= constraints.minimum_recall
+        let satisfied = recall >= constraints.minimum_recall
             && precision >= constraints.minimum_precision
-            && fpr <= constraints.maximum_false_positive_rate
-        {
-            return Ok(Some(ThresholdSelection {
-                threshold,
-                recall,
-                precision,
-                false_positive_rate: fpr,
-                true_positive: tp,
-                false_positive: fp,
-            }));
+            && fpr <= constraints.maximum_false_positive_rate;
+        satisfied.then_some(ThresholdSelection {
+            threshold,
+            recall,
+            precision,
+            false_positive_rate: fpr,
+            true_positive: tp,
+            false_positive: fp,
+        })
+    };
+    let mut order: Vec<_> = (0..scores.len()).collect();
+    order.sort_by(|a, b| scores[*b].total_cmp(&scores[*a]));
+    if scores[order[0]] < 1.0
+        && let Some(selection) = evaluate(1.0, 0, 0)
+    {
+        return Ok(Some(selection));
+    }
+    let (mut tp, mut fp, mut index) = (0usize, 0usize, 0);
+    while index < order.len() {
+        let threshold = scores[order[index]];
+        while index < order.len() && scores[order[index]] == threshold {
+            if actual[order[index]] {
+                tp += 1
+            } else {
+                fp += 1
+            }
+            index += 1;
+        }
+        if let Some(selection) = evaluate(threshold, tp, fp) {
+            return Ok(Some(selection));
         }
     }
     Ok(None)
@@ -357,5 +367,85 @@ mod tests {
             .unwrap()
             .is_none()
         );
+    }
+
+    fn exhaustive_threshold(
+        actual: &[bool],
+        scores: &[f64],
+        c: &ThresholdConstraints,
+    ) -> Option<(f64, usize, usize)> {
+        let positives = actual.iter().filter(|v| **v).count() as f64;
+        let negatives = actual.len() as f64 - positives;
+        let mut candidates = scores.to_vec();
+        candidates.push(1.0);
+        candidates.sort_by(|a, b| b.total_cmp(a));
+        candidates.dedup();
+        candidates.into_iter().find_map(|threshold| {
+            let flagged = |label: bool| {
+                actual
+                    .iter()
+                    .zip(scores)
+                    .filter(|(a, s)| **a == label && **s >= threshold)
+                    .count()
+            };
+            let (tp, fp) = (flagged(true), flagged(false));
+            let precision = if tp + fp > 0 {
+                tp as f64 / (tp + fp) as f64
+            } else {
+                0.0
+            };
+            (tp as f64 / positives >= c.minimum_recall
+                && precision >= c.minimum_precision
+                && fp as f64 / negatives <= c.maximum_false_positive_rate)
+                .then_some((threshold, tp, fp))
+        })
+    }
+
+    #[test]
+    fn threshold_sweep_matches_exhaustive_search_with_tied_scores() {
+        let mut rng = crate::Rng::new(7);
+        let actual: Vec<_> = (0..400).map(|i| i % 3 == 0).collect();
+        let raw: Vec<_> = actual
+            .iter()
+            .map(|positive| rng.uniform() * 0.7 + if *positive { 0.3 } else { 0.0 })
+            .collect();
+        for scale in [1.0, 0.9] {
+            let scores: Vec<_> = raw
+                .iter()
+                .map(|v| (v * 20.0).round() / 20.0 * scale)
+                .collect();
+            for (minimum_recall, minimum_precision, maximum_false_positive_rate) in [
+                (0.0, 0.0, 1.0),
+                (0.0, 0.0, 0.0),
+                (0.5, 0.0, 0.2),
+                (0.6, 0.7, 1.0),
+                (0.3, 0.9, 0.05),
+                (0.95, 0.0, 1.0),
+                (1.0, 1.0, 0.0),
+            ] {
+                let c = ThresholdConstraints {
+                    minimum_recall,
+                    minimum_precision,
+                    maximum_false_positive_rate,
+                };
+                let selected = select_threshold(&actual, &scores, &c)
+                    .unwrap()
+                    .map(|s| (s.threshold, s.true_positive, s.false_positive));
+                assert_eq!(selected, exhaustive_threshold(&actual, &scores, &c));
+            }
+        }
+    }
+
+    #[test]
+    fn threshold_search_handles_many_distinct_scores_with_unmet_constraints() {
+        let rows = 100_000;
+        let actual: Vec<_> = (0..rows).map(|i| i % 2 == 0).collect();
+        let scores: Vec<_> = (0..rows).map(|i| i as f64 / rows as f64).collect();
+        let c = ThresholdConstraints {
+            minimum_recall: 0.99,
+            minimum_precision: 0.0,
+            maximum_false_positive_rate: 0.01,
+        };
+        assert!(select_threshold(&actual, &scores, &c).unwrap().is_none());
     }
 }

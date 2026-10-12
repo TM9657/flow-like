@@ -6,6 +6,1086 @@
 // JSDoc tags carry the node type (`@node`), the receiver pin (`@receiver`) and the legacy
 // camelCase spelling (`@alias`), which is still accepted.
 
+declare namespace inspection {
+    // === AI/ML/Anomaly ===
+
+    /**
+     * Convert a channel-first spatial feature map to position-major PatchCore or PaDiM embeddings
+     * @node ml_feature_map_to_patches @alias mlFeatureMapToPatches
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function patches({ request: Struct }): Struct;
+
+    /**
+     * Fit isolation trees to normal sensor or embedding features
+     * @node ml_train_isolation_forest @alias mlTrainIsolationForest
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainIsolationForest({ request: Struct }): Struct;
+
+    /**
+     * Fit a regularized Gaussian per spatial patch of normal image embeddings
+     * @node ml_train_padim @alias mlTrainPadim
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainPadim({ request: Struct }): Struct;
+
+    /**
+     * Select a farthest-first coreset of normal frozen-encoder patch embeddings
+     * @node ml_train_patchcore @alias mlTrainPatchcore
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainPatchCore({ request: Struct }): Struct;
+
+    // === AI/ML/Auto Training ===
+
+    /**
+     * Pin a dataset and start a durable, bounded model search
+     * @node ml_auto_train_anomaly @alias mlAutoTrainAnomaly
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function autoTrainAnomaly({ request: Struct }): Struct;
+
+    /**
+     * Pin a dataset and start a durable, bounded model search
+     * @node ml_auto_train_forecast @alias mlAutoTrainForecast
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function autoTrainForecast({ request: Struct }): Struct;
+
+    /**
+     * Pin a dataset and start a durable, bounded model search
+     * @node ml_auto_train_tabular @alias mlAutoTrainTabular
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function autoTrainTabular({ request: Struct }): Struct;
+
+    /**
+     * Pin a dataset and start a durable, bounded model search
+     * @node ml_auto_train_vision @alias mlAutoTrainVision
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function autoTrainVision({ request: Struct }): Struct;
+
+    /**
+     * Cancel active trials and preserve the experiment and checkpoints
+     * @node ml_cancel_auto_training @alias mlCancelAutoTraining
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function cancelAutoTraining({ request: Struct }): Struct;
+
+    /**
+     * Write native model weights and their task, preprocessing and evaluation manifest
+     * @node ml_export_auto_model @alias mlExportAutoModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function exportAutoModel({ request: Struct }): Struct;
+
+    /**
+     * Freeze the selected candidate and audit it against the untouched test partition
+     * @node ml_finalize_auto_training @alias mlFinalizeAutoTraining
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function finalizeAutoTraining({ request: Struct }): Struct;
+
+    /**
+     * Read the durable experiment, leaderboard, table versions and best model bundle
+     * @node ml_get_auto_training @alias mlGetAutoTraining
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function getAutoTraining({ request: Struct }): Struct;
+
+    /**
+     * Apply the winning model's saved preprocessing to raw rows and load its durable weights
+     * @node ml_predict_auto_model @alias mlPredictAutoModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function predictAutoModel({ request: Struct }): Struct;
+
+    /**
+     * Resume a saved experiment in the background within its remaining budget
+     * @node ml_resume_auto_training @alias mlResumeAutoTraining
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function resumeAutoTraining({ request: Struct }): Struct;
+
+    /**
+     * Run one candidate and return its measured validation results
+     * @node ml_step_auto_training @alias mlStepAutoTraining
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function stepAutoTraining({ request: Struct }): Struct;
+
+    // === AI/ML/Compute ===
+
+    /**
+     * Resolve automatic device selection or test a specific CPU or GPU backend with a forward and backward calculation
+     * @node ml_probe_training_device @alias mlProbeTrainingDevice
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function probeDevice({ request: Struct }): Struct;
+
+    // === AI/ML/Continuous Learning ===
+
+    /**
+     * Measure errors by class and declared operating slices using reviewed outcomes
+     * @node ml_analyze_model_errors @alias mlAnalyzeModelErrors
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function analyzeModelErrors({ request: Struct }): Struct;
+
+    /**
+     * Persist a task, dataset source, review policy and budget across training experiments
+     * @node ml_create_learning_project @alias mlCreateLearningProject
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function createLearningProject({ request: Struct }): Struct;
+
+    /**
+     * Read project state, budget, experiment history and retraining reasons
+     * @node ml_get_learning_project @alias mlGetLearningProject
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function getLearningProject({ request: Struct }): Struct;
+
+    /**
+     * Record an idempotent product change that can trigger another training cycle
+     * @node ml_notify_learning_product_change @alias mlNotifyLearningProductChange
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function notifyLearningProductChange({ request: Struct }): Struct;
+
+    /**
+     * Record sample predictions, embeddings and operating conditions for review and drift detection
+     * @node ml_observe_learning_sample @alias mlObserveLearningSample
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function observeLearningSamples({ request: Struct }): Struct;
+
+    /**
+     * Pause project training and route decisions through its fallback
+     * @node ml_pause_learning_project @alias mlPauseLearningProject
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function pauseLearningProject({ request: Struct }): Struct;
+
+    /**
+     * Promote an eligible model using fresh audited evidence and the project quality policy
+     * @node ml_promote_learning_model @alias mlPromoteLearningModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function promoteLearningModel({ request: Struct }): Struct;
+
+    /**
+     * Resume the project with its saved budget, datasets and model state
+     * @node ml_resume_learning_project @alias mlResumeLearningProject
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function resumeLearningProject({ request: Struct }): Struct;
+
+    /**
+     * Record a reviewed annotation or measured outcome for a collected sample
+     * @node ml_review_learning_sample @alias mlReviewLearningSample
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function reviewLearningSample({ request: Struct }): Struct;
+
+    /**
+     * Restore the previous model in the project deployment
+     * @node ml_rollback_learning_model @alias mlRollbackLearningModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function rollbackLearningModel({ request: Struct }): Struct;
+
+    /**
+     * Resolve teacher, champion, shadow or deterministic canary routing for a sample
+     * @node ml_route_learning_project @alias mlRouteLearningProject
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function routeLearningProject({ request: Struct }): Struct;
+
+    /**
+     * Select uncertain, disagreeing, diverse and underrepresented samples
+     * @node ml_select_samples_for_review @alias mlSelectSamplesForReview
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function selectSamplesForReview({ request: Struct }): Struct[];
+
+    /**
+     * Prepare or continue a training cycle, compare models on fresh audit evidence and apply the deployment policy
+     * @node ml_step_learning_project @alias mlStepLearningProject
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function stepLearningProject({ request: Struct }): Struct;
+
+    // === AI/ML/Dataset ===
+
+    /**
+     * Materialize native dataset JSON or YOLO box-label files
+     * @node ml_export_annotation_dataset @alias mlExportAnnotationDataset
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function exportAnnotations({ request: Struct }): Struct;
+
+    /**
+     * Fit feature means and scales using only the training partition
+     * @node ml_fit_standard_scaler @alias mlFitStandardScaler
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function fitScaler({ request: Struct }): Struct;
+
+    /**
+     * Attach stable source identity, timestamps and leakage group to an image or sensor tensor
+     * @node ml_make_inspection_sample @alias mlMakeInspectionSample
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function makeSample({ request: Struct }): Struct;
+
+    /**
+     * Normalize features with saved training statistics
+     * @node ml_apply_standard_scaler @alias mlApplyStandardScaler
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function scale({ request: Struct }): Struct;
+
+    /**
+     * Create a canonical dataset with a content digest
+     * @node ml_dataset_snapshot @alias mlDatasetSnapshot
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function snapshot({ request: Struct }): Struct;
+
+    /**
+     * Keep related samples together and purge temporal boundary overlap
+     * @node ml_group_time_split @alias mlGroupTimeSplit
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function split({ request: Struct }): Struct;
+
+    // === AI/ML/Evaluation ===
+
+    /**
+     * Measure threshold curves, AUROC, average precision and calibration errors
+     * @node ml_binary_curve @alias mlBinaryCurve
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function binaryCurve({ request: Struct }): Struct;
+
+    /**
+     * Measure per-class precision, recall and F1 with accuracy confidence bounds
+     * @node ml_classification_metrics @alias mlClassificationMetrics
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function classificationMetrics({ request: Struct }): Struct;
+
+    /**
+     * Measure per-class 101-point AP at an explicit IoU threshold
+     * @node ml_detection_metrics @alias mlDetectionMetrics
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function detectionMetrics({ request: Struct }): Struct;
+
+    /**
+     * Match alarms to observed events and measure lead time and false alarms per hour
+     * @node ml_event_metrics @alias mlEventMetrics
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function eventMetrics({ request: Struct }): Struct;
+
+    /**
+     * Fit Platt, isotonic or temperature calibration on held-out validation data
+     * @node ml_calibrate_probabilities @alias mlCalibrateProbabilities
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function fitCalibration({ request: Struct }): Struct;
+
+    /**
+     * Measure MAE, RMSE and R squared
+     * @node ml_regression_metrics @alias mlRegressionMetrics
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function regressionMetrics({ request: Struct }): Struct;
+
+    /**
+     * Measure per-class IoU and Dice
+     * @node ml_segmentation_metrics @alias mlSegmentationMetrics
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function segmentationMetrics({ request: Struct }): Struct;
+
+    /**
+     * Select a validation threshold satisfying recall, precision and false-positive constraints
+     * @node ml_select_threshold @alias mlSelectThreshold
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function selectThreshold({ request: Struct }): Struct;
+
+    // === AI/ML/Export ===
+
+    /**
+     * Export a supported inference graph with fixed dimensions and explicit output semantics
+     * @node ml_export_student_onnx @alias mlExportStudentOnnx
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function exportOnnx({ request: Struct }): Struct;
+
+    // === AI/ML/Feature Engineering ===
+
+    /**
+     * Create named feature columns in pinned derived tables
+     * @node ml_derive_columns @alias mlDeriveColumns
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function deriveColumns({ request: Struct }): Struct;
+
+    /**
+     * Fit imputation, encoding and scaling on training rows
+     * @node ml_fit_preprocessing @alias mlFitPreprocessing
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function fitPreprocessing({ request: Struct }): Struct;
+
+    /**
+     * Create named feature columns in pinned derived tables
+     * @node ml_join_sources @alias mlJoinSources
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function joinSources({ request: Struct }): Struct;
+
+    /**
+     * Write prepared partitions with original and generated named columns
+     * @node ml_materialize_dataset @alias mlMaterializeDataset
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function materializeDataset({ request: Struct }): Struct[];
+
+    /**
+     * Create named feature columns in pinned derived tables
+     * @node ml_window_features @alias mlWindowFeatures
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function windowFeatures({ request: Struct }): Struct;
+
+    // === AI/ML/Fusion ===
+
+    /**
+     * Combine image features with the latest eligible sensor reading
+     * @node ml_align_modalities @alias mlAlignModalities
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function align({ request: Struct }): Struct;
+
+    // === AI/ML/Inference ===
+
+    /**
+     * Apply a saved calibrator to scores or multiclass logits
+     * @node ml_apply_calibration @alias mlApplyCalibration
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function calibrate({ request: Struct }): float[];
+
+    /**
+     * Check calibrated class confidence and entropy before accepting a prediction
+     * @node ml_student_confidence_gate @alias mlStudentConfidenceGate
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function confidenceGate({ request: Struct }): Struct;
+
+    /**
+     * Predict with a serialized isolation forest, boosted trees, PatchCore or PaDiM model
+     * @node ml_native_model_inference @alias mlNativeModelInference
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function predictNative({ request: Struct }): Struct;
+
+    /**
+     * Compare a prediction score with an explicit inclusive threshold and direction
+     * @node ml_apply_decision_threshold @alias mlApplyDecisionThreshold
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function threshold({ request: Struct }): bool;
+
+    // === AI/ML/Inspection ===
+
+    /**
+     * Apply a corrected annotation with reviewer provenance
+     * @node ml_review_annotation @alias mlReviewAnnotation
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function reviewAnnotation({ request: Struct }): Struct;
+
+    /**
+     * Check tensor dimensions, labels and annotation geometry
+     * @node ml_validate_annotation @alias mlValidateAnnotation
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function validateAnnotation({ request: Struct }): Struct;
+
+    // === AI/ML/Lifecycle ===
+
+    /**
+     * Resolve a durable artifact and verify its inspection scope
+     * @node ml_get_model_artifact @alias mlGetModelArtifact
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function artifact({ request: Struct }): Struct;
+
+    /**
+     * Request cooperative cancellation and retain the last completed checkpoint
+     * @node ml_cancel_training @alias mlCancelTraining
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function cancelTraining({ request: Struct }): Struct;
+
+    /**
+     * Resolve the promoted artifact; an empty result means the teacher still owns decisions
+     * @node ml_get_deployment @alias mlGetDeployment
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function deployment({ request: Struct }): Struct;
+
+    /**
+     * Measure audited classification quality separately from teacher agreement
+     * @node ml_evaluate_student @alias mlEvaluateStudent
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function evaluateStudent({ request: Struct }): Struct;
+
+    /**
+     * Derive audited regression, detection, segmentation or event metrics from held-out evidence
+     * @node ml_evaluate_inspection_task @alias mlEvaluateInspectionTask
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function evaluateTask({ request: Struct }): Struct;
+
+    /**
+     * Extract spatial features from a Burn classifier reused within this workflow execution
+     * @node ml_extract_patch_features @alias mlExtractPatchFeatures
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function imageFeatures({ request: Struct }): Struct;
+
+    /**
+     * Return decisions to the teacher after drift or resume an audited deployment
+     * @node ml_pause_student @alias mlPauseStudent
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function pauseStudent({ request: Struct }): Struct;
+
+    /**
+     * Predict with a versioned model reused within this workflow execution
+     * @node ml_student_inference @alias mlStudentInference
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function predict({ request: Struct }): Struct;
+
+    /**
+     * Promote an artifact only when its sealed evaluation meets named metric bounds
+     * @node ml_promote_by_metrics @alias mlPromoteByMetrics
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function promoteByMetrics({ request: Struct }): Struct;
+
+    /**
+     * Atomically promote a model that passes the audited quality and latency policy
+     * @node ml_promote_student @alias mlPromoteStudent
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function promoteStudent({ request: Struct }): Struct;
+
+    /**
+     * Store aligned teacher and student predictions with audited outcomes
+     * @node ml_record_model_comparison @alias mlRecordModelComparison
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function recordComparison({ request: Struct }): bool;
+
+    /**
+     * Persist a versioned annotation with capture time and label provenance
+     * @node ml_record_training_sample @alias mlRecordTrainingSample
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function recordSample({ request: Struct }): Struct;
+
+    /**
+     * Restart queued jobs or reclaim expired worker leases after process restart
+     * @node ml_recover_training_jobs @alias mlRecoverTrainingJobs
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function recoverTraining({ request: Struct }): Struct[];
+
+    /**
+     * Resume an interrupted or cancelled job from its saved checkpoint
+     * @node ml_resume_training @alias mlResumeTraining
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function resumeTraining({ request: Struct }): Struct;
+
+    /**
+     * Atomically restore the previous model and its evaluation policy
+     * @node ml_rollback_student @alias mlRollbackStudent
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function rollbackStudent({ request: Struct }): Struct;
+
+    /**
+     * Route to the teacher during collection/shadow evaluation and to the audited student after promotion
+     * @node ml_route_inspection @alias mlRouteInspection
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function route({ request: Struct }): Struct;
+
+    /**
+     * Atomically snapshot new labels and start a durable background training job
+     * @node ml_schedule_training @alias mlScheduleTraining
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function scheduleTraining({ request: Struct }): Struct;
+
+    /**
+     * Train a selected neural architecture on CPU or an optional GPU backend
+     * @node ml_train_burn_model @alias mlTrainBurnModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainBurn({ request: Struct }): Struct;
+
+    /**
+     * Schedule 1D CNN training with durable checkpoints and explicit device selection
+     * @node ml_train_cnn1d @alias mlTrainCnn1d
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainCnn1d({ request: Struct }): Struct;
+
+    /**
+     * Schedule CNN-LSTM Video Model with durable checkpoints and explicit device selection
+     * @node ml_train_cnn_lstm @alias mlTrainCnnLstm
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainCnnLstm({ request: Struct }): Struct;
+
+    /**
+     * Schedule Convolutional Sequence Autoencoder training with durable checkpoints and explicit device selection
+     * @node ml_train_conv1d_autoencoder @alias mlTrainConv1dAutoencoder
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainConv1dAutoencoder({ request: Struct }): Struct;
+
+    /**
+     * Schedule Dense Autoencoder training with durable checkpoints and explicit device selection
+     * @node ml_train_dense_autoencoder @alias mlTrainDenseAutoencoder
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainDenseAutoencoder({ request: Struct }): Struct;
+
+    /**
+     * Fine-tune a native D-FINE Nano detector with matching and auxiliary classification and box losses
+     * @node ml_train_dfine_nano @alias mlTrainDfineNano
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainDfineNano({ request: Struct }): Struct;
+
+    /**
+     * Train a DINOv2 image classifier from scratch or compatible pretrained weights
+     * @node ml_train_dino_v2 @alias mlTrainDinoV2
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainDinoV2({ request: Struct }): Struct;
+
+    /**
+     * Train a PDN teacher/student and autoencoder anomaly model from supplied pretrained teacher weights and normal images
+     * @node ml_train_efficient_ad @alias mlTrainEfficientAd
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainEfficientAd({ request: Struct }): Struct;
+
+    /**
+     * Schedule EfficientNet training with durable checkpoints and explicit device selection
+     * @node ml_train_efficient_net @alias mlTrainEfficientNet
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainEfficientNet({ request: Struct }): Struct;
+
+    /**
+     * Schedule GRU training with durable checkpoints and explicit device selection
+     * @node ml_train_gru @alias mlTrainGru
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainGru({ request: Struct }): Struct;
+
+    /**
+     * Schedule Image/Sensor Fusion Model with durable checkpoints and explicit device selection
+     * @node ml_train_image_sensor_fusion @alias mlTrainImageSensorFusion
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainImageSensorFusion({ request: Struct }): Struct;
+
+    /**
+     * Schedule LSTM training with durable checkpoints and explicit device selection
+     * @node ml_train_lstm @alias mlTrainLstm
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainLstm({ request: Struct }): Struct;
+
+    /**
+     * Schedule LSTM Autoencoder with durable checkpoints and explicit device selection
+     * @node ml_train_lstm_autoencoder @alias mlTrainLstmAutoencoder
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainLstmAutoencoder({ request: Struct }): Struct;
+
+    /**
+     * Train a two-stage detector with region proposals, ROIAlign, boxes and instance masks
+     * @node ml_train_mask_rcnn @alias mlTrainMaskRcnn
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainMaskRcnn({ request: Struct }): Struct;
+
+    /**
+     * Schedule MLP training with durable checkpoints and explicit device selection
+     * @node ml_train_mlp @alias mlTrainMlp
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainMlp({ request: Struct }): Struct;
+
+    /**
+     * Schedule MobileNetV2 training with durable checkpoints and explicit device selection
+     * @node ml_train_mobile_net_v2 @alias mlTrainMobileNetV2
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainMobileNetV2({ request: Struct }): Struct;
+
+    /**
+     * Schedule ResNet-18 training with durable checkpoints and explicit device selection
+     * @node ml_train_res_net18 @alias mlTrainResNet18
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainResNet18({ request: Struct }): Struct;
+
+    /**
+     * Train a native RF-DETR object detector with grouped queries and compatible pretrained weights
+     * @node ml_train_rf_detr @alias mlTrainRfDetr
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainRfDetr({ request: Struct }): Struct;
+
+    /**
+     * Train a native RT-DETRv2 object detector from scratch or compatible pretrained weights
+     * @node ml_train_rtdetr_v2 @alias mlTrainRtdetrV2
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainRtdetrV2({ request: Struct }): Struct;
+
+    /**
+     * Schedule TCN training with durable checkpoints and explicit device selection
+     * @node ml_train_tcn @alias mlTrainTcn
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainTcn({ request: Struct }): Struct;
+
+    /**
+     * Schedule U-Net training with durable checkpoints and explicit device selection
+     * @node ml_train_u_net @alias mlTrainUNet
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainUNet({ request: Struct }): Struct;
+
+    /**
+     * Schedule YOLOX training with durable checkpoints and explicit device selection
+     * @node ml_train_yolo_x @alias mlTrainYoloX
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainYoloX({ request: Struct }): Struct;
+
+    /**
+     * Read progress, checkpoint, failure and artifact state
+     * @node ml_training_job_status @alias mlTrainingJobStatus
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainingStatus({ request: Struct }): Struct;
+
+    // === AI/ML/Monitoring ===
+
+    /**
+     * Compare reference and current distributions using KS and PSI
+     * @node ml_distribution_drift @alias mlDistributionDrift
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function distributionDrift({ request: Struct }): Struct;
+
+    /**
+     * Update a persisted Page-Hinkley detector for increasing prediction error
+     * @node ml_loss_drift @alias mlLossDrift
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function lossDrift({ request: Struct }): Struct;
+
+    // === AI/ML/Sequence ===
+
+    /**
+     * Join a mature measured outcome to its earlier feature window
+     * @node ml_attach_observed_outcome @alias mlAttachObservedOutcome
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function attachOutcome({ request: Struct }): Struct;
+
+    /**
+     * Window an ordered sensor batch with explicit stride and sampling interval
+     * @node ml_sensor_window @alias mlSensorWindow
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function sensorWindow({ request: Struct }): Struct[];
+
+    /**
+     * Build timestamped multichannel windows for temporal models
+     * @node ml_build_sequence_dataset @alias mlBuildSequenceDataset
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function sequences({ request: Struct }): Struct[];
+
+    /**
+     * Stack ordered frames into a temporal image tensor for a CNN-LSTM
+     * @node ml_build_visual_sequence @alias mlBuildVisualSequence
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function visualSequence({ request: Struct }): Struct;
+
+    // === AI/ML/Signal ===
+
+    /**
+     * Measure mean-square energy in explicit frequency bands
+     * @node ml_signal_band_energy @alias mlSignalBandEnergy
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function bandEnergy({ request: Struct }): float[];
+
+    /**
+     * Interpolate timestamped readings with a maximum gap
+     * @node ml_resample_sensor @alias mlResampleSensor
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function resample({ request: Struct }): float[];
+
+    /**
+     * Calculate RMS, moments and frequency features from a sensor window
+     * @node ml_signal_features @alias mlSignalFeatures
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function signalFeatures({ request: Struct }): Struct;
+
+    /**
+     * Compute a short-time spectrum with a selected window and hop
+     * @node ml_signal_spectrogram @alias mlSignalSpectrogram
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function spectrogram({ request: Struct }): Struct;
+
+    /**
+     * Calculate a real one-sided frequency spectrum
+     * @node ml_signal_spectrum @alias mlSignalSpectrum
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function spectrum({ request: Struct }): Struct[];
+
+    // === AI/ML/Training ===
+
+    /**
+     * Fine-tune a native SAM image model from prompts and reviewed masks, then publish new project weights
+     * @node ml_fine_tune_sam2 @alias mlFineTuneSam2
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function fineTuneSam2({ request: Struct }): Struct;
+
+    /**
+     * Import compatible vision weights with their source, license and digest for native fine-tuning
+     * @node ml_import_pretrained_vision @alias mlImportPretrainedVision
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function importPretrainedVision({ request: Struct }): Struct;
+
+    /**
+     * List imported weights and trained Burn models available to this project
+     * @node ml_list_pretrained_vision @alias mlListPretrainedVision
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function listPretrainedVision({ request: Struct }): Struct[];
+
+    /**
+     * Extract NCHW spatial features from project-owned DINOv2 or convolutional weights for patch anomaly models
+     * @node ml_extract_pretrained_features @alias mlExtractPretrainedFeatures
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function pretrainedImageFeatures({ request: Struct }): Struct;
+
+    /**
+     * Check new labelled samples and class coverage
+     * @node ml_training_readiness @alias mlTrainingReadiness
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function readiness({ request: Struct }): Struct;
+
+    /**
+     * Fit native histogram trees with squared-error or binary logistic loss
+     * @node ml_train_gradient_boosted_trees @alias mlTrainGradientBoostedTrees
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function trainGradientBoostedTrees({ request: Struct }): Struct;
+
+    // === AI/ML/Vision ===
+
+    /**
+     * Flip pixels and box/mask annotations while preserving the source split group
+     * @node ml_augment_inspection_image @alias mlAugmentInspectionImage
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function flipImage({ request: Struct }): Struct;
+
+    /**
+     * Resize an image and produce an RGB channel-first tensor with explicit normalization
+     * @node ml_preprocess_inspection_image @alias mlPreprocessInspectionImage
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function preprocessImage({ request: Struct }): Struct;
+
+    /**
+     * Predict image masks from foreground points, background points, a box or a previous mask
+     * @node ml_prompt_sam2 @alias mlPromptSam2
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function promptSam2({ request: Struct }): Struct;
+}
+
 declare namespace ml {
     // === AI/ML ===
 

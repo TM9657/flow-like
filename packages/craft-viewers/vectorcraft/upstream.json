@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/storytold/vectorcraft.git",
+  "revision": "22f14bec246e3dbbe4795765e84572f89ad2b91c",
+  "version": "0.10.0",
+  "wasmBindgen": "0.2.129",
+  "cargoPackage": "vectorcraft-web",
+  "label": "Flows Vector",
+  "canvasId": "craft_canvas",
+  "extensions": ["svg", "svgz", "ai", "ait", "eps", "dxf", "emf", "wmf", "vectorcraft", "drawcraft", "vctemplate", "af", "afdesign", "afpub"]
+}

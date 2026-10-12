@@ -15,7 +15,6 @@ use flow_like::{
         execution::LogLevel,
     },
     flow_like_storage::{Path, object_store::ObjectStore},
-    profile::ProfileApp,
     state::FlowLikeState,
 };
 use flow_like_types::anyhow;
@@ -25,13 +24,13 @@ use image::ImageReader;
 use serde::Deserialize;
 use serde_json::Value;
 use tauri::AppHandle;
+pub mod device_export;
 pub mod duplicate;
 pub mod flowpilot_builds;
 pub mod fork;
 pub mod graph;
 pub mod saved_queries;
 pub mod sharing;
-pub mod device_export;
 pub mod tables;
 
 async fn presign_meta(
@@ -131,28 +130,24 @@ pub async fn create_app(
     id: Option<String>,
     metadata: Metadata,
     bits: Vec<String>,
+    add_to_profile: Option<bool>,
 ) -> Result<App, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
 
     let new_app = App::new(id, metadata, bits, flow_like_state).await?;
     new_app.save().await?;
 
-    let settings = TauriSettingsState::construct(&app_handle).await?;
-    let mut settings = settings.lock().await;
-    let profile_id = settings.get_current_profile()?.hub_profile.id;
-    let profile = settings
-        .profiles
-        .get_mut(&profile_id)
-        .ok_or_else(|| TauriFunctionError::new("Profile not found"))?;
-
-    let apps = profile.hub_profile.apps.get_or_insert_with(Vec::new);
-    if !apps.iter().any(|app| app.app_id == new_app.id) {
-        apps.push(ProfileApp::new(new_app.id.clone()));
-        profile.advance_revision(None);
-        settings.try_serialize()?;
+    // Caching a remote app locally passes `false`: membership is not profile
+    // placement, and the current profile need not be the one that holds the app.
+    if add_to_profile.unwrap_or(true) {
+        let profile_id = TauriSettingsState::current_profile(&app_handle)
+            .await?
+            .hub_profile
+            .id;
+        sharing::add_app_to_profile(&app_handle, &profile_id, &new_app.id).await?;
     }
 
-    Ok(new_app.clone())
+    Ok(new_app)
 }
 
 #[tauri::command(async)]

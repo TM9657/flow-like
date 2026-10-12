@@ -1,6 +1,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
+use flow_like_storage_contracts::column_metadata::{ColumnMetadata, without_column_metadata};
 use flow_like_types::{Result, anyhow};
 use lance::datatypes::{LANCE_UNENFORCED_PRIMARY_KEY, LANCE_UNENFORCED_PRIMARY_KEY_POSITION};
 use lancedb::table::FieldMetadataUpdate;
@@ -51,6 +52,19 @@ impl std::fmt::Display for TableInputRejected {
 }
 
 impl std::error::Error for TableInputRejected {}
+
+/// A change the caller's role may not make to a column's read access. The message names the
+/// table and column and is safe to show to the caller.
+#[derive(Debug)]
+pub struct ColumnAccessRejected(pub String);
+
+impl std::fmt::Display for ColumnAccessRejected {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ColumnAccessRejected {}
 
 /// Lance orders keys by explicit position; the legacy boolean flag reads as position 0.
 fn primary_key_position(field: &Field) -> Option<u32> {
@@ -128,6 +142,21 @@ pub fn without_primary_key_marker(
     metadata.remove(LANCE_UNENFORCED_PRIMARY_KEY);
     metadata.remove(LANCE_UNENFORCED_PRIMARY_KEY_POSITION);
     metadata
+}
+
+/// Field metadata without what is written after a column is created: the key marker and
+/// the column metadata.
+pub fn without_managed_field_metadata(
+    metadata: &std::collections::HashMap<String, String>,
+) -> std::collections::HashMap<String, String> {
+    without_column_metadata(&without_primary_key_marker(metadata))
+}
+
+/// Stores exactly `metadata` on `column`, leaving its other field metadata alone.
+pub fn column_metadata_update(column: &str, metadata: &ColumnMetadata) -> FieldMetadataUpdate {
+    let mut update = FieldMetadataUpdate::new(column);
+    update.metadata.extend(metadata.field_metadata_changes());
+    update
 }
 
 /// Marks an existing column as the key. lancedb's `set_unenforced_primary_key` refuses

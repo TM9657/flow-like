@@ -1,0 +1,30 @@
+---
+title: "Lifecycle Node Catalog"
+description: "AI/ML/Lifecycle Flow-Like node category with 40 generated node references."
+sidebar:
+  order: 0
+  label: "Lifecycle"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "Lifecycle nodes, AI/ML/Lifecycle, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "AI/ML/Lifecycle"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"Lifecycle Node Catalog\",\"description\":\"AI/ML/Lifecycle Flow-Like node category with 40 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/ai/ml/lifecycle/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"AI/ML/Lifecycle\",\"keywords\":\"Lifecycle nodes, AI/ML/Lifecycle, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"AI/ML/Lifecycle"}
+	label="Lifecycle"
+	nodes={nodesByCategory["AI/ML/Lifecycle"] ?? []}
+	client:load
+/>

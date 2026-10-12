@@ -4,8 +4,8 @@
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
-		"dev": "next dev --turbopack -p 3001",
-		"build": "node ../../packages/device-crypto/build-web.mjs && bun ../../scripts/sync-node-icons.ts && NODE_OPTIONS=--max-old-space-size=8192 next build --turbopack",
+		"dev": "node ../../packages/wordcraft/build-web.mjs && next dev --turbopack -p 3001",
+		"build": "node ../../packages/wordcraft/build-web.mjs && node ../../packages/device-crypto/build-web.mjs && bun ../../scripts/sync-node-icons.ts && NODE_OPTIONS=--max-old-space-size=8192 next build --turbopack",
 		"start": "next start -p 3001",
 		"upload-sourcemaps": "bun ../../scripts/upload-sourcemaps.ts --source=web --dir=out",
 		"deploy": "bun run build && bunx wrangler pages deploy out",

@@ -1,0 +1,58 @@
+{
+  "repository": "https://github.com/storytold/soundcraft.git",
+  "revision": "df0c4790b72972cbb967d5af17228e782dbee420",
+  "version": "0.6.0",
+  "wasmBindgen": "0.2.129",
+  "cargoPackage": "soundcraft-web",
+  "label": "Flows Audio",
+  "canvasId": "craft_canvas",
+  "maxBytes": 104857600,
+  "extensions": [
+    "wav",
+    "wave",
+    "bwf",
+    "aif",
+    "aiff",
+    "aifc",
+    "flac",
+    "mp3",
+    "ogg",
+    "oga",
+    "m4a",
+    "aac",
+    "caf",
+    "mid",
+    "midi",
+    "smf",
+    "scraft",
+    "scraftz"
+  ],
+  "id": "soundcraft",
+  "fingerprint": "7d6a179d51cb4103a4d6561fb5184da51a527f4577af322b501d503719d25322",
+  "lockSha256": "d0403bd0ad19434732796a47b094110b6da999ee03f8f46fd858efe3f35af7fd",
+  "wasm": {
+    "compression": "gzip",
+    "byteLength": 19972481,
+    "sha256": "193d4b4d5ee6ca9a168721957f6422fee9a089eaf3e45b069884c591c1ae7618",
+    "parts": [
+      {
+        "file": "craft.wasm.gz.000",
+        "byteLength": 6049641,
+        "sha256": "d231b38143e13df6fec4ec428ea62d2f6343076a80a65c5a3ba967b4f0f93af8"
+      }
+    ]
+  },
+  "files": {
+    "craft.d.ts": "7d8e62e06c0ec300866eb2eee7daadc3883cbb3f7c0751b3d6af8e1a924749fe",
+    "craft.js": "3cc264d77a33accb5445d5d57a458db0ffa4ea7572998e0c52c123330ad58051",
+    "craft.wasm.gz.000": "d231b38143e13df6fec4ec428ea62d2f6343076a80a65c5a3ba967b4f0f93af8",
+    "craft_bg.wasm.d.ts": "ea5f32fd45b2e6d66d1fda8cd26d90358d1df4b2de88dc454e9a3c75f0f7d6c9",
+    "host.js": "f99517b495fa726aec627e84463dc583b9fa2ec4521499aada8e843b15ad9afe",
+    "index.html": "0a3836b8ee42726621f146b72342fb10f07ecca53dc34d052a46e133f346ef28",
+    "protocol.js": "364536098b5b24eaff595c4d8ef562c2689d915b48779842050e0f1c567b1937",
+    "licenses/ATTRIBUTION.txt": "aaf3fa13f18d7bd84d6827b40a5a2added7548ffcef3ecde9aa322ccfaa5698b",
+    "licenses/LICENSE-APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+    "licenses/LICENSE-MIT": "6aff3a3f0d8eb4c2d4fca151a00cdf26d8ff3020889402a453381a12dba3381e",
+    "licenses/NOTICE": "977949446409bf907b265d765f024d3194c09251c2a65a4ca418cf5cb2dc84c0"
+  }
+}

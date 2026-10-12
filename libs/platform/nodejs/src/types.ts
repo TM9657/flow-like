@@ -184,6 +184,15 @@ export interface TableField {
 	metadata?: Record<string, string>;
 	[key: string]: unknown;
 }
+/** What a column means and who may read it. Saving replaces all of it. */
+export interface ColumnMetadata {
+	display_name?: string;
+	description?: string;
+	classification?: "public" | "internal" | "confidential" | "restricted";
+	pii?: boolean;
+	/** Role attributes allowed to read the column; empty means everyone who may read the table. */
+	read_attributes?: string[];
+}
 export interface EventTriggerOptions extends TriggerOptions {
 	version?: string;
 	token?: string;

@@ -1,4 +1,6 @@
 #[cfg(feature = "database-runtime")]
+pub mod column_access;
+#[cfg(feature = "database-runtime")]
 pub mod df_provider;
 #[cfg(feature = "database-runtime")]
 pub mod graph;

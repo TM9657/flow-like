@@ -1,5 +1,10 @@
 "use client";
-import { StorageSystem, useBackend } from "@flow-like/flow-like-ui";
+import {
+	RolePermissions,
+	StorageSystem,
+	useAppPermissions,
+	useBackend,
+} from "@flow-like/flow-like-ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 
@@ -7,6 +12,9 @@ export default function Page() {
 	const backend = useBackend();
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
+	const permissions = useAppPermissions(id);
+	const canWrite =
+		!permissions.isLoading && permissions.can(RolePermissions.WriteFiles);
 	const prefix = searchParams.get("prefix") ?? "";
 	const router = useRouter();
 
@@ -31,6 +39,8 @@ export default function Page() {
 			appId={id ?? ""}
 			prefix={decodeURIComponent(prefix)}
 			fileToUrl={fileToUrl}
+			enableDocx
+			canWrite={canWrite}
 			updatePrefix={(prefix) => {
 				router.push(
 					`/library/config/storage?id=${id}&prefix=${encodeURIComponent(prefix)}`,

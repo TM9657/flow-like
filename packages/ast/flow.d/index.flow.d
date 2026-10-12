@@ -13,6 +13,7 @@
 // Email -> email.flow.d
 // Events -> events.flow.d
 // Image -> image.flow.d
+// Industrial -> industrial.flow.d
 // Logging -> logging.flow.d
 // Math -> math.flow.d
 // Notifications -> notifications.flow.d

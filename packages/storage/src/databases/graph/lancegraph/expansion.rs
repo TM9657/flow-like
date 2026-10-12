@@ -6,11 +6,13 @@
 
 #[cfg(test)]
 use super::PropertyProjectionMode;
+use super::restrict_overlay;
 use super::{
     GraphOverlayDef, LanceGraphStore, dedupe_and_limit_subgraph, filter_identifier, load_overlay,
     resolve_object_mapping, resolve_property_names, value_sql_literal, value_to_id_string,
 };
 use crate::arrow_utils::record_batch_to_value;
+use crate::databases::column_access::{hidden_columns, is_hidden};
 use crate::databases::graph::{
     EdgeLabelCount, GraphAnalyticsResult, GraphPath, GraphPathsResult, LabelCount, NodeMetric,
     SubgraphEdge, SubgraphNode, SubgraphNodeStats, SubgraphResult, TraversalDirection,
@@ -1355,7 +1357,14 @@ impl LanceGraphStore {
             let overlay = match overlay_cache.get(&overlay_id) {
                 Some(cached) => cached.clone(),
                 None => {
-                    let loaded = load_overlay(&self.connection, &overlay_id).await.ok();
+                    let loaded = match load_overlay(&self.connection, &overlay_id).await {
+                        Ok(loaded) => {
+                            restrict_overlay(&self.connection, loaded, &self.column_reader)
+                                .await
+                                .ok()
+                        }
+                        Err(_) => None,
+                    };
                     overlay_cache.insert(overlay_id.clone(), loaded.clone());
                     loaded
                 }
@@ -1383,6 +1392,19 @@ impl LanceGraphStore {
                     continue;
                 }
             };
+            if !self.column_reader.is_unrestricted() {
+                let hides_identity = match table.schema().await {
+                    Ok(schema) => is_hidden(&hidden_columns(&schema, &self.column_reader), &id_col),
+                    Err(_) => true,
+                };
+                if hides_identity {
+                    warnings.push(format!(
+                        "Object type '{}' of linked ontology '{}' could not be loaded",
+                        label, overlay_id
+                    ));
+                    continue;
+                }
+            }
             let excluded = HashSet::from([id_col.clone()]);
             let always_include = display_col
                 .clone()

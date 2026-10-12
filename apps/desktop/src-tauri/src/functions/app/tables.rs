@@ -17,7 +17,7 @@ use flow_like::{
         databases::table_summary::{TableSummary, summarize_tables},
         databases::vector::{
             VectorStore,
-            lancedb::{IndexConfigDto, LanceDBVectorStore, record_batches_to_vec},
+            lancedb::{ColumnMetadata, IndexConfigDto, LanceDBVectorStore, record_batches_to_vec},
             schema::{DatabaseSchemaField, database_fields_to_arrow_schema},
         },
         datafusion::prelude::SessionContext,
@@ -835,6 +835,33 @@ pub async fn db_set_primary_key(
     .await?;
     db.set_primary_key(&column).await?;
     Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_set_column_metadata(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    column: String,
+    metadata: ColumnMetadata,
+    user_scoped: Option<bool>,
+    sub: Option<String>,
+    selector: Option<DatabaseSelector>,
+    token: Option<String>,
+) -> Result<ColumnMetadata, TauriFunctionError> {
+    let db = db_connection_inner(
+        &app_handle,
+        app_id,
+        Some(table_name),
+        credentials,
+        user_scoped.unwrap_or(false),
+        sub,
+        selector,
+        token,
+    )
+    .await?;
+    Ok(db.set_column_metadata(&column, metadata).await?)
 }
 
 #[tauri::command(async)]

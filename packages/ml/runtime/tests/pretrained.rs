@@ -5,7 +5,9 @@ use flow_like_ml_core::{
     Annotation, ComputeBackend, ComputeConfig, LabelProvenance, Sample, TensorData,
 };
 use flow_like_ml_runtime::{engines::*, worker::TrainingWorker, *};
-use serde_json::json;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use std::sync::Arc;
 
 fn config(classes: usize) -> burn::TrainingConfig {
     burn::TrainingConfig {
@@ -19,7 +21,8 @@ fn config(classes: usize) -> burn::TrainingConfig {
         batch_size: 2,
         learning_rate: 0.001,
         seed: 17,
-        gradient_clip: 5.,
+        // No exact f32 form: manifests and packed state must still agree on load.
+        gradient_clip: 0.1,
     }
 }
 
@@ -30,16 +33,20 @@ fn job(
     classes: usize,
     pretrained: Option<PretrainedSourceRef>,
 ) -> TrainingJob {
-    job_with_epochs(repo, project, name, classes, pretrained, 1)
+    job_with(repo, project, name, name, classes, pretrained, 1, json!([]))
 }
 
-fn job_with_epochs(
+/// Streams with the same `content` hold identical rows under the same sample digests.
+#[allow(clippy::too_many_arguments)]
+fn job_with(
     repo: &TrainingRepository,
     project: &str,
     name: &str,
+    content: &str,
     classes: usize,
     pretrained: Option<PretrainedSourceRef>,
     epochs: usize,
+    preprocessing: Value,
 ) -> TrainingJob {
     let stream = StreamKey {
         project_id: project.into(),
@@ -78,7 +85,7 @@ fn job_with_epochs(
                 group_id: sample.group_id.clone(),
                 captured_at_ms: index,
                 label_available_at_ms: index,
-                content_digest: format!("{index:064x}"),
+                content_digest: format!("{:x}", Sha256::digest(format!("{content}-{index}"))),
                 source: LabelSource::Reviewed,
                 accepted: true,
                 payload: serde_json::to_value(sample).unwrap(),
@@ -93,7 +100,7 @@ fn job_with_epochs(
         12,
         TrainingRequest {
             engine: "burn".into(),
-            recipe: json!({"config":training_config,"labels":labels,"pretrained":pretrained}),
+            recipe: json!({"config":training_config,"labels":labels,"pretrained":pretrained,"preprocessing":preprocessing}),
             compute: json!(ComputeConfig {
                 backend: ComputeBackend::Cpu,
                 ..Default::default()
@@ -271,9 +278,10 @@ fn fine_tuning_resumes_its_own_checkpoint_without_reloading_the_source_blob() {
     let repo = TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
     let source_job = job(&repo, "project", "source", 2, None);
     let source = worker(&repo).run(&source_job.id).unwrap();
-    let target = job_with_epochs(
+    let target = job_with(
         &repo,
         "project",
+        "resume",
         "resume",
         3,
         Some(PretrainedSourceRef {
@@ -282,29 +290,19 @@ fn fine_tuning_resumes_its_own_checkpoint_without_reloading_the_source_blob() {
             freeze_backbone: true,
         }),
         10,
+        json!([]),
     );
-    let worker_repo = repo.clone();
-    let target_id = target.id.clone();
-    let running = std::thread::spawn(move || worker(&worker_repo).run(&target_id));
-    // Interrupt after a durable epoch checkpoint instead of relying on a short timeout.
-    let timeout = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    loop {
-        let current = repo.get_job(&target.id).unwrap();
-        assert!(matches!(
-            current.status,
-            JobStatus::Queued | JobStatus::Running
-        ));
-        if current.checkpoint.is_some() {
-            repo.request_cancel(&target.id, now_ms()).unwrap();
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < timeout,
-            "training did not publish a checkpoint"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(1));
-    }
-    assert!(matches!(running.join().unwrap(), Err(Error::Cancelled)));
+    // Interrupt from inside the run after its first durable epoch checkpoint.
+    let cancelling = repo.clone();
+    let mut first = TrainingWorker::new(repo.clone(), WorkerLimits::default()).unwrap();
+    register_observed_burn_engine(
+        &mut first,
+        Arc::new(move |job: &TrainingJob, _step: u64| {
+            cancelling.request_cancel(&job.id, now_ms()).unwrap();
+        }),
+    )
+    .unwrap();
+    assert!(matches!(first.run(&target.id), Err(Error::Cancelled)));
     let checkpoint = repo.get_job(&target.id).unwrap().checkpoint.unwrap();
     std::fs::remove_file(
         repo.path()
@@ -455,4 +453,92 @@ fn imported_feature_sources_enforce_scope_budget_contract_and_digest_without_tra
             .to_string()
             .contains("digest or size mismatch")
     );
+}
+
+#[test]
+fn in_project_sources_cannot_initialize_runs_that_hold_out_their_training_content() {
+    let directory = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+    let source = worker(&repo)
+        .run(&job(&repo, "project", "source", 2, None).id)
+        .unwrap();
+    let reference = PretrainedSourceRef {
+        source_id: source.id.clone(),
+        replace_head: true,
+        freeze_backbone: false,
+    };
+    // The source's rows reappear in another stream, where they are validated and audited.
+    let copied = job_with(
+        &repo,
+        "project",
+        "copied",
+        "source",
+        2,
+        Some(reference.clone()),
+        1,
+        json!([]),
+    );
+    let error = worker(&repo).run(&copied.id).unwrap_err().to_string();
+    assert!(error.contains("validation/test groups"), "{error}");
+    let stopped = repo.get_job(&copied.id).unwrap();
+    assert_eq!(stopped.status, JobStatus::Failed);
+    assert!(stopped.artifact_id.is_none());
+    let independent = job(&repo, "project", "independent", 2, Some(reference));
+    let artifact = worker(&repo).run(&independent.id).unwrap();
+    assert_eq!(artifact.manifest["pretrained"]["source_kind"], "training_artifact");
+}
+
+#[test]
+fn fine_tuning_checks_declared_normalization_against_the_source_recommendation() {
+    let directory = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+    let original = worker(&repo)
+        .run(&job(&repo, "project", "source", 2, None).id)
+        .unwrap();
+    let bytes = repo.read_blob(&original.blob).unwrap();
+    let recommended = json!([{"kind":"normalize","mean":[0.5],"std":[0.25]}]);
+    let mut manifest = original.manifest.clone();
+    manifest["recommended_preprocessing"] = recommended.clone();
+    let imported = repo
+        .register_pretrained_source(
+            "project",
+            &bytes,
+            manifest,
+            json!({"source":"fixture bundle"}),
+            bytes.len() as u64,
+            now_ms(),
+        )
+        .unwrap();
+    let reference = PretrainedSourceRef {
+        source_id: imported.id.clone(),
+        replace_head: true,
+        freeze_backbone: true,
+    };
+    let unnormalized = job_with(
+        &repo,
+        "project",
+        "unnormalized",
+        "unnormalized",
+        3,
+        Some(reference.clone()),
+        1,
+        json!([{"kind":"normalize","mean":[0.0],"std":[1.0]}]),
+    );
+    let error = worker(&repo).run(&unnormalized.id).unwrap_err().to_string();
+    assert!(error.contains("expects images normalized"), "{error}");
+    let matching = job_with(
+        &repo,
+        "project",
+        "matching",
+        "matching",
+        3,
+        Some(reference.clone()),
+        1,
+        recommended.clone(),
+    );
+    let declared = worker(&repo).run(&matching.id).unwrap();
+    assert!(declared.manifest.get("recommended_preprocessing").is_none());
+    let undeclared = job(&repo, "project", "undeclared", 3, Some(reference));
+    let inherited = worker(&repo).run(&undeclared.id).unwrap();
+    assert_eq!(inherited.manifest["recommended_preprocessing"], recommended);
 }

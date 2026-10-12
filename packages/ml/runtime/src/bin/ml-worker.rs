@@ -63,9 +63,17 @@ fn run() -> Result<serde_json::Value> {
                 .into(),
         ));
     }
-    let repository = TrainingRepository::open(
+    let repository = std::path::PathBuf::from(
         repository.ok_or_else(|| Error::Invalid("--repository is required".into()))?,
-    )?;
+    );
+    // A mistyped or unmounted path must not silently become a new, empty ledger.
+    if !repository.is_file() {
+        return Err(Error::NotFound(format!(
+            "training ledger {}",
+            repository.display()
+        )));
+    }
+    let repository = TrainingRepository::open(repository)?;
     if let Some(job) = cancel {
         return Ok(serde_json::to_value(
             repository.request_cancel(&job, now_ms())?,

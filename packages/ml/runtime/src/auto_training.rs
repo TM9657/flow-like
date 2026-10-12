@@ -1,19 +1,25 @@
 //! Bounded model search. Validation ranks candidates; the final holdout is read after selection.
 use crate::{
-    engines::LoadedArtifactPredictor,
+    engines::{BurnEngineRecipe, LoadedArtifactPredictor},
     worker::{LocalRunLock, TrainingWorker},
     *,
 };
 use flow_like_ml_burn as burn;
 use flow_like_ml_core::{
-    Annotation, ComputeConfig, InspectionSpec, LabelProvenance, Sample, TaskKind, TensorData,
+    Annotation, ComputeBackend, ComputeConfig, InspectionSpec, LabelProvenance, Sample, TaskKind,
+    TensorData,
 };
 use flow_like_ml_native::evaluation as metrics;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     sync::Arc,
     time::Instant,
 };
+
+/// Cap on the wall time held back for the final audit, otherwise a tenth of the wall budget.
+const MAXIMUM_AUDIT_ALLOWANCE_MS: u64 = 300_000;
+/// Marks a candidate appended with a smaller batch in place of the oversized original.
+const RESIZED_FROM: &str = "resized_from_candidate";
 
 pub trait SearchPredictor {
     /// Input has a leading batch dimension. Return native scores or Burn-shaped predictions.
@@ -132,13 +138,110 @@ pub fn validate_search(
     Ok(())
 }
 
-/// Generate a reproducible, bounded set of actual supported training recipes.
+/// Reject a selection metric or bound that validation never measures for this task. Selection
+/// would otherwise rank every trial as ineligible and leave the bound to the final audit.
+pub fn validate_goals(spec: &InspectionSpec, goals: &ExperimentGoals) -> Result<()> {
+    for name in std::iter::once(&goals.primary_metric).chain(goals.bounds.iter().map(|b| &b.name)) {
+        if !validation_measures(&goals.task, &spec.labels, name) {
+            return Err(invalid(format!(
+                "goal metric {name} is not measured on the validation partition for this task"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validation_measures(task: &EvaluationTask, labels: &[String], name: &str) -> bool {
+    if matches!(
+        name,
+        "audited_samples" | "mean_latency_ms" | "failure_rate" | "artifact_bytes"
+    ) {
+        return true;
+    }
+    let class = |value: &str, classes: usize| value.parse::<usize>().is_ok_and(|c| c < classes);
+    let per_class = |prefixes: &[&str], classes: usize| {
+        prefixes.iter().any(|prefix| {
+            name.strip_prefix(*prefix)
+                .is_some_and(|value| class(value, classes))
+        })
+    };
+    match task {
+        EvaluationTask::Classification => {
+            matches!(
+                name,
+                "accuracy"
+                    | "accuracy_wilson_lower_95"
+                    | "macro_f1"
+                    | "balanced_accuracy"
+                    | "mean_rank_error"
+                    | "macro_rank_error"
+                    | "quadratic_kappa"
+            ) || ["support/", "recall/"].iter().any(|prefix| {
+                name.strip_prefix(*prefix)
+                    .is_some_and(|label| labels.iter().any(|known| known == label))
+            }) || name
+                .strip_prefix("class/")
+                .and_then(|rest| rest.split_once('/'))
+                .is_some_and(|(index, metric)| {
+                    class(index, labels.len()) && matches!(metric, "support" | "recall")
+                })
+        }
+        EvaluationTask::Regression => matches!(name, "rmse" | "mae" | "r2"),
+        EvaluationTask::Anomaly { .. } => matches!(
+            name,
+            "auroc"
+                | "average_precision"
+                | "accuracy"
+                | "accuracy_wilson_lower_95"
+                | "brier_score"
+                | "log_loss"
+                | "precision"
+                | "recall"
+                | "false_positive_rate"
+                | "support/normal"
+                | "support/anomaly"
+                | "anomaly_scale"
+        ),
+        EvaluationTask::Detection { classes, .. } => {
+            name == "mean_average_precision"
+                || per_class(
+                    &["support/", "recall/", "precision/", "average_precision/"],
+                    *classes,
+                )
+        }
+        EvaluationTask::Segmentation { classes } => {
+            matches!(name, "mean_iou" | "mean_dice") || per_class(&["iou/", "dice/"], *classes)
+        }
+        EvaluationTask::InstanceSegmentation { classes, .. } => {
+            matches!(name, "mask_mean_average_precision" | "mask_mean_iou")
+                || per_class(
+                    &[
+                        "support/",
+                        "predicted/",
+                        "precision/",
+                        "recall/",
+                        "mask_average_precision/",
+                        "mask_iou/",
+                    ],
+                    *classes,
+                )
+        }
+        EvaluationTask::Events { .. } => false,
+    }
+}
+
+/// Generate a reproducible, bounded set of actual supported training recipes. Burn batches are
+/// halved until the model fits the compute memory limit; admission repeats the check with the
+/// snapshot, pretrained source and worker budget.
 pub fn generate_candidates(
     spec: &InspectionSpec,
     search: &AutoSearchConfig,
     compute: &ComputeConfig,
 ) -> Result<Vec<TrainingRequest>> {
     validate_search(spec, search, compute)?;
+    let native_allowed = matches!(compute.backend, ComputeBackend::Cpu | ComputeBackend::Auto)
+        || compute.allow_cpu_fallback;
+    let memory_budget = compute.memory_limit_bytes;
     let shape = &spec.input_shape;
     let classification = !spec.labels.is_empty()
         && !matches!(
@@ -351,9 +454,15 @@ pub fn generate_candidates(
             ));
         }
     }
+    // Native models run on CPU only; a strict GPU request must not silently become CPU training.
+    let skipped_native = !native_allowed && !candidates.is_empty();
+    if skipped_native {
+        candidates.clear();
+    }
     let mut rng = SearchRng(search.seed);
+    let mut smallest_unfit: Option<u64> = None;
     for recipe in recipes {
-        let config = burn::TrainingConfig {
+        let mut config = burn::TrainingConfig {
             recipe,
             backend: burn::BackendChoice::Auto,
             epochs: search.min_epochs,
@@ -368,10 +477,19 @@ pub fn generate_candidates(
             seed: search.seed,
             gradient_clip: 5.0,
         };
-        if burn::validate_inspection_config(spec, &config).is_ok() {
-            let family = digest(&serde_json::to_vec(&config)?);
-            candidates.push(TrainingRequest {engine:"burn".into(),recipe:serde_json::json!({"config":config,"labels":spec.labels,"inspection_task":spec.task,"search":{"family":family,"rung":0,"min_epochs":search.min_epochs,"max_epochs":search.max_epochs,"reduction_factor":search.reduction_factor}}),compute:compute.clone()});
+        if burn::validate_inspection_config(spec, &config).is_err() {
+            continue;
         }
+        match fit_batch(&config.recipe, shape, config.batch_size, 0, memory_budget) {
+            Some(Ok(batch)) => config.batch_size = batch,
+            Some(Err(estimate)) => {
+                smallest_unfit = Some(smallest_unfit.map_or(estimate, |s| s.min(estimate)));
+                continue;
+            }
+            None => {}
+        }
+        let family = digest(&serde_json::to_vec(&config)?);
+        candidates.push(TrainingRequest {engine:"burn".into(),recipe:serde_json::json!({"config":config,"labels":spec.labels,"inspection_task":spec.task,"search":{"family":family,"rung":0,"min_epochs":search.min_epochs,"max_epochs":search.max_epochs,"reduction_factor":search.reduction_factor}}),compute:compute.clone()});
     }
     for i in (1..candidates.len()).rev() {
         let j = rng.next() as usize % (i + 1);
@@ -379,11 +497,39 @@ pub fn generate_candidates(
     }
     candidates.truncate(search.maximum_candidates);
     if candidates.is_empty() {
-        return Err(invalid(
-            "no supported candidate matches this shape and task",
-        ));
+        return Err(invalid(match smallest_unfit {
+            Some(estimate) => format!(
+                "no candidate fits the memory budget of {memory_budget} bytes; the smallest estimate is {estimate} bytes"
+            ),
+            None if skipped_native => "native classical candidates need CPU compute or allow_cpu_fallback, and no GPU recipe matches this shape and task".into(),
+            None => "no supported candidate matches this shape and task".into(),
+        }));
     }
     Ok(candidates)
+}
+
+/// Halve `batch` until the training estimate plus `fixed_bytes` fits `budget`. Returns the
+/// batch, the estimate at batch 1 when nothing fits, or None when the estimate is undefined.
+fn fit_batch(
+    recipe: &burn::Recipe,
+    sample_shape: &[usize],
+    mut batch: usize,
+    fixed_bytes: u64,
+    budget: u64,
+) -> Option<std::result::Result<usize, u64>> {
+    loop {
+        let estimate = recipe
+            .estimated_training_bytes(sample_shape, batch)
+            .ok()?
+            .saturating_add(fixed_bytes);
+        if estimate <= budget {
+            return Some(Ok(batch));
+        }
+        if batch <= 1 {
+            return Some(Err(estimate));
+        }
+        batch /= 2;
+    }
 }
 
 struct SearchRng(u64);
@@ -534,11 +680,14 @@ fn decode_prediction(
                     "detection predictor returned a different batch size",
                 ));
             }
+            // Boxes clamped to the image border can collapse to zero area; no truth can match
+            // them and box validation would reject the whole partition.
             let boxes = detections
                 .into_iter()
                 .next()
                 .unwrap_or_default()
                 .into_iter()
+                .filter(|d| !(d.x_max <= d.x_min || d.y_max <= d.y_min))
                 .map(|d| DetectionEvidence {
                     class_id: d.class_id as u32,
                     x_min: d.x_min,
@@ -766,6 +915,7 @@ fn measure(
                 actual.push(is_anomaly);
                 scores.push(probability);
             }
+            // Same metric set as the final anomaly audit, so goal bounds can steer selection.
             let curve = metrics::binary_curve(&actual, &scores).map_err(engine_error)?;
             if let Some(auc) = curve.roc_auc {
                 values.insert("auroc".into(), auc);
@@ -778,16 +928,27 @@ fn measure(
             let result =
                 metrics::classification_metrics(&truth, &predicted, 2).map_err(engine_error)?;
             values.insert("accuracy".into(), result.accuracy);
+            values.insert(
+                "accuracy_wilson_lower_95".into(),
+                result.accuracy_interval_95.lower,
+            );
             values.insert("brier_score".into(), curve.brier_score);
-            if let Some(recall) = result.per_class[1].recall {
+            values.insert("log_loss".into(), curve.log_loss);
+            let (normal, anomaly) = (&result.per_class[0], &result.per_class[1]);
+            if let Some(precision) = anomaly.precision {
+                values.insert("precision".into(), precision);
+            }
+            if let Some(recall) = anomaly.recall {
                 values.insert("recall".into(), recall);
             }
-            if result.per_class[0].support > 0 {
+            if normal.support > 0 {
                 values.insert(
                     "false_positive_rate".into(),
-                    result.per_class[1].false_positive as f64 / result.per_class[0].support as f64,
+                    anomaly.false_positive as f64 / normal.support as f64,
                 );
             }
+            values.insert("support/normal".into(), normal.support as f64);
+            values.insert("support/anomaly".into(), anomaly.support as f64);
         }
         EvaluationTask::Detection {
             classes,
@@ -825,6 +986,19 @@ fn measure(
             if let Some(ap) = result.mean_average_precision {
                 values.insert("mean_average_precision".into(), ap);
             }
+            for class in result.per_class {
+                let id = class.class_id;
+                values.insert(format!("support/{id}"), class.actual as f64);
+                if let Some(recall) = class.recall {
+                    values.insert(format!("recall/{id}"), recall);
+                }
+                if let Some(precision) = class.precision {
+                    values.insert(format!("precision/{id}"), precision);
+                }
+                if let Some(ap) = class.average_precision {
+                    values.insert(format!("average_precision/{id}"), ap);
+                }
+            }
         }
         EvaluationTask::Segmentation { classes } => {
             let mut actual = Vec::new();
@@ -856,6 +1030,16 @@ fn measure(
                 .map_err(engine_error)?;
             values.insert("mean_iou".into(), result.mean_iou);
             values.insert("mean_dice".into(), result.mean_dice);
+            for (class, iou) in result.per_class_iou.into_iter().enumerate() {
+                if let Some(iou) = iou {
+                    values.insert(format!("iou/{class}"), iou);
+                }
+            }
+            for (class, dice) in result.per_class_dice.into_iter().enumerate() {
+                if let Some(dice) = dice {
+                    values.insert(format!("dice/{class}"), dice);
+                }
+            }
         }
         EvaluationTask::InstanceSegmentation {
             classes,
@@ -895,6 +1079,7 @@ pub struct AutoTrainingController {
     repository: TrainingRepository,
     worker: TrainingWorker,
     predictors: Arc<dyn SearchPredictorFactory>,
+    clock: Arc<dyn Fn() -> i64 + Send + Sync>,
 }
 impl AutoTrainingController {
     pub fn new(repository: TrainingRepository, worker: TrainingWorker) -> Self {
@@ -902,11 +1087,21 @@ impl AutoTrainingController {
             repository,
             worker,
             predictors: Arc::new(NativeSearchPredictorFactory),
+            clock: Arc::new(now_ms),
         }
     }
     pub fn with_predictor_factory(mut self, predictors: Arc<dyn SearchPredictorFactory>) -> Self {
         self.predictors = predictors;
         self
+    }
+    /// Experiment timestamps and wall-time checks use this clock; worker leases keep the
+    /// system clock.
+    pub fn with_clock(mut self, clock: Arc<dyn Fn() -> i64 + Send + Sync>) -> Self {
+        self.clock = clock;
+        self
+    }
+    fn now(&self) -> i64 {
+        (self.clock)()
     }
 
     /// Execute at most one candidate. Reopening the repository resumes a scheduled job or
@@ -918,6 +1113,9 @@ impl AutoTrainingController {
                 Err(Error::Conflict(_)) => return self.repository.get_experiment(experiment_id),
                 Err(error) => return Err(error),
             };
+        // Wall time is charged from the first controller step, not from creation.
+        self.repository
+            .mark_experiment_active(experiment_id, self.now())?;
         let experiment = self.repository.get_experiment(experiment_id)?;
         if experiment.status != ExperimentStatus::Running || experiment.selected_trial_id.is_some()
         {
@@ -941,35 +1139,65 @@ impl AutoTrainingController {
         {
             trial.clone()
         } else {
-            let index = (0..experiment.request.candidates.len())
-                .find(|i| !trials.iter().any(|t| t.candidate_index == *i));
+            if trials.is_empty()
+                && let Ok(spec) =
+                    serde_json::from_value::<InspectionSpec>(experiment.request.spec.clone())
+                && let Err(Error::Invalid(message)) =
+                    validate_goals(&spec, &experiment.request.goals)
+            {
+                return self.repository.finalize_experiment(
+                    experiment_id,
+                    None,
+                    &message,
+                    self.now(),
+                );
+            }
             if experiment.usage.submitted_trials >= experiment.request.budget.maximum_trials {
                 return self.repository.stop_experiment_budget(
                     experiment_id,
                     "trial_budget_exhausted",
-                    now_ms(),
+                    self.now(),
                 );
             }
-            let submitted = if let Some(index) = index {
-                self.repository
+            if !search_window_open(&experiment, self.now()) {
+                return self.repository.stop_experiment_budget(
+                    experiment_id,
+                    "wall_time_budget_exhausted",
+                    self.now(),
+                );
+            }
+            let submitted = match self.next_fresh_candidate(&experiment, &trials) {
+                Ok(Some(index)) => self
+                    .repository
                     .submit_experiment_trial(
                         experiment_id,
                         index,
                         &format!("candidate-{index}"),
-                        now_ms(),
+                        self.now(),
                     )
-                    .map(Some)
-            } else {
-                self.next_halving_trial(&experiment, &trials)
+                    .map(Some),
+                Ok(None) if trials.is_empty() => match self.unfit_memory_reason(experiment_id)? {
+                    Some(reason) => {
+                        return self.repository.stop_experiment_budget(
+                            experiment_id,
+                            &reason,
+                            self.now(),
+                        );
+                    }
+                    None => Ok(None),
+                },
+                Ok(None) => self.next_halving_trial(&experiment, &trials),
+                Err(error) => Err(error),
             };
             match submitted {
                 Ok(Some(trial)) => trial,
-                Ok(None) => return Ok(experiment),
-                Err(Error::Invalid(message)) if message.contains("budget") => {
+                Ok(None) => return self.repository.get_experiment(experiment_id),
+                // A clock that moved backwards is a retryable Conflict, never a budget stop.
+                Err(Error::Invalid(message)) if message.contains("budget exhausted") => {
                     return self.repository.stop_experiment_budget(
                         experiment_id,
                         &message,
-                        now_ms(),
+                        self.now(),
                     );
                 }
                 Err(error) => return Err(error),
@@ -1046,7 +1274,16 @@ impl AutoTrainingController {
                 experiment.request.goals.task,
                 EvaluationTask::Anomaly { .. }
             ) {
-                self.anomaly_scale(experiment_id, &mut *predictor, &dataset, &spec)?
+                let (scale, in_sample) =
+                    self.anomaly_scale(experiment_id, &mut *predictor, &dataset, &spec)?;
+                if in_sample {
+                    self.note(
+                        experiment_id,
+                        "anomaly_calibration_in_sample",
+                        serde_json::json!({"trial_id":trial.id,"reason":"validation has no normal samples, so the decision scale was fitted on training scores"}),
+                    );
+                }
+                scale
             } else {
                 1.0
             };
@@ -1072,6 +1309,10 @@ impl AutoTrainingController {
             ) {
                 metrics.insert("anomaly_scale".into(), scale);
             }
+            // Recording would reject the set and leave the trial scheduled forever.
+            if metrics.values().any(|value| !value.is_finite()) {
+                return Err(invalid("validation produced a non-finite metric"));
+            }
             Ok((artifact, metrics))
         })();
         let elapsed = if recovering_completed {
@@ -1085,7 +1326,7 @@ impl AutoTrainingController {
                     &trial.id,
                     &metrics,
                     elapsed,
-                    now_ms(),
+                    self.now(),
                 )?;
             }
             Err(Error::Conflict(_) | Error::LeaseLost) => {
@@ -1096,17 +1337,22 @@ impl AutoTrainingController {
                     &trial.id,
                     &error.to_string(),
                     elapsed,
-                    now_ms(),
+                    self.now(),
                 )?;
             }
         }
         let updated = self.repository.get_experiment(experiment_id)?;
-        if updated.status == ExperimentStatus::Running && wall_budget_exhausted(&updated) {
-            return self.repository.stop_experiment_budget(
+        if updated.status == ExperimentStatus::Running && !search_window_open(&updated, self.now())
+        {
+            // Another scheduled trial keeps the search open until it settles.
+            return match self.repository.stop_experiment_budget(
                 experiment_id,
                 "wall_time_budget_exhausted",
-                now_ms(),
-            );
+                self.now(),
+            ) {
+                Err(Error::Conflict(_)) => Ok(updated),
+                stopped => stopped,
+            };
         }
         Ok(updated)
     }
@@ -1145,6 +1391,8 @@ impl AutoTrainingController {
 
     /// Freeze the validation winner before opening its final test partition. Repeated calls
     /// reuse durable prediction evidence and the final evaluation, never select another winner.
+    /// Once the winner is frozen every outcome settles the experiment, except a cancellation or
+    /// a busy ledger, which a later call retries.
     pub fn finalize(&self, experiment_id: &str) -> Result<Experiment> {
         let _lock =
             match LocalRunLock::acquire(&self.repository, &format!("experiment:{experiment_id}")) {
@@ -1156,30 +1404,68 @@ impl AutoTrainingController {
         if experiment.final_evaluation_id.is_some()
             || matches!(
                 experiment.status,
-                ExperimentStatus::Cancelled | ExperimentStatus::CancelRequested
+                ExperimentStatus::Cancelled
+                    | ExperimentStatus::CancelRequested
+                    | ExperimentStatus::Failed
             )
         {
             return Ok(experiment);
         }
         if experiment.best_trial_id.is_none() {
-            return self.repository.finalize_experiment(
-                experiment_id,
-                None,
-                "no_candidate_met_validation_requirements",
-                now_ms(),
-            );
+            let reason = experiment
+                .stop_reason
+                .clone()
+                .unwrap_or_else(|| "no_candidate_met_validation_requirements".into());
+            return self
+                .repository
+                .finalize_experiment(experiment_id, None, &reason, self.now());
         }
         let experiment = self
             .repository
-            .select_experiment_winner(experiment_id, now_ms())?;
-        if wall_budget_exhausted(&experiment) {
-            return self.repository.finalize_experiment(
-                experiment_id,
-                None,
-                "wall_time_budget_exhausted",
-                now_ms(),
-            );
+            .select_experiment_winner(experiment_id, self.now())?;
+        if experiment.status != ExperimentStatus::Evaluating {
+            let reason = experiment
+                .stop_reason
+                .clone()
+                .unwrap_or_else(|| "final_evaluation_unavailable".into());
+            return self
+                .repository
+                .finalize_experiment(experiment_id, None, &reason, self.now());
         }
+        let reason = experiment
+            .stop_reason
+            .clone()
+            .unwrap_or_else(|| "candidate_search_completed".into());
+        let outcome = self.audit(&experiment).and_then(|audit| match audit {
+            Audit::Evaluated(evaluation_id) => self.repository.finalize_experiment(
+                experiment_id,
+                Some(&evaluation_id),
+                &reason,
+                self.now(),
+            ),
+            Audit::Ended(ended) => {
+                self.repository
+                    .finalize_experiment(experiment_id, None, &ended, self.now())
+            }
+        });
+        match outcome {
+            Err(error) if !matches!(error, Error::Cancelled) && !ledger_busy(&error) => {
+                self.repository.finalize_experiment(
+                    experiment_id,
+                    None,
+                    &format!("final_evaluation_failed: {error}"),
+                    self.now(),
+                )
+            }
+            outcome => outcome,
+        }
+    }
+
+    /// Score the frozen winner on the final holdout, reusing only predictions this audit
+    /// recorded. A failed prediction counts as a miss where the task can score one.
+    fn audit(&self, experiment: &Experiment) -> Result<Audit> {
+        let experiment_id = experiment.id.as_str();
+        let task = &experiment.request.goals.task;
         let trial = self.repository.get_experiment_trial(
             experiment
                 .selected_trial_id
@@ -1192,7 +1478,7 @@ impl AutoTrainingController {
             .ok_or_else(|| invalid("selected trial has no model artifact"))?;
         let dataset = self
             .repository
-            .get_snapshot_limited(&trial.dataset_snapshot_id, snapshot_limit(&experiment))?;
+            .get_snapshot_limited(&trial.dataset_snapshot_id, snapshot_limit(experiment))?;
         let mut spec: InspectionSpec = serde_json::from_value(experiment.request.spec.clone())?;
         let first: Sample = serde_json::from_value(
             dataset
@@ -1205,82 +1491,117 @@ impl AutoTrainingController {
                 .clone(),
         )?;
         spec.input_shape = first.input.shape;
-        validate_task(&spec, &experiment.request.goals.task)?;
-        if dataset.test.len() < experiment.request.goals.minimum_audited_samples {
-            return Err(invalid(
-                "final test partition has fewer samples than the audited minimum",
-            ));
-        }
+        validate_task(&spec, task)?;
         let job = self.repository.get_job(&trial.job_id)?;
-        let compute = inference_compute(&job.request.compute, &experiment)?;
-        let mut predictor = self
-            .predictors
-            .load(&self.repository, artifact_id, &compute)?;
-        let recorded = self.repository.predictions(artifact_id)?;
+        let compute = inference_compute(&job.request.compute, experiment)?;
+        let holdout: BTreeSet<String> = dataset.test.iter().map(|row| row.id.clone()).collect();
+        let recorded: BTreeMap<String, PredictionRecord> = self
+            .repository
+            .predictions(artifact_id)?
+            .into_iter()
+            .filter(|prediction| holdout.contains(&prediction.sample_id))
+            .map(|prediction| (prediction.sample_id.clone(), prediction))
+            .collect();
         let scale = trial
             .validation_metrics
             .get("anomaly_scale")
             .copied()
             .unwrap_or(1.0);
+        let mut predictor: Option<Box<dyn SearchPredictor>> = None;
         for row in &dataset.test {
-            if wall_budget_exhausted(&experiment) {
-                return self.repository.finalize_experiment(
-                    experiment_id,
-                    None,
-                    "wall_time_budget_exhausted",
-                    now_ms(),
-                );
+            let current = self.repository.get_experiment(experiment_id)?;
+            if matches!(
+                current.status,
+                ExperimentStatus::Cancelled | ExperimentStatus::CancelRequested
+            ) {
+                return Err(Error::Cancelled);
             }
-            self.check_cancel(experiment_id)?;
-            if recorded.iter().any(|p| p.sample_id == row.id) {
-                continue;
+            if !audit_window_open(&current, self.now()) {
+                return Ok(Audit::Ended("wall_time_budget_exhausted".into()));
+            }
+            if let Some(existing) = recorded.get(&row.id) {
+                if existing.details.get("partition").and_then(Value::as_str) == Some("final_test")
+                    && existing.details.get("experiment_id").and_then(Value::as_str)
+                        == Some(experiment_id)
+                {
+                    continue;
+                }
+                return Ok(Audit::Ended(format!(
+                    "final_evaluation_failed: holdout sample {} already has a prediction that this audit did not record",
+                    row.id
+                )));
             }
             let sample = sealed_sample(row, &spec, dataset.as_of_ms, true)?;
+            let actual_label = audited_label(row, &sample, &spec)?;
+            if predictor.is_none() {
+                predictor = Some(
+                    self.predictors
+                        .load(&self.repository, artifact_id, &compute)?,
+                );
+            }
+            let model = predictor
+                .as_deref_mut()
+                .ok_or_else(|| invalid("final audit predictor is unavailable"))?;
             let started = Instant::now();
-            let raw = predict_sample(&mut *predictor, &sample)?;
-            let observation = decode_prediction(
-                sample,
-                &raw,
-                &experiment.request.goals.task,
-                spec.labels.len(),
-                scale,
-                started.elapsed().as_secs_f64() * 1000.0,
-            )?;
-            let actual_label = if let Annotation::Class { class_id } = observation.sample.annotation
-            {
-                let expected = spec
-                    .labels
-                    .get(class_id as usize)
-                    .ok_or_else(|| invalid("test class outside label order"))?;
-                if row.payload.get("label").and_then(Value::as_str) != Some(expected.as_str()) {
-                    return Err(invalid(
-                        "test ledger label differs from the inspection class order",
-                    ));
-                }
-                Some(expected.clone())
-            } else {
-                None
+            let observed = match predict_sample(model, &sample) {
+                Ok(raw) => decode_prediction(
+                    sample,
+                    &raw,
+                    task,
+                    spec.labels.len(),
+                    scale,
+                    started.elapsed().as_secs_f64() * 1000.0,
+                ),
+                Err(error) => Err(error),
             };
+            let (predicted_label, evidence, latency_ms, failure) = match observed {
+                Ok(observation) => (
+                    observation
+                        .predicted_class
+                        .map(|class| spec.labels[class as usize].clone()),
+                    serde_json::to_value(&observation.evidence)?,
+                    observation.latency_ms,
+                    None,
+                ),
+                Err(error) => match failed_evidence(task) {
+                    Some(evidence) => (
+                        None,
+                        evidence,
+                        started.elapsed().as_secs_f64() * 1000.0,
+                        Some(error.to_string()),
+                    ),
+                    None => {
+                        return Ok(Audit::Ended(format!(
+                            "final_evaluation_failed: test sample {} could not be scored: {error}",
+                            row.id
+                        )));
+                    }
+                },
+            };
+            let mut details = serde_json::json!({"prediction":evidence,"experiment_id":experiment_id,"partition":"final_test"});
+            if let Some(failure) = &failure {
+                details["error"] = serde_json::json!(failure);
+            }
             self.repository.record_prediction(&PredictionRecord {
-                sample_id:row.id.clone(),artifact_id:artifact_id.into(),predicted_label:observation.predicted_class.map(|class|spec.labels[class as usize].clone()),
-                teacher_label:None,actual_label,actual_source:Some(row.source),latency_ms:observation.latency_ms,failed:false,recorded_at_ms:now_ms(),
-                details:serde_json::json!({"prediction":observation.evidence,"experiment_id":experiment_id,"partition":"final_test"}),
+                sample_id: row.id.clone(),
+                artifact_id: artifact_id.into(),
+                predicted_label,
+                teacher_label: None,
+                actual_label,
+                actual_source: Some(row.source),
+                latency_ms,
+                failed: failure.is_some(),
+                recorded_at_ms: self.now(),
+                details,
             })?;
         }
-        let evaluation = self.repository.evaluate_task(
+        let evaluation = self.repository.evaluate_task_cohort(
             artifact_id,
-            experiment.request.goals.task.clone(),
-            now_ms(),
+            task.clone(),
+            Some(&holdout),
+            self.now(),
         )?;
-        self.repository.finalize_experiment(
-            experiment_id,
-            Some(&evaluation.id),
-            experiment
-                .stop_reason
-                .as_deref()
-                .unwrap_or("candidate_search_completed"),
-            now_ms(),
-        )
+        Ok(Audit::Evaluated(evaluation.id))
     }
 
     fn check_cancel(&self, experiment_id: &str) -> Result<()> {
@@ -1290,13 +1611,270 @@ impl AutoTrainingController {
             ExperimentStatus::Cancelled | ExperimentStatus::CancelRequested
         ) {
             Err(Error::Cancelled)
-        } else if wall_budget_exhausted(&experiment) {
+        } else if experiment.wall_remaining_ms(self.now()) == 0 {
             Err(Error::Engine(
                 "experiment wall time budget exhausted".into(),
             ))
         } else {
             Ok(())
         }
+    }
+
+    /// Diagnostic events never block the search; a full event log only loses the note.
+    fn note(&self, experiment_id: &str, kind: &str, body: Value) {
+        let _ = self
+            .repository
+            .record_experiment_event(experiment_id, kind, body, self.now());
+    }
+
+    /// The next unsubmitted candidate that fits this worker's memory. An oversized Burn
+    /// candidate is replaced by a copy with the largest fitting batch, or skipped with its
+    /// estimate recorded when even one sample does not fit.
+    fn next_fresh_candidate(
+        &self,
+        experiment: &Experiment,
+        trials: &[ExperimentTrial],
+    ) -> Result<Option<usize>> {
+        let submitted: HashSet<usize> = trials.iter().map(|t| t.candidate_index).collect();
+        let mut skipped = self.skipped_candidates(experiment)?;
+        let mut experiment = experiment.clone();
+        let mut data = HashMap::new();
+        loop {
+            let Some(index) = (0..experiment.request.candidates.len())
+                .find(|i| !submitted.contains(i) && !skipped.contains(i))
+            else {
+                return Ok(None);
+            };
+            let candidate = experiment.request.candidates[index].clone();
+            match self.admit(&experiment, &candidate, &mut data)? {
+                Admission::Fits => return Ok(Some(index)),
+                Admission::Resize {
+                    mut request,
+                    batch,
+                    estimate,
+                    budget,
+                } => {
+                    request.recipe[RESIZED_FROM] = serde_json::json!(index);
+                    match self.repository.append_experiment_candidates(
+                        &experiment.id,
+                        vec![request],
+                        self.now(),
+                    ) {
+                        Ok(updated) => {
+                            self.note(
+                                &experiment.id,
+                                "candidate_resized",
+                                serde_json::json!({"candidate_index":index,"replacement_index":updated.request.candidates.len() - 1,"batch_size":batch,"estimated_bytes":estimate,"memory_budget_bytes":budget}),
+                            );
+                            experiment = updated;
+                        }
+                        Err(Error::Invalid(message)) if message.contains("candidate count") => {
+                            self.note(
+                                &experiment.id,
+                                "candidate_skipped",
+                                serde_json::json!({"candidate_index":index,"reason":format!("batch {batch} would fit, but {message}")}),
+                            );
+                        }
+                        Err(error) => return Err(error),
+                    }
+                    skipped.insert(index);
+                }
+                Admission::Unfit { estimate, budget } => {
+                    self.note(
+                        &experiment.id,
+                        "candidate_skipped",
+                        serde_json::json!({"candidate_index":index,"reason":"training does not fit the worker memory budget at batch 1","estimated_bytes":estimate,"memory_budget_bytes":budget}),
+                    );
+                    skipped.insert(index);
+                }
+            }
+        }
+    }
+
+    fn skipped_candidates(&self, experiment: &Experiment) -> Result<HashSet<usize>> {
+        let mut skipped: HashSet<usize> = experiment
+            .request
+            .candidates
+            .iter()
+            .filter_map(|candidate| candidate.recipe.get(RESIZED_FROM)?.as_u64())
+            .map(|index| index as usize)
+            .collect();
+        for event in self.repository.experiment_events(&experiment.id)? {
+            if event["kind"] == "candidate_skipped"
+                && let Some(index) = event["body"]["candidate_index"].as_u64()
+            {
+                skipped.insert(index as usize);
+            }
+        }
+        Ok(skipped)
+    }
+
+    /// Mirror the Burn worker's admission estimate: model and optimizer at the batch, twelve
+    /// copies of the serialized training view and the unpacked pretrained source.
+    fn admit(
+        &self,
+        experiment: &Experiment,
+        candidate: &TrainingRequest,
+        data: &mut HashMap<(String, u64), TrainingData>,
+    ) -> Result<Admission> {
+        if candidate.engine != "burn" {
+            return Ok(Admission::Fits);
+        }
+        let Ok(recipe) = serde_json::from_value::<BurnEngineRecipe>(candidate.recipe.clone())
+        else {
+            return Ok(Admission::Fits);
+        };
+        let worker_budget = self.worker.limits().memory_budget_bytes;
+        let budget = candidate
+            .compute
+            .get("memory_limit_bytes")
+            .and_then(Value::as_u64)
+            .unwrap_or(worker_budget)
+            .min(worker_budget);
+        let dataset_id = candidate
+            .recipe
+            .get("dataset_snapshot_id")
+            .and_then(Value::as_str)
+            .unwrap_or(&experiment.request.snapshot_id)
+            .to_owned();
+        // Twelve copies of a larger view exceed the budget whatever the model needs.
+        let limit = budget / 12;
+        let key = (dataset_id, limit);
+        if !data.contains_key(&key) {
+            let measured = self.training_data(&experiment.id, &key.0, limit)?;
+            data.insert(key.clone(), measured);
+        }
+        let (dataset_bytes, shape) = match &data[&key] {
+            TrainingData::Measured { bytes, shape } => (*bytes, shape.clone()),
+            TrainingData::Exceeds => {
+                return Ok(Admission::Unfit {
+                    estimate: limit.saturating_add(1).saturating_mul(12),
+                    budget,
+                });
+            }
+            TrainingData::Unknown => return Ok(Admission::Fits),
+        };
+        let source_bytes = match &recipe.pretrained {
+            Some(reference) => match self.pretrained_source_bytes(reference) {
+                Some(bytes) => bytes,
+                None => return Ok(Admission::Fits),
+            },
+            None => 0,
+        };
+        let fixed = dataset_bytes.saturating_mul(12).saturating_add(source_bytes);
+        Ok(
+            match fit_batch(
+                &recipe.config.recipe,
+                &shape,
+                recipe.config.batch_size,
+                fixed,
+                budget,
+            ) {
+                None => Admission::Fits,
+                Some(Ok(batch)) if batch == recipe.config.batch_size => Admission::Fits,
+                Some(Ok(batch)) => {
+                    let mut request = candidate.clone();
+                    request.recipe["config"]["batch_size"] = serde_json::json!(batch);
+                    if request.recipe.get("search").is_some_and(Value::is_object) {
+                        let mut config = recipe.config.clone();
+                        config.batch_size = batch;
+                        request.recipe["search"]["family"] =
+                            serde_json::json!(digest(&serde_json::to_vec(&config)?));
+                    }
+                    let estimate = recipe
+                        .config
+                        .recipe
+                        .estimated_training_bytes(&shape, batch)
+                        .map_err(engine_error)?
+                        .saturating_add(fixed);
+                    Admission::Resize {
+                        request,
+                        batch,
+                        estimate,
+                        budget,
+                    }
+                }
+                Some(Err(estimate)) => Admission::Unfit { estimate, budget },
+            },
+        )
+    }
+
+    /// Serialized size and sample shape of a dataset's worker view, read only up to `limit`.
+    fn training_data(
+        &self,
+        experiment_id: &str,
+        dataset_id: &str,
+        limit: u64,
+    ) -> Result<TrainingData> {
+        let Some(dataset) = self
+            .repository
+            .experiment_result(experiment_id)?
+            .datasets
+            .into_iter()
+            .find(|dataset| dataset.snapshot_id == dataset_id)
+        else {
+            return Ok(TrainingData::Unknown);
+        };
+        let snapshot = match self
+            .repository
+            .get_snapshot_limited(&dataset.training_snapshot_id, limit)
+        {
+            Ok(snapshot) => snapshot,
+            Err(Error::Invalid(_)) => return Ok(TrainingData::Exceeds),
+            Err(error) => return Err(error),
+        };
+        let Some(first) = snapshot.train.first() else {
+            return Ok(TrainingData::Unknown);
+        };
+        let Ok(sample) = serde_json::from_value::<Sample>(
+            first.payload.get("sample").unwrap_or(&first.payload).clone(),
+        ) else {
+            return Ok(TrainingData::Unknown);
+        };
+        Ok(TrainingData::Measured {
+            bytes: serialized_size(&snapshot)?,
+            shape: sample.input.shape,
+        })
+    }
+
+    fn pretrained_source_bytes(&self, reference: &PretrainedSourceRef) -> Option<u64> {
+        let source = self
+            .repository
+            .get_pretrained_source(&reference.source_id)
+            .ok()?;
+        let config: burn::TrainingConfig =
+            serde_json::from_value(source.manifest["config"].clone()).ok()?;
+        let shape: Vec<usize> = serde_json::from_value(source.manifest["input_shape"].clone()).ok()?;
+        Some(
+            source
+                .blob
+                .bytes
+                .saturating_mul(4)
+                .saturating_add(config.recipe.estimated_training_bytes(&shape, 1).ok()?),
+        )
+    }
+
+    /// Explain an experiment whose every candidate was skipped for memory.
+    fn unfit_memory_reason(&self, experiment_id: &str) -> Result<Option<String>> {
+        let mut smallest: Option<(u64, u64)> = None;
+        for event in self.repository.experiment_events(experiment_id)? {
+            if event["kind"] != "candidate_skipped" {
+                continue;
+            }
+            let body = &event["body"];
+            if let (Some(estimate), Some(budget)) = (
+                body["estimated_bytes"].as_u64(),
+                body["memory_budget_bytes"].as_u64(),
+            ) && smallest.is_none_or(|(least, _)| estimate < least)
+            {
+                smallest = Some((estimate, budget));
+            }
+        }
+        Ok(smallest.map(|(estimate, budget)| {
+            format!(
+                "no candidate fits the memory budget of {budget} bytes; the smallest estimate is {estimate} bytes"
+            )
+        }))
     }
 
     fn next_halving_trial(
@@ -1368,38 +1946,92 @@ impl AutoTrainingController {
             parents.retain(|parent| families.insert(parent.family.as_str()));
             let survivors = parents.len().div_ceil(parents[0].factor);
             for parent in parents.into_iter().take(survivors) {
-                if parent.epochs >= parent.maximum
-                    || rungs.iter().any(|child| {
+                if parent.epochs >= parent.maximum {
+                    continue;
+                }
+                let children = rungs
+                    .iter()
+                    .filter(|child| {
                         child.parent.as_deref() == Some(parent.trial.id.as_str())
                             || (child.rung == parent.rung + 1 && child.family == parent.family)
                     })
-                {
+                    .collect::<Vec<_>>();
+                // One retry with half the extra epochs after a failed continuation.
+                let target = match children.as_slice() {
+                    [] => parent
+                        .epochs
+                        .saturating_mul(parent.factor)
+                        .min(parent.maximum),
+                    [failed] if failed.trial.status == ExperimentTrialStatus::Failed => {
+                        parent.epochs + failed.epochs.saturating_sub(parent.epochs) / 2
+                    }
+                    _ => continue,
+                };
+                let started_from = rungs
+                    .iter()
+                    .find(|grandparent| {
+                        parent.parent.as_deref() == Some(grandparent.trial.id.as_str())
+                    })
+                    .map_or(0, |grandparent| grandparent.epochs);
+                let fitting = epochs_within_trial_cap(
+                    self.worker.limits().maximum_duration_ms,
+                    parent.trial.training_time_ms,
+                    parent.epochs.saturating_sub(started_from),
+                );
+                let epochs = target.min(parent.epochs.saturating_add(fitting));
+                if epochs <= parent.epochs {
                     continue;
                 }
-                let epochs = parent
-                    .epochs
-                    .saturating_mul(parent.factor)
-                    .min(parent.maximum);
                 return self
                     .repository
-                    .continue_experiment_trial(&parent.trial.id, epochs, now_ms())
+                    .continue_experiment_trial(&parent.trial.id, epochs, self.now())
                     .map(Some);
             }
         }
         Ok(None)
     }
 
+    /// Fit the decision scale on held-out normal validation scores. The model was fitted on
+    /// the training rows, so their scores are a fallback, reported as in-sample.
     fn anomaly_scale(
         &self,
         id: &str,
         predictor: &mut dyn SearchPredictor,
         dataset: &DatasetSnapshot,
         spec: &InspectionSpec,
-    ) -> Result<f64> {
+    ) -> Result<(f64, bool)> {
+        let mut scores =
+            self.normal_scores(id, predictor, &dataset.validation, spec, dataset.as_of_ms, true)?;
+        let in_sample = scores.is_empty();
+        if in_sample {
+            scores =
+                self.normal_scores(id, predictor, &dataset.train, spec, dataset.as_of_ms, false)?;
+        }
+        if scores.is_empty() {
+            return Err(invalid(
+                "anomaly calibration requires explicitly normal examples",
+            ));
+        }
+        scores.sort_by(f64::total_cmp);
+        Ok((
+            scores[((scores.len() - 1) as f64 * 0.95).floor() as usize].max(1e-8),
+            in_sample,
+        ))
+    }
+
+    fn normal_scores(
+        &self,
+        id: &str,
+        predictor: &mut dyn SearchPredictor,
+        rows: &[TrainingSample],
+        spec: &InspectionSpec,
+        as_of_ms: i64,
+        audited: bool,
+    ) -> Result<Vec<f64>> {
         let mut scores = Vec::new();
-        for row in &dataset.train {
+        for row in rows {
             self.check_cancel(id)?;
-            let sample = sealed_sample(row, spec, dataset.as_of_ms, false)?;
+            let sample = sealed_sample(row, spec, as_of_ms, audited)?;
             if matches!(sample.annotation, Annotation::Anomaly { is_anomaly: false }) {
                 scores.push(scalar_score(&predict_sample(predictor, &sample)?)?);
                 if scores.len() == 256 {
@@ -1407,13 +2039,7 @@ impl AutoTrainingController {
                 }
             }
         }
-        if scores.is_empty() {
-            return Err(invalid(
-                "anomaly calibration requires explicitly normal training examples",
-            ));
-        }
-        scores.sort_by(f64::total_cmp);
-        Ok(scores[((scores.len() - 1) as f64 * 0.95).floor() as usize].max(1e-8))
+        Ok(scores)
     }
 
     fn observe(
@@ -1447,9 +2073,122 @@ impl AutoTrainingController {
     }
 }
 
-fn wall_budget_exhausted(experiment: &Experiment) -> bool {
-    now_ms() as i128 - experiment.created_at_ms as i128
-        > experiment.request.budget.maximum_wall_time_ms as i128
+/// Wall time held back so a frozen winner always gets its final holdout evaluation.
+fn audit_allowance_ms(experiment: &Experiment) -> u64 {
+    (experiment.request.budget.maximum_wall_time_ms / 10).min(MAXIMUM_AUDIT_ALLOWANCE_MS)
+}
+
+/// New trials start only while more than the audit allowance of wall time remains.
+fn search_window_open(experiment: &Experiment, at_ms: i64) -> bool {
+    experiment.wall_remaining_ms(at_ms) > audit_allowance_ms(experiment)
+}
+
+/// The audit may use the remaining wall time and at least its allowance after the winner
+/// froze, so a trial stopped at the deadline does not cost the final evaluation.
+fn audit_window_open(experiment: &Experiment, at_ms: i64) -> bool {
+    experiment.wall_remaining_ms(at_ms) > 0
+        || experiment.selected_at_ms.is_some_and(|selected| {
+            (at_ms as i128 - selected as i128) < audit_allowance_ms(experiment) as i128
+        })
+}
+
+/// Extra epochs expected to finish within 80% of the per-trial duration cap, estimated from
+/// the time the parent trial spent on the epochs it trained itself.
+fn epochs_within_trial_cap(cap_ms: u64, trained_ms: u64, trained_epochs: usize) -> usize {
+    let per_epoch_ms = trained_ms.div_ceil(trained_epochs.max(1) as u64);
+    if per_epoch_ms == 0 {
+        return usize::MAX;
+    }
+    usize::try_from(cap_ms / 5 * 4 / per_epoch_ms).unwrap_or(usize::MAX)
+}
+
+fn ledger_busy(error: &Error) -> bool {
+    matches!(
+        error,
+        Error::Sql(rusqlite::Error::SqliteFailure(failure, _))
+            if matches!(
+                failure.code,
+                rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+            )
+    )
+}
+
+/// Evidence for a failed test prediction where the task scores a failure as a miss.
+fn failed_evidence(task: &EvaluationTask) -> Option<Value> {
+    match task {
+        EvaluationTask::Classification => Some(Value::Null),
+        EvaluationTask::Detection { .. } => {
+            serde_json::to_value(EvidencePrediction::Detection { boxes: Vec::new() }).ok()
+        }
+        EvaluationTask::InstanceSegmentation { .. } => serde_json::to_value(
+            EvidencePrediction::Instances {
+                instances: Vec::new(),
+            },
+        )
+        .ok(),
+        _ => None,
+    }
+}
+
+fn audited_label(
+    row: &TrainingSample,
+    sample: &Sample,
+    spec: &InspectionSpec,
+) -> Result<Option<String>> {
+    let Annotation::Class { class_id } = sample.annotation else {
+        return Ok(None);
+    };
+    let expected = spec
+        .labels
+        .get(class_id as usize)
+        .ok_or_else(|| invalid("test class outside label order"))?;
+    if row.payload.get("label").and_then(Value::as_str) != Some(expected.as_str()) {
+        return Err(invalid(
+            "test ledger label differs from the inspection class order",
+        ));
+    }
+    Ok(Some(expected.clone()))
+}
+
+fn serialized_size<T: Serialize>(value: &T) -> Result<u64> {
+    struct Counter(u64);
+    impl std::io::Write for Counter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0 = self.0.saturating_add(bytes.len() as u64);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut counter = Counter(0);
+    serde_json::to_writer(&mut counter, value)?;
+    Ok(counter.0)
+}
+
+enum Audit {
+    Evaluated(String),
+    Ended(String),
+}
+
+enum Admission {
+    Fits,
+    Resize {
+        request: TrainingRequest,
+        batch: usize,
+        estimate: u64,
+        budget: u64,
+    },
+    Unfit {
+        estimate: u64,
+        budget: u64,
+    },
+}
+
+enum TrainingData {
+    Measured { bytes: u64, shape: Vec<usize> },
+    Exceeds,
+    Unknown,
 }
 
 struct HalvingCandidate {
@@ -1570,4 +2309,286 @@ fn validate_recipe(spec: &InspectionSpec, request: &TrainingRequest) -> Result<(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flow_like_ml_core::{BoundingBox, InstanceMask};
+
+    fn observed(
+        annotation: Annotation,
+        evidence: Option<EvidencePrediction>,
+        predicted_class: Option<u32>,
+    ) -> Observation {
+        Observation {
+            sample: Sample {
+                id: "sample".into(),
+                group_id: "group".into(),
+                stream_id: "stream".into(),
+                timestamp_ms: 0,
+                window_start_ms: 0,
+                window_end_ms: 0,
+                input: TensorData {
+                    shape: vec![1],
+                    values: vec![0.0],
+                },
+                annotation,
+                provenance: LabelProvenance::Reviewed {
+                    reviewer: "fixture".into(),
+                    reviewed_at_ms: 0,
+                },
+                outcome: None,
+            },
+            predicted_class,
+            evidence,
+            latency_ms: 1.0,
+        }
+    }
+
+    fn centered_box(class_id: u32) -> BoundingBox {
+        BoundingBox {
+            class_id,
+            x_min: 0.25,
+            y_min: 0.25,
+            x_max: 0.75,
+            y_max: 0.75,
+        }
+    }
+
+    #[test]
+    fn validation_reports_the_final_audit_metrics_and_goal_checks_accept_them() {
+        let labels = vec!["normal".to_string(), "defect".to_string()];
+        let anomaly = |is_anomaly, probability| {
+            observed(
+                Annotation::Anomaly { is_anomaly },
+                Some(EvidencePrediction::Anomaly { probability }),
+                None,
+            )
+        };
+        let cases = vec![
+            (
+                EvaluationTask::Anomaly { threshold: 0.5 },
+                vec![
+                    anomaly(false, 0.2),
+                    anomaly(true, 0.8),
+                    anomaly(false, 0.6),
+                ],
+                vec![
+                    "accuracy_wilson_lower_95",
+                    "log_loss",
+                    "precision",
+                    "recall",
+                    "false_positive_rate",
+                    "support/normal",
+                    "support/anomaly",
+                ],
+            ),
+            (
+                EvaluationTask::Detection {
+                    classes: 2,
+                    iou_threshold: 0.5,
+                },
+                vec![observed(
+                    Annotation::Boxes {
+                        boxes: vec![centered_box(0), centered_box(1)],
+                    },
+                    Some(EvidencePrediction::Detection {
+                        boxes: vec![DetectionEvidence {
+                            class_id: 0,
+                            x_min: 0.25,
+                            y_min: 0.25,
+                            x_max: 0.75,
+                            y_max: 0.75,
+                            confidence: 0.9,
+                        }],
+                    }),
+                    None,
+                )],
+                vec![
+                    "mean_average_precision",
+                    "support/1",
+                    "recall/0",
+                    "precision/0",
+                    "average_precision/1",
+                ],
+            ),
+            (
+                EvaluationTask::Segmentation { classes: 2 },
+                vec![observed(
+                    Annotation::Mask {
+                        width: 2,
+                        height: 1,
+                        classes: vec![0, 1],
+                    },
+                    Some(EvidencePrediction::Segmentation {
+                        width: 2,
+                        height: 1,
+                        classes: vec![0, 1],
+                    }),
+                    None,
+                )],
+                vec!["iou/0", "iou/1", "dice/0", "dice/1"],
+            ),
+            (
+                EvaluationTask::InstanceSegmentation {
+                    classes: 1,
+                    iou_threshold: 0.5,
+                },
+                vec![observed(
+                    Annotation::InstanceMasks {
+                        instances: vec![InstanceMask {
+                            instance_id: "instance".into(),
+                            bounds: centered_box(0),
+                            width: 2,
+                            height: 1,
+                            foreground: vec![true, false],
+                        }],
+                    },
+                    Some(EvidencePrediction::Instances {
+                        instances: vec![InstanceEvidence {
+                            class_id: 0,
+                            confidence: 0.9,
+                            width: 2,
+                            height: 1,
+                            foreground: vec![true, false],
+                        }],
+                    }),
+                    None,
+                )],
+                vec!["mask_mean_average_precision", "mask_iou/0", "recall/0"],
+            ),
+            (
+                EvaluationTask::Classification,
+                vec![
+                    observed(Annotation::Class { class_id: 0 }, None, Some(0)),
+                    observed(Annotation::Class { class_id: 1 }, None, Some(0)),
+                ],
+                vec!["macro_f1", "recall/defect", "class/1/support"],
+            ),
+            (
+                EvaluationTask::Regression,
+                vec![
+                    observed(
+                        Annotation::Scalar { value: 1.0 },
+                        Some(EvidencePrediction::Regression { values: vec![1.5] }),
+                        None,
+                    ),
+                    observed(
+                        Annotation::Scalar { value: 2.0 },
+                        Some(EvidencePrediction::Regression { values: vec![2.5] }),
+                        None,
+                    ),
+                ],
+                vec!["rmse", "mae", "r2"],
+            ),
+        ];
+        for (task, observations, expected) in cases {
+            let metrics = measure(&observations, &task, &labels).unwrap();
+            for name in expected {
+                assert!(
+                    metrics.contains_key(name),
+                    "{task:?} validation lacks {name}"
+                );
+            }
+            for name in metrics.keys() {
+                assert!(
+                    validation_measures(&task, &labels, name),
+                    "{task:?} goal check rejects measured {name}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn goals_naming_metrics_validation_never_measures_are_rejected() {
+        let spec = InspectionSpec {
+            id: "spec".into(),
+            description: "classify windows".into(),
+            task: TaskKind::SensorClassification,
+            labels: vec!["ok".into(), "defect".into()],
+            input_shape: vec![4],
+            prediction_horizon_ms: None,
+            minimum_examples: 1,
+            minimum_examples_per_class: 1,
+        };
+        let mut goals = default_goals(&spec);
+        let bound = |name: &str| MetricBound {
+            name: name.into(),
+            minimum: Some(0.5),
+            maximum: None,
+        };
+        for name in [
+            "recall/defect",
+            "class/1/recall",
+            "accuracy_wilson_lower_95",
+            "artifact_bytes",
+        ] {
+            goals.bounds = vec![bound(name)];
+            validate_goals(&spec, &goals).unwrap();
+        }
+        for name in ["teacher_agreement", "recall/missing", "class/2/recall", "accuracy "] {
+            goals.bounds = vec![bound(name)];
+            assert!(validate_goals(&spec, &goals).is_err(), "{name}");
+        }
+        goals.bounds.clear();
+        goals.primary_metric = "mean_iou".into();
+        assert!(validate_goals(&spec, &goals).is_err());
+    }
+
+    #[test]
+    fn continuation_epochs_stay_within_eighty_percent_of_the_trial_cap() {
+        assert_eq!(epochs_within_trial_cap(60_000, 15_000, 3), 9);
+        assert_eq!(epochs_within_trial_cap(60_000, 60_000, 3), 2);
+        assert_eq!(epochs_within_trial_cap(60_000, 100_000, 1), 0);
+        assert_eq!(epochs_within_trial_cap(60_000, 0, 3), usize::MAX);
+    }
+
+    #[test]
+    fn batches_halve_until_the_estimate_fits() {
+        let recipe = burn::Recipe::ResNet18 {
+            input_channels: 3,
+            classes: 2,
+            base_channels: 16,
+        };
+        let shape = [3, 64, 64];
+        let at = |batch| recipe.estimated_training_bytes(&shape, batch).unwrap();
+        assert_eq!(fit_batch(&recipe, &shape, 16, 0, at(16)), Some(Ok(16)));
+        assert_eq!(fit_batch(&recipe, &shape, 16, 0, at(4)), Some(Ok(4)));
+        assert_eq!(fit_batch(&recipe, &shape, 16, 100, at(4) + 99), Some(Ok(2)));
+        assert_eq!(fit_batch(&recipe, &shape, 16, 0, at(1) - 1), Some(Err(at(1))));
+    }
+
+    #[test]
+    fn boxes_clamped_to_zero_area_are_not_scored() {
+        let raw = serde_json::json!({"detections":[[
+            {"class_id":0,"confidence":0.9,"x_min":0.2,"y_min":0.2,"x_max":0.6,"y_max":0.6},
+            {"class_id":0,"confidence":0.8,"x_min":1.0,"y_min":0.3,"x_max":1.0,"y_max":0.7}
+        ]]});
+        let sample = observed(
+            Annotation::Boxes {
+                boxes: vec![centered_box(0)],
+            },
+            None,
+            None,
+        )
+        .sample;
+        let observation = decode_prediction(
+            sample,
+            &raw,
+            &EvaluationTask::Detection {
+                classes: 1,
+                iou_threshold: 0.5,
+            },
+            1,
+            1.0,
+            1.0,
+        )
+        .unwrap();
+        let Some(EvidencePrediction::Detection { boxes }) = observation.evidence else {
+            panic!("detection evidence is missing");
+        };
+        assert_eq!(boxes.len(), 1);
+        assert_eq!(boxes[0].x_max, 0.6);
+    }
 }

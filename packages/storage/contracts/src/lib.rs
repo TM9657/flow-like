@@ -5,6 +5,8 @@
 //! not pay for the storage runtime dependency graph.
 
 #[cfg(feature = "database")]
+pub mod column_metadata;
+#[cfg(feature = "database")]
 pub mod database;
 #[cfg(feature = "graph")]
 pub mod graph;

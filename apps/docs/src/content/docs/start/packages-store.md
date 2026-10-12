@@ -89,7 +89,9 @@ Paid, private and access-request packages are licensed per App. An admin or
 the owner who has the package adds it to the App and holds its licence. Every
 member of the App can then use its nodes and widgets, on the web and on
 Desktop, without buying it or getting access to it themselves. Members get the
-version the App uses. The **Add Package** dialog marks the packages you own. For one you
+version the App uses. A page that still shows a widget from an earlier version
+keeps working for them too: Desktop downloads that widget's build and keeps it
+for offline use, without installing the earlier version. The **Add Package** dialog marks the packages you own. For one you
 don't have yet, it sends you to the store to get it first.
 
 If the licence holder leaves the App or loses the package, the licence passes to

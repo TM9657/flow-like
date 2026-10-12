@@ -2,11 +2,18 @@ use crate::{BackendChoice, Error, Result};
 use burn::tensor::Device;
 use std::{
     collections::HashMap,
-    sync::{Mutex, OnceLock},
+    sync::{Mutex, MutexGuard, OnceLock},
 };
 
 type ResolvedCache = HashMap<(BackendChoice, bool), BackendChoice>;
 static RESOLVED: OnceLock<Mutex<ResolvedCache>> = OnceLock::new();
+
+fn resolved_cache() -> MutexGuard<'static, ResolvedCache> {
+    RESOLVED
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// Select a usable backend. Auto prefers CUDA, ROCm, WGPU, then CPU.
 /// Explicit choices remain strict.
@@ -15,33 +22,57 @@ pub fn resolve_backend(choice: &BackendChoice) -> Result<BackendChoice> {
 }
 
 /// Resolve an automatic or explicit preference by executing a numerical device probe.
-/// Successful selections are cached for this process. Explicit GPU fallback moves through
-/// lower-priority GPU backends and then CPU; Auto always permits this search.
+/// Successful selections are cached for this process and reused while their device still
+/// opens. Explicit GPU fallback moves through lower-priority GPU backends and then CPU; Auto
+/// always permits this search.
 pub fn resolve_backend_with_fallback(
     choice: &BackendChoice,
     allow_fallback: bool,
 ) -> Result<BackendChoice> {
-    let mut cache = RESOLVED
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let require_physical_gpu = !matches!(
+        choice,
+        BackendChoice::Wgpu | BackendChoice::WgpuAdapter { .. }
+    );
+    resolve_cached(
+        &mut resolved_cache(),
+        choice,
+        allow_fallback,
+        &compiled_backends(),
+        |resolved| open_device(resolved, false).is_ok(),
+        |candidate| probe_candidate(candidate, require_physical_gpu).map(|_| ()),
+    )
+}
+
+/// A lost GPU (driver reset, unplugged or faulted device) stays unusable for the rest of the
+/// process, so a cached selection whose device no longer opens is evicted and probed again.
+fn resolve_cached(
+    cache: &mut ResolvedCache,
+    choice: &BackendChoice,
+    allow_fallback: bool,
+    compiled: &[&str],
+    usable: impl FnOnce(&BackendChoice) -> bool,
+    probe: impl FnMut(&BackendChoice) -> Result<()>,
+) -> Result<BackendChoice> {
     let key = (choice.clone(), allow_fallback);
-    if let Some(resolved) = cache.get(&key) {
-        return Ok(resolved.clone());
+    if let Some(resolved) = cache.get(&key).cloned() {
+        if usable(&resolved) {
+            return Ok(resolved);
+        }
+        forget_in(cache, &resolved);
     }
-    let resolved = resolve_with_probe(choice, allow_fallback, &compiled_backends(), |candidate| {
-        probe_candidate(
-            candidate,
-            !matches!(
-                choice,
-                BackendChoice::Wgpu | BackendChoice::WgpuAdapter { .. }
-            ),
-        )
-        .map(|_| ())
-    })?;
+    let resolved = resolve_with_probe(choice, allow_fallback, compiled, probe)?;
     cache.insert((resolved.clone(), false), resolved.clone());
     cache.insert(key, resolved.clone());
     Ok(resolved)
+}
+
+fn forget_in(cache: &mut ResolvedCache, failed: &BackendChoice) {
+    cache.retain(|_, resolved| *resolved != *failed);
+}
+
+/// Must not be called while the resolution cache is locked.
+fn forget(failed: &BackendChoice) {
+    forget_in(&mut resolved_cache(), failed);
 }
 
 fn resolve_with_probe(
@@ -105,7 +136,13 @@ fn resolve_resume_with(
     resolve(requested)
 }
 
+/// Open a resolved backend. A failure evicts cached selections of that backend, so the next
+/// resolution probes again instead of returning a lost GPU.
 pub(crate) fn device(choice: &BackendChoice, training: bool) -> Result<Device> {
+    open_device(choice, training).inspect_err(|_| forget(choice))
+}
+
+fn open_device(choice: &BackendChoice, training: bool) -> Result<Device> {
     let device = std::panic::catch_unwind(|| -> Result<Device> {
         #[cfg(ml_backend_wgpu)]
         if matches!(
@@ -166,29 +203,40 @@ pub(crate) fn device(choice: &BackendChoice, training: bool) -> Result<Device> {
 fn cuda_driver_preflight() -> Result<()> {
     static DRIVER: OnceLock<std::result::Result<libloading::Library, String>> = OnceLock::new();
     DRIVER
-        .get_or_init(|| {
-            let names: &[&str] = if cfg!(target_os = "windows") {
-                &["nvcuda.dll", "cuda.dll"]
-            } else if cfg!(target_os = "macos") {
-                &["libcuda.dylib", "libnvcuda.dylib"]
-            } else {
-                &[
-                    "libcuda.so",
-                    "libcuda.so.1",
-                    "libnvcuda.so",
-                    "libnvcuda.so.1",
-                ]
-            };
-            for name in names {
-                if let Ok(library) = unsafe { libloading::Library::new(name) } {
-                    return Ok(library);
-                }
-            }
-            Err("CUDA driver library is unavailable".into())
-        })
+        .get_or_init(load_cuda_driver)
         .as_ref()
         .map(|_| ())
         .map_err(|error| Error::Backend(error.clone()))
+}
+
+/// The NVIDIA driver installs nvcuda.dll in System32. Only that directory is searched, so a
+/// DLL planted in the working directory or on PATH is never loaded.
+#[cfg(all(ml_backend_cuda, windows))]
+fn load_cuda_driver() -> std::result::Result<libloading::Library, String> {
+    use libloading::os::windows::{LOAD_LIBRARY_SEARCH_SYSTEM32, Library};
+    unsafe { Library::load_with_flags("nvcuda.dll", LOAD_LIBRARY_SEARCH_SYSTEM32) }
+        .map(libloading::Library::from)
+        .map_err(|error| format!("CUDA driver library is unavailable in System32: {error}"))
+}
+
+#[cfg(all(ml_backend_cuda, not(windows)))]
+fn load_cuda_driver() -> std::result::Result<libloading::Library, String> {
+    let names: &[&str] = if cfg!(target_os = "macos") {
+        &["libcuda.dylib", "libnvcuda.dylib"]
+    } else {
+        &[
+            "libcuda.so",
+            "libcuda.so.1",
+            "libnvcuda.so",
+            "libnvcuda.so.1",
+        ]
+    };
+    for name in names {
+        if let Ok(library) = unsafe { libloading::Library::new(name) } {
+            return Ok(library);
+        }
+    }
+    Err("CUDA driver library is unavailable".into())
 }
 /// Backends compiled into this binary. Hardware availability is checked when opening a session.
 pub fn compiled_backends() -> Vec<&'static str> {
@@ -211,7 +259,7 @@ pub fn probe_backend(choice: &BackendChoice) -> Result<crate::BackendProbe> {
     } else {
         choice.clone()
     };
-    probe_concrete(&choice)
+    probe_concrete(&choice).inspect_err(|_| forget(&choice))
 }
 
 fn probe_concrete(choice: &BackendChoice) -> Result<crate::BackendProbe> {
@@ -224,7 +272,7 @@ fn probe_candidate(
 ) -> Result<crate::BackendProbe> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         use burn::tensor::Tensor;
-        let device = device(choice, true)?;
+        let device = open_device(choice, true)?;
         #[cfg(ml_backend_wgpu)]
         if require_physical_gpu
             && matches!(
@@ -387,6 +435,78 @@ mod tests {
                 BackendChoice::Rocm { device: 3 },
                 BackendChoice::Cpu
             ]
+        );
+    }
+
+    fn resolve_in(
+        cache: &mut ResolvedCache,
+        choice: &BackendChoice,
+        allow_fallback: bool,
+        gpu_alive: bool,
+        probes: &mut Vec<BackendChoice>,
+    ) -> Result<BackendChoice> {
+        let alive = move |candidate: &BackendChoice| gpu_alive || *candidate == BackendChoice::Cpu;
+        resolve_cached(
+            cache,
+            choice,
+            allow_fallback,
+            &["cuda", "rocm", "wgpu", "cpu"],
+            alive,
+            |candidate| {
+                probes.push(candidate.clone());
+                if alive(candidate) {
+                    Ok(())
+                } else {
+                    Err(Error::Backend("device lost".into()))
+                }
+            },
+        )
+    }
+
+    #[test]
+    fn cached_selection_is_probed_again_after_its_gpu_is_lost() {
+        let cuda = BackendChoice::Cuda { device: 0 };
+        let mut cache = ResolvedCache::new();
+        let mut probes = Vec::new();
+        for _ in 0..2 {
+            assert_eq!(
+                resolve_in(&mut cache, &BackendChoice::Auto, true, true, &mut probes).unwrap(),
+                cuda
+            );
+        }
+        assert_eq!(probes, vec![cuda.clone()]);
+        probes.clear();
+        assert_eq!(
+            resolve_in(&mut cache, &BackendChoice::Auto, true, false, &mut probes).unwrap(),
+            BackendChoice::Cpu
+        );
+        assert_eq!(
+            probes,
+            vec![
+                cuda.clone(),
+                BackendChoice::Rocm { device: 0 },
+                BackendChoice::Wgpu,
+                BackendChoice::Cpu
+            ]
+        );
+        assert!(!cache.values().any(|resolved| *resolved == cuda));
+        assert!(resolve_in(&mut cache, &cuda, false, false, &mut probes).is_err());
+        assert!(!cache.contains_key(&(cuda, false)));
+    }
+
+    #[test]
+    fn failed_device_evicts_every_selection_that_resolved_to_it() {
+        let cuda = BackendChoice::Cuda { device: 0 };
+        let mut cache = ResolvedCache::from([
+            ((BackendChoice::Auto, true), cuda.clone()),
+            ((BackendChoice::Auto, false), cuda.clone()),
+            ((cuda.clone(), false), cuda.clone()),
+            ((BackendChoice::Wgpu, true), BackendChoice::Cpu),
+        ]);
+        forget_in(&mut cache, &cuda);
+        assert_eq!(
+            cache,
+            ResolvedCache::from([((BackendChoice::Wgpu, true), BackendChoice::Cpu)])
         );
     }
 }

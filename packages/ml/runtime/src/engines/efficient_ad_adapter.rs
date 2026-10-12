@@ -58,14 +58,11 @@ impl TrainingEngine for EfficientAdEngine {
             let update = (|| -> Result<()> {
                 control.progress(serde_json::to_value(&progress)?)?;
                 if progress.validation_loss.is_some() {
-                    let bytes = burn_adapter::pack_named(
+                    burn_adapter::publish_checkpoint(
+                        work,
+                        control,
                         directory.path(),
                         MANIFEST,
-                        true,
-                        control.limits().maximum_checkpoint_bytes,
-                    )?;
-                    control.checkpoint(
-                        &bytes,
                         progress.steps as u64,
                         serde_json::json!({"engine":"efficient_ad","steps":progress.steps}),
                     )?;
@@ -126,14 +123,11 @@ impl TrainingEngine for EfficientAdEngine {
             }
         })?;
         control.check_cancel()?;
-        let checkpoint = burn_adapter::pack_named(
+        burn_adapter::publish_checkpoint(
+            work,
+            control,
             directory.path(),
             MANIFEST,
-            true,
-            control.limits().maximum_checkpoint_bytes,
-        )?;
-        control.checkpoint(
-            &checkpoint,
             report.steps as u64,
             serde_json::json!({"engine":"efficient_ad","steps":report.steps}),
         )?;

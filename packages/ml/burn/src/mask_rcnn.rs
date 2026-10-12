@@ -1,6 +1,10 @@
 use crate::mask_rcnn_types::{
     InstanceDetection, InstanceTarget, MaskRcnnConfig, MaskRcnnPrediction,
 };
+use crate::types::{
+    MASK_RCNN_ELEMENT_BUDGET, MASK_RCNN_MAX_INSTANCES, instance_mask_elements,
+    mask_rcnn_roi_elements,
+};
 use crate::{Detection, DetectionOptions, Error, Result, TensorData};
 use burn::{
     module::Module,
@@ -16,6 +20,7 @@ use burn::{
 };
 
 type BoxCoords = [f32; 4];
+const RPN_SAMPLING_SALT: u64 = 0x5250_4e5f_616e_6368;
 #[derive(Clone, Debug)]
 pub struct Roi {
     pub image: usize,
@@ -146,19 +151,15 @@ impl MaskRcnn {
         if anchor_count.is_none_or(|n| n > 1_000_000) {
             return Err(Error::Invalid("Mask R-CNN anchor budget exceeded".into()));
         }
-        let max_rois = batch
-            * if targets.is_some() {
-                self.config.training_samples
-            } else {
-                self.config.proposals
-            };
-        let mask_elements = max_rois
-            .checked_mul(self.config.base_channels * 2)
-            .and_then(|n| n.checked_mul(self.config.mask_size * self.config.mask_size));
-        if mask_elements.is_none_or(|n| n > 64 * 1024 * 1024) {
-            return Err(Error::Invalid(
-                "Mask R-CNN proposal feature budget exceeded".into(),
-            ));
+        if targets.is_some()
+            && batch
+                .checked_mul(self.config.training_samples)
+                .and_then(|rois| mask_rcnn_roi_elements(&self.config, rois))
+                .is_none_or(|n| n > MASK_RCNN_ELEMENT_BUDGET)
+        {
+            return Err(Error::Invalid(format!(
+                "Mask R-CNN training batch of {batch} images exceeds the {MASK_RCNN_ELEMENT_BUDGET}-element ROI mask-head budget"
+            )));
         }
         let anchors = anchors(fh, fw, height, width, &self.config);
         if anchors.len() > 1_000_000 {
@@ -237,11 +238,20 @@ impl MaskRcnn {
         } else {
             rois.clone()
         };
-        let mut mask = roi_align(features, &mask_rois, self.config.mask_size / 2, 2)?;
-        for conv in &self.mask_convs {
-            mask = relu(conv.forward(mask));
-        }
-        let mask_logits = self.mask_logits.forward(relu(self.mask_up.forward(mask)));
+        let mask_logits = if targets.is_some() {
+            self.mask_head(features, &mask_rois)?
+        } else {
+            // Prediction batches are not validated up front; chunk the mask head to stay in budget.
+            let per_roi = mask_rcnn_roi_elements(&self.config, 1).unwrap_or(usize::MAX);
+            let rois_per_chunk = (MASK_RCNN_ELEMENT_BUDGET / per_roi).max(1);
+            Tensor::cat(
+                mask_rois
+                    .chunks(rois_per_chunk)
+                    .map(|chunk| self.mask_head(features.clone(), chunk))
+                    .collect::<Result<Vec<_>>>()?,
+                0,
+            )
+        };
         Ok(MaskRcnnOutput {
             objectness,
             deltas,
@@ -256,7 +266,15 @@ impl MaskRcnn {
             height,
             width,
             classes: self.config.classes,
+            sampling_seed,
         })
+    }
+    fn mask_head(&self, features: Tensor<4>, rois: &[Roi]) -> Result<Tensor<4>> {
+        let mut mask = roi_align(features, rois, self.config.mask_size / 2, 2)?;
+        for conv in &self.mask_convs {
+            mask = relu(conv.forward(mask));
+        }
+        Ok(self.mask_logits.forward(relu(self.mask_up.forward(mask))))
     }
 }
 
@@ -274,6 +292,7 @@ pub struct MaskRcnnOutput {
     height: usize,
     width: usize,
     classes: usize,
+    sampling_seed: Option<u64>,
 }
 impl MaskRcnnOutput {
     pub fn loss(self, targets: &[Vec<InstanceTarget>]) -> Result<Tensor<1>> {
@@ -281,19 +300,23 @@ impl MaskRcnnOutput {
         let device = self.objectness.device();
         let count = self.anchors.len();
         let raw = values(self.objectness.clone());
+        let anchor_seed = self.sampling_seed.unwrap_or_default() ^ RPN_SAMPLING_SALT;
         let mut selected = Vec::new();
         let mut obj_targets = Vec::new();
         let mut positive = Vec::new();
         let mut box_targets = Vec::new();
         for (image, truth) in targets.iter().enumerate() {
             let assignment = assign_anchors(&self.anchors, truth);
-            let mut pos = (0..count)
-                .filter(|i| assignment[*i].is_some_and(|v| v.1 >= 0.7 || v.2))
-                .collect::<Vec<_>>();
+            let pos = sample_positive_anchors(
+                (0..count)
+                    .filter(|i| assignment[*i].is_some_and(|v| v.1 >= 0.7 || v.2))
+                    .collect(),
+                128,
+                anchor_seed.wrapping_add(image as u64),
+            );
             let mut neg = (0..count)
                 .filter(|i| assignment[*i].is_none_or(|v| v.1 < 0.3 && !v.2))
                 .collect::<Vec<_>>();
-            pos.truncate(128);
             neg.sort_by(|a, b| raw[image * count + b].total_cmp(&raw[image * count + a]));
             neg.truncate(256 - pos.len());
             for anchor in pos {
@@ -398,7 +421,18 @@ impl MaskRcnnOutput {
         Ok(loss)
     }
     pub fn prediction(self, options: &DetectionOptions) -> Result<MaskRcnnPrediction> {
+        self.prediction_within(options, MASK_RCNN_ELEMENT_BUDGET)
+    }
+    /// Keeps the most confident detections whose full-image masks fit in `mask_elements` per image.
+    fn prediction_within(
+        self,
+        options: &DetectionOptions,
+        mask_elements: usize,
+    ) -> Result<MaskRcnnPrediction> {
         options.validate()?;
+        let limit = options
+            .max_detections
+            .min(mask_elements / self.height.saturating_mul(self.width).max(1));
         let scores = values(softmax(self.class_logits, 1));
         let masks = values(self.mask_logits.clone());
         if scores.iter().chain(&masks).any(|v| !v.is_finite()) {
@@ -440,25 +474,15 @@ impl MaskRcnnOutput {
             candidates.sort_by(|a, b| b.2.total_cmp(&a.2));
             let mut kept: Vec<(usize, usize, f32, BoxCoords)> = Vec::new();
             for candidate in candidates {
+                if kept.len() >= limit {
+                    break;
+                }
                 if kept.iter().any(|old| {
                     old.1 == candidate.1 && iou(old.3, candidate.3) > options.iou_threshold
                 }) {
                     continue;
                 }
                 kept.push(candidate);
-                if kept.len() == options.max_detections {
-                    break;
-                }
-            }
-            let output_pixels = self
-                .height
-                .checked_mul(self.width)
-                .and_then(|n| n.checked_mul(kept.len()))
-                .ok_or_else(|| Error::Invalid("Mask output size overflows".into()))?;
-            if output_pixels > 64 * 1024 * 1024 {
-                return Err(Error::Invalid(
-                    "Instance masks exceed the output element limit".into(),
-                ));
             }
             for (i, class, confidence, bounds) in kept {
                 let offset = (i * self.classes + class) * mask_size * mask_size;
@@ -595,20 +619,19 @@ fn validate_targets(
     height: usize,
     width: usize,
 ) -> Result<()> {
-    if targets.len() != batch || targets.iter().any(|v| v.len() > 1024) {
+    if targets.len() != batch || targets.iter().any(|v| v.len() > MASK_RCNN_MAX_INSTANCES) {
         return Err(Error::Invalid("Invalid instance target batch size".into()));
     }
-    let mut elements = 0usize;
-    for instances in targets {
-        for instance in instances {
-            instance.validate(classes, height, width)?;
-            elements = elements
-                .checked_add(instance.mask.values.len())
-                .ok_or_else(|| Error::Invalid("Instance masks exceed limit".into()))?;
-        }
+    for instance in targets.iter().flatten() {
+        instance.validate(classes, height, width)?;
     }
-    if elements > 64 * 1024 * 1024 {
-        return Err(Error::Invalid("Instance masks exceed limit".into()));
+    let elements = targets
+        .iter()
+        .try_fold(0usize, |total, instances| total.checked_add(instance_mask_elements(instances)?));
+    if elements.is_none_or(|n| n > MASK_RCNN_ELEMENT_BUDGET) {
+        return Err(Error::Invalid(format!(
+            "Instance masks of this batch exceed the {MASK_RCNN_ELEMENT_BUDGET}-element Mask R-CNN limit; lower the batch size"
+        )));
     }
     Ok(())
 }
@@ -723,6 +746,17 @@ fn sample_rois(
     negative.truncate(limit - result.len());
     result.extend(negative);
     result
+}
+/// Anchors are generated row-major, so plain truncation would only train objects near the top.
+fn sample_positive_anchors(positive: Vec<usize>, limit: usize, seed: u64) -> Vec<usize> {
+    if positive.len() <= limit {
+        return positive;
+    }
+    crate::engine::shuffled_indices(positive.len(), seed)
+        .into_iter()
+        .take(limit)
+        .map(|index| positive[index])
+        .collect()
 }
 fn assign_anchors(
     anchors: &[BoxCoords],
@@ -909,6 +943,127 @@ mod tests {
         assert!(
             selected_exact,
             "Ground-truth proposals must remain eligible"
+        );
+    }
+    #[test]
+    fn positive_anchor_sampling_is_seeded_and_reaches_later_rows() {
+        let positives = (0..600).collect::<Vec<usize>>();
+        let sampled = sample_positive_anchors(positives.clone(), 128, 7);
+        assert_eq!(sampled.len(), 128);
+        assert_eq!(sampled, sample_positive_anchors(positives.clone(), 128, 7));
+        assert_ne!(sampled, sample_positive_anchors(positives, 128, 8));
+        let mut unique = sampled.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), 128);
+        assert!(
+            sampled.iter().any(|anchor| *anchor >= 300),
+            "Row-major truncation would only keep anchors from the top rows"
+        );
+        assert_eq!(sample_positive_anchors(vec![5, 9], 128, 7), vec![5, 9]);
+    }
+    #[test]
+    fn chunked_mask_head_matches_a_single_pass() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let device = Device::flex();
+        device.seed(5);
+        let config = MaskRcnnConfig {
+            input_channels: 1,
+            classes: 2,
+            base_channels: 2,
+            anchor_scales: vec![0.5],
+            anchor_ratios: vec![1.0],
+            roi_size: 2,
+            mask_size: 4,
+            proposals: 8,
+            training_samples: 8,
+        };
+        let model = MaskRcnn::new(&config, &device).unwrap();
+        let features = Tensor::<4>::random([2, 4, 4, 4], Distribution::Uniform(-1.0, 1.0), &device);
+        let rois = [
+            Roi {
+                image: 0,
+                bounds: [0.0, 0.0, 0.5, 0.5],
+            },
+            Roi {
+                image: 1,
+                bounds: [0.25, 0.25, 1.0, 1.0],
+            },
+            Roi {
+                image: 0,
+                bounds: [0.1, 0.3, 0.9, 0.8],
+            },
+        ];
+        let whole = values(model.mask_head(features.clone(), &rois).unwrap());
+        let chunked = values(Tensor::cat(
+            rois.chunks(2)
+                .map(|chunk| model.mask_head(features.clone(), chunk).unwrap())
+                .collect::<Vec<_>>(),
+            0,
+        ));
+        assert_eq!(whole.len(), 3 * 2 * 4 * 4);
+        assert_eq!(whole.len(), chunked.len());
+        for (single, split) in whole.iter().zip(&chunked) {
+            assert!((single - split).abs() < 1e-6, "{single} != {split}");
+        }
+    }
+    #[test]
+    fn instance_prediction_caps_dense_masks_instead_of_failing() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let device = Device::flex();
+        let rois = (0..6)
+            .map(|i| Roi {
+                image: 0,
+                bounds: [i as f32 / 6.0, 0.0, (i + 1) as f32 / 6.0, 1.0],
+            })
+            .collect::<Vec<_>>();
+        let output = || MaskRcnnOutput {
+            objectness: Tensor::zeros([1, 1], &device),
+            deltas: Tensor::zeros([1, 1, 4], &device),
+            anchors: vec![[0.0, 0.0, 1.0, 1.0]],
+            rois: rois.clone(),
+            mask_rois: rois.clone(),
+            mask_valid: vec![true; 6],
+            class_logits: Tensor::from_data(
+                BurnData::new(
+                    (0..6)
+                        .flat_map(|i| [0.0, 1.0 + i as f32])
+                        .collect::<Vec<_>>(),
+                    [6, 2],
+                ),
+                &device,
+            ),
+            box_deltas: Tensor::zeros([6, 4], &device),
+            mask_logits: Tensor::ones([6, 1, 4, 4], &device),
+            batch: 1,
+            height: 16,
+            width: 16,
+            classes: 1,
+            sampling_seed: None,
+        };
+        let options = DetectionOptions {
+            confidence_threshold: 0.0,
+            iou_threshold: 0.5,
+            max_detections: 10,
+        };
+        let all = output().prediction(&options).unwrap();
+        assert_eq!(all.instances[0].len(), 6);
+        let capped = output().prediction_within(&options, 3 * 16 * 16).unwrap();
+        let confidences = capped.instances[0]
+            .iter()
+            .map(|instance| instance.detection.confidence)
+            .collect::<Vec<_>>();
+        assert_eq!(confidences.len(), 3);
+        assert!(confidences.windows(2).all(|pair| pair[0] > pair[1]));
+        assert_eq!(confidences[0], all.instances[0][0].detection.confidence);
+        assert!(
+            capped.instances[0]
+                .iter()
+                .all(|instance| instance.mask.values.len() == 16 * 16)
         );
     }
     #[test]

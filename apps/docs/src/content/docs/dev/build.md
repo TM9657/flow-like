@@ -117,6 +117,35 @@ runs `apps/desktop/scripts/sync-version.ts` explicitly. It does not install the
 desktop workspace, so it cannot rely on the desktop postinstall script to
 synchronize versions.
 
+## Build and upgrade Flows Word
+
+Flows Word uses the WordCraft runtime. Web and desktop development and build
+scripts prepare it automatically. The first run downloads the pinned source and
+builds it with Rust's `wasm32-unknown-unknown` target and the matching
+`wasm-bindgen` CLI.
+Later runs reuse verified assets from `target/wordcraft`. Generated files in
+each app's `public/wordcraft` directory are excluded from Git. The browser
+loads them only when a DOCX file opens.
+
+To upgrade WordCraft, update `packages/wordcraft/upstream.json` with the exact
+upstream commit, its workspace version, and the `wasm-bindgen` version from
+its `Cargo.lock`. Then run from the repository root:
+
+```bash
+bun run build:wordcraft
+bun run test:wordcraft
+```
+
+The host adapter lives separately in `packages/wordcraft`. The build checks
+the upstream integration points and fails if they have changed, so an upgrade
+cannot silently skip a required patch. The tests cover the storage controls,
+message protocol, and a browser round trip through viewing, editing, saving
+the selected file, and reopening it. Install the test browser with
+`bunx puppeteer browsers install chrome`, or set `CHROME_PATH` to an existing
+Chrome executable. Review representative documents in Microsoft Word after an
+upgrade, especially documents with complex layouts. DOCX editing remains
+experimental; saving updates the selected file.
+
 ## Other useful tasks
 
 ```bash

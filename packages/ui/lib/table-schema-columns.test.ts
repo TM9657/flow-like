@@ -91,6 +91,34 @@ describe("summarizeTableColumns", () => {
 		expect(summarizeTableColumns(null)).toEqual([]);
 		expect(summarizeTableColumns({ fields: "nope" })).toEqual([]);
 	});
+
+	test("carries the column metadata of labelled columns only", () => {
+		const schema = {
+			fields: [
+				field("salary", "Float64", {
+					"flow-like:display-name": "Annual salary",
+					"flow-like:classification": "confidential",
+					"flow-like:pii": "true",
+					"flow-like:read-attributes": '["hr"]',
+				}),
+				field("label", "Utf8", { "flow-like:pii": "false" }),
+			],
+		};
+		expect(summarizeTableColumns(schema)).toEqual([
+			{
+				name: "salary",
+				type: "float64",
+				nullable: true,
+				column_metadata: {
+					display_name: "Annual salary",
+					classification: "confidential",
+					pii: true,
+					read_attributes: ["hr"],
+				},
+			},
+			{ name: "label", type: "string", nullable: true },
+		]);
+	});
 });
 
 describe("assertRowKeysAreColumns", () => {

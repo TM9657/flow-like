@@ -148,7 +148,7 @@ jobs:
         run: bash apps/backend/signaling/tests/image-smoke.sh "signaling-smoke:${GITHUB_SHA}"
 
   web-image:
-    name: Web images export device cryptography
+    name: Web images export browser runtimes
     needs: validate
     # Publication builds these recipes on push; for pull requests this is the only
     # gate on the device-crypto stage's Rust, clang and wasm-bindgen toolchain.
@@ -169,14 +169,14 @@ jobs:
           free -h
           df -h "$RUNNER_TEMP"
       # Both recipes share their build stages, so the second build reuses the first's layers.
-      - name: Build each web recipe through its static export and require the bundle
+      - name: Build each web recipe through its static export and require the bundles
         run: |
           for recipe in apps/backend/docker-compose/web/Dockerfile apps/backend/kubernetes/web/Dockerfile; do
             tag="web-smoke:${GITHUB_SHA}"
             DOCKER_BUILDKIT=1 docker build --file "$recipe" --target builder --tag "$tag" .
             docker run --rm --entrypoint sh "$tag" -c \
-              'test -s out/device-crypto/flow_like_device_crypto_bg.wasm && test -s out/device-crypto/flow_like_device_crypto.js' \
-              || { echo "${recipe} exported no device-crypto bundle under out/device-crypto." >&2; exit 1; }
+              'test -s out/device-crypto/flow_like_device_crypto_bg.wasm && test -s out/device-crypto/flow_like_device_crypto.js && test -s out/wordcraft/runtime.json && test -s out/wordcraft/host.js' \
+              || { echo "${recipe} omitted a required browser runtime from its static export." >&2; exit 1; }
           done
 
   matrix:

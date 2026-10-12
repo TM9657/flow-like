@@ -87,12 +87,54 @@ export const generatedNodeSidebar = [
         ]
       },
       {
+        "label": "Decisions",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/ai/decisions"
+          },
+          {
+            "label": "Find Decision Model",
+            "slug": "nodes/ai/decisions/ai-systemone-find-model"
+          },
+          {
+            "label": "Invoke SystemOne",
+            "slug": "nodes/ai/decisions/ai-systemone-invoke"
+          },
+          {
+            "label": "SystemOne Choice",
+            "slug": "nodes/ai/decisions/ai-systemone-choice"
+          },
+          {
+            "label": "SystemOne Noul",
+            "slug": "nodes/ai/decisions/ai-systemone-noul"
+          },
+          {
+            "label": "SystemOne Score",
+            "slug": "nodes/ai/decisions/ai-systemone-score"
+          }
+        ]
+      },
+      {
         "label": "Embedding",
         "collapsed": true,
         "items": [
           {
             "label": "Overview",
             "slug": "nodes/ai/embedding"
+          },
+          {
+            "label": "Embed Audio",
+            "slug": "nodes/ai/embedding/embed-audio"
+          },
+          {
+            "label": "Embed Content",
+            "slug": "nodes/ai/embedding/embed-content"
+          },
+          {
+            "label": "Embed Content Batch",
+            "slug": "nodes/ai/embedding/embed-contents"
           },
           {
             "label": "Embed Document",
@@ -107,8 +149,20 @@ export const generatedNodeSidebar = [
             "slug": "nodes/ai/embedding/embed-query"
           },
           {
+            "label": "Embed Video",
+            "slug": "nodes/ai/embedding/embed-video"
+          },
+          {
+            "label": "Embedding Model Info",
+            "slug": "nodes/ai/embedding/embedding-model-info"
+          },
+          {
             "label": "Load Embedding Model",
             "slug": "nodes/ai/embedding/load-model"
+          },
+          {
+            "label": "Prepare Embedding Media",
+            "slug": "nodes/ai/embedding/prepare-embedding-media"
           }
         ]
       },
@@ -877,6 +931,90 @@ export const generatedNodeSidebar = [
             "slug": "nodes/ai/ml"
           },
           {
+            "label": "Anomaly",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/anomaly"
+              },
+              {
+                "label": "Feature Map to Patches",
+                "slug": "nodes/ai/ml/anomaly/ml-feature-map-to-patches"
+              },
+              {
+                "label": "Train Isolation Forest",
+                "slug": "nodes/ai/ml/anomaly/ml-train-isolation-forest"
+              },
+              {
+                "label": "Train PaDiM",
+                "slug": "nodes/ai/ml/anomaly/ml-train-padim"
+              },
+              {
+                "label": "Train PatchCore Memory Bank",
+                "slug": "nodes/ai/ml/anomaly/ml-train-patchcore"
+              }
+            ]
+          },
+          {
+            "label": "Auto Training",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/auto-training"
+              },
+              {
+                "label": "Auto Train Agent",
+                "slug": "nodes/ai/ml/auto-training/ml-auto-train-agent"
+              },
+              {
+                "label": "Auto Train Anomaly",
+                "slug": "nodes/ai/ml/auto-training/ml-auto-train-anomaly"
+              },
+              {
+                "label": "Auto Train Forecast",
+                "slug": "nodes/ai/ml/auto-training/ml-auto-train-forecast"
+              },
+              {
+                "label": "Auto Train Tabular",
+                "slug": "nodes/ai/ml/auto-training/ml-auto-train-tabular"
+              },
+              {
+                "label": "Auto Train Vision",
+                "slug": "nodes/ai/ml/auto-training/ml-auto-train-vision"
+              },
+              {
+                "label": "Cancel Auto Training",
+                "slug": "nodes/ai/ml/auto-training/ml-cancel-auto-training"
+              },
+              {
+                "label": "Export Auto Model",
+                "slug": "nodes/ai/ml/auto-training/ml-export-auto-model"
+              },
+              {
+                "label": "Finalize Auto Training",
+                "slug": "nodes/ai/ml/auto-training/ml-finalize-auto-training"
+              },
+              {
+                "label": "Get Auto Training Result",
+                "slug": "nodes/ai/ml/auto-training/ml-get-auto-training"
+              },
+              {
+                "label": "Predict Auto Model",
+                "slug": "nodes/ai/ml/auto-training/ml-predict-auto-model"
+              },
+              {
+                "label": "Resume Auto Training",
+                "slug": "nodes/ai/ml/auto-training/ml-resume-auto-training"
+              },
+              {
+                "label": "Step Auto Training",
+                "slug": "nodes/ai/ml/auto-training/ml-step-auto-training"
+              }
+            ]
+          },
+          {
             "label": "Classification",
             "collapsed": true,
             "items": [
@@ -945,6 +1083,86 @@ export const generatedNodeSidebar = [
             ]
           },
           {
+            "label": "Compute",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/compute"
+              },
+              {
+                "label": "Probe Training Device",
+                "slug": "nodes/ai/ml/compute/ml-probe-training-device"
+              }
+            ]
+          },
+          {
+            "label": "Continuous Learning",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/continuous-learning"
+              },
+              {
+                "label": "Analyze Model Errors",
+                "slug": "nodes/ai/ml/continuous-learning/ml-analyze-model-errors"
+              },
+              {
+                "label": "Create Learning Project",
+                "slug": "nodes/ai/ml/continuous-learning/ml-create-learning-project"
+              },
+              {
+                "label": "Get Learning Project",
+                "slug": "nodes/ai/ml/continuous-learning/ml-get-learning-project"
+              },
+              {
+                "label": "Learning Project Agent",
+                "slug": "nodes/ai/ml/continuous-learning/ml-learning-project-agent"
+              },
+              {
+                "label": "Notify Learning Product Change",
+                "slug": "nodes/ai/ml/continuous-learning/ml-notify-learning-product-change"
+              },
+              {
+                "label": "Observe Learning Samples",
+                "slug": "nodes/ai/ml/continuous-learning/ml-observe-learning-sample"
+              },
+              {
+                "label": "Pause Learning Project",
+                "slug": "nodes/ai/ml/continuous-learning/ml-pause-learning-project"
+              },
+              {
+                "label": "Promote Learning Model",
+                "slug": "nodes/ai/ml/continuous-learning/ml-promote-learning-model"
+              },
+              {
+                "label": "Resume Learning Project",
+                "slug": "nodes/ai/ml/continuous-learning/ml-resume-learning-project"
+              },
+              {
+                "label": "Review Learning Sample",
+                "slug": "nodes/ai/ml/continuous-learning/ml-review-learning-sample"
+              },
+              {
+                "label": "Rollback Learning Model",
+                "slug": "nodes/ai/ml/continuous-learning/ml-rollback-learning-model"
+              },
+              {
+                "label": "Route Learning Project",
+                "slug": "nodes/ai/ml/continuous-learning/ml-route-learning-project"
+              },
+              {
+                "label": "Select Samples for Review",
+                "slug": "nodes/ai/ml/continuous-learning/ml-select-samples-for-review"
+              },
+              {
+                "label": "Step Learning Project",
+                "slug": "nodes/ai/ml/continuous-learning/ml-step-learning-project"
+              }
+            ]
+          },
+          {
             "label": "Dataset",
             "collapsed": true,
             "items": [
@@ -953,8 +1171,32 @@ export const generatedNodeSidebar = [
                 "slug": "nodes/ai/ml/dataset"
               },
               {
+                "label": "Apply Standard Scaler",
+                "slug": "nodes/ai/ml/dataset/ml-apply-standard-scaler"
+              },
+              {
+                "label": "Dataset Snapshot",
+                "slug": "nodes/ai/ml/dataset/ml-dataset-snapshot"
+              },
+              {
+                "label": "Export Annotation Dataset",
+                "slug": "nodes/ai/ml/dataset/ml-export-annotation-dataset"
+              },
+              {
+                "label": "Fit Standard Scaler",
+                "slug": "nodes/ai/ml/dataset/ml-fit-standard-scaler"
+              },
+              {
+                "label": "Group/Time Split",
+                "slug": "nodes/ai/ml/dataset/ml-group-time-split"
+              },
+              {
                 "label": "K-Fold Split",
                 "slug": "nodes/ai/ml/dataset/ai-ml-dataset-kfold"
+              },
+              {
+                "label": "Make Inspection Sample",
+                "slug": "nodes/ai/ml/dataset/ml-make-inspection-sample"
               },
               {
                 "label": "Sample Dataset",
@@ -971,6 +1213,332 @@ export const generatedNodeSidebar = [
               {
                 "label": "Stratified Split",
                 "slug": "nodes/ai/ml/dataset/ai-ml-dataset-stratified-split"
+              }
+            ]
+          },
+          {
+            "label": "Evaluation",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/evaluation"
+              },
+              {
+                "label": "Classification Metrics",
+                "slug": "nodes/ai/ml/evaluation/ml-classification-metrics"
+              },
+              {
+                "label": "Detection Metrics",
+                "slug": "nodes/ai/ml/evaluation/ml-detection-metrics"
+              },
+              {
+                "label": "Fit Probability Calibration",
+                "slug": "nodes/ai/ml/evaluation/ml-calibrate-probabilities"
+              },
+              {
+                "label": "Precision/Recall and ROC Curve",
+                "slug": "nodes/ai/ml/evaluation/ml-binary-curve"
+              },
+              {
+                "label": "Predictive Event Metrics",
+                "slug": "nodes/ai/ml/evaluation/ml-event-metrics"
+              },
+              {
+                "label": "Regression Metrics",
+                "slug": "nodes/ai/ml/evaluation/ml-regression-metrics"
+              },
+              {
+                "label": "Segmentation Metrics",
+                "slug": "nodes/ai/ml/evaluation/ml-segmentation-metrics"
+              },
+              {
+                "label": "Select Decision Threshold",
+                "slug": "nodes/ai/ml/evaluation/ml-select-threshold"
+              }
+            ]
+          },
+          {
+            "label": "Export",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/export"
+              },
+              {
+                "label": "Export Student to ONNX",
+                "slug": "nodes/ai/ml/export/ml-export-student-onnx"
+              }
+            ]
+          },
+          {
+            "label": "Feature Engineering",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/feature-engineering"
+              },
+              {
+                "label": "Derive Columns",
+                "slug": "nodes/ai/ml/feature-engineering/ml-derive-columns"
+              },
+              {
+                "label": "Fit Preprocessing",
+                "slug": "nodes/ai/ml/feature-engineering/ml-fit-preprocessing"
+              },
+              {
+                "label": "Join Sources",
+                "slug": "nodes/ai/ml/feature-engineering/ml-join-sources"
+              },
+              {
+                "label": "Materialize Dataset",
+                "slug": "nodes/ai/ml/feature-engineering/ml-materialize-dataset"
+              },
+              {
+                "label": "Window Features",
+                "slug": "nodes/ai/ml/feature-engineering/ml-window-features"
+              }
+            ]
+          },
+          {
+            "label": "Fusion",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/fusion"
+              },
+              {
+                "label": "Align Modalities",
+                "slug": "nodes/ai/ml/fusion/ml-align-modalities"
+              }
+            ]
+          },
+          {
+            "label": "Inference",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/inference"
+              },
+              {
+                "label": "Apply Decision Threshold",
+                "slug": "nodes/ai/ml/inference/ml-apply-decision-threshold"
+              },
+              {
+                "label": "Apply Probability Calibration",
+                "slug": "nodes/ai/ml/inference/ml-apply-calibration"
+              },
+              {
+                "label": "Native Model Inference",
+                "slug": "nodes/ai/ml/inference/ml-native-model-inference"
+              },
+              {
+                "label": "Student Confidence Gate",
+                "slug": "nodes/ai/ml/inference/ml-student-confidence-gate"
+              }
+            ]
+          },
+          {
+            "label": "Inspection",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/inspection"
+              },
+              {
+                "label": "Build Inspection Spec",
+                "slug": "nodes/ai/ml/inspection/ml-build-inspection-spec"
+              },
+              {
+                "label": "Plan Inspection Training",
+                "slug": "nodes/ai/ml/inspection/ml-plan-inspection-training"
+              },
+              {
+                "label": "Review Annotation",
+                "slug": "nodes/ai/ml/inspection/ml-review-annotation"
+              },
+              {
+                "label": "Teacher Label",
+                "slug": "nodes/ai/ml/inspection/ml-teacher-label"
+              },
+              {
+                "label": "Validate Annotation",
+                "slug": "nodes/ai/ml/inspection/ml-validate-annotation"
+              }
+            ]
+          },
+          {
+            "label": "Lifecycle",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/lifecycle"
+              },
+              {
+                "label": "Cancel Training",
+                "slug": "nodes/ai/ml/lifecycle/ml-cancel-training"
+              },
+              {
+                "label": "Evaluate Inspection Task",
+                "slug": "nodes/ai/ml/lifecycle/ml-evaluate-inspection-task"
+              },
+              {
+                "label": "Evaluate Student",
+                "slug": "nodes/ai/ml/lifecycle/ml-evaluate-student"
+              },
+              {
+                "label": "Extract Image Features",
+                "slug": "nodes/ai/ml/lifecycle/ml-extract-patch-features"
+              },
+              {
+                "label": "Get Active Student",
+                "slug": "nodes/ai/ml/lifecycle/ml-get-deployment"
+              },
+              {
+                "label": "Get Model Artifact",
+                "slug": "nodes/ai/ml/lifecycle/ml-get-model-artifact"
+              },
+              {
+                "label": "Pause/Resume Student Routing",
+                "slug": "nodes/ai/ml/lifecycle/ml-pause-student"
+              },
+              {
+                "label": "Promote Student",
+                "slug": "nodes/ai/ml/lifecycle/ml-promote-student"
+              },
+              {
+                "label": "Promote by Audited Metrics",
+                "slug": "nodes/ai/ml/lifecycle/ml-promote-by-metrics"
+              },
+              {
+                "label": "Record Model Comparison",
+                "slug": "nodes/ai/ml/lifecycle/ml-record-model-comparison"
+              },
+              {
+                "label": "Record Training Sample",
+                "slug": "nodes/ai/ml/lifecycle/ml-record-training-sample"
+              },
+              {
+                "label": "Recover Training Jobs",
+                "slug": "nodes/ai/ml/lifecycle/ml-recover-training-jobs"
+              },
+              {
+                "label": "Resume Training",
+                "slug": "nodes/ai/ml/lifecycle/ml-resume-training"
+              },
+              {
+                "label": "Rollback Student",
+                "slug": "nodes/ai/ml/lifecycle/ml-rollback-student"
+              },
+              {
+                "label": "Route Inspection",
+                "slug": "nodes/ai/ml/lifecycle/ml-route-inspection"
+              },
+              {
+                "label": "Student Model Inference",
+                "slug": "nodes/ai/ml/lifecycle/ml-student-inference"
+              },
+              {
+                "label": "Train 1D CNN",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-cnn1d"
+              },
+              {
+                "label": "Train After N Samples",
+                "slug": "nodes/ai/ml/lifecycle/ml-schedule-training"
+              },
+              {
+                "label": "Train Burn Model",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-burn-model"
+              },
+              {
+                "label": "Train CNN-LSTM Video Model",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-cnn-lstm"
+              },
+              {
+                "label": "Train Convolutional Sequence Autoencoder",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-conv1d-autoencoder"
+              },
+              {
+                "label": "Train D-FINE Nano",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-dfine-nano"
+              },
+              {
+                "label": "Train DINOv2",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-dino-v2"
+              },
+              {
+                "label": "Train Dense Autoencoder",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-dense-autoencoder"
+              },
+              {
+                "label": "Train EfficientAD",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-efficient-ad"
+              },
+              {
+                "label": "Train EfficientNet",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-efficient-net"
+              },
+              {
+                "label": "Train GRU",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-gru"
+              },
+              {
+                "label": "Train Image/Sensor Fusion Model",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-image-sensor-fusion"
+              },
+              {
+                "label": "Train LSTM",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-lstm"
+              },
+              {
+                "label": "Train LSTM Autoencoder",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-lstm-autoencoder"
+              },
+              {
+                "label": "Train MLP",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-mlp"
+              },
+              {
+                "label": "Train Mask R-CNN",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-mask-rcnn"
+              },
+              {
+                "label": "Train MobileNetV2",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-mobile-net-v2"
+              },
+              {
+                "label": "Train RF-DETR",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-rf-detr"
+              },
+              {
+                "label": "Train RT-DETRv2",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-rtdetr-v2"
+              },
+              {
+                "label": "Train ResNet-18",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-res-net18"
+              },
+              {
+                "label": "Train TCN",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-tcn"
+              },
+              {
+                "label": "Train U-Net",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-u-net"
+              },
+              {
+                "label": "Train YOLOX",
+                "slug": "nodes/ai/ml/lifecycle/ml-train-yolo-x"
+              },
+              {
+                "label": "Training Job Status",
+                "slug": "nodes/ai/ml/lifecycle/ml-training-job-status"
               }
             ]
           },
@@ -1027,6 +1595,24 @@ export const generatedNodeSidebar = [
               {
                 "label": "Model Info",
                 "slug": "nodes/ai/ml/model-info/ml-model-info"
+              }
+            ]
+          },
+          {
+            "label": "Monitoring",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/monitoring"
+              },
+              {
+                "label": "Distribution Drift",
+                "slug": "nodes/ai/ml/monitoring/ml-distribution-drift"
+              },
+              {
+                "label": "Loss Drift",
+                "slug": "nodes/ai/ml/monitoring/ml-loss-drift"
               }
             ]
           },
@@ -1121,6 +1707,28 @@ export const generatedNodeSidebar = [
                 ]
               },
               {
+                "label": "Inspection",
+                "collapsed": true,
+                "items": [
+                  {
+                    "label": "Overview",
+                    "slug": "nodes/ai/ml/onnx/inspection"
+                  },
+                  {
+                    "label": "GroundingDINO Detection",
+                    "slug": "nodes/ai/ml/onnx/inspection/onnx-grounding-dino-detection"
+                  },
+                  {
+                    "label": "SAM Image Encoder",
+                    "slug": "nodes/ai/ml/onnx/inspection/onnx-sam-image-encoder"
+                  },
+                  {
+                    "label": "SAM Prompt Segmentation",
+                    "slug": "nodes/ai/ml/onnx/inspection/onnx-sam-prompt-segmentation"
+                  }
+                ]
+              },
+              {
                 "label": "NLP",
                 "collapsed": true,
                 "items": [
@@ -1209,6 +1817,10 @@ export const generatedNodeSidebar = [
               {
                 "label": "Model Info",
                 "slug": "nodes/ai/ml/onnx/onnx-model-info"
+              },
+              {
+                "label": "ONNX Tensor Inference",
+                "slug": "nodes/ai/ml/onnx/onnx-tensor-inference"
               },
               {
                 "label": "Object Detection",
@@ -1341,6 +1953,88 @@ export const generatedNodeSidebar = [
             ]
           },
           {
+            "label": "Sensors",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/sensors"
+              },
+              {
+                "label": "Capture GenICam Frame",
+                "slug": "nodes/ai/ml/sensors/ml-capture-genicam-frame"
+              },
+              {
+                "label": "Decode Sensor Registers",
+                "slug": "nodes/ai/ml/sensors/ml-decode-sensor-registers"
+              },
+              {
+                "label": "Read Modbus Sensor",
+                "slug": "nodes/ai/ml/sensors/ml-read-modbus-sensor"
+              },
+              {
+                "label": "Read OPC UA Sensor",
+                "slug": "nodes/ai/ml/sensors/ml-read-opcua-sensor"
+              }
+            ]
+          },
+          {
+            "label": "Sequence",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/sequence"
+              },
+              {
+                "label": "Attach Observed Outcome",
+                "slug": "nodes/ai/ml/sequence/ml-attach-observed-outcome"
+              },
+              {
+                "label": "Build Sequence Dataset",
+                "slug": "nodes/ai/ml/sequence/ml-build-sequence-dataset"
+              },
+              {
+                "label": "Build Visual Sequence",
+                "slug": "nodes/ai/ml/sequence/ml-build-visual-sequence"
+              },
+              {
+                "label": "Sensor Window",
+                "slug": "nodes/ai/ml/sequence/ml-sensor-window"
+              }
+            ]
+          },
+          {
+            "label": "Signal",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/signal"
+              },
+              {
+                "label": "Extract Signal Features",
+                "slug": "nodes/ai/ml/signal/ml-signal-features"
+              },
+              {
+                "label": "Resample Sensor",
+                "slug": "nodes/ai/ml/signal/ml-resample-sensor"
+              },
+              {
+                "label": "Signal Band Energy",
+                "slug": "nodes/ai/ml/signal/ml-signal-band-energy"
+              },
+              {
+                "label": "Signal FFT",
+                "slug": "nodes/ai/ml/signal/ml-signal-spectrum"
+              },
+              {
+                "label": "Signal STFT",
+                "slug": "nodes/ai/ml/signal/ml-signal-spectrogram"
+              }
+            ]
+          },
+          {
             "label": "Teachable Machine",
             "collapsed": true,
             "items": [
@@ -1377,6 +2071,40 @@ export const generatedNodeSidebar = [
             ]
           },
           {
+            "label": "Training",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/training"
+              },
+              {
+                "label": "Extract Pretrained Image Features",
+                "slug": "nodes/ai/ml/training/ml-extract-pretrained-features"
+              },
+              {
+                "label": "Fine-tune SAM 2",
+                "slug": "nodes/ai/ml/training/ml-fine-tune-sam2"
+              },
+              {
+                "label": "Import Pretrained Vision Weights",
+                "slug": "nodes/ai/ml/training/ml-import-pretrained-vision"
+              },
+              {
+                "label": "List Pretrained Vision Weights",
+                "slug": "nodes/ai/ml/training/ml-list-pretrained-vision"
+              },
+              {
+                "label": "Train Gradient Boosted Trees",
+                "slug": "nodes/ai/ml/training/ml-train-gradient-boosted-trees"
+              },
+              {
+                "label": "Training Readiness Gate",
+                "slug": "nodes/ai/ml/training/ml-training-readiness"
+              }
+            ]
+          },
+          {
             "label": "Tuning",
             "collapsed": true,
             "items": [
@@ -1399,6 +2127,28 @@ export const generatedNodeSidebar = [
               {
                 "label": "Ordinal Grid Search",
                 "slug": "nodes/ai/ml/tuning/ai-ml-tuning-ordinal-grid-search"
+              }
+            ]
+          },
+          {
+            "label": "Vision",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/vision"
+              },
+              {
+                "label": "Flip Inspection Image",
+                "slug": "nodes/ai/ml/vision/ml-augment-inspection-image"
+              },
+              {
+                "label": "Preprocess Inspection Image",
+                "slug": "nodes/ai/ml/vision/ml-preprocess-inspection-image"
+              },
+              {
+                "label": "Segment with SAM 2",
+                "slug": "nodes/ai/ml/vision/ml-prompt-sam2"
               }
             ]
           },
@@ -3553,6 +4303,10 @@ export const generatedNodeSidebar = [
                 "slug": "nodes/data/database/meta/count-local-db"
               },
               {
+                "label": "Get Column Metadata",
+                "slug": "nodes/data/database/meta/get-column-metadata-local-db"
+              },
+              {
                 "label": "Get Schema",
                 "slug": "nodes/data/database/meta/schema-local-db"
               },
@@ -3615,6 +4369,10 @@ export const generatedNodeSidebar = [
               {
                 "label": "Make Column Optional",
                 "slug": "nodes/data/database/schema/make-column-optional-local-db"
+              },
+              {
+                "label": "Set Column Metadata",
+                "slug": "nodes/data/database/schema/set-column-metadata-local-db"
               },
               {
                 "label": "Set Table Key",
@@ -4065,6 +4823,14 @@ export const generatedNodeSidebar = [
               {
                 "label": "Head",
                 "slug": "nodes/data/files/operations/path-head"
+              },
+              {
+                "label": "Is File",
+                "slug": "nodes/data/files/operations/path-is-file"
+              },
+              {
+                "label": "Is Folder",
+                "slug": "nodes/data/files/operations/path-is-folder"
               },
               {
                 "label": "List Folders",
@@ -6471,6 +7237,580 @@ export const generatedNodeSidebar = [
       {
         "label": "Transform Image",
         "slug": "nodes/image/video-transform-image"
+      }
+    ]
+  },
+  {
+    "label": "Industrial",
+    "collapsed": true,
+    "items": [
+      {
+        "label": "Overview",
+        "slug": "nodes/industrial"
+      },
+      {
+        "label": "ADS",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/ads"
+          },
+          {
+            "label": "Connect ADS / TwinCAT",
+            "slug": "nodes/industrial/ads/industrial-ads-connect"
+          },
+          {
+            "label": "Disconnect ADS",
+            "slug": "nodes/industrial/ads/industrial-ads-disconnect"
+          },
+          {
+            "label": "Read ADS",
+            "slug": "nodes/industrial/ads/industrial-ads-read"
+          },
+          {
+            "label": "Subscribe ADS Notifications",
+            "slug": "nodes/industrial/ads/industrial-ads-subscribe"
+          },
+          {
+            "label": "Write ADS",
+            "slug": "nodes/industrial/ads/industrial-ads-write"
+          }
+        ]
+      },
+      {
+        "label": "DDS",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/dds"
+          },
+          {
+            "label": "Connect DDS",
+            "slug": "nodes/industrial/dds/industrial-dds-connect"
+          },
+          {
+            "label": "Disconnect DDS",
+            "slug": "nodes/industrial/dds/industrial-dds-disconnect"
+          },
+          {
+            "label": "Publish DDS",
+            "slug": "nodes/industrial/dds/industrial-dds-publish"
+          },
+          {
+            "label": "Receive DDS Sample",
+            "slug": "nodes/industrial/dds/industrial-dds-receive"
+          },
+          {
+            "label": "Subscribe DDS",
+            "slug": "nodes/industrial/dds/industrial-dds-subscribe"
+          },
+          {
+            "label": "Wait for DDS Peer",
+            "slug": "nodes/industrial/dds/industrial-dds-wait-for-match"
+          }
+        ]
+      },
+      {
+        "label": "EtherCAT",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/ethercat"
+          },
+          {
+            "label": "Read EtherCAT Process Data",
+            "slug": "nodes/industrial/ethercat/industrial-ethercat-read"
+          },
+          {
+            "label": "Start EtherCAT Master",
+            "slug": "nodes/industrial/ethercat/industrial-ethercat-start"
+          },
+          {
+            "label": "Stop EtherCAT Master",
+            "slug": "nodes/industrial/ethercat/industrial-ethercat-stop"
+          },
+          {
+            "label": "Watch EtherCAT Process Data",
+            "slug": "nodes/industrial/ethercat/industrial-ethercat-watch"
+          },
+          {
+            "label": "Write EtherCAT Outputs",
+            "slug": "nodes/industrial/ethercat/industrial-ethercat-write"
+          }
+        ]
+      },
+      {
+        "label": "EtherNet IP",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/ethernet-ip"
+          },
+          {
+            "label": "Connect EtherNet/IP Logix",
+            "slug": "nodes/industrial/ethernet-ip/industrial-cip-connect"
+          },
+          {
+            "label": "Disconnect EtherNet/IP",
+            "slug": "nodes/industrial/ethernet-ip/industrial-cip-disconnect"
+          },
+          {
+            "label": "Poll Logix Tag",
+            "slug": "nodes/industrial/ethernet-ip/industrial-cip-poll"
+          },
+          {
+            "label": "Read Logix Tag",
+            "slug": "nodes/industrial/ethernet-ip/industrial-cip-read"
+          },
+          {
+            "label": "Write Logix Tag",
+            "slug": "nodes/industrial/ethernet-ip/industrial-cip-write"
+          }
+        ]
+      },
+      {
+        "label": "HART",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/hart"
+          },
+          {
+            "label": "Connect HART",
+            "slug": "nodes/industrial/hart/industrial-hart-connect"
+          },
+          {
+            "label": "Disconnect HART",
+            "slug": "nodes/industrial/hart/industrial-hart-disconnect"
+          },
+          {
+            "label": "HART Command",
+            "slug": "nodes/industrial/hart/industrial-hart-command"
+          },
+          {
+            "label": "Poll HART",
+            "slug": "nodes/industrial/hart/industrial-hart-poll"
+          }
+        ]
+      },
+      {
+        "label": "IO Link",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/io-link"
+          },
+          {
+            "label": "Connect IO-Link JSON Master",
+            "slug": "nodes/industrial/io-link/industrial-iolink-connect"
+          },
+          {
+            "label": "Disconnect IO-Link JSON Master",
+            "slug": "nodes/industrial/io-link/industrial-iolink-disconnect"
+          },
+          {
+            "label": "Poll IO-Link Process Data",
+            "slug": "nodes/industrial/io-link/industrial-iolink-poll"
+          },
+          {
+            "label": "Read IO-Link ISDU Parameter",
+            "slug": "nodes/industrial/io-link/industrial-iolink-read-parameter"
+          },
+          {
+            "label": "Read IO-Link Process Data",
+            "slug": "nodes/industrial/io-link/industrial-iolink-read"
+          },
+          {
+            "label": "Write IO-Link ISDU Parameter",
+            "slug": "nodes/industrial/io-link/industrial-iolink-write-parameter"
+          },
+          {
+            "label": "Write IO-Link Process Data",
+            "slug": "nodes/industrial/io-link/industrial-iolink-write"
+          }
+        ]
+      },
+      {
+        "label": "Iroh",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/iroh"
+          },
+          {
+            "label": "Bind Iroh Endpoint",
+            "slug": "nodes/industrial/iroh/industrial-iroh-bind"
+          },
+          {
+            "label": "Close Iroh Endpoint",
+            "slug": "nodes/industrial/iroh/industrial-iroh-close-endpoint"
+          },
+          {
+            "label": "Connect Iroh Peer",
+            "slug": "nodes/industrial/iroh/industrial-iroh-connect"
+          },
+          {
+            "label": "Disconnect Iroh Peer",
+            "slug": "nodes/industrial/iroh/industrial-iroh-disconnect"
+          },
+          {
+            "label": "Listen for Iroh Peers",
+            "slug": "nodes/industrial/iroh/industrial-iroh-listen"
+          },
+          {
+            "label": "Receive Iroh Messages",
+            "slug": "nodes/industrial/iroh/industrial-iroh-receive"
+          },
+          {
+            "label": "Send Iroh Message",
+            "slug": "nodes/industrial/iroh/industrial-iroh-send"
+          }
+        ]
+      },
+      {
+        "label": "Kafka",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/kafka"
+          },
+          {
+            "label": "Kafka Connect",
+            "slug": "nodes/industrial/kafka/industrial-kafka-connect"
+          },
+          {
+            "label": "Kafka Consume",
+            "slug": "nodes/industrial/kafka/industrial-kafka-consume"
+          },
+          {
+            "label": "Kafka Disconnect",
+            "slug": "nodes/industrial/kafka/industrial-kafka-disconnect"
+          },
+          {
+            "label": "Kafka Publish",
+            "slug": "nodes/industrial/kafka/industrial-kafka-publish"
+          }
+        ]
+      },
+      {
+        "label": "Modbus",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/modbus"
+          },
+          {
+            "label": "Connect Modbus",
+            "slug": "nodes/industrial/modbus/industrial-modbus-connect"
+          },
+          {
+            "label": "Disconnect Modbus",
+            "slug": "nodes/industrial/modbus/industrial-modbus-disconnect"
+          },
+          {
+            "label": "Poll Modbus",
+            "slug": "nodes/industrial/modbus/industrial-modbus-poll"
+          },
+          {
+            "label": "Read Modbus",
+            "slug": "nodes/industrial/modbus/industrial-modbus-read"
+          },
+          {
+            "label": "Write Modbus",
+            "slug": "nodes/industrial/modbus/industrial-modbus-write"
+          }
+        ]
+      },
+      {
+        "label": "NATS",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/nats"
+          },
+          {
+            "label": "NATS Connect",
+            "slug": "nodes/industrial/nats/industrial-nats-connect"
+          },
+          {
+            "label": "NATS Consume",
+            "slug": "nodes/industrial/nats/industrial-nats-consume"
+          },
+          {
+            "label": "NATS Disconnect",
+            "slug": "nodes/industrial/nats/industrial-nats-disconnect"
+          },
+          {
+            "label": "NATS Publish",
+            "slug": "nodes/industrial/nats/industrial-nats-publish"
+          }
+        ]
+      },
+      {
+        "label": "OPC UA",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/opc-ua"
+          },
+          {
+            "label": "Browse OPC UA",
+            "slug": "nodes/industrial/opc-ua/industrial-opcua-browse"
+          },
+          {
+            "label": "Connect OPC UA",
+            "slug": "nodes/industrial/opc-ua/industrial-opcua-connect"
+          },
+          {
+            "label": "Disconnect OPC UA",
+            "slug": "nodes/industrial/opc-ua/industrial-opcua-disconnect"
+          },
+          {
+            "label": "Read OPC UA",
+            "slug": "nodes/industrial/opc-ua/industrial-opcua-read"
+          },
+          {
+            "label": "Subscribe OPC UA",
+            "slug": "nodes/industrial/opc-ua/industrial-opcua-subscribe"
+          },
+          {
+            "label": "Write OPC UA",
+            "slug": "nodes/industrial/opc-ua/industrial-opcua-write"
+          }
+        ]
+      },
+      {
+        "label": "OPC UA PubSub",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/opc-ua-pubsub"
+          },
+          {
+            "label": "Close OPC UA PubSub",
+            "slug": "nodes/industrial/opc-ua-pubsub/industrial-opcua-pubsub-disconnect"
+          },
+          {
+            "label": "Open OPC UA PubSub",
+            "slug": "nodes/industrial/opc-ua-pubsub/industrial-opcua-pubsub-connect"
+          },
+          {
+            "label": "Publish OPC UA DataSet",
+            "slug": "nodes/industrial/opc-ua-pubsub/industrial-opcua-pubsub-publish"
+          },
+          {
+            "label": "Receive OPC UA DataSet",
+            "slug": "nodes/industrial/opc-ua-pubsub/industrial-opcua-pubsub-receive"
+          },
+          {
+            "label": "Subscribe OPC UA PubSub",
+            "slug": "nodes/industrial/opc-ua-pubsub/industrial-opcua-pubsub-subscribe"
+          }
+        ]
+      },
+      {
+        "label": "PROFIBUS",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/profibus"
+          },
+          {
+            "label": "Listen PROFIBUS State",
+            "slug": "nodes/industrial/profibus/industrial-profibus-listen"
+          },
+          {
+            "label": "Read PROFIBUS State",
+            "slug": "nodes/industrial/profibus/industrial-profibus-read"
+          },
+          {
+            "label": "Set PROFIBUS Mode",
+            "slug": "nodes/industrial/profibus/industrial-profibus-set-mode"
+          },
+          {
+            "label": "Start PROFIBUS DP Master",
+            "slug": "nodes/industrial/profibus/industrial-profibus-connect"
+          },
+          {
+            "label": "Stop PROFIBUS DP Master",
+            "slug": "nodes/industrial/profibus/industrial-profibus-disconnect"
+          },
+          {
+            "label": "Write PROFIBUS Outputs",
+            "slug": "nodes/industrial/profibus/industrial-profibus-write"
+          }
+        ]
+      },
+      {
+        "label": "RabbitMQ",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/rabbitmq"
+          },
+          {
+            "label": "RabbitMQ Connect",
+            "slug": "nodes/industrial/rabbitmq/industrial-amqp-connect"
+          },
+          {
+            "label": "RabbitMQ Consume",
+            "slug": "nodes/industrial/rabbitmq/industrial-amqp-consume"
+          },
+          {
+            "label": "RabbitMQ Disconnect",
+            "slug": "nodes/industrial/rabbitmq/industrial-amqp-disconnect"
+          },
+          {
+            "label": "RabbitMQ Publish",
+            "slug": "nodes/industrial/rabbitmq/industrial-amqp-publish"
+          }
+        ]
+      },
+      {
+        "label": "Redis Streams",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/redis-streams"
+          },
+          {
+            "label": "Redis Streams Connect",
+            "slug": "nodes/industrial/redis-streams/industrial-redis-connect"
+          },
+          {
+            "label": "Redis Streams Consume",
+            "slug": "nodes/industrial/redis-streams/industrial-redis-consume"
+          },
+          {
+            "label": "Redis Streams Disconnect",
+            "slug": "nodes/industrial/redis-streams/industrial-redis-disconnect"
+          },
+          {
+            "label": "Redis Streams Publish",
+            "slug": "nodes/industrial/redis-streams/industrial-redis-publish"
+          }
+        ]
+      },
+      {
+        "label": "Sparkplug",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/sparkplug"
+          },
+          {
+            "label": "Decode Sparkplug B",
+            "slug": "nodes/industrial/sparkplug/sparkplug-decode"
+          },
+          {
+            "label": "Encode Sparkplug B",
+            "slug": "nodes/industrial/sparkplug/sparkplug-encode"
+          },
+          {
+            "label": "Observe Sparkplug State",
+            "slug": "nodes/industrial/sparkplug/sparkplug-observe"
+          },
+          {
+            "label": "Prepare Sparkplug Session",
+            "slug": "nodes/industrial/sparkplug/sparkplug-prepare-session"
+          },
+          {
+            "label": "Sparkplug State Transition",
+            "slug": "nodes/industrial/sparkplug/sparkplug-transition"
+          }
+        ]
+      },
+      {
+        "label": "Zenoh",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/zenoh"
+          },
+          {
+            "label": "Connect Zenoh",
+            "slug": "nodes/industrial/zenoh/industrial-zenoh-connect"
+          },
+          {
+            "label": "Delete Zenoh Key",
+            "slug": "nodes/industrial/zenoh/industrial-zenoh-delete"
+          },
+          {
+            "label": "Disconnect Zenoh",
+            "slug": "nodes/industrial/zenoh/industrial-zenoh-disconnect"
+          },
+          {
+            "label": "Publish Zenoh",
+            "slug": "nodes/industrial/zenoh/industrial-zenoh-publish"
+          },
+          {
+            "label": "Query Zenoh",
+            "slug": "nodes/industrial/zenoh/industrial-zenoh-query"
+          },
+          {
+            "label": "Subscribe Zenoh",
+            "slug": "nodes/industrial/zenoh/industrial-zenoh-subscribe"
+          }
+        ]
+      },
+      {
+        "label": "cifX Controller",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/industrial/cifx-controller"
+          },
+          {
+            "label": "Connect cifX Controller",
+            "slug": "nodes/industrial/cifx-controller/industrial-cifx-connect"
+          },
+          {
+            "label": "Disconnect cifX Controller",
+            "slug": "nodes/industrial/cifx-controller/industrial-cifx-disconnect"
+          },
+          {
+            "label": "Inspect cifX Controller",
+            "slug": "nodes/industrial/cifx-controller/industrial-cifx-info"
+          },
+          {
+            "label": "Poll cifX Inputs",
+            "slug": "nodes/industrial/cifx-controller/industrial-cifx-poll"
+          },
+          {
+            "label": "Read cifX Bus State",
+            "slug": "nodes/industrial/cifx-controller/industrial-cifx-state"
+          },
+          {
+            "label": "Read cifX Inputs",
+            "slug": "nodes/industrial/cifx-controller/industrial-cifx-read"
+          },
+          {
+            "label": "Set cifX Bus State",
+            "slug": "nodes/industrial/cifx-controller/industrial-cifx-set-bus"
+          },
+          {
+            "label": "Write cifX Outputs",
+            "slug": "nodes/industrial/cifx-controller/industrial-cifx-write"
+          }
+        ]
       }
     ]
   },

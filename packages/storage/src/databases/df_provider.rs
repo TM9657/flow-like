@@ -40,6 +40,7 @@ use flow_like_types::async_trait;
 use futures::StreamExt;
 
 use crate::databases::vector::schema::primary_key_columns;
+use flow_like_storage_contracts::column_metadata::has_column_metadata;
 
 use crate::databases::lance_dml::{
     LanceDmlExec, LanceDmlOp, assignments_to_lance_updates, filters_to_lance_predicate,
@@ -169,29 +170,42 @@ struct ZeroColumnSafeProvider {
 }
 
 impl ZeroColumnSafeProvider {
-    /// An overwrite commits the query's schema, which carries no key marker. The key is
-    /// read from the live table because an upsert may have set it after this mount.
-    async fn ensure_overwrite_keeps_key(&self) -> DataFusionResult<()> {
-        let keys = match &self.dml_table {
+    /// An overwrite commits the query's schema, which carries neither the key marker nor
+    /// column metadata. The schema is read from the live table because an upsert or a
+    /// metadata edit may have changed it after this mount.
+    async fn ensure_overwrite_keeps_schema_metadata(&self) -> DataFusionResult<()> {
+        let schema = match &self.dml_table {
             Some(table) => {
                 table
                     .checkout_latest()
                     .await
                     .map_err(|error| DataFusionError::External(error.into()))?;
-                let schema = table
+                table
                     .schema()
                     .await
-                    .map_err(|error| DataFusionError::External(error.into()))?;
-                primary_key_columns(&schema)
+                    .map_err(|error| DataFusionError::External(error.into()))?
             }
-            None => primary_key_columns(&self.schema()),
+            None => self.schema(),
         };
-        if keys.is_empty() {
+        let keys = primary_key_columns(&schema);
+        if !keys.is_empty() {
+            return Err(DataFusionError::Plan(format!(
+                "INSERT OVERWRITE would replace the table schema and drop its key column '{}'; delete the rows and use INSERT INTO instead",
+                keys.join("', '")
+            )));
+        }
+        let described: Vec<&str> = schema
+            .fields()
+            .iter()
+            .filter(|field| has_column_metadata(field.metadata()))
+            .map(|field| field.name().as_str())
+            .collect();
+        if described.is_empty() {
             return Ok(());
         }
         Err(DataFusionError::Plan(format!(
-            "INSERT OVERWRITE would replace the table schema and drop its key column '{}'; delete the rows and use INSERT INTO instead",
-            keys.join("', '")
+            "INSERT OVERWRITE would replace the table schema and drop the metadata of column '{}'; delete the rows and use INSERT INTO instead",
+            described.join("', '")
         )))
     }
 }
@@ -325,7 +339,7 @@ impl TableProvider for ZeroColumnSafeProvider {
             return Err(DataFusionError::Plan("SQL INSERT into geometry tables is unsupported; use validated JSON or Arrow insert/upsert".into()));
         }
         if matches!(insert_op, InsertOp::Overwrite) {
-            self.ensure_overwrite_keeps_key().await?;
+            self.ensure_overwrite_keeps_schema_metadata().await?;
         }
         self.inner.insert_into(state, input, insert_op).await
     }

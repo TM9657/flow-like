@@ -163,6 +163,8 @@ impl Attention {
         self.out
             .forward(output.swap_dims(1, 2).reshape([batch, queries, channels]))
     }
+    // Burn slices take one range per dimension, so a one-element range array is intended.
+    #[allow(clippy::single_range_in_vec_init)]
     pub(crate) fn import(
         mut self,
         prefix: &str,

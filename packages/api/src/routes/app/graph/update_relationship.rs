@@ -1,7 +1,11 @@
 use super::update_object::{UpdateOverlayRowResponse, identity_label, overlay_row_update_error};
 use crate::{
-    audit_branch, ensure_any_permission, error::ApiError, middleware::jwt::AppUser,
-    permission::role_permission::RolePermissions, routes::app::db::ScopeParams, state::AppState,
+    audit_branch, ensure_any_permission,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    routes::app::db::{ScopeParams, column_reader},
+    state::AppState,
 };
 use axum::{
     Extension, Json,
@@ -78,7 +82,7 @@ pub async fn update_relationship(
     Query(scope): Query<ScopeParams>,
     Json(payload): Json<UpdateRelationshipPayload>,
 ) -> Result<Json<UpdateOverlayRowResponse>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -93,6 +97,9 @@ pub async fn update_relationship(
 
     let (connection, overlay) =
         super::load_scoped_overlay_for_write(&state, &user, &app_id, &overlay_id, &scope).await?;
+    let overlay =
+        lancegraph::restrict_overlay(&connection, overlay, &column_reader(&permission, &scope))
+            .await?;
     let relationship_type = payload.relationship_type.clone();
     let source = identity_label(&payload.source);
     let target = identity_label(&payload.target);

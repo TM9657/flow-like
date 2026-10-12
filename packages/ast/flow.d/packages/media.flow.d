@@ -188,6 +188,51 @@ declare namespace ai {
         }
     }
 
+    namespace embedding {
+        // === AI/Embedding ===
+
+        /**
+         * Embeds a file using its extension to select text, image, audio, or video input
+         * @node embed_audio @alias embedAudio
+         * @param source — A media or UTF-8 text file; its extension selects the embedding modality
+         * @param model — A loaded embedding model that supports the detected file modality
+         * @param purpose (optional) — The embedding task supported by the model
+         * @param options (optional) — Optional output dimensions supported by the model
+         * @returns vector — The file embedding
+         * @returns result — The vector with its embedding space, model revision, and usage
+         * @impure has side effects / drives control flow
+         */
+        function embedAudio({ source: Struct, model: Struct, purpose?: string, options?: Struct }): { vector: float[], result: Struct };
+
+        /**
+         * Embeds a file using its extension to select text, image, audio, or video input
+         * @node embed_video @alias embedVideo
+         * @param source — A media or UTF-8 text file; its extension selects the embedding modality
+         * @param model — A loaded embedding model that supports the detected file modality
+         * @param purpose (optional) — The embedding task supported by the model
+         * @param options (optional) — Optional output dimensions supported by the model
+         * @param maxFrames (optional) — Maximum uniformly sampled frames for local models; hosted models sample frames on the server
+         * @param includeAudio (optional) — Include a video's audio track; missing audio returns an error
+         * @returns vector — The file embedding
+         * @returns result — The vector with its embedding space, model revision, and usage
+         * @impure has side effects / drives control flow
+         */
+        function embedVideo({ source: Struct, model: Struct, purpose?: string, options?: Struct, maxFrames?: int, includeAudio?: bool }): { vector: float[], result: Struct };
+
+        /**
+         * Prepares an audio or video file as decoded content or an encoded source for a hosted model
+         * @node prepare_embedding_media @alias prepareEmbeddingMedia
+         * @param source — Audio or video file
+         * @param encoded (optional) — Keep the original media file for hosted models; local models need decoded content
+         * @param kind (optional) — Which media input to prepare
+         * @param maxFrames (optional) — Maximum uniformly sampled video frames
+         * @param includeAudio (optional) — Include the video's audio track; missing audio returns an error
+         * @returns content — Decoded media for Embed Content
+         * @impure has side effects / drives control flow
+         */
+        function prepareMedia({ source: Struct, encoded?: bool, kind?: string, maxFrames?: int, includeAudio?: bool }): Struct;
+    }
+
     namespace image {
         // === AI/Generative/Image ===
 

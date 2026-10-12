@@ -17,6 +17,8 @@ enum LoadedModel {
     #[cfg(feature = "burn")]
     Burn {
         predictor: Box<flow_like_ml_burn::Predictor>,
+        /// Samples per forward pass that keep attention workspaces within the budget.
+        batch_limit: usize,
         // Keep extracted files alive for weight records backed by file mappings.
         _directory: tempfile::TempDir,
     },
@@ -92,18 +94,29 @@ impl LoadedArtifactPredictor {
                         directory.path().join(flow_like_ml_burn::MANIFEST_FILE),
                     )?)?;
                     if state["input_shape"] != artifact.manifest["input_shape"]
-                        || state["config"] != artifact.manifest["config"]
+                        || !burn_adapter::same_training_config(
+                            &state["config"],
+                            &artifact.manifest["config"],
+                        )
                     {
                         return Err(invalid(
                             "Burn artifact manifest differs from packed model state",
                         ));
                     }
+                    let config: flow_like_ml_burn::TrainingConfig =
+                        serde_json::from_value(state["config"].clone())?;
+                    let batch_limit = burn_adapter::inference_batch_limit(
+                        &config.recipe,
+                        &expected,
+                        compute.memory_limit_bytes.saturating_sub(reserved),
+                    )?;
                     let choice = burn_adapter::backend(compute)?;
                     effective_compute = burn_adapter::concrete_compute(compute, &choice)?;
                     let predictor = flow_like_ml_burn::Predictor::load(directory.path(), choice)
                         .map_err(engine_error)?;
                     LoadedModel::Burn {
                         predictor: Box::new(predictor),
+                        batch_limit,
                         _directory: directory,
                     }
                 }
@@ -258,24 +271,36 @@ impl LoadedArtifactPredictor {
                         "model produced non-finite anomaly or regression scores",
                     ));
                 }
-                Ok(
-                    serde_json::json!({"engine":self.artifact.manifest["engine"],"scores":scores,"patch_scores":patch_scores,"labels":self.artifact.manifest["labels"]}),
-                )
+                let mut result = serde_json::json!({"engine":self.artifact.manifest["engine"],"scores":scores,"patch_scores":patch_scores,"labels":self.artifact.manifest["labels"]});
+                // Boosting fitted on one-element value targets answers in the dense shape.
+                if matches!(model, NativeModel::HistogramGradientBoosting(_))
+                    && self.artifact.manifest["output_shape"] == serde_json::json!([1])
+                {
+                    result["output"] =
+                        serde_json::json!({"shape":[scores.len(), 1],"values":scores});
+                }
+                Ok(result)
             }
             #[cfg(feature = "burn")]
-            LoadedModel::Burn { predictor, .. } => {
+            LoadedModel::Burn {
+                predictor,
+                batch_limit,
+                ..
+            } => {
                 if !batch_shape {
                     return Err(invalid(
                         "Burn inference tensor needs a batch dimension matching training",
                     ));
                 }
-                let result = predictor
-                    .predict(&flow_like_ml_burn::TensorData {
-                        shape: input.shape.clone(),
-                        values: input.values.clone(),
-                    })
-                    .map_err(engine_error)?;
-                Ok(serde_json::to_value(result)?)
+                let mut results = batch_chunks(input, *batch_limit)
+                    .map(|chunk| predictor.predict(&chunk).map_err(engine_error));
+                let mut merged = results
+                    .next()
+                    .ok_or_else(|| invalid("inference batch is empty"))??;
+                for result in results {
+                    merge_predictions(&mut merged, result?)?;
+                }
+                Ok(serde_json::to_value(merged)?)
             }
             #[cfg(feature = "burn")]
             LoadedModel::EfficientAd { predictor, .. } => {
@@ -301,15 +326,22 @@ impl LoadedArtifactPredictor {
         if input.shape.len() != self.expected.len() + 1 || input.shape[1..] != self.expected {
             return Err(invalid("feature tensor shape differs from training"));
         }
-        let LoadedModel::Burn { predictor, .. } = &self.model else {
+        let LoadedModel::Burn {
+            predictor,
+            batch_limit,
+            ..
+        } = &self.model
+        else {
             return Err(invalid("spatial features require a Burn image classifier"));
         };
-        let output = predictor
-            .features(&flow_like_ml_burn::TensorData {
-                shape: input.shape.clone(),
-                values: input.values.clone(),
-            })
-            .map_err(engine_error)?;
+        let mut outputs = batch_chunks(input, *batch_limit)
+            .map(|chunk| predictor.features(&chunk).map_err(engine_error));
+        let mut output = outputs
+            .next()
+            .ok_or_else(|| invalid("feature batch is empty"))??;
+        for chunk in outputs {
+            concatenate_batch(&mut output, chunk?)?;
+        }
         let tensor = TensorData {
             shape: output.shape,
             values: output.values,
@@ -317,6 +349,108 @@ impl LoadedArtifactPredictor {
         tensor.validate(self.input_limit).map_err(engine_error)?;
         Ok(tensor)
     }
+
+    /// Identity of this model as the extractor of the features it computes.
+    pub fn feature_extractor(&self) -> Result<FeatureExtractor> {
+        FeatureExtractor::from_artifact(&self.artifact)
+    }
+
+    /// Score embeddings after checking they come from the extractor and image steps the
+    /// model was fitted on. Models fitted without a recorded extractor cannot be checked.
+    pub fn predict_with_extractor(
+        &self,
+        input: &TensorData,
+        extractor: &FeatureExtractor,
+    ) -> Result<Value> {
+        if let Some(recorded) = self
+            .artifact
+            .manifest
+            .get("feature_extractor")
+            .filter(|value| !value.is_null())
+        {
+            let recorded: FeatureExtractor = serde_json::from_value(recorded.clone())?;
+            if recorded != *extractor {
+                return Err(invalid(format!(
+                    "embeddings from extractor {} ({}) differ from the extractor {} ({}) or image steps this model was fitted on; recompute them with the recorded extractor",
+                    extractor.source_id,
+                    extractor.blob_sha256,
+                    recorded.source_id,
+                    recorded.blob_sha256
+                )));
+            }
+        }
+        self.predict(input)
+    }
+}
+
+/// Split a batch along its first dimension into forward passes of at most `limit` samples.
+#[cfg(feature = "burn")]
+fn batch_chunks(
+    input: &TensorData,
+    limit: usize,
+) -> impl Iterator<Item = flow_like_ml_burn::TensorData> {
+    let width = input.values.len() / input.shape[0];
+    let shape = input.shape.clone();
+    input
+        .values
+        .chunks(width * limit.clamp(1, input.shape[0]))
+        .map(move |values| {
+            let mut shape = shape.clone();
+            shape[0] = values.len() / width;
+            flow_like_ml_burn::TensorData {
+                shape,
+                values: values.to_vec(),
+            }
+        })
+}
+
+#[cfg(feature = "burn")]
+fn concatenate_batch(
+    merged: &mut flow_like_ml_burn::TensorData,
+    chunk: flow_like_ml_burn::TensorData,
+) -> Result<()> {
+    if merged.shape.is_empty() || merged.shape.get(1..) != chunk.shape.get(1..) {
+        return Err(engine_error(
+            "model returned differently shaped outputs for one batch",
+        ));
+    }
+    merged.shape[0] += chunk.shape[0];
+    merged.values.extend(chunk.values);
+    Ok(())
+}
+
+#[cfg(feature = "burn")]
+fn extend_batch<T>(merged: &mut Option<Vec<T>>, chunk: Option<Vec<T>>) -> Result<()> {
+    match (merged.as_mut(), chunk) {
+        (Some(merged), Some(chunk)) => merged.extend(chunk),
+        (None, None) => {}
+        _ => {
+            return Err(engine_error(
+                "model returned inconsistent outputs for one batch",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Every prediction field is batch-major, so chunks concatenate in input order.
+#[cfg(feature = "burn")]
+fn merge_predictions(
+    merged: &mut flow_like_ml_burn::PredictionBatch,
+    chunk: flow_like_ml_burn::PredictionBatch,
+) -> Result<()> {
+    let flow_like_ml_burn::PredictionBatch {
+        output,
+        classes,
+        reconstruction_error,
+        detections,
+        instances,
+    } = chunk;
+    concatenate_batch(&mut merged.output, output)?;
+    extend_batch(&mut merged.classes, classes)?;
+    extend_batch(&mut merged.reconstruction_error, reconstruction_error)?;
+    extend_batch(&mut merged.detections, detections)?;
+    extend_batch(&mut merged.instances, instances)
 }
 
 #[cfg(test)]
@@ -634,6 +768,127 @@ mod tests {
         std::fs::remove_dir_all(model_dir.path()).unwrap();
         assert_eq!(loaded.predict(&input).unwrap(), expected);
         assert_eq!(loaded.predict(&input).unwrap(), expected);
+    }
+
+    #[test]
+    #[cfg(feature = "burn")]
+    fn burn_predictions_split_batches_and_load_manifests_with_widened_f32_configs() {
+        use flow_like_ml_burn as burn;
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let model_dir = tempfile::tempdir().unwrap();
+        let config = burn::TrainingConfig {
+            recipe: burn::Recipe::Mlp {
+                input_features: 1,
+                hidden: 4,
+                outputs: 1,
+                objective: burn::Objective::Regression,
+            },
+            backend: burn::BackendChoice::Cpu,
+            epochs: 2,
+            batch_size: 3,
+            learning_rate: 0.01,
+            seed: 42,
+            gradient_clip: 0.1,
+        };
+        let dataset = burn::TensorDataset {
+            inputs: burn::TensorData {
+                shape: vec![5, 1],
+                values: vec![-1.0, -0.5, 0.0, 0.5, 1.0],
+            },
+            targets: burn::Targets::Dense {
+                tensor: burn::TensorData {
+                    shape: vec![5, 1],
+                    values: vec![-2.0, -1.0, 0.0, 1.0, 2.0],
+                },
+            },
+        };
+        burn::train(
+            &config,
+            &dataset,
+            None,
+            model_dir.path(),
+            &burn::CancellationToken::new(),
+            |_| {},
+        )
+        .unwrap();
+        let bytes = burn_adapter::pack_named(
+            model_dir.path(),
+            burn::MANIFEST_FILE,
+            false,
+            32 * 1024 * 1024,
+        )
+        .unwrap();
+        // Artifacts published before the fix carry a json!-widened config.
+        let artifact = publish(
+            &repository,
+            0,
+            &bytes,
+            serde_json::json!({"engine":"burn","format_version":1,"config":config,"input_shape":[1],"labels":[]}),
+        );
+        let mut loaded =
+            LoadedArtifactPredictor::load(&repository, &artifact.id, &ComputeConfig::default())
+                .unwrap();
+        let input = TensorData {
+            shape: dataset.inputs.shape,
+            values: dataset.inputs.values,
+        };
+        let whole = loaded.predict(&input).unwrap();
+        let LoadedModel::Burn { batch_limit, .. } = &mut loaded.model else {
+            panic!("expected a Burn predictor");
+        };
+        *batch_limit = 2;
+        let chunked = loaded.predict(&input).unwrap();
+        assert_eq!(chunked["output"]["shape"], serde_json::json!([5, 1]));
+        let values = |prediction: &Value| -> Vec<f64> {
+            serde_json::from_value(prediction["output"]["values"].clone()).unwrap()
+        };
+        for (left, right) in values(&whole).iter().zip(values(&chunked)) {
+            assert!((left - right).abs() < 1e-6, "{left} != {right}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "burn")]
+    fn prediction_chunks_concatenate_batch_major_fields_and_reject_mismatches() {
+        use flow_like_ml_burn as burn;
+        let batch = |rows: usize, classes: Option<Vec<i64>>| burn::PredictionBatch {
+            output: burn::TensorData {
+                shape: vec![rows, 2],
+                values: vec![rows as f32; rows * 2],
+            },
+            classes,
+            reconstruction_error: None,
+            detections: None,
+            instances: None,
+        };
+        let mut merged = batch(2, Some(vec![0, 1]));
+        merge_predictions(&mut merged, batch(1, Some(vec![1]))).unwrap();
+        assert_eq!(merged.output.shape, vec![3, 2]);
+        assert_eq!(merged.output.values.len(), 6);
+        assert_eq!(merged.classes, Some(vec![0, 1, 1]));
+        assert!(merge_predictions(&mut merged, batch(1, None)).is_err());
+        let mut reshaped = batch(1, Some(vec![0]));
+        reshaped.output.shape = vec![1, 1, 2];
+        assert!(merge_predictions(&mut merged, reshaped).is_err());
+        let input = TensorData {
+            shape: vec![5, 2],
+            values: (0..10).map(|value| value as f32).collect(),
+        };
+        let chunks: Vec<_> = batch_chunks(&input, 2).collect();
+        assert_eq!(
+            chunks.iter().map(|chunk| chunk.shape.clone()).collect::<Vec<_>>(),
+            vec![vec![2, 2], vec![2, 2], vec![1, 2]]
+        );
+        assert_eq!(
+            chunks
+                .into_iter()
+                .flat_map(|chunk| chunk.values)
+                .collect::<Vec<_>>(),
+            input.values
+        );
+        assert_eq!(batch_chunks(&input, usize::MAX).count(), 1);
     }
 
     #[test]

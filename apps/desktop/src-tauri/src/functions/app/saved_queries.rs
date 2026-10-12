@@ -1,4 +1,5 @@
 use flow_like::flow_like_storage::{
+    contracts::column_metadata::ColumnReader,
     databases::graph::lancegraph,
     databases::workbench::{
         self, WorkbenchSurface, WorkbenchView,
@@ -383,6 +384,7 @@ pub async fn query_execute_sql(
         &payload.sql,
         &params,
         payload.limit,
+        &ColumnReader::Unrestricted,
     )
     .await?;
     serde_json::to_value(result).map_err(|e| e.into())

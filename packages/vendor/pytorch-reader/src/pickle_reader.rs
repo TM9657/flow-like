@@ -15,7 +15,7 @@
 use crate::storage::{StorageSource, read_exact_len};
 use crate::{DType, MAX_TENSOR_SIZE, Tensor};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map};
 use std::io::{self, BufRead};
 use std::sync::Arc;
 use thiserror::Error;
@@ -268,15 +268,21 @@ impl Object {
         }
     }
 
-    /// Bytes of string and bytes payload in the object tree, which a clone duplicates.
+    /// Heap bytes the object tree owns besides its nodes, all of which a clone duplicates:
+    /// strings and bytes, dict keys, class, type and storage names, tensor names and shapes.
     fn payload_bytes(&self) -> usize {
         match self {
-            Object::String(s) => s.len(),
+            Object::String(s) | Object::Opaque(s) => s.len(),
             Object::Bytes(b) => b.len(),
-            Object::Opaque(name) => name.len(),
-            Object::Tuple(v) | Object::List(v) => v.iter().map(|o| o.payload_bytes()).sum(),
-            Object::Dict(m) => m.values().map(|o| o.payload_bytes()).sum(),
-            _ => 0,
+            Object::Class { module_name, name } => module_name.len() + name.len(),
+            Object::Storage(storage) => storage.key.len(),
+            Object::Tensor(tensor) => tensor.name.len() + size_of_val(tensor.shape()),
+            Object::Tuple(v) | Object::List(v) => v.iter().map(Object::payload_bytes).sum(),
+            Object::Dict(m) => m
+                .iter()
+                .map(|(key, value)| key.len() + value.payload_bytes())
+                .sum(),
+            Object::None | Object::Bool(_) | Object::Int(_) | Object::Float(_) => 0,
         }
     }
 
@@ -333,8 +339,13 @@ pub(crate) enum PersistentIds {
 }
 
 /// Parse one pickle from `r`, leaving it positioned just after the `STOP` opcode.
+///
+/// The tensors in it are checked to get distinct names of bounded size from
+/// [`extract_tensors`] (see [`check_tensor_names`]).
 pub(crate) fn read_pickle<R: BufRead>(r: &mut R, ids: &PersistentIds) -> Result<Object> {
-    Unpickler::new(ids).run(r)
+    let root = Unpickler::new(ids).run(r)?;
+    check_tensor_names(&root)?;
+    Ok(root)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1009,9 +1020,20 @@ pub(crate) fn build_tensor(
 /// rejected as a memo bomb (each such opcode deep-copies an object).
 const MAX_COPIED_NODES: usize = 1_000_000;
 
-/// Total string and bytes payload those copies may duplicate. A pickle can memoize one
-/// large value and fetch it many times, so node counts alone do not bound memory.
+/// Total heap payload (see [`Object::payload_bytes`]) those copies may duplicate. A pickle
+/// can memoize one large value and fetch it many times, so node counts alone do not bound
+/// memory.
 const MAX_COPIED_BYTES: usize = 64 << 20;
+
+/// Most stack entries, open marks and memo slots held at once.
+///
+/// A stack entry takes about 90 bytes however little pickle made it (`N` is one byte), so
+/// the pickle's length alone would let it ask for almost a hundred times its size.
+const MAX_LIVE_ENTRIES: usize = 1 << 22;
+
+/// Longest module or attribute name a `GLOBAL` or `STACK_GLOBAL` may give. Python names
+/// are short; a long one only makes each copy of the class expensive.
+const MAX_GLOBAL_NAME_LEN: usize = 4096;
 
 /// Deepest container nesting accepted.
 ///
@@ -1052,12 +1074,28 @@ impl<'a> Unpickler<'a> {
         }
     }
 
-    fn push_scalar(&mut self, object: Object) {
-        self.stack.push(Entry {
+    /// Refuse another stack entry, mark or memo slot once [`MAX_LIVE_ENTRIES`] are held.
+    fn ensure_room(&self) -> Result<()> {
+        if self.stack.len() + self.marks.len() + self.memo.len() >= MAX_LIVE_ENTRIES {
+            return Err(PickleError::InvalidData(format!(
+                "pickle needs more than {MAX_LIVE_ENTRIES} stack, mark and memo entries at once"
+            )));
+        }
+        Ok(())
+    }
+
+    fn push_entry(&mut self, entry: Entry) -> Result<()> {
+        self.ensure_room()?;
+        self.stack.push(entry);
+        Ok(())
+    }
+
+    fn push_scalar(&mut self, object: Object) -> Result<()> {
+        self.push_entry(Entry {
             object,
             depth: 0,
             memo: None,
-        });
+        })
     }
 
     fn push(&mut self, object: Object, depth: u32) -> Result<()> {
@@ -1066,12 +1104,11 @@ impl<'a> Unpickler<'a> {
                 "pickle nesting exceeds {MAX_NESTING_DEPTH} levels"
             )));
         }
-        self.stack.push(Entry {
+        self.push_entry(Entry {
             object,
             depth,
             memo: None,
-        });
-        Ok(())
+        })
     }
 
     /// Whether the innermost `MARK` sits on top of the stack, with no value above it.
@@ -1149,6 +1186,9 @@ impl<'a> Unpickler<'a> {
     }
 
     fn memo_put(&mut self, idx: u32) -> Result<()> {
+        if !self.memo.contains_key(&idx) {
+            self.ensure_room()?;
+        }
         let top = self.top_mut()?;
         top.memo = Some(idx);
         let entry = top.clone();
@@ -1209,9 +1249,9 @@ impl<'a> Unpickler<'a> {
                 OpCode::Stop => break,
 
                 // Scalars
-                OpCode::None => self.push_scalar(Object::None),
-                OpCode::NewTrue => self.push_scalar(Object::Bool(true)),
-                OpCode::NewFalse => self.push_scalar(Object::Bool(false)),
+                OpCode::None => self.push_scalar(Object::None)?,
+                OpCode::NewTrue => self.push_scalar(Object::Bool(true))?,
+                OpCode::NewFalse => self.push_scalar(Object::Bool(false))?,
                 OpCode::Int => {
                     let text = read_line(r)?;
                     // Protocol 0 spells booleans as INT 00 / INT 01.
@@ -1220,90 +1260,95 @@ impl<'a> Unpickler<'a> {
                         "01" => Object::Bool(true),
                         _ => Object::Int(parse_int(&text)?),
                     };
-                    self.push_scalar(value);
+                    self.push_scalar(value)?;
                 }
                 OpCode::Long => {
                     let text = read_line(r)?;
                     let text = text.strip_suffix('L').unwrap_or(&text);
-                    self.push_scalar(parse_long(text)?);
+                    self.push_scalar(parse_long(text)?)?;
                 }
                 OpCode::Float => {
                     let text = read_line(r)?;
                     let value = text.parse::<f64>().map_err(|e| {
                         PickleError::InvalidData(format!("Invalid FLOAT value '{text}': {e}"))
                     })?;
-                    self.push_scalar(Object::Float(value));
+                    self.push_scalar(Object::Float(value))?;
                 }
                 OpCode::Unicode => {
                     let text = read_raw_unicode_escape_line(r)?;
-                    self.push_scalar(Object::String(text));
+                    self.push_scalar(Object::String(text))?;
                 }
                 OpCode::BinInt => {
                     let v = r.read_i32::<LittleEndian>()?;
-                    self.push_scalar(Object::Int(v as i64));
+                    self.push_scalar(Object::Int(v as i64))?;
                 }
                 OpCode::BinInt1 => {
                     let v = r.read_u8()?;
-                    self.push_scalar(Object::Int(v as i64));
+                    self.push_scalar(Object::Int(v as i64))?;
                 }
                 OpCode::BinInt2 => {
                     let v = r.read_u16::<LittleEndian>()?;
-                    self.push_scalar(Object::Int(v as i64));
+                    self.push_scalar(Object::Int(v as i64))?;
                 }
                 OpCode::BinFloat => {
                     let v = r.read_f64::<BigEndian>()?;
-                    self.push_scalar(Object::Float(v));
+                    self.push_scalar(Object::Float(v))?;
                 }
                 OpCode::Long1 => {
                     let len = r.read_u8()? as u64;
                     let bytes = read_exact_len(r, len, STRING_PREALLOC_BOUND)?;
-                    self.push_scalar(long_object(&bytes));
+                    self.push_scalar(long_object(&bytes))?;
                 }
                 OpCode::Long4 => {
                     let len = r.read_u32::<LittleEndian>()? as u64;
                     let bytes = read_exact_len(r, len, STRING_PREALLOC_BOUND)?;
-                    self.push_scalar(long_object(&bytes));
+                    self.push_scalar(long_object(&bytes))?;
                 }
 
                 // Strings and bytes
                 OpCode::ShortBinUnicode => {
                     let len = r.read_u8()? as u64;
-                    self.push_scalar(read_string(r, len)?);
+                    self.push_scalar(read_string(r, len)?)?;
                 }
                 OpCode::BinUnicode => {
                     let len = r.read_u32::<LittleEndian>()? as u64;
-                    self.push_scalar(read_string(r, len)?);
+                    self.push_scalar(read_string(r, len)?)?;
                 }
                 OpCode::ShortBinString => {
                     let len = r.read_u8()? as u64;
-                    self.push_scalar(read_py2_string(r, len)?);
+                    self.push_scalar(read_py2_string(r, len)?)?;
                 }
                 OpCode::BinString => {
                     let len = r.read_u32::<LittleEndian>()? as u64;
-                    self.push_scalar(read_py2_string(r, len)?);
+                    self.push_scalar(read_py2_string(r, len)?)?;
                 }
                 OpCode::BinUnicode8 => {
                     let len = r.read_u64::<LittleEndian>()?;
-                    self.push_scalar(read_string(r, len)?);
+                    self.push_scalar(read_string(r, len)?)?;
                 }
                 OpCode::ShortBinBytes => {
                     let len = r.read_u8()? as u64;
-                    self.push_scalar(Object::Bytes(read_bytes(r, len)?));
+                    self.push_scalar(Object::Bytes(read_bytes(r, len)?))?;
                 }
                 OpCode::BinBytes => {
                     let len = r.read_u32::<LittleEndian>()? as u64;
-                    self.push_scalar(Object::Bytes(read_bytes(r, len)?));
+                    self.push_scalar(Object::Bytes(read_bytes(r, len)?))?;
                 }
                 OpCode::BinBytes8 | OpCode::ByteArray8 => {
                     let len = r.read_u64::<LittleEndian>()?;
-                    self.push_scalar(Object::Bytes(read_bytes(r, len)?));
+                    self.push_scalar(Object::Bytes(read_bytes(r, len)?))?;
                 }
 
                 // Containers
-                OpCode::Mark => self.marks.push(self.stack.len()),
-                OpCode::EmptyTuple => self.push_scalar(Object::Tuple(Vec::new())),
-                OpCode::EmptyList | OpCode::EmptySet => self.push_scalar(Object::List(Vec::new())),
-                OpCode::EmptyDict => self.push_scalar(Object::Dict(HashMap::new())),
+                OpCode::Mark => {
+                    self.ensure_room()?;
+                    self.marks.push(self.stack.len());
+                }
+                OpCode::EmptyTuple => self.push_scalar(Object::Tuple(Vec::new()))?,
+                OpCode::EmptyList | OpCode::EmptySet => {
+                    self.push_scalar(Object::List(Vec::new()))?
+                }
+                OpCode::EmptyDict => self.push_scalar(Object::Dict(HashMap::new()))?,
                 OpCode::Tuple => {
                     let (items, depth) = self.pop_to_mark()?;
                     self.push(Object::Tuple(items), depth + 1)?;
@@ -1369,24 +1414,24 @@ impl<'a> Unpickler<'a> {
                 OpCode::Dup => {
                     let top = self.top()?.clone();
                     self.charge_copy(&top.object)?;
-                    self.stack.push(top);
+                    self.push_entry(top)?;
                 }
 
                 // Memo
                 OpCode::Get => {
                     let idx = parse_index(&read_line(r)?)?;
                     let entry = self.memo_get(idx)?;
-                    self.stack.push(entry);
+                    self.push_entry(entry)?;
                 }
                 OpCode::BinGet => {
                     let idx = r.read_u8()? as u32;
                     let entry = self.memo_get(idx)?;
-                    self.stack.push(entry);
+                    self.push_entry(entry)?;
                 }
                 OpCode::LongBinGet => {
                     let idx = r.read_u32::<LittleEndian>()?;
                     let entry = self.memo_get(idx)?;
-                    self.stack.push(entry);
+                    self.push_entry(entry)?;
                 }
                 OpCode::Put => {
                     let idx = parse_index(&read_line(r)?)?;
@@ -1409,14 +1454,14 @@ impl<'a> Unpickler<'a> {
                 OpCode::Global => {
                     let module_name = read_line(r)?;
                     let name = read_line(r)?;
-                    self.push_scalar(Object::Class { module_name, name });
+                    self.push_scalar(global_class(module_name, name)?)?;
                 }
                 OpCode::StackGlobal => {
                     let name = self.pop_object()?;
                     let module_name = self.pop_object()?;
                     match (module_name, name) {
                         (Object::String(module_name), Object::String(name)) => {
-                            self.push_scalar(Object::Class { module_name, name })
+                            self.push_scalar(global_class(module_name, name)?)?
                         }
                         _ => {
                             return Err(PickleError::InvalidData(
@@ -1428,12 +1473,12 @@ impl<'a> Unpickler<'a> {
                 OpCode::PersId => {
                     let pid = Object::String(read_line(r)?);
                     let obj = resolve_persistent_id(pid, self.ids)?;
-                    self.push_scalar(obj);
+                    self.push_scalar(obj)?;
                 }
                 OpCode::BinPersId => {
                     let pid = self.pop_object()?;
                     let obj = resolve_persistent_id(pid, self.ids)?;
-                    self.push_scalar(obj);
+                    self.push_scalar(obj)?;
                 }
                 OpCode::Reduce => {
                     let args = self.pop()?;
@@ -1446,7 +1491,7 @@ impl<'a> Unpickler<'a> {
                     let args = self.pop_object()?;
                     let cls = self.pop_object()?;
                     let obj = opaque(&cls, &args)?;
-                    self.push_scalar(obj);
+                    self.push_scalar(obj)?;
                 }
                 OpCode::NewObjEx => {
                     let kwargs = self.pop_object()?;
@@ -1454,15 +1499,15 @@ impl<'a> Unpickler<'a> {
                     let cls = self.pop_object()?;
                     opaque(&cls, &kwargs)?;
                     let obj = opaque(&cls, &args)?;
-                    self.push_scalar(obj);
+                    self.push_scalar(obj)?;
                 }
                 OpCode::Build => {
                     let state = self.pop()?;
                     let object = self.pop()?;
                     let memo = object.memo;
                     let (built, depth) = match (object.object, state.object) {
-                        (Object::Dict(mut dict), Object::Dict(update)) => {
-                            dict.extend(update);
+                        (Object::Dict(mut dict), Object::Dict(attrs)) => {
+                            set_dict_state(&mut dict, attrs)?;
                             (Object::Dict(dict), object.depth.max(state.depth))
                         }
                         // A dict subclass with non-dict state: the items are what matter,
@@ -1647,6 +1692,16 @@ fn int_from_le_bytes(bytes: &[u8]) -> Option<i64> {
     Some(i64::from_le_bytes(buf))
 }
 
+/// The class a `GLOBAL` or `STACK_GLOBAL` names, refusing names past [`MAX_GLOBAL_NAME_LEN`].
+fn global_class(module_name: String, name: String) -> Result<Object> {
+    if module_name.len().max(name.len()) > MAX_GLOBAL_NAME_LEN {
+        return Err(PickleError::InvalidData(format!(
+            "global name longer than {MAX_GLOBAL_NAME_LEN} bytes"
+        )));
+    }
+    Ok(Object::Class { module_name, name })
+}
+
 fn dict_key(key: Object) -> Result<String> {
     match key {
         Object::String(s) => Ok(s),
@@ -1667,9 +1722,123 @@ fn insert_pairs(dict: &mut HashMap<String, Object>, items: Vec<Object>) -> Resul
     Ok(())
 }
 
+/// Apply a dict's `BUILD` state, its attributes, which are read as items too (a
+/// state_dict's `_metadata`). Python keeps an item and an attribute of the same name apart,
+/// so the item stays, and an attribute holding tensor data must not vanish behind it.
+fn set_dict_state(
+    dict: &mut HashMap<String, Object>,
+    attrs: HashMap<String, Object>,
+) -> Result<()> {
+    for (name, value) in attrs {
+        match dict.entry(name) {
+            hash_map::Entry::Vacant(slot) => {
+                slot.insert(value);
+            }
+            hash_map::Entry::Occupied(item) if value.holds_tensor_data() => {
+                return Err(PickleError::UnsupportedType(format!(
+                    "dict whose tensor-bearing attribute '{}' shares its name with an item",
+                    item.key()
+                )));
+            }
+            hash_map::Entry::Occupied(_) => {}
+        }
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------------------------
 // Tensor extraction
 // ---------------------------------------------------------------------------------------------
+
+/// Longest dotted name a tensor may get.
+const MAX_TENSOR_NAME_LEN: usize = 4096;
+
+/// Most bytes the dotted names of all tensors may take together. A key is repeated in the
+/// name of every tensor below it, so a short pickle could otherwise put one long key above
+/// many fetches of a memoized tensor and ask for terabytes of names.
+const MAX_TENSOR_NAME_BYTES: usize = 64 << 20;
+
+/// Check that [`extract_tensors`] can name every tensor in a parsed pickle: no name longer
+/// than [`MAX_TENSOR_NAME_LEN`], all of them within [`MAX_TENSOR_NAME_BYTES`], and no two
+/// alike, as one would silently replace the other. The names under any dict inside `root`
+/// are these names less a common prefix, so they pass as well.
+fn check_tensor_names(root: &Object) -> Result<()> {
+    TensorNames::default().visit(root, 0)
+}
+
+/// The walk behind [`check_tensor_names`]. Each name is held only in `path` until it has
+/// passed the limits.
+#[derive(Default)]
+struct TensorNames {
+    /// Dotted path to the object being visited.
+    path: String,
+    /// Bytes taken by the names recorded so far.
+    total: usize,
+    seen: HashSet<String>,
+}
+
+impl TensorNames {
+    fn visit(&mut self, obj: &Object, depth: usize) -> Result<()> {
+        match obj {
+            Object::Dict(dict) => {
+                for (key, value) in dict.iter().filter(|(_, value)| may_hold_tensors(value)) {
+                    self.visit_child(key, value, depth)?;
+                }
+            }
+            Object::List(items) | Object::Tuple(items) => {
+                let items = items.iter().enumerate();
+                for (index, item) in items.filter(|(_, item)| may_hold_tensors(item)) {
+                    self.visit_child(&index.to_string(), item, depth)?;
+                }
+            }
+            Object::Tensor(_) => self.record()?,
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn visit_child(&mut self, component: &str, child: &Object, depth: usize) -> Result<()> {
+        let parent_len = self.path.len();
+        if depth > 0 {
+            self.path.push('.');
+        }
+        self.path.push_str(component);
+        let visited = self.visit(child, depth + 1);
+        self.path.truncate(parent_len);
+        visited
+    }
+
+    fn record(&mut self) -> Result<()> {
+        let len = self.path.len();
+        if len > MAX_TENSOR_NAME_LEN {
+            let start: String = self.path.chars().take(64).collect();
+            return Err(PickleError::InvalidData(format!(
+                "tensor name starting '{start}' is {len} bytes, above the {MAX_TENSOR_NAME_LEN} byte limit"
+            )));
+        }
+        self.total += len;
+        if self.total > MAX_TENSOR_NAME_BYTES {
+            return Err(PickleError::InvalidData(format!(
+                "tensor names take more than {MAX_TENSOR_NAME_BYTES} bytes together"
+            )));
+        }
+        if !self.seen.insert(self.path.clone()) {
+            return Err(PickleError::InvalidData(format!(
+                "more than one tensor is named '{}'",
+                self.path
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// Whether `obj` is a tensor or a container that can hold one.
+fn may_hold_tensors(obj: &Object) -> bool {
+    matches!(
+        obj,
+        Object::Dict(_) | Object::List(_) | Object::Tuple(_) | Object::Tensor(_)
+    )
+}
 
 /// Walk a parsed object tree, collecting each tensor found under a nested dict/list/tuple path.
 ///
@@ -1678,7 +1847,8 @@ fn insert_pairs(dict: &mut HashMap<String, Object>, items: Vec<Object>) -> Resul
 /// parameter naming and matches how `nn.ModuleList` entries appear in a PyTorch state_dict,
 /// so such files load into the natural burn module without remapping. A tensor is built
 /// without a name, its path being assembled only here, so this is also where each one gets
-/// its final identity.
+/// its final identity. [`read_pickle`] has checked these names, so each is bounded and
+/// none is shared.
 pub(crate) fn extract_tensors(dict: HashMap<String, Object>) -> HashMap<String, Tensor> {
     fn walk(obj: Object, path: &mut Vec<String>, tensors: &mut HashMap<String, Tensor>) {
         match obj {
@@ -1698,7 +1868,11 @@ pub(crate) fn extract_tensors(dict: HashMap<String, Object>) -> HashMap<String, 
             }
             Object::Tensor(mut tensor) => {
                 tensor.name = path.join(".");
-                tensors.insert(tensor.name.clone(), tensor);
+                let replaced = tensors.insert(tensor.name.clone(), tensor);
+                debug_assert!(
+                    replaced.is_none(),
+                    "read_pickle lets no two tensors share a name"
+                );
             }
             _ => {}
         }
@@ -1711,7 +1885,7 @@ pub(crate) fn extract_tensors(dict: HashMap<String, Object>) -> HashMap<String, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::{read_as, test_data_path};
+    use crate::tests::{PICKLED_TENSOR, pickle_str, read_as, test_data_path};
     use std::io::Cursor;
 
     fn fixture_source() -> Arc<StorageSource> {
@@ -1766,6 +1940,14 @@ mod tests {
         read_pickle(&mut Cursor::new(bytes), &PersistentIds::Unavailable)
     }
 
+    /// Parse `bytes` with the fixture's storages available, for pickles holding tensors.
+    fn with_storages(bytes: &[u8]) -> Result<Object> {
+        read_pickle(
+            &mut Cursor::new(bytes),
+            &PersistentIds::Storages(fixture_source()),
+        )
+    }
+
     #[test]
     fn test_memo_bomb_mitigation() {
         // Generate the Billion Laughs equivalent for pickles
@@ -1810,6 +1992,123 @@ mod tests {
             plain(&bytes).unwrap_err(),
             PickleError::InvalidData(msg) if msg.contains("memo bomb")
         ));
+    }
+
+    #[test]
+    fn copies_are_charged_for_every_byte_they_own() {
+        let source = fixture_source();
+        let Object::Tuple(pid) = storage_pid("FloatStorage", "12", 32) else {
+            unreachable!()
+        };
+        let storage = resolve_storage_id(&pid, &source).unwrap();
+        let tensor = rebuild(rebuild_args(
+            "FloatStorage",
+            "0",
+            32,
+            0,
+            &[2, 3],
+            &[3, 1],
+            &source,
+        ))
+        .unwrap();
+        let class = Object::Class {
+            module_name: "torch".to_string(),
+            name: "Tensor".to_string(),
+        };
+        let dict = Object::Dict(HashMap::from([(
+            "key".to_string(),
+            Object::String("value".to_string()),
+        )]));
+        assert_eq!(class.payload_bytes(), "torchTensor".len());
+        assert_eq!(Object::Storage(storage).payload_bytes(), "12".len());
+        assert_eq!(
+            Object::Tensor(tensor).payload_bytes(),
+            2 * size_of::<usize>()
+        );
+        assert_eq!(dict.payload_bytes(), "keyvalue".len());
+    }
+
+    #[test]
+    fn copies_of_a_class_are_charged_for_its_name() {
+        // A class with a 4000-byte module name duplicated 20,000 times would copy 80 MB
+        // while counting one node per copy.
+        let mut bytes = [
+            b"\x80\x04".as_slice(),
+            &pickle_str(&"m".repeat(4000)),
+            b"\x8c\x01b\x93",
+        ]
+        .concat();
+        bytes.extend(std::iter::repeat_n(b'2', 20_000));
+        bytes.push(b'.');
+        assert!(matches!(
+            plain(&bytes).unwrap_err(),
+            PickleError::InvalidData(msg) if msg.contains("memo bomb")
+        ));
+    }
+
+    #[test]
+    fn copies_of_a_dict_are_charged_for_its_keys() {
+        // A dict whose one key is 2 MiB, memoized and fetched 40 times, would copy 80 MiB.
+        let mut bytes = [
+            b"\x80\x02}".as_slice(),
+            &pickle_str(&"k".repeat(2 << 20)),
+            b"Nsq\x00(",
+        ]
+        .concat();
+        for _ in 0..40 {
+            bytes.extend_from_slice(b"h\x00");
+        }
+        bytes.extend_from_slice(b"t.");
+        assert!(matches!(
+            plain(&bytes).unwrap_err(),
+            PickleError::InvalidData(msg) if msg.contains("memo bomb")
+        ));
+    }
+
+    #[test]
+    fn long_global_names_are_refused() {
+        let long = "m".repeat(MAX_GLOBAL_NAME_LEN + 1);
+        let stack_global = [
+            b"\x80\x04".as_slice(),
+            &pickle_str(&long),
+            b"\x8c\x01b\x93.",
+        ]
+        .concat();
+        let global = [b"\x80\x02c".as_slice(), long.as_bytes(), b"\nb\n."].concat();
+        for bytes in [stack_global, global] {
+            assert!(matches!(
+                plain(&bytes).unwrap_err(),
+                PickleError::InvalidData(msg) if msg.contains("global name longer")
+            ));
+        }
+        let at_limit = [b"\x80\x02c".as_slice(), &long.as_bytes()[1..], b"\nb\n."].concat();
+        assert!(matches!(
+            plain(&at_limit).unwrap(),
+            Object::Class { module_name, .. } if module_name.len() == MAX_GLOBAL_NAME_LEN
+        ));
+    }
+
+    #[test]
+    fn entries_held_at_once_are_capped() {
+        // Open marks, as a pickle of MARK opcodes leaves them, fill all slots but one. A
+        // value fits in that one; a second value, a DUP, a new memo slot or a MARK does not.
+        let ids = PersistentIds::Unavailable;
+        let nearly_full = || {
+            let mut unpickler = Unpickler::new(&ids);
+            unpickler.marks.resize(MAX_LIVE_ENTRIES - 1, 0);
+            unpickler
+        };
+        let run = |tail: &[u8]| nearly_full().run(&mut Cursor::new(tail));
+        assert!(matches!(run(b"N.").unwrap(), Object::None));
+        for tail in [b"NN.".as_slice(), b"N2.", b"Nq\x00.", b"N(."] {
+            assert!(
+                matches!(
+                    run(tail).unwrap_err(),
+                    PickleError::InvalidData(msg) if msg.contains("at once")
+                ),
+                "{tail:?}"
+            );
+        }
     }
 
     #[test]
@@ -2727,5 +3026,134 @@ mod tests {
         // The indexed names match burn's Vec<Module> naming; the tensor data is intact.
         let tensor = tensors.remove("weights.0").unwrap();
         assert_eq!(read_as::<f32>(&tensor), [0.0, 1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn tensor_names_past_the_length_limit_are_refused() {
+        let key = pickle_str(&"k".repeat(MAX_TENSOR_NAME_LEN));
+        let under_key = |value: &[u8]| [b"\x80\x02}".as_slice(), &key, value, b"s."].concat();
+        // A name of exactly the limit parses, as does a long key above no tensor.
+        assert!(with_storages(&under_key(PICKLED_TENSOR)).is_ok());
+        assert!(with_storages(&under_key(b"}K\x01K\x02s")).is_ok());
+        let nested = [b"}".as_slice(), &pickle_str("w"), PICKLED_TENSOR, b"s"].concat();
+        assert!(matches!(
+            with_storages(&under_key(&nested)).unwrap_err(),
+            PickleError::InvalidData(msg) if msg.contains("is 4098 bytes, above the 4096 byte limit")
+        ));
+    }
+
+    #[test]
+    fn tensor_names_are_bounded_in_total() {
+        // {"ab": [t, t]} names `ab.0` and `ab.1`, eight bytes together. A walk that has
+        // already counted all but eight bytes of the budget takes both; one more refuses.
+        let bytes = [
+            b"\x80\x02}".as_slice(),
+            &pickle_str("ab"),
+            b"](",
+            PICKLED_TENSOR,
+            b"q\x00h\x00es.",
+        ]
+        .concat();
+        let root = with_storages(&bytes).unwrap();
+        let walk_with_used = |used: usize| {
+            TensorNames {
+                total: used,
+                ..TensorNames::default()
+            }
+            .visit(&root, 0)
+        };
+        assert!(walk_with_used(MAX_TENSOR_NAME_BYTES - 8).is_ok());
+        assert!(matches!(
+            walk_with_used(MAX_TENSOR_NAME_BYTES - 7).unwrap_err(),
+            PickleError::InvalidData(msg) if msg.contains("bytes together")
+        ));
+    }
+
+    #[test]
+    fn tensors_that_would_share_a_name_are_refused() {
+        // A dotted key beside a nested dict, and beside a list: each pair flattens to one
+        // name, and which tensor survived would depend on hash order.
+        let nested = [
+            b"\x80\x02}(".as_slice(),
+            &pickle_str("model"),
+            b"}",
+            &pickle_str("w"),
+            PICKLED_TENSOR,
+            b"s",
+            &pickle_str("model.w"),
+            PICKLED_TENSOR,
+            b"u.",
+        ]
+        .concat();
+        let listed = [
+            b"\x80\x02}(".as_slice(),
+            &pickle_str("a"),
+            b"](",
+            PICKLED_TENSOR,
+            b"e",
+            &pickle_str("a.0"),
+            PICKLED_TENSOR,
+            b"u.",
+        ]
+        .concat();
+        for (bytes, name) in [(nested, "model.w"), (listed, "a.0")] {
+            assert!(matches!(
+                with_storages(&bytes).unwrap_err(),
+                PickleError::InvalidData(msg) if msg == format!("more than one tensor is named '{name}'")
+            ));
+        }
+
+        // One tensor saved under two names, as tied weights are, keeps both.
+        let tied = [
+            b"\x80\x02}(".as_slice(),
+            &pickle_str("a"),
+            PICKLED_TENSOR,
+            b"q\x00",
+            &pickle_str("b"),
+            b"h\x00u.",
+        ]
+        .concat();
+        let Object::Dict(dict) = with_storages(&tied).unwrap() else {
+            panic!("expected dict");
+        };
+        let mut names: Vec<_> = extract_tensors(dict).into_keys().collect();
+        names.sort();
+        assert_eq!(names, ["a", "b"]);
+    }
+
+    #[test]
+    fn dict_state_keeps_items_of_the_same_name() {
+        // OrderedDict items {"w": 1} built with state {"w": 2, "_metadata": {}}. The state
+        // sets attributes, so the item stays, and `_metadata` is still read beside it.
+        let ordered_dict = |state: &[u8]| {
+            [
+                b"\x80\x02ccollections\nOrderedDict\n)R(".as_slice(),
+                &pickle_str("w"),
+                b"K\x01u",
+                state,
+                b"b.",
+            ]
+            .concat()
+        };
+        let state = [
+            b"}(".as_slice(),
+            &pickle_str("w"),
+            b"K\x02",
+            &pickle_str("_metadata"),
+            b"}u",
+        ]
+        .concat();
+        let Object::Dict(dict) = plain(&ordered_dict(&state)).unwrap() else {
+            panic!("expected dict");
+        };
+        assert!(matches!(dict["w"], Object::Int(1)));
+        assert!(matches!(&dict["_metadata"], Object::Dict(d) if d.is_empty()));
+
+        // An attribute holding a tensor is refused rather than dropped behind the item.
+        let state = [b"}".as_slice(), &pickle_str("w"), PICKLED_TENSOR, b"s"].concat();
+        assert!(matches!(
+            with_storages(&ordered_dict(&state)).unwrap_err(),
+            PickleError::UnsupportedType(name) if name.contains("attribute 'w'")
+        ));
     }
 }

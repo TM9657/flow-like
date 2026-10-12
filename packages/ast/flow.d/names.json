@@ -2033,6 +2033,51 @@
     "class": null,
     "category": "AI/Processing"
   },
+  "ai_systemone_choice": {
+    "qualified": "ai::systemone::choice",
+    "namespace": "ai.systemone",
+    "alias": "choice",
+    "flat": "aiSystemoneChoice",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Decisions"
+  },
+  "ai_systemone_find_model": {
+    "qualified": "ai::systemone::findModel",
+    "namespace": "ai.systemone",
+    "alias": "findModel",
+    "flat": "aiSystemoneFindModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Decisions"
+  },
+  "ai_systemone_invoke": {
+    "qualified": "ai::systemone::invoke",
+    "namespace": "ai.systemone",
+    "alias": "invoke",
+    "flat": "aiSystemoneInvoke",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Decisions"
+  },
+  "ai_systemone_noul": {
+    "qualified": "ai::systemone::noul",
+    "namespace": "ai.systemone",
+    "alias": "noul",
+    "flat": "aiSystemoneNoul",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Decisions"
+  },
+  "ai_systemone_score": {
+    "qualified": "ai::systemone::score",
+    "namespace": "ai.systemone",
+    "alias": "score",
+    "flat": "aiSystemoneScore",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Decisions"
+  },
   "ai_video_build_fal": {
     "qualified": "ai::video::provider::fal",
     "namespace": "ai.video.provider",
@@ -8612,6 +8657,33 @@
     "class": "SmtpConnection",
     "category": "Email/SMTP"
   },
+  "embed_audio": {
+    "qualified": "ai::embedding::embedAudio",
+    "namespace": "ai.embedding",
+    "alias": "embedAudio",
+    "flat": "embedAudio",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Embedding"
+  },
+  "embed_content": {
+    "qualified": "ai::embedding::embedContent",
+    "namespace": "ai.embedding",
+    "alias": "embedContent",
+    "flat": "embedContent",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Embedding"
+  },
+  "embed_contents": {
+    "qualified": "ai::embedding::embedContents",
+    "namespace": "ai.embedding",
+    "alias": "embedContents",
+    "flat": "embedContents",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Embedding"
+  },
   "embed_document": {
     "qualified": "ai::embedding::embedDocument",
     "namespace": "ai.embedding",
@@ -8635,6 +8707,24 @@
     "namespace": "ai.embedding",
     "alias": "embedQuery",
     "flat": "embedQuery",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Embedding"
+  },
+  "embed_video": {
+    "qualified": "ai::embedding::embedVideo",
+    "namespace": "ai.embedding",
+    "alias": "embedVideo",
+    "flat": "embedVideo",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Embedding"
+  },
+  "embedding_model_info": {
+    "qualified": "ai::embedding::modelInfo",
+    "namespace": "ai.embedding",
+    "alias": "modelInfo",
+    "flat": "embeddingModelInfo",
     "receiver": null,
     "class": null,
     "category": "AI/Embedding"
@@ -11825,6 +11915,15 @@
     "class": "geometry",
     "category": "Web/Geo/Geometry"
   },
+  "get_column_metadata_local_db": {
+    "qualified": "db::columnMetadata",
+    "namespace": "db",
+    "alias": "columnMetadata",
+    "flat": "getColumnMetadataLocalDb",
+    "receiver": "database",
+    "class": "NodeDBConnection",
+    "category": "Data/Database/Meta"
+  },
   "get_dimensions": {
     "qualified": "image::getDimensions",
     "namespace": "image",
@@ -12373,6 +12472,825 @@
     "receiver": "database",
     "class": "NodeDBConnection",
     "category": "Data/Database/Optimization"
+  },
+  "industrial_ads_connect": {
+    "qualified": "ads::connect",
+    "namespace": "ads",
+    "alias": "connect",
+    "flat": "industrialAdsConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/ADS"
+  },
+  "industrial_ads_disconnect": {
+    "qualified": "ads::disconnect",
+    "namespace": "ads",
+    "alias": "disconnect",
+    "flat": "industrialAdsDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/ADS"
+  },
+  "industrial_ads_read": {
+    "qualified": "ads::read",
+    "namespace": "ads",
+    "alias": "read",
+    "flat": "industrialAdsRead",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/ADS"
+  },
+  "industrial_ads_subscribe": {
+    "qualified": "ads::subscribe",
+    "namespace": "ads",
+    "alias": "subscribe",
+    "flat": "industrialAdsSubscribe",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/ADS"
+  },
+  "industrial_ads_write": {
+    "qualified": "ads::write",
+    "namespace": "ads",
+    "alias": "write",
+    "flat": "industrialAdsWrite",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/ADS"
+  },
+  "industrial_amqp_connect": {
+    "qualified": "amqp::connect",
+    "namespace": "amqp",
+    "alias": "connect",
+    "flat": "industrialAmqpConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/RabbitMQ"
+  },
+  "industrial_amqp_consume": {
+    "qualified": "amqp::consume",
+    "namespace": "amqp",
+    "alias": "consume",
+    "flat": "industrialAmqpConsume",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/RabbitMQ"
+  },
+  "industrial_amqp_disconnect": {
+    "qualified": "amqp::disconnect",
+    "namespace": "amqp",
+    "alias": "disconnect",
+    "flat": "industrialAmqpDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/RabbitMQ"
+  },
+  "industrial_amqp_publish": {
+    "qualified": "amqp::publish",
+    "namespace": "amqp",
+    "alias": "publish",
+    "flat": "industrialAmqpPublish",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/RabbitMQ"
+  },
+  "industrial_cifx_connect": {
+    "qualified": "cifx::connect",
+    "namespace": "cifx",
+    "alias": "connect",
+    "flat": "industrialCifxConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/cifX Controller"
+  },
+  "industrial_cifx_disconnect": {
+    "qualified": "cifx::disconnect",
+    "namespace": "cifx",
+    "alias": "disconnect",
+    "flat": "industrialCifxDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/cifX Controller"
+  },
+  "industrial_cifx_info": {
+    "qualified": "cifx::info",
+    "namespace": "cifx",
+    "alias": "info",
+    "flat": "industrialCifxInfo",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/cifX Controller"
+  },
+  "industrial_cifx_poll": {
+    "qualified": "cifx::poll",
+    "namespace": "cifx",
+    "alias": "poll",
+    "flat": "industrialCifxPoll",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/cifX Controller"
+  },
+  "industrial_cifx_read": {
+    "qualified": "cifx::read",
+    "namespace": "cifx",
+    "alias": "read",
+    "flat": "industrialCifxRead",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/cifX Controller"
+  },
+  "industrial_cifx_set_bus": {
+    "qualified": "cifx::setBus",
+    "namespace": "cifx",
+    "alias": "setBus",
+    "flat": "industrialCifxSetBus",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/cifX Controller"
+  },
+  "industrial_cifx_state": {
+    "qualified": "cifx::state",
+    "namespace": "cifx",
+    "alias": "state",
+    "flat": "industrialCifxState",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/cifX Controller"
+  },
+  "industrial_cifx_write": {
+    "qualified": "cifx::write",
+    "namespace": "cifx",
+    "alias": "write",
+    "flat": "industrialCifxWrite",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/cifX Controller"
+  },
+  "industrial_cip_connect": {
+    "qualified": "cip::connect",
+    "namespace": "cip",
+    "alias": "connect",
+    "flat": "industrialCipConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherNet-IP"
+  },
+  "industrial_cip_disconnect": {
+    "qualified": "cip::disconnect",
+    "namespace": "cip",
+    "alias": "disconnect",
+    "flat": "industrialCipDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherNet-IP"
+  },
+  "industrial_cip_poll": {
+    "qualified": "cip::poll",
+    "namespace": "cip",
+    "alias": "poll",
+    "flat": "industrialCipPoll",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherNet-IP"
+  },
+  "industrial_cip_read": {
+    "qualified": "cip::read",
+    "namespace": "cip",
+    "alias": "read",
+    "flat": "industrialCipRead",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherNet-IP"
+  },
+  "industrial_cip_write": {
+    "qualified": "cip::write",
+    "namespace": "cip",
+    "alias": "write",
+    "flat": "industrialCipWrite",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherNet-IP"
+  },
+  "industrial_dds_connect": {
+    "qualified": "dds::connect",
+    "namespace": "dds",
+    "alias": "connect",
+    "flat": "industrialDdsConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/DDS"
+  },
+  "industrial_dds_disconnect": {
+    "qualified": "dds::disconnect",
+    "namespace": "dds",
+    "alias": "disconnect",
+    "flat": "industrialDdsDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/DDS"
+  },
+  "industrial_dds_publish": {
+    "qualified": "dds::publish",
+    "namespace": "dds",
+    "alias": "publish",
+    "flat": "industrialDdsPublish",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/DDS"
+  },
+  "industrial_dds_receive": {
+    "qualified": "dds::receive",
+    "namespace": "dds",
+    "alias": "receive",
+    "flat": "industrialDdsReceive",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/DDS"
+  },
+  "industrial_dds_subscribe": {
+    "qualified": "dds::subscribe",
+    "namespace": "dds",
+    "alias": "subscribe",
+    "flat": "industrialDdsSubscribe",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/DDS"
+  },
+  "industrial_dds_wait_for_match": {
+    "qualified": "dds::wait_for_match",
+    "namespace": "dds",
+    "alias": "wait_for_match",
+    "flat": "industrialDdsWaitForMatch",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/DDS"
+  },
+  "industrial_ethercat_read": {
+    "qualified": "ethercat::read",
+    "namespace": "ethercat",
+    "alias": "read",
+    "flat": "industrialEthercatRead",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherCAT"
+  },
+  "industrial_ethercat_start": {
+    "qualified": "ethercat::start",
+    "namespace": "ethercat",
+    "alias": "start",
+    "flat": "industrialEthercatStart",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherCAT"
+  },
+  "industrial_ethercat_stop": {
+    "qualified": "ethercat::stop",
+    "namespace": "ethercat",
+    "alias": "stop",
+    "flat": "industrialEthercatStop",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherCAT"
+  },
+  "industrial_ethercat_watch": {
+    "qualified": "ethercat::watch",
+    "namespace": "ethercat",
+    "alias": "watch",
+    "flat": "industrialEthercatWatch",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherCAT"
+  },
+  "industrial_ethercat_write": {
+    "qualified": "ethercat::write",
+    "namespace": "ethercat",
+    "alias": "write",
+    "flat": "industrialEthercatWrite",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/EtherCAT"
+  },
+  "industrial_hart_command": {
+    "qualified": "hart::command",
+    "namespace": "hart",
+    "alias": "command",
+    "flat": "industrialHartCommand",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/HART"
+  },
+  "industrial_hart_connect": {
+    "qualified": "hart::connect",
+    "namespace": "hart",
+    "alias": "connect",
+    "flat": "industrialHartConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/HART"
+  },
+  "industrial_hart_disconnect": {
+    "qualified": "hart::disconnect",
+    "namespace": "hart",
+    "alias": "disconnect",
+    "flat": "industrialHartDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/HART"
+  },
+  "industrial_hart_poll": {
+    "qualified": "hart::poll",
+    "namespace": "hart",
+    "alias": "poll",
+    "flat": "industrialHartPoll",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/HART"
+  },
+  "industrial_iolink_connect": {
+    "qualified": "iolink::connect",
+    "namespace": "iolink",
+    "alias": "connect",
+    "flat": "industrialIolinkConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/IO-Link"
+  },
+  "industrial_iolink_disconnect": {
+    "qualified": "iolink::disconnect",
+    "namespace": "iolink",
+    "alias": "disconnect",
+    "flat": "industrialIolinkDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/IO-Link"
+  },
+  "industrial_iolink_poll": {
+    "qualified": "iolink::poll",
+    "namespace": "iolink",
+    "alias": "poll",
+    "flat": "industrialIolinkPoll",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/IO-Link"
+  },
+  "industrial_iolink_read": {
+    "qualified": "iolink::read",
+    "namespace": "iolink",
+    "alias": "read",
+    "flat": "industrialIolinkRead",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/IO-Link"
+  },
+  "industrial_iolink_read_parameter": {
+    "qualified": "iolink::read_parameter",
+    "namespace": "iolink",
+    "alias": "read_parameter",
+    "flat": "industrialIolinkReadParameter",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/IO-Link"
+  },
+  "industrial_iolink_write": {
+    "qualified": "iolink::write",
+    "namespace": "iolink",
+    "alias": "write",
+    "flat": "industrialIolinkWrite",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/IO-Link"
+  },
+  "industrial_iolink_write_parameter": {
+    "qualified": "iolink::write_parameter",
+    "namespace": "iolink",
+    "alias": "write_parameter",
+    "flat": "industrialIolinkWriteParameter",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/IO-Link"
+  },
+  "industrial_iroh_bind": {
+    "qualified": "iroh::bind",
+    "namespace": "iroh",
+    "alias": "bind",
+    "flat": "industrialIrohBind",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Iroh"
+  },
+  "industrial_iroh_close_endpoint": {
+    "qualified": "iroh::close_endpoint",
+    "namespace": "iroh",
+    "alias": "close_endpoint",
+    "flat": "industrialIrohCloseEndpoint",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Iroh"
+  },
+  "industrial_iroh_connect": {
+    "qualified": "iroh::connect",
+    "namespace": "iroh",
+    "alias": "connect",
+    "flat": "industrialIrohConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Iroh"
+  },
+  "industrial_iroh_disconnect": {
+    "qualified": "iroh::disconnect",
+    "namespace": "iroh",
+    "alias": "disconnect",
+    "flat": "industrialIrohDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Iroh"
+  },
+  "industrial_iroh_listen": {
+    "qualified": "iroh::listen",
+    "namespace": "iroh",
+    "alias": "listen",
+    "flat": "industrialIrohListen",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Iroh"
+  },
+  "industrial_iroh_receive": {
+    "qualified": "iroh::receive",
+    "namespace": "iroh",
+    "alias": "receive",
+    "flat": "industrialIrohReceive",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Iroh"
+  },
+  "industrial_iroh_send": {
+    "qualified": "iroh::send",
+    "namespace": "iroh",
+    "alias": "send",
+    "flat": "industrialIrohSend",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Iroh"
+  },
+  "industrial_kafka_connect": {
+    "qualified": "kafka::connect",
+    "namespace": "kafka",
+    "alias": "connect",
+    "flat": "industrialKafkaConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Kafka"
+  },
+  "industrial_kafka_consume": {
+    "qualified": "kafka::consume",
+    "namespace": "kafka",
+    "alias": "consume",
+    "flat": "industrialKafkaConsume",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Kafka"
+  },
+  "industrial_kafka_disconnect": {
+    "qualified": "kafka::disconnect",
+    "namespace": "kafka",
+    "alias": "disconnect",
+    "flat": "industrialKafkaDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Kafka"
+  },
+  "industrial_kafka_publish": {
+    "qualified": "kafka::publish",
+    "namespace": "kafka",
+    "alias": "publish",
+    "flat": "industrialKafkaPublish",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Kafka"
+  },
+  "industrial_modbus_connect": {
+    "qualified": "modbus::connect",
+    "namespace": "modbus",
+    "alias": "connect",
+    "flat": "industrialModbusConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Modbus"
+  },
+  "industrial_modbus_disconnect": {
+    "qualified": "modbus::disconnect",
+    "namespace": "modbus",
+    "alias": "disconnect",
+    "flat": "industrialModbusDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Modbus"
+  },
+  "industrial_modbus_poll": {
+    "qualified": "modbus::poll",
+    "namespace": "modbus",
+    "alias": "poll",
+    "flat": "industrialModbusPoll",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Modbus"
+  },
+  "industrial_modbus_read": {
+    "qualified": "modbus::read",
+    "namespace": "modbus",
+    "alias": "read",
+    "flat": "industrialModbusRead",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Modbus"
+  },
+  "industrial_modbus_write": {
+    "qualified": "modbus::write",
+    "namespace": "modbus",
+    "alias": "write",
+    "flat": "industrialModbusWrite",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Modbus"
+  },
+  "industrial_nats_connect": {
+    "qualified": "nats::connect",
+    "namespace": "nats",
+    "alias": "connect",
+    "flat": "industrialNatsConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/NATS"
+  },
+  "industrial_nats_consume": {
+    "qualified": "nats::consume",
+    "namespace": "nats",
+    "alias": "consume",
+    "flat": "industrialNatsConsume",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/NATS"
+  },
+  "industrial_nats_disconnect": {
+    "qualified": "nats::disconnect",
+    "namespace": "nats",
+    "alias": "disconnect",
+    "flat": "industrialNatsDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/NATS"
+  },
+  "industrial_nats_publish": {
+    "qualified": "nats::publish",
+    "namespace": "nats",
+    "alias": "publish",
+    "flat": "industrialNatsPublish",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/NATS"
+  },
+  "industrial_opcua_browse": {
+    "qualified": "opcua::browse",
+    "namespace": "opcua",
+    "alias": "browse",
+    "flat": "industrialOpcuaBrowse",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA"
+  },
+  "industrial_opcua_connect": {
+    "qualified": "opcua::connect",
+    "namespace": "opcua",
+    "alias": "connect",
+    "flat": "industrialOpcuaConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA"
+  },
+  "industrial_opcua_disconnect": {
+    "qualified": "opcua::disconnect",
+    "namespace": "opcua",
+    "alias": "disconnect",
+    "flat": "industrialOpcuaDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA"
+  },
+  "industrial_opcua_pubsub_connect": {
+    "qualified": "opcua_pubsub::connect",
+    "namespace": "opcua_pubsub",
+    "alias": "connect",
+    "flat": "industrialOpcuaPubsubConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA PubSub"
+  },
+  "industrial_opcua_pubsub_disconnect": {
+    "qualified": "opcua_pubsub::disconnect",
+    "namespace": "opcua_pubsub",
+    "alias": "disconnect",
+    "flat": "industrialOpcuaPubsubDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA PubSub"
+  },
+  "industrial_opcua_pubsub_publish": {
+    "qualified": "opcua_pubsub::publish",
+    "namespace": "opcua_pubsub",
+    "alias": "publish",
+    "flat": "industrialOpcuaPubsubPublish",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA PubSub"
+  },
+  "industrial_opcua_pubsub_receive": {
+    "qualified": "opcua_pubsub::receive",
+    "namespace": "opcua_pubsub",
+    "alias": "receive",
+    "flat": "industrialOpcuaPubsubReceive",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA PubSub"
+  },
+  "industrial_opcua_pubsub_subscribe": {
+    "qualified": "opcua_pubsub::subscribe",
+    "namespace": "opcua_pubsub",
+    "alias": "subscribe",
+    "flat": "industrialOpcuaPubsubSubscribe",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA PubSub"
+  },
+  "industrial_opcua_read": {
+    "qualified": "opcua::read",
+    "namespace": "opcua",
+    "alias": "read",
+    "flat": "industrialOpcuaRead",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA"
+  },
+  "industrial_opcua_subscribe": {
+    "qualified": "opcua::subscribe",
+    "namespace": "opcua",
+    "alias": "subscribe",
+    "flat": "industrialOpcuaSubscribe",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA"
+  },
+  "industrial_opcua_write": {
+    "qualified": "opcua::write",
+    "namespace": "opcua",
+    "alias": "write",
+    "flat": "industrialOpcuaWrite",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/OPC UA"
+  },
+  "industrial_profibus_connect": {
+    "qualified": "profibus::connect",
+    "namespace": "profibus",
+    "alias": "connect",
+    "flat": "industrialProfibusConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/PROFIBUS"
+  },
+  "industrial_profibus_disconnect": {
+    "qualified": "profibus::disconnect",
+    "namespace": "profibus",
+    "alias": "disconnect",
+    "flat": "industrialProfibusDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/PROFIBUS"
+  },
+  "industrial_profibus_listen": {
+    "qualified": "profibus::listen",
+    "namespace": "profibus",
+    "alias": "listen",
+    "flat": "industrialProfibusListen",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/PROFIBUS"
+  },
+  "industrial_profibus_read": {
+    "qualified": "profibus::read",
+    "namespace": "profibus",
+    "alias": "read",
+    "flat": "industrialProfibusRead",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/PROFIBUS"
+  },
+  "industrial_profibus_set_mode": {
+    "qualified": "profibus::setMode",
+    "namespace": "profibus",
+    "alias": "setMode",
+    "flat": "industrialProfibusSetMode",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/PROFIBUS"
+  },
+  "industrial_profibus_write": {
+    "qualified": "profibus::write",
+    "namespace": "profibus",
+    "alias": "write",
+    "flat": "industrialProfibusWrite",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/PROFIBUS"
+  },
+  "industrial_redis_connect": {
+    "qualified": "redis::connect",
+    "namespace": "redis",
+    "alias": "connect",
+    "flat": "industrialRedisConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Redis Streams"
+  },
+  "industrial_redis_consume": {
+    "qualified": "redis::consume",
+    "namespace": "redis",
+    "alias": "consume",
+    "flat": "industrialRedisConsume",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Redis Streams"
+  },
+  "industrial_redis_disconnect": {
+    "qualified": "redis::disconnect",
+    "namespace": "redis",
+    "alias": "disconnect",
+    "flat": "industrialRedisDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Redis Streams"
+  },
+  "industrial_redis_publish": {
+    "qualified": "redis::publish",
+    "namespace": "redis",
+    "alias": "publish",
+    "flat": "industrialRedisPublish",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Redis Streams"
+  },
+  "industrial_zenoh_connect": {
+    "qualified": "zenoh::connect",
+    "namespace": "zenoh",
+    "alias": "connect",
+    "flat": "industrialZenohConnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Zenoh"
+  },
+  "industrial_zenoh_delete": {
+    "qualified": "zenoh::delete",
+    "namespace": "zenoh",
+    "alias": "delete",
+    "flat": "industrialZenohDelete",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Zenoh"
+  },
+  "industrial_zenoh_disconnect": {
+    "qualified": "zenoh::disconnect",
+    "namespace": "zenoh",
+    "alias": "disconnect",
+    "flat": "industrialZenohDisconnect",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Zenoh"
+  },
+  "industrial_zenoh_publish": {
+    "qualified": "zenoh::publish",
+    "namespace": "zenoh",
+    "alias": "publish",
+    "flat": "industrialZenohPublish",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Zenoh"
+  },
+  "industrial_zenoh_query": {
+    "qualified": "zenoh::query",
+    "namespace": "zenoh",
+    "alias": "query",
+    "flat": "industrialZenohQuery",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Zenoh"
+  },
+  "industrial_zenoh_subscribe": {
+    "qualified": "zenoh::subscribe",
+    "namespace": "zenoh",
+    "alias": "subscribe",
+    "flat": "industrialZenohSubscribe",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Zenoh"
   },
   "insert": {
     "qualified": "set::insert",
@@ -13616,6 +14534,51 @@
     "class": "MemoryConfig",
     "category": "AI/Memory"
   },
+  "ml_align_modalities": {
+    "qualified": "inspection::align",
+    "namespace": "inspection",
+    "alias": "align",
+    "flat": "mlAlignModalities",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Fusion"
+  },
+  "ml_analyze_model_errors": {
+    "qualified": "inspection::analyzeModelErrors",
+    "namespace": "inspection",
+    "alias": "analyzeModelErrors",
+    "flat": "mlAnalyzeModelErrors",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_apply_calibration": {
+    "qualified": "inspection::calibrate",
+    "namespace": "inspection",
+    "alias": "calibrate",
+    "flat": "mlApplyCalibration",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inference"
+  },
+  "ml_apply_decision_threshold": {
+    "qualified": "inspection::threshold",
+    "namespace": "inspection",
+    "alias": "threshold",
+    "flat": "mlApplyDecisionThreshold",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inference"
+  },
+  "ml_apply_standard_scaler": {
+    "qualified": "inspection::scale",
+    "namespace": "inspection",
+    "alias": "scale",
+    "flat": "mlApplyStandardScaler",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Dataset"
+  },
   "ml_apply_transform": {
     "qualified": "ml::applyTransform",
     "namespace": "ml",
@@ -13624,6 +14587,204 @@
     "receiver": "model",
     "class": "NodeMLModel",
     "category": "AI/ML/Preprocessing"
+  },
+  "ml_attach_observed_outcome": {
+    "qualified": "inspection::attachOutcome",
+    "namespace": "inspection",
+    "alias": "attachOutcome",
+    "flat": "mlAttachObservedOutcome",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Sequence"
+  },
+  "ml_augment_inspection_image": {
+    "qualified": "inspection::flipImage",
+    "namespace": "inspection",
+    "alias": "flipImage",
+    "flat": "mlAugmentInspectionImage",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Vision"
+  },
+  "ml_auto_train_agent": {
+    "qualified": "inspection::autoTrainAgent",
+    "namespace": "inspection",
+    "alias": "autoTrainAgent",
+    "flat": "mlAutoTrainAgent",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_auto_train_anomaly": {
+    "qualified": "inspection::autoTrainAnomaly",
+    "namespace": "inspection",
+    "alias": "autoTrainAnomaly",
+    "flat": "mlAutoTrainAnomaly",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_auto_train_forecast": {
+    "qualified": "inspection::autoTrainForecast",
+    "namespace": "inspection",
+    "alias": "autoTrainForecast",
+    "flat": "mlAutoTrainForecast",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_auto_train_tabular": {
+    "qualified": "inspection::autoTrainTabular",
+    "namespace": "inspection",
+    "alias": "autoTrainTabular",
+    "flat": "mlAutoTrainTabular",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_auto_train_vision": {
+    "qualified": "inspection::autoTrainVision",
+    "namespace": "inspection",
+    "alias": "autoTrainVision",
+    "flat": "mlAutoTrainVision",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_binary_curve": {
+    "qualified": "inspection::binaryCurve",
+    "namespace": "inspection",
+    "alias": "binaryCurve",
+    "flat": "mlBinaryCurve",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Evaluation"
+  },
+  "ml_build_inspection_spec": {
+    "qualified": "inspection::buildSpec",
+    "namespace": "inspection",
+    "alias": "buildSpec",
+    "flat": "mlBuildInspectionSpec",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inspection"
+  },
+  "ml_build_sequence_dataset": {
+    "qualified": "inspection::sequences",
+    "namespace": "inspection",
+    "alias": "sequences",
+    "flat": "mlBuildSequenceDataset",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Sequence"
+  },
+  "ml_build_visual_sequence": {
+    "qualified": "inspection::visualSequence",
+    "namespace": "inspection",
+    "alias": "visualSequence",
+    "flat": "mlBuildVisualSequence",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Sequence"
+  },
+  "ml_calibrate_probabilities": {
+    "qualified": "inspection::fitCalibration",
+    "namespace": "inspection",
+    "alias": "fitCalibration",
+    "flat": "mlCalibrateProbabilities",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Evaluation"
+  },
+  "ml_cancel_auto_training": {
+    "qualified": "inspection::cancelAutoTraining",
+    "namespace": "inspection",
+    "alias": "cancelAutoTraining",
+    "flat": "mlCancelAutoTraining",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_cancel_training": {
+    "qualified": "inspection::cancelTraining",
+    "namespace": "inspection",
+    "alias": "cancelTraining",
+    "flat": "mlCancelTraining",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_capture_genicam_frame": {
+    "qualified": "inspection::captureGenicam",
+    "namespace": "inspection",
+    "alias": "captureGenicam",
+    "flat": "mlCaptureGenicamFrame",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Sensors"
+  },
+  "ml_classification_metrics": {
+    "qualified": "inspection::classificationMetrics",
+    "namespace": "inspection",
+    "alias": "classificationMetrics",
+    "flat": "mlClassificationMetrics",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Evaluation"
+  },
+  "ml_create_learning_project": {
+    "qualified": "inspection::createLearningProject",
+    "namespace": "inspection",
+    "alias": "createLearningProject",
+    "flat": "mlCreateLearningProject",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_dataset_snapshot": {
+    "qualified": "inspection::snapshot",
+    "namespace": "inspection",
+    "alias": "snapshot",
+    "flat": "mlDatasetSnapshot",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Dataset"
+  },
+  "ml_decode_sensor_registers": {
+    "qualified": "inspection::decodeRegisters",
+    "namespace": "inspection",
+    "alias": "decodeRegisters",
+    "flat": "mlDecodeSensorRegisters",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Sensors"
+  },
+  "ml_derive_columns": {
+    "qualified": "inspection::deriveColumns",
+    "namespace": "inspection",
+    "alias": "deriveColumns",
+    "flat": "mlDeriveColumns",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Feature Engineering"
+  },
+  "ml_detection_metrics": {
+    "qualified": "inspection::detectionMetrics",
+    "namespace": "inspection",
+    "alias": "detectionMetrics",
+    "flat": "mlDetectionMetrics",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Evaluation"
+  },
+  "ml_distribution_drift": {
+    "qualified": "inspection::distributionDrift",
+    "namespace": "inspection",
+    "alias": "distributionDrift",
+    "flat": "mlDistributionDrift",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Monitoring"
   },
   "ml_eval_accuracy": {
     "qualified": "ml::evalAccuracy",
@@ -13652,6 +14813,78 @@
     "class": null,
     "category": "AI/ML/Metrics"
   },
+  "ml_evaluate_inspection_task": {
+    "qualified": "inspection::evaluateTask",
+    "namespace": "inspection",
+    "alias": "evaluateTask",
+    "flat": "mlEvaluateInspectionTask",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_evaluate_student": {
+    "qualified": "inspection::evaluateStudent",
+    "namespace": "inspection",
+    "alias": "evaluateStudent",
+    "flat": "mlEvaluateStudent",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_event_metrics": {
+    "qualified": "inspection::eventMetrics",
+    "namespace": "inspection",
+    "alias": "eventMetrics",
+    "flat": "mlEventMetrics",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Evaluation"
+  },
+  "ml_export_annotation_dataset": {
+    "qualified": "inspection::exportAnnotations",
+    "namespace": "inspection",
+    "alias": "exportAnnotations",
+    "flat": "mlExportAnnotationDataset",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Dataset"
+  },
+  "ml_export_auto_model": {
+    "qualified": "inspection::exportAutoModel",
+    "namespace": "inspection",
+    "alias": "exportAutoModel",
+    "flat": "mlExportAutoModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_export_student_onnx": {
+    "qualified": "inspection::exportOnnx",
+    "namespace": "inspection",
+    "alias": "exportOnnx",
+    "flat": "mlExportStudentOnnx",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Export"
+  },
+  "ml_extract_patch_features": {
+    "qualified": "inspection::imageFeatures",
+    "namespace": "inspection",
+    "alias": "imageFeatures",
+    "flat": "mlExtractPatchFeatures",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_extract_pretrained_features": {
+    "qualified": "inspection::pretrainedImageFeatures",
+    "namespace": "inspection",
+    "alias": "pretrainedImageFeatures",
+    "flat": "mlExtractPretrainedFeatures",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Training"
+  },
   "ml_feature_importance": {
     "qualified": "ml::featureImportance",
     "namespace": "ml",
@@ -13660,6 +14893,69 @@
     "receiver": "model",
     "class": "NodeMLModel",
     "category": "AI/ML/Model Info"
+  },
+  "ml_feature_map_to_patches": {
+    "qualified": "inspection::patches",
+    "namespace": "inspection",
+    "alias": "patches",
+    "flat": "mlFeatureMapToPatches",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Anomaly"
+  },
+  "ml_finalize_auto_training": {
+    "qualified": "inspection::finalizeAutoTraining",
+    "namespace": "inspection",
+    "alias": "finalizeAutoTraining",
+    "flat": "mlFinalizeAutoTraining",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_fine_tune_sam2": {
+    "qualified": "inspection::fineTuneSam2",
+    "namespace": "inspection",
+    "alias": "fineTuneSam2",
+    "flat": "mlFineTuneSam2",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Training"
+  },
+  "ml_fit_preprocessing": {
+    "qualified": "inspection::fitPreprocessing",
+    "namespace": "inspection",
+    "alias": "fitPreprocessing",
+    "flat": "mlFitPreprocessing",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Feature Engineering"
+  },
+  "ml_fit_standard_scaler": {
+    "qualified": "inspection::fitScaler",
+    "namespace": "inspection",
+    "alias": "fitScaler",
+    "flat": "mlFitStandardScaler",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Dataset"
+  },
+  "ml_get_auto_training": {
+    "qualified": "inspection::getAutoTraining",
+    "namespace": "inspection",
+    "alias": "getAutoTraining",
+    "flat": "mlGetAutoTraining",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_get_deployment": {
+    "qualified": "inspection::deployment",
+    "namespace": "inspection",
+    "alias": "deployment",
+    "flat": "mlGetDeployment",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
   },
   "ml_get_kmeans_centroids": {
     "qualified": "ml::getKmeansCentroids",
@@ -13670,6 +14966,15 @@
     "class": "NodeMLModel",
     "category": "AI/ML/Model Info"
   },
+  "ml_get_learning_project": {
+    "qualified": "inspection::getLearningProject",
+    "namespace": "inspection",
+    "alias": "getLearningProject",
+    "flat": "mlGetLearningProject",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
   "ml_get_linear_coefficients": {
     "qualified": "ml::getLinearCoefficients",
     "namespace": "ml",
@@ -13678,6 +14983,87 @@
     "receiver": "model",
     "class": "NodeMLModel",
     "category": "AI/ML/Model Info"
+  },
+  "ml_get_model_artifact": {
+    "qualified": "inspection::artifact",
+    "namespace": "inspection",
+    "alias": "artifact",
+    "flat": "mlGetModelArtifact",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_group_time_split": {
+    "qualified": "inspection::split",
+    "namespace": "inspection",
+    "alias": "split",
+    "flat": "mlGroupTimeSplit",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Dataset"
+  },
+  "ml_import_pretrained_vision": {
+    "qualified": "inspection::importPretrainedVision",
+    "namespace": "inspection",
+    "alias": "importPretrainedVision",
+    "flat": "mlImportPretrainedVision",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Training"
+  },
+  "ml_join_sources": {
+    "qualified": "inspection::joinSources",
+    "namespace": "inspection",
+    "alias": "joinSources",
+    "flat": "mlJoinSources",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Feature Engineering"
+  },
+  "ml_learning_project_agent": {
+    "qualified": "inspection::learningProjectAgent",
+    "namespace": "inspection",
+    "alias": "learningProjectAgent",
+    "flat": "mlLearningProjectAgent",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_list_pretrained_vision": {
+    "qualified": "inspection::listPretrainedVision",
+    "namespace": "inspection",
+    "alias": "listPretrainedVision",
+    "flat": "mlListPretrainedVision",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Training"
+  },
+  "ml_loss_drift": {
+    "qualified": "inspection::lossDrift",
+    "namespace": "inspection",
+    "alias": "lossDrift",
+    "flat": "mlLossDrift",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Monitoring"
+  },
+  "ml_make_inspection_sample": {
+    "qualified": "inspection::makeSample",
+    "namespace": "inspection",
+    "alias": "makeSample",
+    "flat": "mlMakeInspectionSample",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Dataset"
+  },
+  "ml_materialize_dataset": {
+    "qualified": "inspection::materializeDataset",
+    "namespace": "inspection",
+    "alias": "materializeDataset",
+    "flat": "mlMaterializeDataset",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Feature Engineering"
   },
   "ml_model_info": {
     "qualified": "ml::info",
@@ -13688,6 +15074,33 @@
     "class": "NodeMLModel",
     "category": "AI/ML/Model Info"
   },
+  "ml_native_model_inference": {
+    "qualified": "inspection::predictNative",
+    "namespace": "inspection",
+    "alias": "predictNative",
+    "flat": "mlNativeModelInference",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inference"
+  },
+  "ml_notify_learning_product_change": {
+    "qualified": "inspection::notifyLearningProductChange",
+    "namespace": "inspection",
+    "alias": "notifyLearningProductChange",
+    "flat": "mlNotifyLearningProductChange",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_observe_learning_sample": {
+    "qualified": "inspection::observeLearningSamples",
+    "namespace": "inspection",
+    "alias": "observeLearningSamples",
+    "flat": "mlObserveLearningSample",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
   "ml_ordinal_metrics": {
     "qualified": "ml::ordinalMetrics",
     "namespace": "ml",
@@ -13696,6 +15109,33 @@
     "receiver": null,
     "class": null,
     "category": "AI/ML/Ordinal"
+  },
+  "ml_pause_learning_project": {
+    "qualified": "inspection::pauseLearningProject",
+    "namespace": "inspection",
+    "alias": "pauseLearningProject",
+    "flat": "mlPauseLearningProject",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_pause_student": {
+    "qualified": "inspection::pauseStudent",
+    "namespace": "inspection",
+    "alias": "pauseStudent",
+    "flat": "mlPauseStudent",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_plan_inspection_training": {
+    "qualified": "inspection::planTraining",
+    "namespace": "inspection",
+    "alias": "planTraining",
+    "flat": "mlPlanInspectionTraining",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inspection"
   },
   "ml_predict": {
     "qualified": "ml::predict",
@@ -13706,6 +15146,177 @@
     "class": "NodeMLModel",
     "category": "AI/ML"
   },
+  "ml_predict_auto_model": {
+    "qualified": "inspection::predictAutoModel",
+    "namespace": "inspection",
+    "alias": "predictAutoModel",
+    "flat": "mlPredictAutoModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_preprocess_inspection_image": {
+    "qualified": "inspection::preprocessImage",
+    "namespace": "inspection",
+    "alias": "preprocessImage",
+    "flat": "mlPreprocessInspectionImage",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Vision"
+  },
+  "ml_probe_training_device": {
+    "qualified": "inspection::probeDevice",
+    "namespace": "inspection",
+    "alias": "probeDevice",
+    "flat": "mlProbeTrainingDevice",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Compute"
+  },
+  "ml_promote_by_metrics": {
+    "qualified": "inspection::promoteByMetrics",
+    "namespace": "inspection",
+    "alias": "promoteByMetrics",
+    "flat": "mlPromoteByMetrics",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_promote_learning_model": {
+    "qualified": "inspection::promoteLearningModel",
+    "namespace": "inspection",
+    "alias": "promoteLearningModel",
+    "flat": "mlPromoteLearningModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_promote_student": {
+    "qualified": "inspection::promoteStudent",
+    "namespace": "inspection",
+    "alias": "promoteStudent",
+    "flat": "mlPromoteStudent",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_prompt_sam2": {
+    "qualified": "inspection::promptSam2",
+    "namespace": "inspection",
+    "alias": "promptSam2",
+    "flat": "mlPromptSam2",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Vision"
+  },
+  "ml_read_modbus_sensor": {
+    "qualified": "inspection::readModbus",
+    "namespace": "inspection",
+    "alias": "readModbus",
+    "flat": "mlReadModbusSensor",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Sensors"
+  },
+  "ml_read_opcua_sensor": {
+    "qualified": "inspection::readOpcUa",
+    "namespace": "inspection",
+    "alias": "readOpcUa",
+    "flat": "mlReadOpcuaSensor",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Sensors"
+  },
+  "ml_record_model_comparison": {
+    "qualified": "inspection::recordComparison",
+    "namespace": "inspection",
+    "alias": "recordComparison",
+    "flat": "mlRecordModelComparison",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_record_training_sample": {
+    "qualified": "inspection::recordSample",
+    "namespace": "inspection",
+    "alias": "recordSample",
+    "flat": "mlRecordTrainingSample",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_recover_training_jobs": {
+    "qualified": "inspection::recoverTraining",
+    "namespace": "inspection",
+    "alias": "recoverTraining",
+    "flat": "mlRecoverTrainingJobs",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_regression_metrics": {
+    "qualified": "inspection::regressionMetrics",
+    "namespace": "inspection",
+    "alias": "regressionMetrics",
+    "flat": "mlRegressionMetrics",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Evaluation"
+  },
+  "ml_resample_sensor": {
+    "qualified": "inspection::resample",
+    "namespace": "inspection",
+    "alias": "resample",
+    "flat": "mlResampleSensor",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Signal"
+  },
+  "ml_resume_auto_training": {
+    "qualified": "inspection::resumeAutoTraining",
+    "namespace": "inspection",
+    "alias": "resumeAutoTraining",
+    "flat": "mlResumeAutoTraining",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_resume_learning_project": {
+    "qualified": "inspection::resumeLearningProject",
+    "namespace": "inspection",
+    "alias": "resumeLearningProject",
+    "flat": "mlResumeLearningProject",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_resume_training": {
+    "qualified": "inspection::resumeTraining",
+    "namespace": "inspection",
+    "alias": "resumeTraining",
+    "flat": "mlResumeTraining",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_review_annotation": {
+    "qualified": "inspection::reviewAnnotation",
+    "namespace": "inspection",
+    "alias": "reviewAnnotation",
+    "flat": "mlReviewAnnotation",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inspection"
+  },
+  "ml_review_learning_sample": {
+    "qualified": "inspection::reviewLearningSample",
+    "namespace": "inspection",
+    "alias": "reviewLearningSample",
+    "flat": "mlReviewLearningSample",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
   "ml_roc_auc": {
     "qualified": "ml::rocAuc",
     "namespace": "ml",
@@ -13715,6 +15326,123 @@
     "class": null,
     "category": "AI/ML/Metrics"
   },
+  "ml_rollback_learning_model": {
+    "qualified": "inspection::rollbackLearningModel",
+    "namespace": "inspection",
+    "alias": "rollbackLearningModel",
+    "flat": "mlRollbackLearningModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_rollback_student": {
+    "qualified": "inspection::rollbackStudent",
+    "namespace": "inspection",
+    "alias": "rollbackStudent",
+    "flat": "mlRollbackStudent",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_route_inspection": {
+    "qualified": "inspection::route",
+    "namespace": "inspection",
+    "alias": "route",
+    "flat": "mlRouteInspection",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_route_learning_project": {
+    "qualified": "inspection::routeLearningProject",
+    "namespace": "inspection",
+    "alias": "routeLearningProject",
+    "flat": "mlRouteLearningProject",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_schedule_training": {
+    "qualified": "inspection::scheduleTraining",
+    "namespace": "inspection",
+    "alias": "scheduleTraining",
+    "flat": "mlScheduleTraining",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_segmentation_metrics": {
+    "qualified": "inspection::segmentationMetrics",
+    "namespace": "inspection",
+    "alias": "segmentationMetrics",
+    "flat": "mlSegmentationMetrics",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Evaluation"
+  },
+  "ml_select_samples_for_review": {
+    "qualified": "inspection::selectSamplesForReview",
+    "namespace": "inspection",
+    "alias": "selectSamplesForReview",
+    "flat": "mlSelectSamplesForReview",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_select_threshold": {
+    "qualified": "inspection::selectThreshold",
+    "namespace": "inspection",
+    "alias": "selectThreshold",
+    "flat": "mlSelectThreshold",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Evaluation"
+  },
+  "ml_sensor_window": {
+    "qualified": "inspection::sensorWindow",
+    "namespace": "inspection",
+    "alias": "sensorWindow",
+    "flat": "mlSensorWindow",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Sequence"
+  },
+  "ml_signal_band_energy": {
+    "qualified": "inspection::bandEnergy",
+    "namespace": "inspection",
+    "alias": "bandEnergy",
+    "flat": "mlSignalBandEnergy",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Signal"
+  },
+  "ml_signal_features": {
+    "qualified": "inspection::signalFeatures",
+    "namespace": "inspection",
+    "alias": "signalFeatures",
+    "flat": "mlSignalFeatures",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Signal"
+  },
+  "ml_signal_spectrogram": {
+    "qualified": "inspection::spectrogram",
+    "namespace": "inspection",
+    "alias": "spectrogram",
+    "flat": "mlSignalSpectrogram",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Signal"
+  },
+  "ml_signal_spectrum": {
+    "qualified": "inspection::spectrum",
+    "namespace": "inspection",
+    "alias": "spectrum",
+    "flat": "mlSignalSpectrum",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Signal"
+  },
   "ml_silhouette_score": {
     "qualified": "ml::silhouetteScore",
     "namespace": "ml",
@@ -13723,6 +15451,321 @@
     "receiver": null,
     "class": null,
     "category": "AI/ML/Metrics"
+  },
+  "ml_step_auto_training": {
+    "qualified": "inspection::stepAutoTraining",
+    "namespace": "inspection",
+    "alias": "stepAutoTraining",
+    "flat": "mlStepAutoTraining",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Auto Training"
+  },
+  "ml_step_learning_project": {
+    "qualified": "inspection::stepLearningProject",
+    "namespace": "inspection",
+    "alias": "stepLearningProject",
+    "flat": "mlStepLearningProject",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
+  },
+  "ml_student_confidence_gate": {
+    "qualified": "inspection::confidenceGate",
+    "namespace": "inspection",
+    "alias": "confidenceGate",
+    "flat": "mlStudentConfidenceGate",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inference"
+  },
+  "ml_student_inference": {
+    "qualified": "inspection::predict",
+    "namespace": "inspection",
+    "alias": "predict",
+    "flat": "mlStudentInference",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_teacher_label": {
+    "qualified": "inspection::teacherLabel",
+    "namespace": "inspection",
+    "alias": "teacherLabel",
+    "flat": "mlTeacherLabel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inspection"
+  },
+  "ml_train_burn_model": {
+    "qualified": "inspection::trainBurn",
+    "namespace": "inspection",
+    "alias": "trainBurn",
+    "flat": "mlTrainBurnModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_cnn1d": {
+    "qualified": "inspection::trainCnn1d",
+    "namespace": "inspection",
+    "alias": "trainCnn1d",
+    "flat": "mlTrainCnn1d",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_cnn_lstm": {
+    "qualified": "inspection::trainCnnLstm",
+    "namespace": "inspection",
+    "alias": "trainCnnLstm",
+    "flat": "mlTrainCnnLstm",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_conv1d_autoencoder": {
+    "qualified": "inspection::trainConv1dAutoencoder",
+    "namespace": "inspection",
+    "alias": "trainConv1dAutoencoder",
+    "flat": "mlTrainConv1dAutoencoder",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_dense_autoencoder": {
+    "qualified": "inspection::trainDenseAutoencoder",
+    "namespace": "inspection",
+    "alias": "trainDenseAutoencoder",
+    "flat": "mlTrainDenseAutoencoder",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_dfine_nano": {
+    "qualified": "inspection::trainDfineNano",
+    "namespace": "inspection",
+    "alias": "trainDfineNano",
+    "flat": "mlTrainDfineNano",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_dino_v2": {
+    "qualified": "inspection::trainDinoV2",
+    "namespace": "inspection",
+    "alias": "trainDinoV2",
+    "flat": "mlTrainDinoV2",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_efficient_ad": {
+    "qualified": "inspection::trainEfficientAd",
+    "namespace": "inspection",
+    "alias": "trainEfficientAd",
+    "flat": "mlTrainEfficientAd",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_efficient_net": {
+    "qualified": "inspection::trainEfficientNet",
+    "namespace": "inspection",
+    "alias": "trainEfficientNet",
+    "flat": "mlTrainEfficientNet",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_gradient_boosted_trees": {
+    "qualified": "inspection::trainGradientBoostedTrees",
+    "namespace": "inspection",
+    "alias": "trainGradientBoostedTrees",
+    "flat": "mlTrainGradientBoostedTrees",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Training"
+  },
+  "ml_train_gru": {
+    "qualified": "inspection::trainGru",
+    "namespace": "inspection",
+    "alias": "trainGru",
+    "flat": "mlTrainGru",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_image_sensor_fusion": {
+    "qualified": "inspection::trainImageSensorFusion",
+    "namespace": "inspection",
+    "alias": "trainImageSensorFusion",
+    "flat": "mlTrainImageSensorFusion",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_isolation_forest": {
+    "qualified": "inspection::trainIsolationForest",
+    "namespace": "inspection",
+    "alias": "trainIsolationForest",
+    "flat": "mlTrainIsolationForest",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Anomaly"
+  },
+  "ml_train_lstm": {
+    "qualified": "inspection::trainLstm",
+    "namespace": "inspection",
+    "alias": "trainLstm",
+    "flat": "mlTrainLstm",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_lstm_autoencoder": {
+    "qualified": "inspection::trainLstmAutoencoder",
+    "namespace": "inspection",
+    "alias": "trainLstmAutoencoder",
+    "flat": "mlTrainLstmAutoencoder",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_mask_rcnn": {
+    "qualified": "inspection::trainMaskRcnn",
+    "namespace": "inspection",
+    "alias": "trainMaskRcnn",
+    "flat": "mlTrainMaskRcnn",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_mlp": {
+    "qualified": "inspection::trainMlp",
+    "namespace": "inspection",
+    "alias": "trainMlp",
+    "flat": "mlTrainMlp",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_mobile_net_v2": {
+    "qualified": "inspection::trainMobileNetV2",
+    "namespace": "inspection",
+    "alias": "trainMobileNetV2",
+    "flat": "mlTrainMobileNetV2",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_padim": {
+    "qualified": "inspection::trainPadim",
+    "namespace": "inspection",
+    "alias": "trainPadim",
+    "flat": "mlTrainPadim",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Anomaly"
+  },
+  "ml_train_patchcore": {
+    "qualified": "inspection::trainPatchCore",
+    "namespace": "inspection",
+    "alias": "trainPatchCore",
+    "flat": "mlTrainPatchcore",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Anomaly"
+  },
+  "ml_train_res_net18": {
+    "qualified": "inspection::trainResNet18",
+    "namespace": "inspection",
+    "alias": "trainResNet18",
+    "flat": "mlTrainResNet18",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_rf_detr": {
+    "qualified": "inspection::trainRfDetr",
+    "namespace": "inspection",
+    "alias": "trainRfDetr",
+    "flat": "mlTrainRfDetr",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_rtdetr_v2": {
+    "qualified": "inspection::trainRtdetrV2",
+    "namespace": "inspection",
+    "alias": "trainRtdetrV2",
+    "flat": "mlTrainRtdetrV2",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_tcn": {
+    "qualified": "inspection::trainTcn",
+    "namespace": "inspection",
+    "alias": "trainTcn",
+    "flat": "mlTrainTcn",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_u_net": {
+    "qualified": "inspection::trainUNet",
+    "namespace": "inspection",
+    "alias": "trainUNet",
+    "flat": "mlTrainUNet",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_train_yolo_x": {
+    "qualified": "inspection::trainYoloX",
+    "namespace": "inspection",
+    "alias": "trainYoloX",
+    "flat": "mlTrainYoloX",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_training_job_status": {
+    "qualified": "inspection::trainingStatus",
+    "namespace": "inspection",
+    "alias": "trainingStatus",
+    "flat": "mlTrainingJobStatus",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Lifecycle"
+  },
+  "ml_training_readiness": {
+    "qualified": "inspection::readiness",
+    "namespace": "inspection",
+    "alias": "readiness",
+    "flat": "mlTrainingReadiness",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Training"
+  },
+  "ml_validate_annotation": {
+    "qualified": "inspection::validateAnnotation",
+    "namespace": "inspection",
+    "alias": "validateAnnotation",
+    "flat": "mlValidateAnnotation",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inspection"
+  },
+  "ml_window_features": {
+    "qualified": "inspection::windowFeatures",
+    "namespace": "inspection",
+    "alias": "windowFeatures",
+    "flat": "mlWindowFeatures",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Feature Engineering"
   },
   "mqtt_broker": {
     "qualified": "mqtt::broker",
@@ -13886,6 +15929,15 @@
     "class": null,
     "category": "AI/ML/ONNX/NLP"
   },
+  "onnx_grounding_dino_detection": {
+    "qualified": "onnx::groundingDino",
+    "namespace": "onnx",
+    "alias": "groundingDino",
+    "flat": "onnxGroundingDinoDetection",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/ONNX/Inspection"
+  },
   "onnx_model_info": {
     "qualified": "onnx::modelInfo",
     "namespace": "onnx",
@@ -13904,6 +15956,24 @@
     "class": null,
     "category": "AI/ML/ONNX/NLP"
   },
+  "onnx_sam_image_encoder": {
+    "qualified": "onnx::samEncode",
+    "namespace": "onnx",
+    "alias": "samEncode",
+    "flat": "onnxSamImageEncoder",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/ONNX/Inspection"
+  },
+  "onnx_sam_prompt_segmentation": {
+    "qualified": "onnx::samSegment",
+    "namespace": "onnx",
+    "alias": "samSegment",
+    "flat": "onnxSamPromptSegmentation",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/ONNX/Inspection"
+  },
   "onnx_session_info": {
     "qualified": "onnx::info",
     "namespace": "onnx",
@@ -13911,6 +15981,15 @@
     "flat": "onnxSessionInfo",
     "receiver": "model",
     "class": "NodeOnnxSession",
+    "category": "AI/ML/ONNX"
+  },
+  "onnx_tensor_inference": {
+    "qualified": "onnx::inferTensors",
+    "namespace": "onnx",
+    "alias": "inferTensors",
+    "flat": "onnxTensorInference",
+    "receiver": null,
+    "class": null,
     "category": "AI/ML/ONNX"
   },
   "onnx_text_detection": {
@@ -14143,6 +16222,24 @@
     "namespace": "files",
     "alias": "head",
     "flat": "pathHead",
+    "receiver": "path",
+    "class": "FlowPath",
+    "category": "Data/Files/Operations"
+  },
+  "path_is_file": {
+    "qualified": "files::isFile",
+    "namespace": "files",
+    "alias": "isFile",
+    "flat": "pathIsFile",
+    "receiver": "path",
+    "class": "FlowPath",
+    "category": "Data/Files/Operations"
+  },
+  "path_is_folder": {
+    "qualified": "files::isFolder",
+    "namespace": "files",
+    "alias": "isFolder",
+    "flat": "pathIsFolder",
     "receiver": "path",
     "class": "FlowPath",
     "category": "Data/Files/Operations"
@@ -14605,6 +16702,15 @@
     "receiver": null,
     "class": null,
     "category": "Document/PPTX"
+  },
+  "prepare_embedding_media": {
+    "qualified": "ai::embedding::prepareMedia",
+    "namespace": "ai.embedding",
+    "alias": "prepareMedia",
+    "flat": "prepareEmbeddingMedia",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Embedding"
   },
   "processing_pii_detection_options": {
     "qualified": "ai::processing::piiDetectionOptions",
@@ -15164,6 +17270,15 @@
     "class": null,
     "category": "Utils/Set/By Reference"
   },
+  "set_column_metadata_local_db": {
+    "qualified": "db::setColumnMetadata",
+    "namespace": "db",
+    "alias": "setColumnMetadata",
+    "flat": "setColumnMetadataLocalDb",
+    "receiver": "database",
+    "class": "NodeDBConnection",
+    "category": "Data/Database/Schema"
+  },
   "set_discard": {
     "qualified": "set::discard",
     "namespace": "set",
@@ -15316,6 +17431,51 @@
     "receiver": "string1",
     "class": "string",
     "category": "Utils/String/Similarity"
+  },
+  "sparkplug_decode": {
+    "qualified": "sparkplug::decode",
+    "namespace": "sparkplug",
+    "alias": "decode",
+    "flat": "sparkplugDecode",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Sparkplug"
+  },
+  "sparkplug_encode": {
+    "qualified": "sparkplug::encode",
+    "namespace": "sparkplug",
+    "alias": "encode",
+    "flat": "sparkplugEncode",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Sparkplug"
+  },
+  "sparkplug_observe": {
+    "qualified": "sparkplug::observe",
+    "namespace": "sparkplug",
+    "alias": "observe",
+    "flat": "sparkplugObserve",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Sparkplug"
+  },
+  "sparkplug_prepare_session": {
+    "qualified": "sparkplug::prepareSession",
+    "namespace": "sparkplug",
+    "alias": "prepareSession",
+    "flat": "sparkplugPrepareSession",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Sparkplug"
+  },
+  "sparkplug_transition": {
+    "qualified": "sparkplug::transition",
+    "namespace": "sparkplug",
+    "alias": "transition",
+    "flat": "sparkplugTransition",
+    "receiver": null,
+    "class": null,
+    "category": "Industrial/Sparkplug"
   },
   "storage_copy": {
     "qualified": "files::copy",

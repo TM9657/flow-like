@@ -43,13 +43,13 @@ use flow_like::flow_like_storage::{
     normalize_object_path,
     object_store::ObjectStore,
 };
-use flow_like::profile::ProfileApp;
 use flow_like_types::anyhow;
 use flow_like_types::base64::{self, Engine as _};
 use futures::TryStreamExt;
 use serde::Deserialize;
 use tauri::AppHandle;
 
+use super::sharing::add_app_to_profile;
 use crate::{
     functions::TauriFunctionError,
     state::{TauriFlowLikeState, TauriSettingsState},
@@ -293,6 +293,10 @@ pub async fn apply_fork_bundle(
         return Err(TauriFunctionError::new("source_content_prefix is empty"));
     }
 
+    let profile_id = TauriSettingsState::current_profile(&app_handle)
+        .await?
+        .hub_profile
+        .id;
     let dst_meta_store = TauriFlowLikeState::get_project_meta_store(&app_handle).await?;
     let dst_content_store = TauriFlowLikeState::get_project_storage_store(&app_handle).await?;
     let dst_app_prefix = Path::from("apps").join(args.app_id.clone());
@@ -426,7 +430,7 @@ pub async fn apply_fork_bundle(
     )
     .await;
 
-    register_profile_app(&app_handle, &args.app_id).await?;
+    add_app_to_profile(&app_handle, &profile_id, &args.app_id).await?;
 
     Ok(ApplyForkBundleResponse {
         app_id: args.app_id,
@@ -605,25 +609,6 @@ async fn summarize_store_prefix(
     }
 
     Ok(entries)
-}
-
-async fn register_profile_app(
-    app_handle: &AppHandle,
-    app_id: &str,
-) -> Result<(), TauriFunctionError> {
-    let settings = TauriSettingsState::construct(app_handle).await?;
-    let mut settings = settings.lock().await;
-    let profile_id = settings.get_current_profile()?.hub_profile.id.clone();
-    let profile = settings
-        .profiles
-        .get_mut(&profile_id)
-        .ok_or_else(|| TauriFunctionError::new("Profile not found"))?;
-    let apps = profile.hub_profile.apps.get_or_insert_with(Vec::new);
-    if !apps.iter().any(|app| app.app_id == app_id) {
-        apps.push(ProfileApp::new(app_id.to_string()));
-    }
-    settings.serialize();
-    Ok(())
 }
 
 fn is_content_blob_path(relative_path: &str) -> bool {

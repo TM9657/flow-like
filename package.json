@@ -13,7 +13,9 @@
 		"icons:lint": "bun scripts/sync-node-icons.ts --check",
 		"icons:sync": "bun scripts/sync-node-icons.ts",
 		"test:e2e:package-security": "bun test tests/package-manager-security.e2e.test.ts",
-		"build:device-crypto": "node packages/device-crypto/build-web.mjs"
+		"build:device-crypto": "node packages/device-crypto/build-web.mjs",
+		"build:wordcraft": "node packages/wordcraft/build-web.mjs",
+		"test:wordcraft": "node --test packages/wordcraft/host.test.mjs && vitest run packages/ui/components/storage/storage-system.dom.test.tsx packages/ui/components/storage/storage-docx-history.dom.test.tsx packages/ui/components/storage/wordcraft-document.dom.test.tsx packages/ui/components/storage/wordcraft-protocol.test.ts --environment happy-dom --maxWorkers 1 && vitest run apps/desktop/components/tauri-provider/__tests__/storage-state.test.ts --maxWorkers 1 && bun tests/wordcraft-browser/verify.ts"
 	},
 	"workspaces": [
 		"packages/*",

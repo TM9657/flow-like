@@ -55,6 +55,19 @@ fn assert_close(values: &[f32], expected: &[f32]) {
     }
 }
 
+/// A pickle `BINUNICODE` opcode carrying `text`.
+pub(crate) fn pickle_str(text: &str) -> Vec<u8> {
+    let mut bytes = vec![b'X'];
+    bytes.extend_from_slice(&(text.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(text.as_bytes());
+    bytes
+}
+
+/// Pickle opcodes building a float tensor of shape `(2,)` from the start of storage `"0"`,
+/// declared with 4 elements, through `torch._utils._rebuild_tensor_v2` as `torch.save`
+/// writes it.
+pub(crate) const PICKLED_TENSOR: &[u8] = b"ctorch._utils\n_rebuild_tensor_v2\n((X\x07\x00\x00\x00storagectorch\nFloatStorage\nX\x01\x00\x00\x000X\x03\x00\x00\x00cpuK\x04tQK\x00K\x02\x85K\x01\x85\x89ccollections\nOrderedDict\n)RtR";
+
 #[test]
 fn test_float32_tensor() {
     let path = test_data_path("float32.pt");
@@ -1984,6 +1997,96 @@ fn test_zip_archive_and_root_level_layouts() {
         assert_eq!(read_as::<f32>(tensor), [1.0, 2.5, -3.7, 0.0]);
         assert_eq!(reader.metadata().pytorch_version.as_deref(), Some("3"));
         assert_eq!(reader.metadata().total_data_size, Some(16));
+    }
+}
+
+/// `float32.pt` rewritten with `pickle` as its `data.pkl`, which may read storage `"0"`.
+fn checkpoint_with_pickle(dir: &std::path::Path, name: &str, pickle: &[u8]) -> PathBuf {
+    let path = dir.join(name);
+    rezip(
+        &test_data_path("float32.pt"),
+        &path,
+        "float32/",
+        zip::CompressionMethod::Stored,
+        |entry, bytes| {
+            if entry == "data.pkl" {
+                *bytes = pickle.to_vec();
+            }
+        },
+    );
+    path
+}
+
+/// `{"model": {"w": t}, "x": {key: t}}`, with `t` the tensor of [`PICKLED_TENSOR`].
+fn model_beside_tensor_under(key: &str) -> Vec<u8> {
+    [
+        b"\x80\x02}(".as_slice(),
+        &pickle_str("model"),
+        b"}",
+        &pickle_str("w"),
+        PICKLED_TENSOR,
+        b"s",
+        &pickle_str("x"),
+        b"}",
+        &pickle_str(key),
+        PICKLED_TENSOR,
+        b"su.",
+    ]
+    .concat()
+}
+
+#[test]
+fn test_long_tensor_names_are_refused_anywhere_in_the_file() {
+    // The long key lies outside the dict a caller would select, but reading the whole file
+    // names a tensor with it, and over many tensors such names exhaust memory.
+    let dir = tempfile::tempdir().unwrap();
+    let pickle = model_beside_tensor_under(&"k".repeat(5000));
+    let path = checkpoint_with_pickle(dir.path(), "long.pt", &pickle);
+    for err in [
+        PytorchReader::read_pickle_data(&path, None).unwrap_err(),
+        PytorchReader::new(&path).unwrap_err(),
+    ] {
+        assert!(
+            err.to_string().contains("above the 4096 byte limit"),
+            "{err}"
+        );
+    }
+
+    let path = checkpoint_with_pickle(dir.path(), "short.pt", &model_beside_tensor_under("k"));
+    let reader = PytorchReader::new(&path).unwrap();
+    assert_eq!(reader.len(), 2);
+    assert_eq!(read_as::<f32>(reader.get("model.w").unwrap()), [1.0, 2.5]);
+    assert!(reader.get("x.k").is_some());
+}
+
+#[test]
+fn test_tensors_sharing_a_flattened_name_are_refused() {
+    // `model.w` names both the tensor inside `model` and the one beside it. Which one a
+    // reader kept used to depend on hash order, so a caller that checked `model` could be
+    // handed the other.
+    let pickle = [
+        b"\x80\x02}(".as_slice(),
+        &pickle_str("model"),
+        b"}",
+        &pickle_str("w"),
+        PICKLED_TENSOR,
+        b"s",
+        &pickle_str("model.w"),
+        PICKLED_TENSOR,
+        b"u.",
+    ]
+    .concat();
+    let dir = tempfile::tempdir().unwrap();
+    let path = checkpoint_with_pickle(dir.path(), "shared.pt", &pickle);
+    for err in [
+        PytorchReader::read_pickle_data(&path, None).unwrap_err(),
+        PytorchReader::new(&path).unwrap_err(),
+    ] {
+        assert!(
+            err.to_string()
+                .contains("more than one tensor is named 'model.w'"),
+            "{err}"
+        );
     }
 }
 

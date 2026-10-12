@@ -5121,15 +5121,21 @@ eventsChat() {
         }
 
         async fn on_update(&self, node: &mut Node, board: &Board) {
-            let has_contract = node
+            let Some(reference) = node
                 .get_pin_by_name("element_ref")
                 .and_then(|pin| pin.depends_on.first())
-                .and_then(|id| board.get_pin_by_id(id))
+            else {
+                node.pins.retain(|_, pin| !pin.name.starts_with("dyn_in_"));
+                return;
+            };
+            let has_contract = board
+                .get_pin_by_id(reference)
                 .and_then(|pin| pin.schema.as_deref())
                 .and_then(|schema| resolve_schema(schema, &board.refs).ok())
                 .is_some_and(|schema| schema == TEST_WIDGET_SCHEMA);
+            // Like the real widget node, a connected reference whose contract is not derived yet
+            // keeps the configured inputs: replay settles the relay and this node in any order.
             if !has_contract {
-                node.pins.retain(|_, pin| !pin.name.starts_with("dyn_in_"));
                 return;
             }
             for (name, data_type) in [

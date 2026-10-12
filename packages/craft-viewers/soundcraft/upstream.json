@@ -1,0 +1,11 @@
+{
+	"repository": "https://github.com/storytold/soundcraft.git",
+	"revision": "df0c4790b72972cbb967d5af17228e782dbee420",
+	"version": "0.6.0",
+	"wasmBindgen": "0.2.129",
+	"cargoPackage": "soundcraft-web",
+	"label": "Flows Audio",
+	"canvasId": "craft_canvas",
+	"maxBytes": 104857600,
+	"extensions": ["wav", "wave", "bwf", "aif", "aiff", "aifc", "flac", "mp3", "ogg", "oga", "m4a", "aac", "caf", "mid", "midi", "smf", "scraft", "scraftz"]
+}

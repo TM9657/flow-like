@@ -1,0 +1,30 @@
+---
+title: "Kafka Node Catalog"
+description: "Industrial/Kafka Flow-Like node category with 4 generated node references."
+sidebar:
+  order: 0
+  label: "Kafka"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "Kafka nodes, Industrial/Kafka, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "Industrial/Kafka"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"Kafka Node Catalog\",\"description\":\"Industrial/Kafka Flow-Like node category with 4 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/industrial/kafka/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"Industrial/Kafka\",\"keywords\":\"Kafka nodes, Industrial/Kafka, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"Industrial/Kafka"}
+	label="Kafka"
+	nodes={nodesByCategory["Industrial/Kafka"] ?? []}
+	client:load
+/>

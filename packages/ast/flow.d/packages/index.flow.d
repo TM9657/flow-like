@@ -4,6 +4,7 @@
 // automation -> packages/automation.flow.d
 // data -> packages/data.flow.d
 // geo -> packages/geo.flow.d
+// industrial -> packages/industrial.flow.d
 // llm -> packages/llm.flow.d
 // media -> packages/media.flow.d
 // ml -> packages/ml.flow.d

@@ -1,3 +1,6 @@
+import type { IColumnMetadata } from "../../lib/column-metadata";
+import type { IDataSensitivity } from "../../lib/data-classification";
+
 export enum IIndexType {
 	FullText = 0,
 	BTree = 1,
@@ -173,6 +176,11 @@ export interface ITableSummary {
 	indexes: IIndexSummary[];
 	storage?: IStorageSummary;
 	consumers: IConsumerSummary;
+	/**
+	 * The strictest classification over the columns the caller can see and
+	 * whether any holds personal data. Absent from older backends.
+	 */
+	sensitivity?: IDataSensitivity;
 	/** Set when this one table failed to read; the rest of the listing still resolved. */
 	error?: string;
 }
@@ -473,6 +481,19 @@ export interface IDatabaseState {
 		userScoped?: boolean,
 		selector?: IDatabaseSelector,
 	): Promise<void>;
+	/**
+	 * Replace `column`'s display name, description, classification, PII flag and
+	 * read attributes; omitted parts are cleared. Changing the read attributes
+	 * needs Admin. Answers the stored, normalized metadata.
+	 */
+	setColumnMetadata(
+		appId: string,
+		tableName: string,
+		column: string,
+		metadata: IColumnMetadata,
+		userScoped?: boolean,
+		selector?: IDatabaseSelector,
+	): Promise<IColumnMetadata>;
 	dropTable(
 		appId: string,
 		tableName: string,

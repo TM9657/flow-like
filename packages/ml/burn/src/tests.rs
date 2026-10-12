@@ -2,6 +2,28 @@ use super::*;
 use std::sync::Mutex;
 pub(crate) static TEST_LOCK: Mutex<()> = Mutex::new(());
 
+pub(crate) fn checkpoint_directories(dir: &std::path::Path, prefix: &str) -> Vec<String> {
+    let mut names = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with(prefix))
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
+fn manifest(dir: &std::path::Path) -> serde_json::Value {
+    serde_json::from_slice(&std::fs::read(dir.join(MANIFEST_FILE)).unwrap()).unwrap()
+}
+
+fn assert_only_manifest_checkpoint(dir: &std::path::Path) {
+    assert_eq!(
+        checkpoint_directories(dir, "checkpoint-"),
+        vec![manifest(dir)["checkpoint"].as_str().unwrap().to_string()],
+        "Superseded checkpoints must be removed"
+    );
+}
+
 #[cfg(feature = "onnx-export")]
 #[test]
 fn onnx_export_requires_a_supported_graph_and_matching_shape() {
@@ -339,6 +361,7 @@ fn cancellation_checkpoints_and_resume_matches_continuous_training() {
         |_| {},
     )
     .unwrap();
+    assert_only_manifest_checkpoint(complete.path());
     let token = CancellationToken::new();
     let err = train(&config, &data, None, interrupted.path(), &token, |p| {
         if p.steps == 3 {
@@ -347,6 +370,7 @@ fn cancellation_checkpoints_and_resume_matches_continuous_training() {
     })
     .unwrap_err();
     assert!(matches!(err, Error::Cancelled));
+    assert_only_manifest_checkpoint(interrupted.path());
     Predictor::load(interrupted.path(), BackendChoice::Cpu)
         .unwrap()
         .predict(&data.inputs)
@@ -364,6 +388,7 @@ fn cancellation_checkpoints_and_resume_matches_continuous_training() {
     .unwrap();
     assert_eq!(report.steps, 16);
     assert_eq!(report.backend, Some(BackendChoice::Cpu));
+    assert_only_manifest_checkpoint(interrupted.path());
     let a = Predictor::load(complete.path(), BackendChoice::Cpu)
         .unwrap()
         .predict(&data.inputs)
@@ -391,6 +416,125 @@ fn cancellation_checkpoints_and_resume_matches_continuous_training() {
         )
         .is_err()
     );
+}
+
+fn mlp_fixture(epochs: usize) -> (TrainingConfig, TensorDataset) {
+    let mut data = sequence_data();
+    data.inputs.shape = vec![16, 4];
+    let config = config(
+        Recipe::Mlp {
+            input_features: 4,
+            hidden: 6,
+            outputs: 2,
+            objective: Objective::Classification,
+        },
+        epochs,
+    );
+    (config, data)
+}
+
+#[test]
+fn cancelling_epoch_evaluation_checkpoints_the_trained_batches() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let (config, data) = mlp_fixture(3);
+    let complete = tempfile::tempdir().unwrap();
+    let expected = train(
+        &config,
+        &data,
+        Some(&data),
+        complete.path(),
+        &CancellationToken::new(),
+        |_| {},
+    )
+    .unwrap();
+    let interrupted = tempfile::tempdir().unwrap();
+    let token = CancellationToken::new();
+    let (held, wait_for_hold) = std::sync::mpsc::channel();
+    let mut holder = None;
+    let error = train(&config, &data, Some(&data), interrupted.path(), &token, |p| {
+        // After the first epoch's last batch, evaluation waits for the RNG until cancelled.
+        if p.epoch == 1 && p.batch == 2 && p.validation_loss.is_none() {
+            let token = token.clone();
+            let held = held.clone();
+            holder = Some(std::thread::spawn(move || {
+                let _rng = crate::execution::lock(None).unwrap();
+                held.send(()).unwrap();
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                token.cancel();
+            }));
+            wait_for_hold.recv().unwrap();
+        }
+    })
+    .unwrap_err();
+    holder.unwrap().join().unwrap();
+    assert!(matches!(error, Error::Cancelled));
+    let state = manifest(interrupted.path());
+    assert_eq!(
+        (
+            state["next_epoch"].as_u64(),
+            state["next_batch"].as_u64(),
+            state["report"]["steps"].as_u64(),
+            state["report"]["completed_epochs"].as_u64(),
+        ),
+        (Some(0), Some(2), Some(2), Some(0)),
+        "Cancelled evaluation must keep the trained batches and re-evaluate on resume"
+    );
+    assert_only_manifest_checkpoint(interrupted.path());
+    let resumed = resume(
+        &config,
+        &data,
+        Some(&data),
+        interrupted.path(),
+        &CancellationToken::new(),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(resumed.steps, expected.steps);
+    assert_eq!(resumed.history.len(), expected.history.len());
+    assert!((resumed.final_loss - expected.final_loss).abs() < 1e-5);
+    assert!((resumed.validation_loss.unwrap() - expected.validation_loss.unwrap()).abs() < 1e-5);
+    assert_only_manifest_checkpoint(interrupted.path());
+}
+
+#[test]
+fn resume_cannot_end_inside_an_epoch_it_already_started() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let (config, data) = mlp_fixture(3);
+    let dir = tempfile::tempdir().unwrap();
+    let token = CancellationToken::new();
+    let error = train(&config, &data, None, dir.path(), &token, |p| {
+        if p.steps == 3 {
+            token.cancel()
+        }
+    })
+    .unwrap_err();
+    assert!(matches!(error, Error::Cancelled));
+    let mut shorter = config.clone();
+    shorter.epochs = 1;
+    let error = resume(
+        &shorter,
+        &data,
+        None,
+        dir.path(),
+        &CancellationToken::new(),
+        |_| {},
+    )
+    .unwrap_err();
+    assert!(
+        error.to_string().contains("Resume needs at least 2 epochs"),
+        "{error}"
+    );
+    shorter.epochs = 2;
+    let report = resume(
+        &shorter,
+        &data,
+        None,
+        dir.path(),
+        &CancellationToken::new(),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!((report.completed_epochs, report.steps), (2, 4));
 }
 
 #[test]

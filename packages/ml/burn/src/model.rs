@@ -310,10 +310,16 @@ impl Model {
             Self::UNet(m) => Output::Image(m.forward(tensor(input, device))),
         })
     }
-    pub(crate) fn loss(&self, data: &TensorDataset, device: &Device) -> Result<Tensor<1>> {
+    /// `training` selects RF-DETR's grouped training queries; evaluation uses the inference group.
+    pub(crate) fn loss(
+        &self,
+        data: &TensorDataset,
+        device: &Device,
+        training: bool,
+    ) -> Result<Tensor<1>> {
         if let (Self::RfDetr(model), Targets::Boxes { values }) = (self, &data.targets) {
             return model
-                .forward(tensor(&data.inputs, device), true)?
+                .forward(tensor(&data.inputs, device), training)?
                 .loss(values);
         }
         if let (Self::MaskRcnn(model), Targets::Instances { values }) = (self, &data.targets) {
@@ -420,24 +426,12 @@ impl Output {
         let (output, classes) = match self {
             Self::Matrix(x) if recipe.objective() == Some(Objective::Classification) => {
                 let probs = softmax(x, 1);
-                let classes = probs
-                    .clone()
-                    .argmax(1)
-                    .into_data()
-                    .convert::<i64>()
-                    .try_to_vec::<i64>()
-                    .map_err(|e| Error::Record(e.to_string()))?;
+                let classes = predicted_classes(probs.clone())?;
                 (to_data(probs)?, Some(classes))
             }
             Self::Image(x) => {
                 let probs = softmax(x, 1);
-                let classes = probs
-                    .clone()
-                    .argmax(1)
-                    .into_data()
-                    .convert::<i64>()
-                    .try_to_vec::<i64>()
-                    .map_err(|e| Error::Record(e.to_string()))?;
+                let classes = predicted_classes(probs.clone())?;
                 (to_data(probs)?, Some(classes))
             }
             Self::Matrix(x) => (to_data(x)?, None),
@@ -470,10 +464,20 @@ impl Output {
         })
     }
 }
+fn predicted_classes<const D: usize>(probabilities: Tensor<D>) -> Result<Vec<i64>> {
+    probabilities
+        .argmax(1)
+        .try_into_data()
+        .map_err(crate::execution::device_error)?
+        .convert::<i64>()
+        .try_to_vec::<i64>()
+        .map_err(|e| Error::Record(e.to_string()))
+}
 fn to_data<const D: usize>(x: Tensor<D>) -> Result<TensorData> {
     let shape = x.dims().to_vec();
     let values = x
-        .into_data()
+        .try_into_data()
+        .map_err(crate::execution::device_error)?
         .try_to_vec::<f32>()
         .map_err(|e| Error::Record(e.to_string()))?;
     let data = TensorData { shape, values };

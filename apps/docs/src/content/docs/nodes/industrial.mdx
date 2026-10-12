@@ -1,0 +1,30 @@
+---
+title: "Industrial Node Catalog"
+description: "Industrial Flow-Like node category with 96 generated node references."
+sidebar:
+  order: 0
+  label: "Industrial"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "Industrial nodes, Industrial, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "Industrial"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"Industrial Node Catalog\",\"description\":\"Industrial Flow-Like node category with 96 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/industrial/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"Industrial\",\"keywords\":\"Industrial nodes, Industrial, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"Industrial"}
+	label="Industrial"
+	nodes={nodesByCategory["Industrial"] ?? []}
+	client:load
+/>

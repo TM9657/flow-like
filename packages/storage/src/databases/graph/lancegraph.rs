@@ -1,6 +1,9 @@
+mod access;
 mod editing;
 mod expansion;
 mod validation;
+
+pub use access::restrict_overlay;
 
 pub use editing::{
     ObjectPropertyUpdate, OverlayRowUpdateOutcome, OverlayRowUpdateRejected,
@@ -14,9 +17,11 @@ use super::{
     GraphSchemaResult, GraphStore, SubgraphEdge, SubgraphNode, SubgraphResult, TraversalDirection,
 };
 use crate::arrow_utils::record_batch_to_value;
+use crate::databases::column_access::{hidden_columns, is_hidden, restrict_provider};
 use crate::databases::df_provider::lance_table_provider;
 use datafusion::catalog::TableProvider;
 use datafusion::prelude::SessionContext;
+use flow_like_storage_contracts::column_metadata::ColumnReader;
 use flow_like_types::{Result, Value, anyhow, async_trait};
 use futures::TryStreamExt;
 use lance_graph::{CypherQuery, GraphConfig};
@@ -341,6 +346,7 @@ pub struct LanceGraphStore {
     graph_config: GraphConfig,
     safety: CypherSafetyConfig,
     semaphore: Arc<tokio::sync::Semaphore>,
+    column_reader: ColumnReader,
 }
 
 impl LanceGraphStore {
@@ -349,9 +355,21 @@ impl LanceGraphStore {
         overlay: GraphOverlayDef,
         safety: Option<CypherSafetyConfig>,
     ) -> Result<Self> {
+        Self::new_for(connection, overlay, safety, ColumnReader::Unrestricted).await
+    }
+
+    /// A store that shows `reader` only the columns it may read: the overlay is
+    /// restricted with [`restrict_overlay`] and every SQL or Cypher table is projected.
+    pub async fn new_for(
+        connection: Connection,
+        overlay: GraphOverlayDef,
+        safety: Option<CypherSafetyConfig>,
+        reader: ColumnReader,
+    ) -> Result<Self> {
         let safety = safety.unwrap_or_default();
         let semaphore = global_query_semaphore(safety.max_concurrent);
 
+        let overlay = restrict_overlay(&connection, overlay, &reader).await?;
         let graph_config = build_graph_config(&connection, &overlay).await?;
 
         Ok(LanceGraphStore {
@@ -360,6 +378,7 @@ impl LanceGraphStore {
             graph_config,
             safety,
             semaphore,
+            column_reader: reader,
         })
     }
 
@@ -764,9 +783,11 @@ impl GraphStore for LanceGraphStore {
                 .await
                 .map_err(|e| anyhow!("Failed to get schema for '{}': {}", node_def.table, e))?;
 
+            let hidden = hidden_columns(&schema, &self.column_reader);
             let properties = schema
                 .fields()
                 .iter()
+                .filter(|f| !is_hidden(&hidden, f.name()))
                 .map(|f| GraphPropertyInfo {
                     name: f.name().clone(),
                     data_type: format!("{:?}", f.data_type()),
@@ -795,9 +816,11 @@ impl GraphStore for LanceGraphStore {
                 .await
                 .map_err(|e| anyhow!("Failed to get schema for '{}': {}", edge_def.table, e))?;
 
+            let hidden = hidden_columns(&schema, &self.column_reader);
             let properties = schema
                 .fields()
                 .iter()
+                .filter(|f| !is_hidden(&hidden, f.name()))
                 .map(|f| GraphPropertyInfo {
                     name: f.name().clone(),
                     data_type: format!("{:?}", f.data_type()),
@@ -905,7 +928,7 @@ impl LanceGraphStore {
             return Ok(adapter.clone());
         }
 
-        let adapter = open_table_adapter(&self.connection, table_name).await?;
+        let adapter = open_table_adapter(&self.connection, table_name, &self.column_reader).await?;
         cache.insert(table_name.to_string(), adapter.clone());
         Ok(adapter)
     }
@@ -1479,20 +1502,31 @@ fn preflight_cypher(
 pub(crate) async fn open_table_adapter(
     connection: &Connection,
     table_name: &str,
+    reader: &ColumnReader,
 ) -> Result<Arc<dyn TableProvider>> {
     let table = connection
         .open_table(table_name)
         .execute()
         .await
         .map_err(|e| anyhow!("Failed to open table '{}': {}", table_name, e))?;
+    let hidden = if reader.is_unrestricted() {
+        Vec::new()
+    } else {
+        let schema = table
+            .schema()
+            .await
+            .map_err(|e| anyhow!("Failed to read schema for '{}': {}", table_name, e))?;
+        hidden_columns(&schema, reader)
+    };
 
-    lance_table_provider(table, false).await.map_err(|e| {
+    let adapter = lance_table_provider(table, false).await.map_err(|e| {
         anyhow!(
             "Failed to create DataFusion adapter for '{}': {}",
             table_name,
             e
         )
-    })
+    })?;
+    Ok(restrict_provider(adapter, &hidden))
 }
 
 pub(crate) use crate::databases::sql_guard::validate_readonly_sql;

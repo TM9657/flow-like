@@ -9,10 +9,12 @@
 //! Nothing is allowed to fail the listing. A table that cannot be opened comes
 //! back with its `error` set and every other table still resolves.
 
+use crate::databases::column_access::{hidden_columns, is_hidden};
 use crate::databases::graph::lancegraph::{GraphOverlayDef, NodeMappingDef, list_overlays};
 use crate::databases::table_cascade::{normalize_table_name, sql_references_table};
 use crate::databases::workbench::saved_query::list_saved_queries;
 use arrow_schema::DataType;
+use flow_like_storage_contracts::column_metadata::{ColumnReader, DataSensitivity};
 use futures::stream::{self, StreamExt};
 use lancedb::Connection;
 use serde::{Deserialize, Serialize};
@@ -101,6 +103,9 @@ pub struct TableSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub storage: Option<StorageSummary>,
     pub consumers: ConsumerSummary,
+    /// The stricter classification of the listed columns, and whether any holds personal data.
+    #[serde(default, skip_serializing_if = "DataSensitivity::is_empty")]
+    pub sensitivity: DataSensitivity,
     /// Set when this one table could not be read. Every other field is then
     /// whatever was resolvable before the failure.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -116,6 +121,7 @@ impl TableSummary {
             indexes: Vec::new(),
             storage: None,
             consumers,
+            sensitivity: DataSensitivity::default(),
             error: Some(error),
         }
     }
@@ -126,13 +132,23 @@ impl TableSummary {
 /// metadata reads. Never returns Err: a broken manifest degrades to empty
 /// consumer counts, a broken table degrades to `TableSummary::error`.
 pub async fn summarize_tables(connection: &Connection, names: Vec<String>) -> Vec<TableSummary> {
+    summarize_tables_for(connection, names, &ColumnReader::Unrestricted).await
+}
+
+/// [`summarize_tables`] as `reader` sees the tables: columns it may not read, and indexes
+/// on them, are left out.
+pub async fn summarize_tables_for(
+    connection: &Connection,
+    names: Vec<String>,
+    reader: &ColumnReader,
+) -> Vec<TableSummary> {
     let overlays = list_overlays(connection).await.unwrap_or_default();
     let queries = list_saved_queries(connection).await.unwrap_or_default();
 
     stream::iter(names)
         .map(|name| {
             let consumers = collect_consumers(&overlays, &queries, &name);
-            async move { summarize_one(connection, name, consumers).await }
+            async move { summarize_one(connection, name, consumers, reader).await }
         })
         .buffer_unordered(SUMMARY_CONCURRENCY)
         .collect()
@@ -143,6 +159,7 @@ async fn summarize_one(
     connection: &Connection,
     name: String,
     consumers: ConsumerSummary,
+    reader: &ColumnReader,
 ) -> TableSummary {
     let table = match connection.open_table(&name).execute().await {
         Ok(table) => table,
@@ -151,8 +168,8 @@ async fn summarize_one(
         }
     };
 
-    let columns = match table.schema().await {
-        Ok(schema) => schema.fields().iter().map(summarize_field).collect(),
+    let schema = match table.schema().await {
+        Ok(schema) => schema,
         Err(error) => {
             return TableSummary::failed(
                 name,
@@ -161,12 +178,30 @@ async fn summarize_one(
             );
         }
     };
+    let hidden = hidden_columns(&schema, reader);
+    let visible: Vec<_> = schema
+        .fields()
+        .iter()
+        .filter(|field| !is_hidden(&hidden, field.name()))
+        .collect();
+    let columns = visible.iter().map(|field| summarize_field(field)).collect();
+    let sensitivity = DataSensitivity::combined(
+        visible
+            .iter()
+            .map(|field| DataSensitivity::from_metadata(field.metadata())),
+    );
 
     let indexes = crate::databases::vector::lancedb::list_table_indices(&table)
         .await
         .map(|indices| {
             indices
                 .into_iter()
+                .filter(|index| {
+                    !index
+                        .columns
+                        .iter()
+                        .any(|column| is_hidden(&hidden, column))
+                })
                 .map(|index| IndexSummary {
                     name: index.name,
                     index_type: index.index_type.to_string(),
@@ -198,6 +233,7 @@ async fn summarize_one(
         indexes,
         storage,
         consumers,
+        sensitivity,
         error: None,
     }
 }

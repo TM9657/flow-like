@@ -413,6 +413,14 @@ class DatabaseMixin(HTTPClient):
         """PUT /apps/{app_id}/db/{table}/primary-key. Bodies and query keys follow the REST API."""
         return await self._ajson("PUT", f"/apps/{segment(app_id)}/db/{segment(table)}/primary-key", json=body, params=params)
 
+    def set_table_column_metadata(self, app_id: str, table: str, column: str, body: dict[str, Any], *, params: dict[str, Any] | None = None) -> Any:
+        """PUT /apps/{app_id}/db/{table}/columns/{column}/metadata. Bodies and query keys follow the REST API."""
+        return self._json("PUT", f"/apps/{segment(app_id)}/db/{segment(table)}/columns/{segment(column)}/metadata", json=body, params=params)
+
+    async def aset_table_column_metadata(self, app_id: str, table: str, column: str, body: dict[str, Any], *, params: dict[str, Any] | None = None) -> Any:
+        """PUT /apps/{app_id}/db/{table}/columns/{column}/metadata. Bodies and query keys follow the REST API."""
+        return await self._ajson("PUT", f"/apps/{segment(app_id)}/db/{segment(table)}/columns/{segment(column)}/metadata", json=body, params=params)
+
     def build_table_index(self, app_id: str, table: str, body: dict[str, Any], *, params: dict[str, Any] | None = None) -> Any:
         """POST /apps/{app_id}/db/{table}/index. Bodies and query keys follow the REST API."""
         return self._json("POST", f"/apps/{segment(app_id)}/db/{segment(table)}/index", json=body, params=params)

@@ -1,6 +1,6 @@
 use crate::{BoundingBox, Detection, DetectionOptions, Result, TensorData};
 use burn::{
-    module::Module,
+    module::{Module, Param},
     nn::{
         BatchNorm, BatchNormConfig, PaddingConfig2d,
         conv::{Conv2d, Conv2dConfig},
@@ -130,8 +130,8 @@ impl Head {
             reg1: BaseConv::new(hidden, hidden, 3, 1, device),
             reg2: BaseConv::new(hidden, hidden, 3, 1, device),
             boxes: Conv2dConfig::new([hidden, 4], [1, 1]).init(device),
-            objectness: Conv2dConfig::new([hidden, 1], [1, 1]).init(device),
-            classes: Conv2dConfig::new([hidden, classes], [1, 1]).init(device),
+            objectness: prior_conv(hidden, 1, device),
+            classes: prior_conv(hidden, classes, device),
         }
     }
     fn forward(&self, x: Tensor<4>) -> Tensor<3> {
@@ -151,6 +151,17 @@ impl Head {
         .flatten(2, 3)
         .swap_dims(1, 2)
     }
+}
+/// Score biases start at the upstream 1% foreground prior so the dense negative objectness loss
+/// does not dominate early training.
+fn prior_conv(input: usize, output: usize, device: &Device) -> Conv2d {
+    let mut conv = Conv2dConfig::new([input, output], [1, 1]).init(device);
+    conv.bias = Some(Param::from_tensor(Tensor::full(
+        [output],
+        (0.01f32 / 0.99).ln(),
+        device,
+    )));
+    conv
 }
 
 /// CSPDarknet, path aggregation feature pyramid and decoupled YOLOX heads.
@@ -595,6 +606,40 @@ mod tests {
                 actual.is_finite() && (actual - expected).abs() < 1e-6,
                 "gradient {actual} != {expected}"
             );
+        }
+    }
+    #[test]
+    fn new_score_heads_start_at_the_upstream_foreground_prior() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let device = Device::flex();
+        let model = YoloX::new(1, 3, 0.0625, 0.33, &device);
+        let prior = (0.01f32 / 0.99).ln();
+        for head in &model.heads {
+            for (layer, channels) in [(&head.objectness, 1), (&head.classes, 3)] {
+                let bias = layer
+                    .bias
+                    .as_ref()
+                    .unwrap()
+                    .val()
+                    .into_data()
+                    .iter::<f32>()
+                    .collect::<Vec<_>>();
+                assert_eq!(bias.len(), channels);
+                assert!(bias.iter().all(|value| (value - prior).abs() < 1e-6));
+            }
+        }
+        // A blank image has zero head features, so every score logit is exactly the prior.
+        let logits = model
+            .forward(Tensor::zeros([1, 1, 32, 32], &device))
+            .logits
+            .into_data()
+            .iter::<f32>()
+            .collect::<Vec<_>>();
+        assert_eq!(logits.len(), 21 * 8);
+        for anchor in logits.chunks_exact(8) {
+            assert!(anchor[4..].iter().all(|value| (value - prior).abs() < 1e-5));
         }
     }
 }

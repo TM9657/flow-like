@@ -3,7 +3,7 @@ use crate::{
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
-    routes::app::db::{ScopeParams, table_input_error},
+    routes::app::db::{ScopeParams, column_reader, table_input_error},
     state::AppState,
 };
 use axum::{
@@ -133,7 +133,7 @@ pub async fn update_object(
     Query(scope): Query<ScopeParams>,
     Json(payload): Json<UpdateObjectPayload>,
 ) -> Result<Json<UpdateOverlayRowResponse>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -148,6 +148,9 @@ pub async fn update_object(
 
     let (connection, overlay) =
         super::load_scoped_overlay_for_write(&state, &user, &app_id, &overlay_id, &scope).await?;
+    let overlay =
+        lancegraph::restrict_overlay(&connection, overlay, &column_reader(&permission, &scope))
+            .await?;
     let object_type = payload.object_type.clone();
     let object_id = identity_label(&payload.id);
     let columns = payload.updates.keys().cloned().collect::<Vec<_>>();

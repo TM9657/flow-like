@@ -11,6 +11,7 @@ use axum::{
     Extension, Json,
     extract::{Path, Query, State},
 };
+use flow_like_storage::contracts::column_metadata::ColumnReader;
 
 #[utoipa::path(
     get,
@@ -54,5 +55,7 @@ pub async fn list_tables_user(
     let builder = credentials.to_db_scoped(&sub, &app_id).await?;
     let connection = builder.execute().await?;
 
-    Ok(Json(table_listing(connection, &params).await?))
+    Ok(Json(
+        table_listing(connection, &params, &ColumnReader::Unrestricted).await?,
+    ))
 }

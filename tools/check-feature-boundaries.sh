@@ -309,14 +309,18 @@ configure_boundary() {
         industrial-adapters)
             CHECK_ARGS=(--package flow-like-industrial --no-default-features --features execute)
             FORBIDDEN=(flow-like flow-like-runtime flow-like-editor flow-like-types flow-like-storage flow-like-model-provider "${CATALOG_NODE_PACKAGES[@]}" burn lancedb datafusion wasmtime tauri)
+            REQUIRED=(dust_dds)
             ;;
         catalog-industrial|catalog-industrial-execute)
             CHECK_ARGS=(--package flow-like-catalog-industrial --no-default-features)
-            if [ "$boundary" = catalog-industrial-execute ]; then
-                CHECK_ARGS+=(--features execute)
-            fi
             FORBIDDEN=(flow-like flow-like-editor flow-like-catalog-ml flow-like-ml-native flow-like-ml-burn flow-like-ml-runtime burn)
             REQUIRED=(flow-like-industrial)
+            if [ "$boundary" = catalog-industrial-execute ]; then
+                CHECK_ARGS+=(--features execute)
+                REQUIRED+=(dust_dds)
+            else
+                FORBIDDEN+=(dust_dds)
+            fi
             ;;
         core-contracts)
             CHECK_ARGS=(--package flow-like-core-contracts --no-default-features)
@@ -579,6 +583,7 @@ configure_boundary() {
             CHECK_ARGS=(--package flow-like-catalog --no-default-features --features portable-metadata)
             FORBIDDEN=(
                 flow-like-catalog-automation
+                dust_dds
                 lancedb
                 lance
                 lance-core

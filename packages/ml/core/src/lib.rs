@@ -112,6 +112,10 @@ impl InspectionSpec {
         ) {
             require(!self.labels.is_empty(), "This task requires labels")?;
         }
+        require(
+            self.task != TaskKind::SequenceForecast || self.prediction_horizon_ms != Some(0),
+            "A forecast prediction horizon must be positive, or empty for no horizon limit",
+        )?;
         Ok(())
     }
 
@@ -159,6 +163,22 @@ impl InspectionSpec {
             compatible,
             "Annotation type does not match the inspection task",
         )?;
+        match &sample.annotation {
+            Annotation::Mask { width, height, .. } => {
+                require_input_resolution(&self.input_shape, *width, *height, "Mask")?
+            }
+            Annotation::InstanceMasks { instances } => {
+                for instance in instances {
+                    require_input_resolution(
+                        &self.input_shape,
+                        instance.width,
+                        instance.height,
+                        &format!("Instance mask '{}'", instance.instance_id),
+                    )?;
+                }
+            }
+            _ => {}
+        }
         if self.task == TaskKind::SequenceForecast
             || self.prediction_horizon_ms.is_some_and(|h| h > 0)
         {
@@ -214,6 +234,27 @@ pub fn validate_labels(labels: &[String]) -> Result<()> {
             .iter()
             .all(|s| !s.trim().is_empty() && seen.insert(s)),
         "Labels must be nonempty and unique",
+    )
+}
+
+/// Masks label the input's pixels, so they need its trailing [height, width] dimensions.
+fn require_input_resolution(
+    input_shape: &[usize],
+    width: usize,
+    height: usize,
+    mask: &str,
+) -> Result<()> {
+    let [.., input_height, input_width] = input_shape else {
+        return Err(Error::Invalid(format!(
+            "{mask} needs an image input shaped [..., height, width], not {input_shape:?}"
+        )));
+    };
+    require(
+        (height, width) == (*input_height, *input_width),
+        format!(
+            "{mask} is {width}x{height} (width x height) but the input image is \
+             {input_width}x{input_height}; resize masks together with their images"
+        ),
     )
 }
 
@@ -1047,6 +1088,74 @@ mod tests {
             confidence: None,
         };
         assert!(spec.validate_sample(&sample).is_err());
+    }
+
+    #[test]
+    fn forecast_specs_reject_a_zero_prediction_horizon() {
+        let mut forecast = contract_spec(TaskKind::SequenceForecast, vec![]);
+        forecast.validate().unwrap();
+        forecast.prediction_horizon_ms = Some(0);
+        assert!(forecast.validate().is_err());
+        forecast.prediction_horizon_ms = Some(1);
+        forecast.validate().unwrap();
+        let mut regression = contract_spec(TaskKind::SensorRegression, vec![]);
+        regression.prediction_horizon_ms = Some(0);
+        regression.validate().unwrap();
+    }
+
+    #[test]
+    fn masks_must_match_the_input_resolution() {
+        let segmentation = InspectionSpec {
+            input_shape: vec![1, 2, 3],
+            ..contract_spec(
+                TaskKind::Segmentation,
+                vec!["background".into(), "scratch".into()],
+            )
+        };
+        let mut sample = Sample {
+            input: TensorData {
+                shape: vec![1, 2, 3],
+                values: vec![0.; 6],
+            },
+            annotation: Annotation::Mask {
+                width: 3,
+                height: 2,
+                classes: vec![0, 1, 0, 1, 0, 1],
+            },
+            ..contract_sample()
+        };
+        segmentation.validate_sample(&sample).unwrap();
+        sample.annotation = Annotation::Mask {
+            width: 2,
+            height: 3,
+            classes: vec![0; 6],
+        };
+        assert!(segmentation.validate_sample(&sample).is_err());
+        let instance = |width: usize, height: usize| InstanceMask {
+            instance_id: "part".into(),
+            bounds: BoundingBox {
+                class_id: 1,
+                x_min: 0.,
+                y_min: 0.,
+                x_max: 0.5,
+                y_max: 0.5,
+            },
+            width,
+            height,
+            foreground: vec![true; width * height],
+        };
+        let instances = InspectionSpec {
+            task: TaskKind::InstanceSegmentation,
+            ..segmentation
+        };
+        sample.annotation = Annotation::InstanceMasks {
+            instances: vec![instance(3, 2)],
+        };
+        instances.validate_sample(&sample).unwrap();
+        sample.annotation = Annotation::InstanceMasks {
+            instances: vec![instance(6, 1)],
+        };
+        assert!(instances.validate_sample(&sample).is_err());
     }
 
     #[test]

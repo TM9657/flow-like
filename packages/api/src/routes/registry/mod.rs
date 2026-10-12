@@ -20,6 +20,7 @@ pub mod upload;
 pub mod users;
 pub mod widget_access;
 pub mod widget_asset;
+pub mod widget_bundle;
 pub mod widget_grant_jwt;
 pub mod widget_policy;
 pub mod widget_sandbox;
@@ -128,6 +129,10 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/package/{package_id}/widget-sandbox/{version}/{*path}",
             get(widget_sandbox::get_widget_sandbox),
+        )
+        .route(
+            "/package/{package_id}/widget-bundle/{version}",
+            get(widget_bundle::get_widget_bundle),
         )
         .route(
             "/package/{package_id}/widget-policy/{version}/{widget_id}",

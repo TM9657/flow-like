@@ -24,7 +24,10 @@ use crate::{
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
     routes::app::{
-        db::{ScopeParams, resolve_connection, resolve_write_connection, validate_table_name},
+        db::{
+            ScopeParams, column_reader, resolve_connection, resolve_write_connection,
+            validate_table_name,
+        },
         graph::load_scoped_overlay,
     },
     state::AppState,
@@ -475,7 +478,7 @@ pub async fn execute_query(
     Query(scope): Query<ScopeParams>,
     Json(payload): Json<ExecuteQueryPayload>,
 ) -> Result<Json<workbench::SqlQueryResult>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -509,6 +512,7 @@ pub async fn execute_query(
         &payload.sql,
         &params,
         payload.limit,
+        &column_reader(&permission, &scope),
     )
     .await?;
     Ok(Json(result))

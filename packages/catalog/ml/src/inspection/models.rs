@@ -112,12 +112,17 @@ pub struct ScaleRequest {
     pub scaler: StandardScaler,
     pub rows: Vec<Vec<f64>>,
 }
-fn scale(input: ScaleRequest) -> Result<Vec<Vec<f64>>> {
-    Ok(input
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ScaledRows {
+    pub rows: Vec<Vec<f64>>,
+}
+fn scale(input: ScaleRequest) -> Result<ScaledRows> {
+    let rows = input
         .rows
         .iter()
         .map(|r| input.scaler.transform(r))
-        .collect::<flow_like_ml_core::Result<_>>()?)
+        .collect::<flow_like_ml_core::Result<_>>()?;
+    Ok(ScaledRows { rows })
 }
 
 #[crate::register_node]
@@ -215,8 +220,9 @@ operation!(
     "scale",
     "AI/ML/Dataset",
     ScaleRequest,
-    Vec<Vec<f64>>,
-    scale
+    ScaledRows,
+    scale,
+    version = 1
 );
 
 #[cfg(test)]

@@ -23,6 +23,8 @@ export * from "./board-tests";
 export * from "./regression";
 export * from "./observe-resize";
 export * from "./storage-file";
+export * from "./data-classification";
+export * from "./column-metadata";
 
 export * from "./bit/bit";
 export * from "./bit/bit-pack";

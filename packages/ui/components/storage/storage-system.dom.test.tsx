@@ -2,9 +2,14 @@ import { CancelledError } from "@tanstack/react-query";
 import { type ComponentProps, type ReactNode, act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildUploadPath } from "../../lib/bulk-upload";
 import type { IStorageItem } from "../../lib/schema/storage/storage-item";
 import { storageDisplayName } from "../../lib/storage-tree";
 import { StorageSystem } from "./storage-system";
+
+type DocxProps = ComponentProps<
+	typeof import("./wordcraft-document").WordcraftDocument
+>;
 
 const fixture = vi.hoisted(() => ({
 	items: [] as IStorageItem[],
@@ -15,10 +20,18 @@ const fixture = vi.hoisted(() => ({
 	fetchQuery: vi.fn(),
 	invoke: undefined as (() => Promise<unknown>) | undefined,
 	deleteFile: undefined as ((target: string) => Promise<void>) | undefined,
+	loadFile: undefined as ((target: string) => Promise<void>) | undefined,
+	changePrefix: undefined as ((prefix: string) => void) | undefined,
+	closeDialog: undefined as (() => void) | undefined,
+	docxProps: undefined as DocxProps | undefined,
+	docxRender: vi.fn(),
+	previewable: new Map<string, boolean | undefined>(),
+	updatePrefix: vi.fn(),
 	backend: {
 		storageState: {
 			listStorageItems: vi.fn(),
 			deleteStorageItems: vi.fn(),
+			downloadStorageItems: vi.fn(),
 			uploadStorageItems: vi.fn(),
 		},
 	},
@@ -53,6 +66,15 @@ vi.mock("../ui", () => {
 				{children}
 			</button>
 		),
+		Dialog: ({
+			children,
+			onOpenChange,
+		}: { children: ReactNode; onOpenChange: (open: boolean) => void }) => {
+			fixture.closeDialog = () => onOpenChange(false);
+			return <>{children}</>;
+		},
+		DialogContent: Wrapper,
+		DialogTitle: Wrapper,
 		DropdownMenu: Wrapper,
 		DropdownMenuContent: () => null,
 		DropdownMenuItem: Wrapper,
@@ -74,15 +96,37 @@ vi.mock("../ui", () => {
 });
 
 vi.mock("./storage-breadcrumbs", () => ({
-	StorageBreadcrumbs: () => null,
+	StorageBreadcrumbs: ({
+		updatePrefix,
+	}: { updatePrefix: (prefix: string) => void }) => {
+		fixture.changePrefix = updatePrefix;
+		return null;
+	},
+}));
+
+vi.mock("./wordcraft-document", () => ({
+	WordcraftDocument: (props: DocxProps) => {
+		fixture.docxProps = props;
+		fixture.docxRender(props);
+		return <div data-docx-document={props.filename} />;
+	},
 }));
 
 vi.mock("./storage-file-or-folder", () => ({
 	FileOrFolder: ({
 		file,
 		deleteFile,
-	}: { file: IStorageItem; deleteFile: (target: string) => Promise<void> }) => {
+		loadFile,
+		previewable,
+	}: {
+		file: IStorageItem;
+		deleteFile: (target: string) => Promise<void>;
+		loadFile: (target: string) => Promise<void>;
+		previewable?: boolean;
+	}) => {
 		fixture.deleteFile = deleteFile;
+		fixture.loadFile = loadFile;
+		fixture.previewable.set(file.location, previewable);
 		fixture.renderedLocations.push(file.location);
 		return (
 			<div data-storage-location={file.location} data-folder={file.is_dir}>
@@ -104,6 +148,7 @@ let container: HTMLDivElement;
 
 beforeEach(() => {
 	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+	vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
 	sessionStorage.clear();
 	fixture.items = [];
 	fixture.renderedLocations = [];
@@ -119,10 +164,25 @@ beforeEach(() => {
 	fixture.fetchQuery.mockImplementation(({ queryFn }) => queryFn());
 	fixture.invoke = undefined;
 	fixture.deleteFile = undefined;
+	fixture.loadFile = undefined;
+	fixture.changePrefix = undefined;
+	fixture.closeDialog = undefined;
+	fixture.docxProps = undefined;
+	fixture.docxRender.mockReset();
+	fixture.previewable.clear();
+	fixture.updatePrefix.mockReset();
 	fixture.backend.storageState.listStorageItems.mockReset();
 	fixture.backend.storageState.listStorageItems.mockResolvedValue([]);
 	fixture.backend.storageState.deleteStorageItems.mockReset();
 	fixture.backend.storageState.deleteStorageItems.mockResolvedValue(undefined);
+	fixture.backend.storageState.downloadStorageItems.mockReset();
+	fixture.backend.storageState.downloadStorageItems.mockImplementation(
+		async (_appId: string, paths: string[]) =>
+			paths.map((prefix) => ({
+				prefix,
+				url: `https://storage.example/${prefix}`,
+			})),
+	);
 	fixture.backend.storageState.uploadStorageItems.mockReset();
 	fixture.backend.storageState.uploadStorageItems.mockResolvedValue(undefined);
 	container = document.createElement("div");
@@ -135,21 +195,259 @@ afterEach(async () => {
 	container.remove();
 	sessionStorage.clear();
 	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
 });
 
-async function renderStorage(storageScopeKey = "shared", prefix = "") {
+async function renderStorage(
+	storageScopeKey = "shared",
+	prefix = "",
+	props: Partial<ComponentProps<typeof StorageSystem>> = {},
+) {
 	await act(async () => {
 		root.render(
 			<StorageSystem
 				appId="app-a"
 				prefix={prefix}
 				storageScopeKey={storageScopeKey}
-				updatePrefix={() => {}}
+				updatePrefix={fixture.updatePrefix}
 				fileToUrl={async () => ""}
+				{...props}
 			/>,
 		);
 	});
 }
+
+describe("Storage DOCX documents", () => {
+	it("enables only DOCX previews on opted-in storage pages and loads the editor on selection", async () => {
+		fixture.items = [
+			item("docs/report.DOCX", false),
+			item("docs/legacy.doc", false),
+		];
+		await renderStorage("shared", "docs");
+		expect(fixture.previewable.get("docs/report.DOCX")).toBeUndefined();
+		expect(fixture.docxRender).not.toHaveBeenCalled();
+		await renderStorage("shared", "docs", { enableDocx: true });
+		expect(fixture.previewable.get("docs/report.DOCX")).toBe(true);
+		expect(fixture.previewable.get("docs/legacy.doc")).toBeUndefined();
+		expect(fixture.docxRender).not.toHaveBeenCalled();
+		await act(async () => {
+			await fixture.loadFile?.("docs/report.DOCX");
+		});
+		expect(fixture.docxProps?.filename).toBe("report.DOCX");
+		expect(fixture.docxProps?.url).toBe(
+			"https://storage.example/docs/report.DOCX",
+		);
+	});
+
+	it("overwrites the selected DOCX in its source folder and refreshes storage", async () => {
+		fixture.items = [item("apps/app-a/upload/docs/report.docx", false)];
+		await renderStorage("shared", "docs", { enableDocx: true });
+		await act(async () => {
+			await fixture.loadFile?.(fixture.items[0].location);
+		});
+		const exported = new File(
+			[new Uint8Array([0x50, 0x4b, 0, 0xff])],
+			"document.docx",
+		);
+		await act(async () => {
+			await fixture.docxProps?.onSave(exported);
+		});
+		const [appId, directory, savedFiles] =
+			fixture.backend.storageState.uploadStorageItems.mock.calls[0];
+		expect(appId).toBe("app-a");
+		expect(directory).toBe("docs");
+		expect(savedFiles[0].name).toBe("report.docx");
+		expect(savedFiles[0].type).toBe(
+			"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		);
+		expect(new Uint8Array(await savedFiles[0].arrayBuffer())).toEqual(
+			new Uint8Array(await exported.arrayBuffer()),
+		);
+		expect(
+			fixture.backend.storageState.listStorageItems,
+		).toHaveBeenLastCalledWith("app-a", "docs", { refresh: true });
+	});
+
+	it.each([
+		["docs", "apps/app-a/upload/docs/report%2Fpart.docx", "report%2Fpart.docx"],
+		["docs", "docs/literal%252Fname.docx", "literal%252Fname.docx"],
+		[
+			"Q1%20draft",
+			"Q1%20draft/%C3%9Cbersicht%231.DOCX",
+			"%C3%9Cbersicht%231.DOCX",
+		],
+		["docs", "docs/100%25.docx", "100%25.docx"],
+		["", "REPORT.DOCX", "REPORT.DOCX"],
+	])(
+		"preserves the exact storage address when saving %s / %s",
+		async (prefix, location, name) => {
+			fixture.items = [item(location, false)];
+			await renderStorage("shared", prefix, { enableDocx: true });
+			await act(async () => {
+				await fixture.loadFile?.(location);
+			});
+			const exported = new File(["updated"], "document.docx");
+			await act(async () => {
+				await fixture.docxProps?.onSave(exported);
+				await fixture.docxProps?.onSave(exported);
+			});
+			expect(
+				fixture.backend.storageState.uploadStorageItems,
+			).toHaveBeenCalledTimes(2);
+			for (const [appId, directory, savedFiles] of fixture.backend.storageState
+				.uploadStorageItems.mock.calls) {
+				expect(appId).toBe("app-a");
+				expect(directory).toBe(prefix);
+				expect(savedFiles).toHaveLength(1);
+				expect(savedFiles[0].name).toBe(name);
+				expect(buildUploadPath(directory, savedFiles[0])).toBe(
+					prefix ? `${prefix}/${name}` : name,
+				);
+			}
+		},
+	);
+
+	it("keeps read-only DOCX files viewable and prevents their save callback from uploading", async () => {
+		fixture.items = [item("report.docx", false)];
+		await renderStorage("shared", "", { enableDocx: true, canWrite: false });
+		await act(async () => {
+			await fixture.loadFile?.("report.docx");
+		});
+		expect(fixture.docxProps?.editable).toBe(false);
+		await expect(
+			fixture.docxProps?.onSave(new File(["content"], "report.docx")),
+		).rejects.toThrow("permission");
+		expect(
+			fixture.backend.storageState.uploadStorageItems,
+		).not.toHaveBeenCalled();
+	});
+
+	it("propagates failed saves and leaves the dirty document open", async () => {
+		fixture.items = [item("report.docx", false)];
+		await renderStorage("shared", "", { enableDocx: true });
+		await act(async () => {
+			await fixture.loadFile?.("report.docx");
+		});
+		fixture.docxProps?.onDirtyChange?.(true);
+		fixture.backend.storageState.uploadStorageItems.mockRejectedValueOnce(
+			new Error("Upload failed"),
+		);
+		await expect(
+			fixture.docxProps?.onSave(new File(["content"], "report.docx")),
+		).rejects.toThrow("Upload failed");
+		expect(container.querySelector("[data-docx-document]")).not.toBeNull();
+		const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+		await act(async () => {
+			fixture.closeDialog?.();
+		});
+		expect(confirm).toHaveBeenCalledOnce();
+		expect(
+			fixture.backend.storageState.listStorageItems,
+		).toHaveBeenLastCalledWith("app-a", "", { refresh: true });
+	});
+
+	it("retains the dirty editor when a refreshed listing becomes empty", async () => {
+		fixture.items = [item("report.docx", false)];
+		await renderStorage("shared", "", { enableDocx: true });
+		await act(async () => {
+			await fixture.loadFile?.("report.docx");
+		});
+		fixture.docxProps?.onDirtyChange?.(true);
+		const documentNode = container.querySelector("[data-docx-document]");
+		fixture.items = [];
+		await renderStorage("shared", "", { enableDocx: true });
+		expect(container.querySelector("[data-docx-document]")).toBe(documentNode);
+		const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+		await act(async () => {
+			fixture.closeDialog?.();
+		});
+		expect(confirm).toHaveBeenCalledOnce();
+	});
+
+	it("retains a dirty editor when close, folder navigation or another file is declined", async () => {
+		fixture.items = [item("report.docx", false), item("second.docx", false)];
+		await renderStorage("shared", "", { enableDocx: true });
+		await act(async () => {
+			await fixture.loadFile?.("report.docx");
+		});
+		fixture.docxProps?.onDirtyChange?.(true);
+		const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+		await act(async () => {
+			fixture.closeDialog?.();
+			fixture.changePrefix?.("elsewhere");
+			await fixture.loadFile?.("second.docx");
+		});
+		expect(confirm).toHaveBeenCalledTimes(3);
+		expect(fixture.updatePrefix).not.toHaveBeenCalled();
+		expect(
+			container
+				.querySelector("[data-docx-document]")
+				?.getAttribute("data-docx-document"),
+		).toBe("report.docx");
+		expect(
+			fixture.backend.storageState.downloadStorageItems,
+		).toHaveBeenCalledOnce();
+		confirm.mockReturnValue(true);
+		await act(async () => {
+			fixture.closeDialog?.();
+		});
+		expect(container.querySelector("[data-docx-document]")).toBeNull();
+	});
+
+	it("blocks unload and same-tab links while dirty, and prevents closing during save", async () => {
+		fixture.items = [item("report.docx", false)];
+		await renderStorage("shared", "", { enableDocx: true });
+		await act(async () => {
+			await fixture.loadFile?.("report.docx");
+		});
+		fixture.docxProps?.onDirtyChange?.(true);
+		const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+		const unload = new Event("beforeunload", { cancelable: true });
+		window.dispatchEvent(unload);
+		expect(unload.defaultPrevented).toBe(true);
+		const anchor = document.createElement("a");
+		anchor.href = "/library/config/flows";
+		container.append(anchor);
+		const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+		anchor.dispatchEvent(click);
+		expect(click.defaultPrevented).toBe(true);
+		fixture.docxProps?.onDirtyChange?.(false);
+		fixture.docxProps?.onBusyChange?.(true);
+		confirm.mockClear();
+		await act(async () => {
+			fixture.closeDialog?.();
+			window.history.back();
+		});
+		expect(confirm).not.toHaveBeenCalled();
+		expect(container.querySelector("[data-docx-document]")).not.toBeNull();
+	});
+
+	it("keeps browser Back on the storage page until dirty changes are discarded", async () => {
+		fixture.items = [item("report.docx", false)];
+		const originalUrl = window.location.href;
+		const originalState = window.history.state;
+		await renderStorage("shared", "", { enableDocx: true });
+		await act(async () => {
+			await fixture.loadFile?.("report.docx");
+		});
+		fixture.docxProps?.onDirtyChange?.(true);
+		const documentNode = container.querySelector("[data-docx-document]");
+		const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+		await act(async () => {
+			window.history.back();
+		});
+		expect(confirm).toHaveBeenCalledOnce();
+		expect(container.querySelector("[data-docx-document]")).toBe(documentNode);
+		expect(window.location.href).toBe(originalUrl);
+		confirm.mockReturnValue(true);
+		await act(async () => {
+			window.history.back();
+		});
+		expect(container.querySelector("[data-docx-document]")).toBeNull();
+		expect(window.history.state).toEqual(originalState);
+		expect(window.location.href).toBe(originalUrl);
+	});
+});
 
 function visibleFolders() {
 	return Array.from(container.querySelectorAll('[data-folder="true"]')).map(

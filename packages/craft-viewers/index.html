@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' blob: data:; font-src 'self' data:; media-src 'self' blob: data:; worker-src 'self' blob:; base-uri 'none'; form-action 'none'" />
+		<title>Flows Editor</title>
+		<style>
+			html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #e6e6e6; }
+			canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+			#loading { position: absolute; inset: 0; display: grid; place-items: center; color: #555; font: 14px system-ui, sans-serif; pointer-events: none; }
+		</style>
+	</head>
+	<body>
+		<canvas id="craft_canvas" aria-label="Document content"></canvas>
+		<div id="loading" role="status">Loading Flows Editor…</div>
+		<script type="module" src="./host.js"></script>
+	</body>
+</html>

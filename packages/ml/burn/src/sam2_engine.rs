@@ -1,6 +1,9 @@
 use crate::{
     backend,
-    engine::{DirectoryLock, shuffled_indices, sync_directory, sync_record},
+    engine::{
+        DirectoryLock, commit_checkpoint, ensure_resumable, shuffled_indices, sync_directory,
+        sync_record, write_manifest,
+    },
     pretrained::{SafeTensorReader, file_sha256, read_import_weights},
     *,
 };
@@ -19,6 +22,7 @@ use std::{
 };
 
 pub const SAM2_MANIFEST_FILE: &str = "sam2-state.json";
+const DATASET_DIGEST_VERSION: u32 = 1;
 static CHECKPOINT_ID: AtomicU64 = AtomicU64::new(0);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct State {
@@ -28,6 +32,9 @@ struct State {
     source_model_sha256: Option<String>,
     training: Option<Sam2TrainingConfig>,
     dataset_sha256: Option<String>,
+    /// Scheme of `dataset_sha256`; manifests without it used the legacy JSON digest.
+    #[serde(default)]
+    dataset_digest_version: u32,
     checkpoint: String,
     next_epoch: usize,
     next_batch: usize,
@@ -99,19 +106,56 @@ fn checkpoint(
     }
     sync_directory(&target)?;
     sync_directory(directory)?;
-    state.checkpoint = name;
-    let temporary = directory.join("sam2-state.json.pending");
-    let file = fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&temporary)?;
-    serde_json::to_writer_pretty(&file, state)?;
-    file.sync_all()?;
-    drop(file);
-    fs::rename(temporary, directory.join(SAM2_MANIFEST_FILE))?;
-    sync_directory(directory)?;
-    Ok(())
+    commit(directory, state, name)
+}
+fn commit(directory: &Path, state: &mut State, checkpoint: String) -> Result<()> {
+    let superseded = std::mem::replace(&mut state.checkpoint, checkpoint);
+    commit_checkpoint(
+        directory,
+        SAM2_MANIFEST_FILE,
+        state,
+        &state.checkpoint,
+        checked_checkpoint(directory, &superseded).ok(),
+    )
+}
+/// Version 0 hashed the dataset's JSON. Version 1 streams shapes and raw f32 bits of the
+/// images and masks, then the prompts' JSON, without materializing formatted floats.
+fn dataset_digest(data: &Sam2TrainingDataset, version: u32) -> Result<String> {
+    struct DigestWriter(Sha256);
+    impl std::io::Write for DigestWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.update(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut hasher = DigestWriter(Sha256::new());
+    match version {
+        0 => serde_json::to_writer(&mut hasher, data)?,
+        DATASET_DIGEST_VERSION => {
+            let mut bytes = Vec::with_capacity(64 * 1024);
+            for tensor in [&data.images, &data.masks] {
+                hasher.0.update((tensor.shape.len() as u64).to_le_bytes());
+                for dimension in &tensor.shape {
+                    hasher.0.update((*dimension as u64).to_le_bytes());
+                }
+                for values in tensor.values.chunks(16 * 1024) {
+                    bytes.clear();
+                    bytes.extend(values.iter().flat_map(|value| value.to_le_bytes()));
+                    hasher.0.update(&bytes);
+                }
+            }
+            serde_json::to_writer(&mut hasher, &data.prompts)?;
+        }
+        other => {
+            return Err(Error::Invalid(format!(
+                "Unsupported SAM dataset digest version {other}"
+            )));
+        }
+    }
+    Ok(format!("{:x}", hasher.0.finalize()))
 }
 
 /// Import the image path of the official SAM 2.1 Hiera-T checkpoint without executing Python.
@@ -150,6 +194,7 @@ pub fn import_sam2_weights(
         source_model_sha256: None,
         training: None,
         dataset_sha256: None,
+        dataset_digest_version: DATASET_DIGEST_VERSION,
         checkpoint: String::new(),
         next_epoch: 0,
         next_batch: 0,
@@ -303,7 +348,7 @@ impl Sam2Predictor {
             .try_load_file(checked_checkpoint(directory, &state.checkpoint)?.join("model.bpk"))
             .map_err(record_error)?
             .valid();
-        crate::execution::materialize(&model);
+        crate::execution::materialize(&model)?;
         Ok(Self {
             model,
             device,
@@ -332,7 +377,8 @@ impl Sam2Predictor {
 fn host<const D: usize>(value: Tensor<D>) -> Result<TensorData> {
     let shape = value.dims().to_vec();
     let values = value
-        .into_data()
+        .try_into_data()
+        .map_err(crate::execution::device_error)?
         .try_to_vec::<f32>()
         .map_err(record_error)?;
     let output = TensorData { shape, values };
@@ -413,7 +459,12 @@ fn run(
             .as_ref()
             .and_then(|s| s.training.as_ref().map(|c| &c.backend)),
     )?;
-    let digest = format!("{:x}", Sha256::digest(serde_json::to_vec(data)?));
+    let digest = dataset_digest(
+        data,
+        previous
+            .as_ref()
+            .map_or(DATASET_DIGEST_VERSION, |state| state.dataset_digest_version),
+    )?;
     let count = data.images.shape[0];
     let batches = count.div_ceil(config.batch_size);
     let device = backend::device(&config.backend, true)?;
@@ -422,7 +473,7 @@ fn run(
     let mut optimizer = AdamConfig::new()
         .init()
         .with_grad_clipping(GradientClippingConfig::Norm(config.gradient_clip).init());
-    let (mut model, mut state) = if let Some(previous) = previous {
+    let (mut model, mut state, resumed) = if let Some(previous) = previous {
         let mut expected = previous.training.clone().ok_or_else(|| {
             Error::Invalid("An imported SAM source cannot be resumed; start fine-tuning".into())
         })?;
@@ -430,13 +481,13 @@ fn run(
         expected.backend = config.backend.clone();
         if expected != config
             || previous.dataset_sha256.as_ref() != Some(&digest)
-            || config.epochs < previous.next_epoch
             || previous.next_batch > batches
         {
             return Err(Error::Invalid(
                 "SAM resume configuration or dataset differs from its checkpoint".into(),
             ));
         }
+        ensure_resumable(config.epochs, previous.next_epoch, previous.next_batch)?;
         let checkpoint = checked_checkpoint(directory, &previous.checkpoint)?;
         let model = Sam2::new(&config.model, &device)?
             .try_load_file(checkpoint.join("model.bpk"))
@@ -445,7 +496,7 @@ fn run(
         optimizer = optimizer
             .load(checkpoint.join("optimizer.bpk"))
             .map_err(record_error)?;
-        (model, previous)
+        (model, previous, true)
     } else {
         let source = source.expect("new fine-tuning has a source");
         let origin = read_state(source)?;
@@ -460,7 +511,6 @@ fn run(
             .try_load_file(path)
             .map_err(record_error)?
             .configure_fine_tuning(config.freeze_image_encoder);
-        let initial = evaluate(&model, data, &device, config.batch_size)?;
         let state = State {
             version: 1,
             model: config.model.clone(),
@@ -468,6 +518,7 @@ fn run(
             source_model_sha256: Some(source_digest),
             training: Some(config.clone()),
             dataset_sha256: Some(digest),
+            dataset_digest_version: DATASET_DIGEST_VERSION,
             checkpoint: String::new(),
             next_epoch: 0,
             next_batch: 0,
@@ -475,18 +526,27 @@ fn run(
                 backend: Some(config.backend.clone()),
                 completed_epochs: 0,
                 steps: 0,
-                initial_loss: initial,
-                final_loss: initial,
+                initial_loss: 0.0,
+                final_loss: 0.0,
                 validation_loss: None,
                 history: Vec::new(),
             },
         };
-        (model, state)
+        (model, state, false)
     };
+    // Every SAM weight comes from a checkpoint and its forward pass draws no randomness.
+    drop(initialization_guard);
     state.training = Some(config.clone());
     state.report.backend = Some(config.backend.clone());
-    checkpoint(directory, &model, Some(&optimizer), &mut state)?;
-    drop(initialization_guard);
+    if resumed {
+        // The weights and optimizer are the checkpoint just loaded; only the settings change.
+        write_manifest(directory, SAM2_MANIFEST_FILE, &state)?;
+    } else {
+        let initial = evaluate(&model, data, &device, config.batch_size, cancellation)?;
+        state.report.initial_loss = initial;
+        state.report.final_loss = initial;
+        checkpoint(directory, &model, Some(&optimizer), &mut state)?;
+    }
     for epoch in state.next_epoch..config.epochs {
         let indices = shuffled_indices(count, config.seed.wrapping_add(epoch as u64));
         let first = if epoch == state.next_epoch {
@@ -540,10 +600,18 @@ fn run(
                 return Err(Error::Cancelled);
             }
         }
+        let final_loss = match evaluate(&model, data, &device, config.batch_size, cancellation) {
+            Ok(loss) => loss,
+            Err(Error::Cancelled) => {
+                checkpoint(directory, &model, Some(&optimizer), &mut state)?;
+                return Err(Error::Cancelled);
+            }
+            Err(error) => return Err(error),
+        };
         state.next_epoch = epoch + 1;
         state.next_batch = 0;
         state.report.completed_epochs = epoch + 1;
-        state.report.final_loss = evaluate(&model, data, &device, config.batch_size)?;
+        state.report.final_loss = final_loss;
         let event = TrainingProgress {
             epoch: epoch + 1,
             batch: batches,
@@ -595,7 +663,8 @@ fn batch(
 }
 fn scalar(value: Tensor<1>) -> Result<f32> {
     value
-        .into_data()
+        .try_into_data()
+        .map_err(crate::execution::device_error)?
         .try_to_vec::<f32>()
         .map_err(record_error)?
         .first()
@@ -607,11 +676,15 @@ fn evaluate(
     data: &Sam2TrainingDataset,
     device: &Device,
     batch_size: usize,
+    cancellation: &CancellationToken,
 ) -> Result<f32> {
     let model = model.valid();
     let count = data.images.shape[0];
     let mut sum = 0.0f64;
     for start in (0..count).step_by(batch_size) {
+        if cancellation.is_cancelled() {
+            return Err(Error::Cancelled);
+        }
         let indices = (start..(start + batch_size).min(count)).collect::<Vec<_>>();
         let (images, prompts, masks) = batch(data, &indices, device);
         sum += scalar(model.forward(images, &prompts)?.loss(masks))? as f64 * indices.len() as f64;
@@ -633,11 +706,11 @@ mod tests {
         tensor::{TensorView, serialize},
     };
 
-    #[test]
-    fn sam2_resume_rejects_changed_data_freezing_and_import_sources_before_loading_weights() {
-        let _lock = crate::tests::TEST_LOCK
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
+    fn legacy_digest(data: &Sam2TrainingDataset) -> String {
+        format!("{:x}", Sha256::digest(serde_json::to_vec(data).unwrap()))
+    }
+
+    fn resume_fixture() -> (Sam2TrainingDataset, Sam2TrainingConfig, State) {
         let data = Sam2TrainingDataset {
             images: TensorData {
                 shape: vec![1, 3, 1024, 1024],
@@ -661,7 +734,7 @@ mod tests {
             gradient_clip: 5.0,
             freeze_image_encoder: true,
         };
-        let mut state = State {
+        let state = State {
             version: 1,
             model: config.model.clone(),
             provenance: Sam2WeightsProvenance {
@@ -677,10 +750,8 @@ mod tests {
             },
             source_model_sha256: Some("0".repeat(64)),
             training: Some(config.clone()),
-            dataset_sha256: Some(format!(
-                "{:x}",
-                Sha256::digest(serde_json::to_vec(&data).unwrap())
-            )),
+            dataset_sha256: Some(legacy_digest(&data)),
+            dataset_digest_version: 0,
             checkpoint: "sam2-checkpoint-0-test".into(),
             next_epoch: 0,
             next_batch: 0,
@@ -694,6 +765,156 @@ mod tests {
                 history: Vec::new(),
             },
         };
+        (data, config, state)
+    }
+
+    #[test]
+    fn sam2_dataset_digest_streams_raw_values_and_reproduces_the_legacy_scheme() {
+        let data = Sam2TrainingDataset {
+            images: TensorData {
+                shape: vec![1, 3, 2, 2],
+                values: (0..12).map(|value| value as f32 * 0.25 - 1.0).collect(),
+            },
+            prompts: vec![Sam2Prompt::default()],
+            masks: TensorData {
+                shape: vec![1, 1, 2, 2],
+                values: vec![0.0, 1.0, 1.0, 0.0],
+            },
+        };
+        assert_eq!(dataset_digest(&data, 0).unwrap(), legacy_digest(&data));
+        let streamed = dataset_digest(&data, DATASET_DIGEST_VERSION).unwrap();
+        assert_eq!(streamed.len(), 64);
+        assert_ne!(streamed, legacy_digest(&data));
+        assert_eq!(
+            dataset_digest(&data, DATASET_DIGEST_VERSION).unwrap(),
+            streamed
+        );
+        let mut image = data.clone();
+        image.images.values[7] = 0.5;
+        let mut mask = data.clone();
+        mask.masks.values[3] = 1.0;
+        let mut prompt = data.clone();
+        prompt.prompts[0].points.push(Sam2Point {
+            x: 1.0,
+            y: 2.0,
+            label: 1,
+        });
+        let mut reshaped = data.clone();
+        reshaped.images.shape = vec![1, 3, 4, 1];
+        for changed in [image, mask, prompt, reshaped] {
+            assert_ne!(
+                dataset_digest(&changed, DATASET_DIGEST_VERSION).unwrap(),
+                streamed
+            );
+        }
+        assert!(dataset_digest(&data, DATASET_DIGEST_VERSION + 1).is_err());
+    }
+
+    #[test]
+    fn sam2_resume_accepts_both_digest_schemes_and_rejects_ending_inside_a_started_epoch() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let (data, config, mut state) = resume_fixture();
+        let directory = tempfile::tempdir().unwrap();
+        let write = |state: &serde_json::Value| {
+            fs::write(
+                directory.path().join(SAM2_MANIFEST_FILE),
+                serde_json::to_vec(state).unwrap(),
+            )
+            .unwrap()
+        };
+        let resume = || {
+            resume_sam2(
+                &config,
+                &data,
+                directory.path(),
+                &CancellationToken::new(),
+                |_| {},
+            )
+            .unwrap_err()
+            .to_string()
+        };
+        // Without weights on disk, a resume that passes validation fails to load model.bpk.
+        let reached_weights = |error: String| {
+            assert!(
+                !error.contains("differs") && !error.contains("epochs"),
+                "{error}"
+            );
+        };
+        let mut legacy = serde_json::to_value(&state).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("dataset_digest_version");
+        write(&legacy);
+        reached_weights(resume());
+        state.dataset_digest_version = DATASET_DIGEST_VERSION;
+        write(&serde_json::to_value(&state).unwrap());
+        assert!(resume().contains("configuration or dataset differs"));
+        state.dataset_sha256 = Some(dataset_digest(&data, DATASET_DIGEST_VERSION).unwrap());
+        write(&serde_json::to_value(&state).unwrap());
+        reached_weights(resume());
+        state.next_epoch = config.epochs;
+        state.next_batch = 1;
+        write(&serde_json::to_value(&state).unwrap());
+        assert!(resume().contains("Resume needs at least 3 epochs"));
+        state.next_batch = 0;
+        write(&serde_json::to_value(&state).unwrap());
+        reached_weights(resume());
+    }
+
+    #[test]
+    fn sam2_evaluation_stops_at_cancellation_before_the_next_batch() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let (data, config, _) = resume_fixture();
+        let device = backend::device(&BackendChoice::Cpu, false).unwrap();
+        // Lazily initialized weights draw from the shared RNG when evaluation reads them.
+        let _rng = crate::execution::lock(None).unwrap();
+        let model = Sam2::new(&config.model, &device).unwrap();
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        assert!(matches!(
+            evaluate(&model, &data, &device, 1, &cancellation),
+            Err(Error::Cancelled)
+        ));
+    }
+
+    #[test]
+    fn sam2_commit_keeps_only_the_checkpoint_the_manifest_names() {
+        let (_, _, mut state) = resume_fixture();
+        let directory = tempfile::tempdir().unwrap();
+        for name in ["sam2-checkpoint-0-test", "sam2-checkpoint-1-test"] {
+            fs::create_dir(directory.path().join(name)).unwrap();
+            fs::write(directory.path().join(name).join("model.bpk"), b"weights").unwrap();
+        }
+        commit(directory.path(), &mut state, "sam2-checkpoint-1-test".into()).unwrap();
+        assert_eq!(
+            crate::tests::checkpoint_directories(directory.path(), "sam2-checkpoint-"),
+            vec!["sam2-checkpoint-1-test".to_string()]
+        );
+        assert_eq!(
+            read_state(directory.path()).unwrap().checkpoint,
+            "sam2-checkpoint-1-test"
+        );
+        commit(directory.path(), &mut state, "sam2-checkpoint-1-test".into()).unwrap();
+        assert!(
+            directory
+                .path()
+                .join("sam2-checkpoint-1-test/model.bpk")
+                .is_file(),
+            "Recommitting the current checkpoint must keep it"
+        );
+    }
+
+    #[test]
+    fn sam2_resume_rejects_changed_data_freezing_and_import_sources_before_loading_weights() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let (data, config, mut state) = resume_fixture();
         let directory = tempfile::tempdir().unwrap();
         let write = |state: &State| {
             fs::write(
@@ -1006,6 +1227,14 @@ mod tests {
             (state.next_epoch, state.next_batch, state.report.steps),
             (0, 1, 1)
         );
+        let only_current_checkpoint = || {
+            assert_eq!(
+                crate::tests::checkpoint_directories(target.path(), "sam2-checkpoint-"),
+                vec![read_state(target.path()).unwrap().checkpoint],
+                "Superseded SAM checkpoints must be removed"
+            );
+        };
+        only_current_checkpoint();
         assert_eq!(
             fs::read(source_directory.path().join(SAM2_MANIFEST_FILE)).unwrap(),
             source_state
@@ -1023,6 +1252,7 @@ mod tests {
             (1, 0, 1)
         );
         assert_eq!(state.report.history.len(), 1);
+        only_current_checkpoint();
         let completed = resume_sam2(
             &config,
             &data,
@@ -1038,5 +1268,6 @@ mod tests {
         );
         assert_eq!(completed.history.len(), 1);
         assert!(completed.final_loss.is_finite());
+        only_current_checkpoint();
     }
 }

@@ -1,4 +1,5 @@
 #![cfg(all(feature = "native", feature = "burn"))]
+use flow_like_ml_burn as burn;
 use flow_like_ml_core::{
     Annotation, ComputeBackend, ComputeConfig, InspectionSpec, LabelProvenance, Sample, TaskKind,
     TensorData,
@@ -8,14 +9,42 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering},
 };
 
+#[derive(Clone, Copy)]
+struct Fixture {
+    anomaly: bool,
+    test_size: usize,
+    /// Added to validation inputs so held-out scores differ from in-sample ones.
+    validation_shift: f32,
+}
+impl Default for Fixture {
+    fn default() -> Self {
+        Self {
+            anomaly: false,
+            test_size: 16,
+            validation_shift: 0.0,
+        }
+    }
+}
+
 fn setup(repo: &TrainingRepository) -> (ExperimentRequest, InspectionSpec) {
-    setup_task(repo, false)
+    fixture(repo, Fixture::default())
 }
 
 fn setup_task(repo: &TrainingRepository, anomaly: bool) -> (ExperimentRequest, InspectionSpec) {
+    fixture(
+        repo,
+        Fixture {
+            anomaly,
+            ..Fixture::default()
+        },
+    )
+}
+
+fn fixture(repo: &TrainingRepository, options: Fixture) -> (ExperimentRequest, InspectionSpec) {
+    let anomaly = options.anomaly;
     let stream = StreamKey {
         project_id: "automl".into(),
         stream_id: "quality".into(),
@@ -37,7 +66,13 @@ fn setup_task(repo: &TrainingRepository, anomaly: bool) -> (ExperimentRequest, I
     };
     let mut partitions: [Vec<TrainingSample>; 3] = Default::default();
     for (partition, rows) in partitions.iter_mut().enumerate() {
-        for index in 0..16 {
+        let count = if partition == 2 { options.test_size } else { 16 };
+        let shift = if partition == 1 {
+            options.validation_shift
+        } else {
+            0.0
+        };
+        for index in 0..count {
             let sign = if index % 2 == 0 { -1.0 } else { 1.0 };
             // Final labels intentionally differ, exposing accidental reuse of validation metrics.
             let class = if partition == 2 {
@@ -54,7 +89,7 @@ fn setup_task(repo: &TrainingRepository, anomaly: bool) -> (ExperimentRequest, I
                 window_end_ms: 100,
                 input: TensorData {
                     shape: vec![1],
-                    values: vec![sign * (1.0 + index as f32 * 0.01)],
+                    values: vec![sign * (1.0 + shift + index as f32 * 0.01)],
                 },
                 annotation: if anomaly {
                     Annotation::Anomaly {
@@ -90,13 +125,14 @@ fn setup_task(repo: &TrainingRepository, anomaly: bool) -> (ExperimentRequest, I
         }
     }
     let [train, validation, test] = partitions;
+    let cutoff_sequence = (train.len() + validation.len() + test.len()) as i64;
     let snapshot = repo
         .import_experiment_snapshot(DatasetSnapshot {
             id: "".into(),
             digest: "".into(),
             stream: stream.clone(),
             as_of_ms: 200,
-            cutoff_sequence: 48,
+            cutoff_sequence,
             policy: SplitPolicy::Group {
                 train_fraction: 1.0 / 3.0,
                 validation_fraction: 1.0 / 3.0,
@@ -936,4 +972,744 @@ fn halving_finishes_each_survivor_and_preserves_distinct_learning_rates() {
         first_survivor_rates[0], first_survivor_rates[1],
         "duplicate candidates must not displace a distinct learning rate"
     );
+}
+
+fn cpu() -> ComputeConfig {
+    ComputeConfig {
+        backend: ComputeBackend::Cpu,
+        ..Default::default()
+    }
+}
+
+/// Controller clock shifted by a test-controlled offset from the system clock.
+fn shifted_clock(offset: &Arc<AtomicI64>) -> Arc<dyn Fn() -> i64 + Send + Sync> {
+    let offset = offset.clone();
+    Arc::new(move || now_ms() + offset.load(Ordering::SeqCst))
+}
+
+fn add_deeper_boosting_candidate(request: &mut ExperimentRequest) {
+    let mut deeper = request.candidates[0].clone();
+    deeper.recipe["config"]["max_depth"] = json!(3);
+    request.candidates.push(deeper);
+}
+
+fn isolation_forest() -> TrainingRequest {
+    TrainingRequest {
+        engine: "isolation_forest".into(),
+        recipe: json!({"labels":["negative","positive"],"inspection_task":"sensor_anomaly","config":{"trees":32,"sample_size":8,"seed":7}}),
+        compute: serde_json::to_value(cpu()).unwrap(),
+    }
+}
+
+#[test]
+fn queued_time_before_the_first_controller_step_is_not_charged() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (request, _) = setup(&repo);
+    let limits = request.budget.worker_limits.clone();
+    let wall = request.budget.maximum_wall_time_ms;
+    let queued_since = now_ms() - 2 * wall as i64;
+    let experiment = repo.create_experiment(request, queued_since).unwrap();
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    assert!(result.final_evaluation_id.is_some());
+    assert!(result.wall_elapsed_ms(now_ms()) < wall);
+}
+
+#[test]
+fn cancelled_time_is_not_charged_and_resume_keeps_the_remaining_wall_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (request, _) = setup(&repo);
+    let limits = request.budget.worker_limits.clone();
+    let wall = request.budget.maximum_wall_time_ms as i64;
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let offset = Arc::new(AtomicI64::new(0));
+    let controller = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .with_clock(shifted_clock(&offset));
+    controller.run_next(&experiment.id).unwrap();
+    let cancelled = repo.cancel_experiment(&experiment.id, now_ms()).unwrap();
+    assert_eq!(cancelled.status, ExperimentStatus::Cancelled);
+    let at = now_ms();
+    assert_eq!(
+        cancelled.wall_elapsed_ms(at + wall),
+        cancelled.wall_elapsed_ms(at),
+        "a stopped experiment must not be charged wall time"
+    );
+    // A whole wall budget passes while the experiment stays cancelled.
+    offset.store(wall, Ordering::SeqCst);
+    let resumed = repo
+        .resume_experiment(&experiment.id, now_ms() + wall)
+        .unwrap();
+    assert_eq!(resumed.status, ExperimentStatus::Running);
+    let result = controller.run(&experiment.id).unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    assert!(result.final_evaluation_id.is_some());
+}
+
+#[test]
+fn a_clock_that_moves_backwards_never_stops_the_search_as_budget_exhausted() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, _) = setup(&repo);
+    add_deeper_boosting_candidate(&mut request);
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let offset = Arc::new(AtomicI64::new(0));
+    let controller = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .with_clock(shifted_clock(&offset));
+    controller.run_next(&experiment.id).unwrap();
+    offset.store(-60_000, Ordering::SeqCst);
+    // The ledger either orders the step after its latest state or reports a retryable conflict.
+    if let Err(error) = controller.run_next(&experiment.id) {
+        assert!(matches!(error, Error::Conflict(_)), "{error}");
+        assert!(!error.to_string().contains("budget"), "{error}");
+    }
+    let after = repo.get_experiment(&experiment.id).unwrap();
+    assert_eq!(after.status, ExperimentStatus::Running);
+    assert!(after.stop_reason.is_none());
+    offset.store(0, Ordering::SeqCst);
+    let result = controller.run(&experiment.id).unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    assert_eq!(repo.list_experiment_trials(&experiment.id).unwrap().len(), 2);
+}
+
+#[test]
+fn a_search_bound_by_wall_time_keeps_its_final_audit() {
+    for past_deadline in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+        let (mut request, _) = setup(&repo);
+        add_deeper_boosting_candidate(&mut request);
+        let limits = request.budget.worker_limits.clone();
+        let wall = request.budget.maximum_wall_time_ms as i64;
+        let experiment = repo.create_experiment(request, now_ms()).unwrap();
+        let offset = Arc::new(AtomicI64::new(0));
+        let controller = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+            .with_clock(shifted_clock(&offset));
+        controller.run_next(&experiment.id).unwrap();
+        // Leave less than the audit allowance, a tenth of the wall budget, or nothing at all.
+        offset.store(
+            if past_deadline {
+                wall + 1_000
+            } else {
+                wall - wall / 20
+            },
+            Ordering::SeqCst,
+        );
+        let result = controller.run(&experiment.id).unwrap();
+        assert_eq!(
+            result.status,
+            ExperimentStatus::Completed,
+            "{past_deadline}: {:?}",
+            result.stop_reason
+        );
+        assert!(result.final_evaluation_id.is_some());
+        assert_eq!(
+            result.stop_reason.as_deref(),
+            Some("wall_time_budget_exhausted")
+        );
+        assert_eq!(
+            repo.list_experiment_trials(&experiment.id).unwrap().len(),
+            1,
+            "no trial may start inside the audit window"
+        );
+    }
+}
+
+#[test]
+fn a_final_holdout_below_the_audited_minimum_is_recorded_instead_of_wedging() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, _) = fixture(
+        &repo,
+        Fixture {
+            test_size: 8,
+            ..Fixture::default()
+        },
+    );
+    request.goals.minimum_audited_samples = 12;
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(result.status, ExperimentStatus::Completed);
+    assert!(!result.target_met);
+    assert!(
+        result
+            .unmet_constraints
+            .iter()
+            .any(|constraint| constraint == "audited_samples: 8 < 12"),
+        "{:?}",
+        result.unmet_constraints
+    );
+}
+
+struct FailingPredictor;
+impl SearchPredictor for FailingPredictor {
+    fn predict(&mut self, _: &TensorData) -> Result<serde_json::Value> {
+        Err(Error::Engine("fixture prediction failure".into()))
+    }
+}
+
+/// Validates normally, then fails every prediction of the final audit.
+struct FailingAuditFactory {
+    loads: AtomicUsize,
+}
+impl SearchPredictorFactory for FailingAuditFactory {
+    fn load(
+        &self,
+        repository: &TrainingRepository,
+        artifact_id: &str,
+        compute: &ComputeConfig,
+    ) -> Result<Box<dyn SearchPredictor>> {
+        if self.loads.fetch_add(1, Ordering::SeqCst) == 0 {
+            return NativeSearchPredictorFactory.load(repository, artifact_id, compute);
+        }
+        Ok(Box::new(FailingPredictor))
+    }
+}
+
+#[test]
+fn failed_test_predictions_count_as_failures_and_settle_the_experiment() {
+    for anomaly in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+        let (mut request, _) = setup_task(&repo, anomaly);
+        if anomaly {
+            request.candidates = vec![isolation_forest()];
+        }
+        let limits = request.budget.worker_limits.clone();
+        let experiment = repo.create_experiment(request, now_ms()).unwrap();
+        let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+            .with_predictor_factory(Arc::new(FailingAuditFactory {
+                loads: AtomicUsize::new(0),
+            }))
+            .run(&experiment.id)
+            .unwrap();
+        if anomaly {
+            // Anomaly audits cannot score a failed prediction, so the experiment ends without one.
+            assert_eq!(result.status, ExperimentStatus::Failed);
+            assert!(result.final_evaluation_id.is_none());
+            assert!(
+                result
+                    .stop_reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.starts_with("final_evaluation_failed")),
+                "{:?}",
+                result.stop_reason
+            );
+            continue;
+        }
+        assert_eq!(
+            result.status,
+            ExperimentStatus::Completed,
+            "{:?}",
+            result.stop_reason
+        );
+        let evaluation = repo
+            .get_evaluation(result.final_evaluation_id.as_ref().unwrap())
+            .unwrap();
+        assert_eq!(evaluation.metrics["failure_rate"], 1.0);
+        assert_eq!(evaluation.metrics["accuracy"], 0.0);
+        let winner = repo
+            .get_experiment_trial(result.selected_trial_id.as_ref().unwrap())
+            .unwrap();
+        let predictions = repo.predictions(winner.artifact_id.as_ref().unwrap()).unwrap();
+        assert_eq!(predictions.len(), 16);
+        assert!(
+            predictions
+                .iter()
+                .all(|prediction| prediction.failed && prediction.details["error"].is_string())
+        );
+    }
+}
+
+#[test]
+fn the_final_audit_never_reuses_predictions_it_did_not_record() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (request, spec) = setup(&repo);
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let controller = AutoTrainingController::new(repo.clone(), worker(&repo, &limits));
+    controller.run_next(&experiment.id).unwrap();
+    let artifact_id = repo
+        .list_experiment_trials(&experiment.id)
+        .unwrap()
+        .remove(0)
+        .artifact_id
+        .unwrap();
+    // A shadow prediction for a holdout sample claims a label the audit never produced.
+    repo.record_prediction(&PredictionRecord {
+        sample_id: "2-0".into(),
+        artifact_id: artifact_id.clone(),
+        predicted_label: Some(spec.labels[1].clone()),
+        teacher_label: None,
+        actual_label: None,
+        actual_source: None,
+        latency_ms: 1.0,
+        failed: false,
+        recorded_at_ms: now_ms(),
+        details: json!({"partition":"shadow"}),
+    })
+    .unwrap();
+    let result = controller.finalize(&experiment.id).unwrap();
+    assert_eq!(result.status, ExperimentStatus::Failed);
+    assert!(result.final_evaluation_id.is_none());
+    assert!(
+        result
+            .stop_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("2-0")),
+        "{:?}",
+        result.stop_reason
+    );
+}
+
+struct CancellingPredictor {
+    inner: Box<dyn SearchPredictor>,
+    repository: TrainingRepository,
+    experiment_id: String,
+    remaining: usize,
+}
+impl SearchPredictor for CancellingPredictor {
+    fn predict(&mut self, input: &TensorData) -> Result<serde_json::Value> {
+        if self.remaining == 0 {
+            self.repository
+                .cancel_experiment(&self.experiment_id, now_ms())?;
+        }
+        self.remaining = self.remaining.saturating_sub(1);
+        self.inner.predict(input)
+    }
+}
+
+/// Cancels the experiment after a few final-audit predictions on the second load.
+struct CancelDuringAudit {
+    loads: AtomicUsize,
+    experiment_id: String,
+}
+impl SearchPredictorFactory for CancelDuringAudit {
+    fn load(
+        &self,
+        repository: &TrainingRepository,
+        artifact_id: &str,
+        compute: &ComputeConfig,
+    ) -> Result<Box<dyn SearchPredictor>> {
+        let inner = NativeSearchPredictorFactory.load(repository, artifact_id, compute)?;
+        if self.loads.fetch_add(1, Ordering::SeqCst) != 1 {
+            return Ok(inner);
+        }
+        Ok(Box::new(CancellingPredictor {
+            inner,
+            repository: repository.clone(),
+            experiment_id: self.experiment_id.clone(),
+            remaining: 4,
+        }))
+    }
+}
+
+#[test]
+fn a_resumed_final_audit_reuses_only_its_own_recorded_predictions() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (request, _) = setup(&repo);
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let controller = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .with_predictor_factory(Arc::new(CancelDuringAudit {
+            loads: AtomicUsize::new(0),
+            experiment_id: experiment.id.clone(),
+        }));
+    controller.run_next(&experiment.id).unwrap();
+    assert!(matches!(
+        controller.finalize(&experiment.id),
+        Err(Error::Cancelled)
+    ));
+    let winner = repo
+        .get_experiment_trial(
+            repo.get_experiment(&experiment.id)
+                .unwrap()
+                .selected_trial_id
+                .as_ref()
+                .unwrap(),
+        )
+        .unwrap();
+    let artifact_id = winner.artifact_id.unwrap();
+    let partial = repo.predictions(&artifact_id).unwrap();
+    assert_eq!(partial.len(), 5);
+    repo.resume_frozen_experiment_audit(&experiment.id, now_ms())
+        .unwrap();
+    let result = controller.finalize(&experiment.id).unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    let predictions = repo.predictions(&artifact_id).unwrap();
+    assert_eq!(predictions.len(), 16);
+    for earlier in &partial {
+        assert!(predictions.contains(earlier), "{}", earlier.sample_id);
+    }
+}
+
+#[test]
+fn strict_gpu_compute_generates_no_native_candidates() {
+    let strict = ComputeConfig {
+        backend: ComputeBackend::Cuda,
+        allow_cpu_fallback: false,
+        ..Default::default()
+    };
+    let sensors = InspectionSpec {
+        id: "sensors".into(),
+        description: "classify sensor features".into(),
+        task: TaskKind::SensorClassification,
+        labels: vec!["ok".into(), "defect".into()],
+        input_shape: vec![4],
+        prediction_horizon_ms: None,
+        minimum_examples: 1,
+        minimum_examples_per_class: 1,
+    };
+    let search = AutoSearchConfig::default();
+    let candidates = generate_candidates(&sensors, &search, &strict).unwrap();
+    assert!(!candidates.is_empty());
+    assert!(candidates.iter().all(|candidate| candidate.engine == "burn"));
+    assert!(
+        generate_candidates(&sensors, &search, &ComputeConfig::default())
+            .unwrap()
+            .iter()
+            .any(|candidate| candidate.engine == "histogram_gradient_boosting")
+    );
+    let patches = InspectionSpec {
+        id: "patches".into(),
+        description: "score patch embeddings".into(),
+        task: TaskKind::VisualAnomaly,
+        labels: vec![],
+        input_shape: vec![16, 8],
+        ..sensors
+    };
+    let error = generate_candidates(&patches, &search, &strict)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("allow_cpu_fallback"), "{error}");
+}
+
+#[test]
+fn generated_vision_batches_are_the_largest_halving_that_fits_the_memory_limit() {
+    let spec = InspectionSpec {
+        id: "images".into(),
+        description: "classify images".into(),
+        task: TaskKind::ImageClassification,
+        labels: vec!["ok".into(), "defect".into()],
+        input_shape: vec![3, 224, 224],
+        prediction_horizon_ms: None,
+        minimum_examples: 1,
+        minimum_examples_per_class: 1,
+    };
+    let search = AutoSearchConfig::default();
+    let compute = ComputeConfig::default();
+    let candidates = generate_candidates(&spec, &search, &compute).unwrap();
+    assert!(!candidates.is_empty());
+    for candidate in &candidates {
+        let config: burn::TrainingConfig =
+            serde_json::from_value(candidate.recipe["config"].clone()).unwrap();
+        let estimate = |batch| {
+            config
+                .recipe
+                .estimated_training_bytes(&spec.input_shape, batch)
+                .unwrap()
+        };
+        assert!(estimate(config.batch_size) <= compute.memory_limit_bytes);
+        assert!(
+            config.batch_size == search.batch_size
+                || estimate(config.batch_size * 2) > compute.memory_limit_bytes
+        );
+    }
+    let resnet = burn::Recipe::ResNet18 {
+        input_channels: 3,
+        classes: 2,
+        base_channels: 16,
+    };
+    let tight = ComputeConfig {
+        memory_limit_bytes: resnet.estimated_training_bytes(&[3, 224, 224], 4).unwrap(),
+        ..Default::default()
+    };
+    let chosen = generate_candidates(&spec, &search, &tight)
+        .unwrap()
+        .into_iter()
+        .find(|candidate| {
+            candidate.recipe["config"]["recipe"]["architecture"] == "res_net18"
+                && candidate.recipe["config"]["recipe"]["base_channels"] == 16
+        })
+        .unwrap();
+    assert_eq!(chosen.recipe["config"]["batch_size"], 4);
+    let huge = InspectionSpec {
+        input_shape: vec![3, 2048, 2048],
+        ..spec
+    };
+    let error = generate_candidates(&huge, &search, &compute)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("memory budget of 2147483648 bytes") && error.contains("smallest estimate"),
+        "{error}"
+    );
+}
+
+#[test]
+fn an_oversized_candidate_trains_with_the_largest_batch_that_fits_the_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, spec) = setup(&repo);
+    let search = AutoSearchConfig {
+        min_epochs: 1,
+        max_epochs: 1,
+        batch_size: 8,
+        ..Default::default()
+    };
+    let candidate = generate_candidates(&spec, &search, &cpu())
+        .unwrap()
+        .into_iter()
+        .find(|candidate| candidate.engine == "burn")
+        .unwrap();
+    let config: burn::TrainingConfig =
+        serde_json::from_value(candidate.recipe["config"].clone()).unwrap();
+    assert_eq!(config.batch_size, 8);
+    request.candidates = vec![candidate];
+    // Every experiment over this snapshot gets a worker view of the same serialized size.
+    let probe = repo.create_experiment(request.clone(), now_ms()).unwrap();
+    let view = repo
+        .experiment_result(&probe.id)
+        .unwrap()
+        .datasets
+        .remove(0)
+        .training_snapshot_id;
+    let view_bytes = serde_json::to_vec(&repo.get_snapshot(&view).unwrap())
+        .unwrap()
+        .len() as u64;
+    request.budget.worker_limits.memory_budget_bytes =
+        config.recipe.estimated_training_bytes(&[1], 1).unwrap() + 12 * view_bytes;
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    let trials = repo.list_experiment_trials(&experiment.id).unwrap();
+    assert_eq!(trials.len(), 1);
+    assert_eq!(trials[0].candidate_index, 1);
+    assert_eq!(
+        trials[0].status,
+        ExperimentTrialStatus::Validated,
+        "{:?}",
+        trials[0].error
+    );
+    assert_eq!(
+        repo.get_job(&trials[0].job_id).unwrap().request.recipe["config"]["batch_size"],
+        1
+    );
+    assert!(
+        repo.experiment_events(&experiment.id)
+            .unwrap()
+            .iter()
+            .any(|event| event["kind"] == "candidate_resized"
+                && event["body"]["candidate_index"] == 0)
+    );
+}
+
+#[test]
+fn candidates_that_never_fit_fail_fast_naming_the_budget_and_smallest_estimate() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, spec) = setup(&repo);
+    let search = AutoSearchConfig {
+        min_epochs: 1,
+        max_epochs: 1,
+        ..Default::default()
+    };
+    request.candidates = generate_candidates(&spec, &search, &cpu())
+        .unwrap()
+        .into_iter()
+        .filter(|candidate| candidate.engine == "burn")
+        .collect();
+    // Burn reserves more than this for its runtime alone.
+    request.budget.worker_limits.memory_budget_bytes = 8 * 1024 * 1024;
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(result.status, ExperimentStatus::BudgetExhausted);
+    let reason = result.stop_reason.unwrap_or_default();
+    assert!(
+        reason.contains("memory budget of 8388608 bytes") && reason.contains("smallest estimate"),
+        "{reason}"
+    );
+    assert!(
+        repo.list_experiment_trials(&experiment.id)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+/// Fails the validation of every continuation so the controller must decide about retries.
+struct FailingContinuations;
+impl SearchPredictorFactory for FailingContinuations {
+    fn load(
+        &self,
+        repository: &TrainingRepository,
+        artifact_id: &str,
+        compute: &ComputeConfig,
+    ) -> Result<Box<dyn SearchPredictor>> {
+        let artifact = repository.get_artifact(artifact_id)?;
+        if repository.get_job(&artifact.job_id)?.request.recipe["search"]["rung"].as_u64()
+            > Some(0)
+        {
+            return Err(Error::Engine(
+                "fixture continuation validation failure".into(),
+            ));
+        }
+        NativeSearchPredictorFactory.load(repository, artifact_id, compute)
+    }
+}
+
+#[test]
+fn a_failed_continuation_is_retried_once_with_fewer_epochs() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, spec) = setup(&repo);
+    request.budget.maximum_trials = 6;
+    request.budget.maximum_training_time_ms = 180_000;
+    request.budget.worker_limits.maximum_duration_ms = 30_000;
+    let search = AutoSearchConfig {
+        maximum_candidates: 32,
+        min_epochs: 1,
+        max_epochs: 8,
+        reduction_factor: 4,
+        batch_size: 8,
+        ..Default::default()
+    };
+    request.candidates = generate_candidates(&spec, &search, &cpu())
+        .unwrap()
+        .into_iter()
+        .filter(|candidate| candidate.engine == "burn")
+        .collect();
+    assert_eq!(request.candidates.len(), 3);
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .with_predictor_factory(Arc::new(FailingContinuations))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    let continuations = repo
+        .list_experiment_trials(&experiment.id)
+        .unwrap()
+        .into_iter()
+        .map(|trial| {
+            let recipe = repo.get_job(&trial.job_id).unwrap().request.recipe;
+            (trial.status, recipe)
+        })
+        .filter(|(_, recipe)| recipe["search"]["rung"] == 1)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        continuations
+            .iter()
+            .map(|(_, recipe)| recipe["config"]["epochs"].as_u64().unwrap())
+            .collect::<Vec<_>>(),
+        vec![4, 2]
+    );
+    assert!(
+        continuations
+            .iter()
+            .all(|(status, _)| *status == ExperimentTrialStatus::Failed)
+    );
+}
+
+/// The 95th percentile of normal-sample scores, as the controller calibrates it.
+fn normal_score_percentile(predictor: &mut dyn SearchPredictor, rows: &[TrainingSample]) -> f64 {
+    let mut scores = rows
+        .iter()
+        .filter_map(|row| {
+            let sample: Sample = serde_json::from_value(row.payload["sample"].clone()).unwrap();
+            matches!(sample.annotation, Annotation::Anomaly { is_anomaly: false }).then(|| {
+                let mut input = sample.input;
+                input.shape.insert(0, 1);
+                predictor.predict(&input).unwrap()["scores"][0]
+                    .as_f64()
+                    .unwrap()
+            })
+        })
+        .collect::<Vec<_>>();
+    scores.sort_by(f64::total_cmp);
+    scores[((scores.len() - 1) as f64 * 0.95).floor() as usize].max(1e-8)
+}
+
+#[test]
+fn the_anomaly_decision_scale_is_fitted_on_held_out_normal_samples() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, _) = fixture(
+        &repo,
+        Fixture {
+            anomaly: true,
+            validation_shift: 0.5,
+            ..Fixture::default()
+        },
+    );
+    request.candidates = vec![isolation_forest()];
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run_next(&experiment.id)
+        .unwrap();
+    let trial = repo
+        .list_experiment_trials(&experiment.id)
+        .unwrap()
+        .remove(0);
+    assert_eq!(
+        trial.status,
+        ExperimentTrialStatus::Validated,
+        "{:?}",
+        trial.error
+    );
+    let mut predictor = NativeSearchPredictorFactory
+        .load(&repo, trial.artifact_id.as_ref().unwrap(), &cpu())
+        .unwrap();
+    let snapshot = repo
+        .get_snapshot(&experiment.request.snapshot_id)
+        .unwrap();
+    let held_out = normal_score_percentile(&mut *predictor, &snapshot.validation);
+    let in_sample = normal_score_percentile(&mut *predictor, &snapshot.train);
+    assert_ne!(held_out, in_sample, "the fixture must separate the two");
+    assert_eq!(trial.validation_metrics["anomaly_scale"], held_out);
 }

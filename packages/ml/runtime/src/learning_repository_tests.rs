@@ -81,6 +81,29 @@ fn snapshot(
     })
     .unwrap()
 }
+fn experiment_request(
+    project: &LearningProject,
+    cycle: &LearningCycle,
+    snapshot: &DatasetSnapshot,
+) -> ExperimentRequest {
+    ExperimentRequest {
+        stream: project.request.stream.clone(),
+        snapshot_id: snapshot.id.clone(),
+        spec: project.request.spec.clone(),
+        candidates: vec![TrainingRequest {
+            engine: "fixture".into(),
+            recipe: json!({"labels":["good","bad"]}),
+            compute: json!({}),
+        }],
+        goals: project.request.goals.clone(),
+        budget: cycle.budget.clone(),
+        source_table_versions: vec![],
+        created_tables: vec![],
+        updated_table_versions: vec![],
+        preprocessing_manifest: Value::Null,
+        context: json!({"learning_cycle_id":cycle.id}),
+    }
+}
 fn experiment(
     repo: &TrainingRepository,
     project: &LearningProject,
@@ -88,27 +111,8 @@ fn experiment(
     snapshot: &DatasetSnapshot,
     time: i64,
 ) -> Experiment {
-    repo.create_experiment(
-        ExperimentRequest {
-            stream: project.request.stream.clone(),
-            snapshot_id: snapshot.id.clone(),
-            spec: project.request.spec.clone(),
-            candidates: vec![TrainingRequest {
-                engine: "fixture".into(),
-                recipe: json!({"labels":["good","bad"]}),
-                compute: json!({}),
-            }],
-            goals: project.request.goals.clone(),
-            budget: cycle.budget.clone(),
-            source_table_versions: vec![],
-            created_tables: vec![],
-            updated_table_versions: vec![],
-            preprocessing_manifest: Value::Null,
-            context: json!({"learning_cycle_id":cycle.id}),
-        },
-        time,
-    )
-    .unwrap()
+    repo.create_experiment(experiment_request(project, cycle, snapshot), time)
+        .unwrap()
 }
 fn finish(
     repo: &TrainingRepository,
@@ -388,37 +392,53 @@ fn fresh_audit_cycles_promote_compare_same_cohort_and_rollback() {
     contaminated.digest.clear();
     std::mem::swap(&mut contaminated.train[0], &mut contaminated.test[0]);
     let contaminated = repo.import_experiment_snapshot(contaminated).unwrap();
-    let bad_exp = experiment(&repo, &project, &second, &contaminated, 116);
+    // An invalid split is refused before an experiment exists, so the reservation can be released.
     assert!(
-        repo.attach_learning_experiment(&second.id, &bad_exp.id, 117)
+        repo.create_experiment(experiment_request(&project, &second, &contaminated), 116)
             .is_err()
     );
-    // An invalid reserved experiment remains undispatchable; its cycle can be explicitly aborted.
+    assert!(
+        repo.find_learning_cycle_experiment(&second.id)
+            .unwrap()
+            .is_none()
+    );
     repo.abort_learning_cycle(&second.id, "invalid split", 117)
         .unwrap();
     assert!(
-        repo.submit_experiment_trial(&bad_exp.id, 0, "invalid", 118)
-            .is_err()
+        repo.learning_next_actions(&project.id, 118)
+            .unwrap()
+            .blocking
+            .contains(&"abort_backoff".into())
     );
+    let retry_at = 117 + 60_000;
     let third = repo
-        .reserve_learning_cycle(&project.id, "third", second.budget.clone(), 118)
+        .reserve_learning_cycle(&project.id, "third", second.budget.clone(), retry_at)
         .unwrap();
     let data2 = snapshot(&repo, &project, &[0, 1], &[2, 3], &[8, 9]);
-    let exp2 = experiment(&repo, &project, &third, &data2, 119);
-    repo.attach_learning_experiment(&third.id, &exp2.id, 120)
+    let exp2 = experiment(&repo, &project, &third, &data2, retry_at + 1);
+    repo.attach_learning_experiment(&third.id, &exp2.id, retry_at + 2)
         .unwrap();
-    let challenger = finish(&repo, &exp2, &data2, true, 121);
-    repo.settle_learning_cycle(&third.id, 129).unwrap();
+    let challenger = finish(&repo, &exp2, &data2, true, retry_at + 3);
+    repo.settle_learning_cycle(&third.id, retry_at + 11)
+        .unwrap();
     for sample in &data2.test {
-        prediction(&repo, &champion.id, &sample.id, false, 130);
+        prediction(&repo, &champion.id, &sample.id, false, retry_at + 12);
     }
-    let comparison = repo.compare_learning_cycle(&third.id, 131).unwrap();
+    let comparison = repo
+        .compare_learning_cycle(&third.id, retry_at + 13)
+        .unwrap();
     assert!(comparison.eligible);
     assert_eq!(comparison.champion_metrics["accuracy"], 0.);
     assert_eq!(comparison.candidate_metrics["accuracy"], 1.);
-    let promoted = repo.promote_learning_cycle(&third.id, 1, 132).unwrap();
+    let promoted = repo
+        .promote_learning_cycle(&third.id, 1, retry_at + 14)
+        .unwrap();
     assert_eq!(promoted.active_artifact_id, challenger.id);
-    let rolled = repo.rollback_learning_project(&project.id, 2, 133).unwrap();
+    let usage = repo.get_learning_project(&project.id).unwrap().usage;
+    assert_eq!((usage.cycles_started, usage.cycles_aborted), (3, 1));
+    let rolled = repo
+        .rollback_learning_project(&project.id, 2, retry_at + 15)
+        .unwrap();
     assert_eq!(rolled.active_artifact_id, champion.id);
     let reopened = TrainingRepository::open(directory.path().join("learning.sqlite")).unwrap();
     assert!(
@@ -447,7 +467,7 @@ fn fresh_audit_cycles_promote_compare_same_cohort_and_rollback() {
 }
 
 #[test]
-fn future_and_absent_reviews_are_not_consumed_by_a_finished_cycle() {
+fn absent_reviews_are_reported_instead_of_retriggering_and_future_reviews_stay_fresh() {
     let (_directory, repo, project, budget) = setup();
     review(&repo, &project, 0, 105);
     review(&repo, &project, 50, 500);
@@ -461,6 +481,7 @@ fn future_and_absent_reviews_are_not_consumed_by_a_finished_cycle() {
         .attach_learning_experiment(&cycle.id, &exp.id, 112)
         .unwrap();
     assert_eq!(attached.reviewed_sample_ids, vec!["sample-0"]);
+    assert_eq!(attached.unmatched_review_ids, vec!["sample-51"]);
     finish(&repo, &exp, &data, false, 113);
     repo.settle_learning_cycle(&cycle.id, 121).unwrap();
     assert!(
@@ -469,17 +490,18 @@ fn future_and_absent_reviews_are_not_consumed_by_a_finished_cycle() {
             .unwrap()
             .eligible
     );
-    assert_eq!(
-        repo.learning_next_actions(&project.id, 123)
-            .unwrap()
-            .new_reviews,
-        1
+    let after = repo.learning_next_actions(&project.id, 123).unwrap();
+    assert_eq!(after.new_reviews, 0);
+    assert!(
+        after
+            .blocking
+            .contains(&"reviews_missing_from_source".into())
     );
     assert_eq!(
         repo.learning_next_actions(&project.id, 501)
             .unwrap()
             .new_reviews,
-        2
+        1
     );
     repo.record_learning_review(
         &project.id,
@@ -507,7 +529,7 @@ fn future_and_absent_reviews_are_not_consumed_by_a_finished_cycle() {
         repo.learning_next_actions(&project.id, 550)
             .unwrap()
             .new_reviews,
-        2
+        1
     );
     assert_eq!(
         repo.learning_training_reviews_at(&project.id, 600)
@@ -522,7 +544,27 @@ fn future_and_absent_reviews_are_not_consumed_by_a_finished_cycle() {
         repo.learning_next_actions(&project.id, 600)
             .unwrap()
             .new_reviews,
-        3
+        2
+    );
+    repo.record_learning_review(
+        &project.id,
+        &LearningReview {
+            sample_id: "sample-51".into(),
+            annotation: json!({"kind":"class","class_id":1}),
+            source: LabelSource::Reviewed,
+            reviewer: "operator".into(),
+            available_at_ms: 601,
+            revision: 2,
+            outcome: None,
+        },
+    )
+    .unwrap();
+    let revised = repo.learning_next_actions(&project.id, 601).unwrap();
+    assert_eq!(revised.new_reviews, 3);
+    assert!(
+        !revised
+            .blocking
+            .contains(&"reviews_missing_from_source".into())
     );
 }
 
@@ -644,9 +686,8 @@ fn audit_rows_can_share_the_current_cycle_group_but_cannot_reuse_prior_audit_gro
         .reserve_learning_cycle(&project.id, "reused-group", budget, 115)
         .unwrap();
     let data2 = grouped_snapshot([12, 13]);
-    let experiment2 = experiment(&repo, &project, &second, &data2, 116);
     assert!(
-        repo.attach_learning_experiment(&second.id, &experiment2.id, 117)
+        repo.create_experiment(experiment_request(&project, &second, &data2), 116)
             .is_err()
     );
     assert_eq!(
@@ -1155,4 +1196,537 @@ fn canary_review_comparison_accepts_typed_numeric_serialization() {
         )
         .unwrap()
     );
+}
+
+fn attached_cycle(
+    repo: &TrainingRepository,
+    project: &LearningProject,
+    budget: &ExperimentBudget,
+    key: &str,
+    test: &[usize],
+    time: i64,
+) -> (LearningCycle, DatasetSnapshot, Experiment) {
+    let cycle = repo
+        .reserve_learning_cycle(&project.id, key, budget.clone(), time)
+        .unwrap();
+    let data = snapshot(repo, project, &[0, 1], &[2, 3], test);
+    let exp = experiment(repo, project, &cycle, &data, time + 1);
+    repo.attach_learning_experiment(&cycle.id, &exp.id, time + 2)
+        .unwrap();
+    (cycle, data, exp)
+}
+
+#[test]
+fn rollback_during_a_cycle_keeps_training_and_a_retried_rollback_is_a_no_op() {
+    let (_directory, repo, project, budget) = setup();
+    let (first, data, exp) = attached_cycle(&repo, &project, &budget, "first", &[4, 5], 101);
+    let champion = finish(&repo, &exp, &data, true, 104);
+    repo.settle_learning_cycle(&first.id, 112).unwrap();
+    repo.promote_learning_cycle(&first.id, 0, 113).unwrap();
+    review(&repo, &project, 8, 114);
+    review(&repo, &project, 9, 114);
+    let (second, data2, exp2) = attached_cycle(&repo, &project, &budget, "second", &[8, 9], 115);
+    let challenger = finish(&repo, &exp2, &data2, true, 118);
+    repo.settle_learning_cycle(&second.id, 126).unwrap();
+    for sample in &data2.test {
+        prediction(&repo, &champion.id, &sample.id, false, 127);
+    }
+    repo.promote_learning_cycle(&second.id, 1, 128).unwrap();
+    review(&repo, &project, 10, 129);
+    review(&repo, &project, 11, 129);
+    let (third, _, exp3) = attached_cycle(&repo, &project, &budget, "third", &[10, 11], 130);
+
+    let rolled = repo
+        .rollback_learning_project_from(&project.id, &challenger.id, 133)
+        .unwrap();
+    assert_eq!(rolled.active_artifact_id, champion.id);
+    let retried = repo
+        .rollback_learning_project_from(&project.id, &challenger.id, 134)
+        .unwrap();
+    assert_eq!(retried.generation, rolled.generation);
+    assert_eq!(retried.active_artifact_id, champion.id);
+    assert!(matches!(
+        repo.rollback_learning_project_from(&project.id, "unknown-model", 134),
+        Err(Error::Conflict(_))
+    ));
+    let value = repo.get_learning_project(&project.id).unwrap();
+    assert_eq!(value.state, LearningState::Training);
+    assert_eq!(value.active_cycle_id.as_deref(), Some(third.id.as_str()));
+    assert_eq!(
+        value.champion_artifact_id.as_deref(),
+        Some(champion.id.as_str())
+    );
+    let paused = repo
+        .pause_learning_project(&project.id, value.generation, 135)
+        .unwrap();
+    let resumed = repo
+        .resume_learning_project(&project.id, paused.generation, 136)
+        .unwrap();
+    assert_eq!(resumed.state, LearningState::Training);
+    repo.submit_experiment_trial(&exp3.id, 0, "candidate", 137)
+        .unwrap();
+}
+
+#[test]
+fn undersized_audit_split_is_refused_before_the_experiment_exists() {
+    let (_directory, repo, initial, budget) = setup();
+    let mut request = initial.request.clone();
+    request.stream.stream_id = "strict".into();
+    request.deployment_id = "strict".into();
+    request.goals.minimum_audited_samples = 3;
+    let project = repo.create_learning_project(request, 100).unwrap();
+    let cycle = repo
+        .reserve_learning_cycle(&project.id, "cycle:0", budget.clone(), 101)
+        .unwrap();
+    let small = snapshot(&repo, &project, &[0, 1], &[2, 3], &[4, 5]);
+    let error = repo
+        .create_experiment(experiment_request(&project, &cycle, &small), 102)
+        .unwrap_err();
+    assert!(error.to_string().contains("enough fresh audit samples"));
+    assert!(
+        repo.find_learning_cycle_experiment(&cycle.id)
+            .unwrap()
+            .is_none()
+    );
+    repo.abort_learning_cycle(&cycle.id, &error.to_string(), 103)
+        .unwrap();
+    let aborted = repo.get_learning_project(&project.id).unwrap();
+    assert_eq!(aborted.state, LearningState::Collecting);
+    assert_eq!(aborted.usage.reserved.training_time_ms, 0);
+    let retry_at = 103 + 60_000;
+    let retry = repo
+        .reserve_learning_cycle(&project.id, "cycle:1", budget, retry_at)
+        .unwrap();
+    let enough = snapshot(&repo, &project, &[0, 1], &[2, 3], &[4, 5, 6]);
+    let exp = experiment(&repo, &project, &retry, &enough, retry_at + 1);
+    repo.attach_learning_experiment(&retry.id, &exp.id, retry_at + 2)
+        .unwrap();
+}
+
+#[test]
+fn aborting_a_reservation_cancels_its_unattached_experiment() {
+    let (_directory, repo, project, budget) = setup();
+    let cycle = repo
+        .reserve_learning_cycle(&project.id, "cycle:0", budget, 101)
+        .unwrap();
+    let data = snapshot(&repo, &project, &[0, 1], &[2, 3], &[4, 5]);
+    let orphan = experiment(&repo, &project, &cycle, &data, 102);
+    let aborted = repo
+        .abort_learning_cycle(&cycle.id, "host could not attach", 103)
+        .unwrap();
+    assert_eq!(aborted.state, LearningCycleState::Aborted);
+    assert_eq!(
+        repo.get_experiment(&orphan.id).unwrap().status,
+        ExperimentStatus::Cancelled
+    );
+    let value = repo.get_learning_project(&project.id).unwrap();
+    assert!(value.active_cycle_id.is_none());
+    assert_eq!(value.usage.reserved.training_time_ms, 0);
+}
+
+#[test]
+fn an_experiment_whose_split_can_never_attach_releases_its_reservation() {
+    let (_directory, repo, project, budget) = setup();
+    let cycle = repo
+        .reserve_learning_cycle(&project.id, "cycle:0", budget, 101)
+        .unwrap();
+    let data = snapshot(&repo, &project, &[0, 1], &[2, 3], &[4, 5]);
+    let saved = experiment(&repo, &project, &cycle, &data, 102);
+    // A split saved before create-time checks existed can reuse an already sealed audit row.
+    repo.connection()
+        .unwrap()
+        .execute(
+            "INSERT INTO learning_exposure(project_id,sample_id,group_id,role,cycle_id) VALUES(?,'sample-4','lot-4','audit','legacy')",
+            [&project.id],
+        )
+        .unwrap();
+    let error = repo
+        .attach_learning_experiment(&cycle.id, &saved.id, 103)
+        .unwrap_err();
+    assert!(matches!(error, Error::Invalid(_)));
+    assert_eq!(
+        repo.get_learning_cycle(&cycle.id).unwrap().state,
+        LearningCycleState::Aborted
+    );
+    assert_eq!(
+        repo.get_experiment(&saved.id).unwrap().status,
+        ExperimentStatus::Cancelled
+    );
+    let value = repo.get_learning_project(&project.id).unwrap();
+    assert!(value.active_cycle_id.is_none());
+    assert_eq!(value.usage.reserved.training_time_ms, 0);
+}
+
+#[test]
+fn aborted_reservations_back_off_without_spending_cycles() {
+    let (_directory, repo, project, budget) = setup();
+    let mut at = 101;
+    for attempt in 0..6 {
+        let cycle = repo
+            .reserve_learning_cycle(&project.id, &format!("cycle:{attempt}"), budget.clone(), at)
+            .unwrap();
+        repo.abort_learning_cycle(&cycle.id, "source unavailable", at)
+            .unwrap();
+        let backoff = 60_000i64 << attempt;
+        let waiting = repo
+            .learning_next_actions(&project.id, at + backoff - 1)
+            .unwrap();
+        assert!(waiting.blocking.contains(&"abort_backoff".into()));
+        at += backoff;
+    }
+    let value = repo.get_learning_project(&project.id).unwrap();
+    assert_eq!(value.usage.cycles_started, 6);
+    assert_eq!(value.usage.cycles_aborted, 6);
+    assert!(value.usage.cycles_started > value.request.budget.maximum_cycles);
+    assert!(
+        repo.learning_next_actions(&project.id, at)
+            .unwrap()
+            .ready_to_train
+    );
+    let cycle = repo
+        .reserve_learning_cycle(&project.id, "cycle:6", budget, at)
+        .unwrap();
+    repo.abort_learning_cycle(&cycle.id, "source unavailable", at)
+        .unwrap();
+    let blocked = repo.get_learning_project(&project.id).unwrap();
+    let paused = repo
+        .pause_learning_project(&project.id, blocked.generation, at + 1)
+        .unwrap();
+    repo.resume_learning_project(&project.id, paused.generation, at + 2)
+        .unwrap();
+    assert!(
+        repo.learning_next_actions(&project.id, at + 2)
+            .unwrap()
+            .ready_to_train
+    );
+}
+
+#[test]
+fn review_outcomes_are_validated_when_recorded() {
+    let (_directory, repo, project, _) = setup();
+    repo.record_learning_observation(&project.id, &observation(0, "good", 0.9, 0.))
+        .unwrap();
+    let measured = |outcome: Value| LearningReview {
+        sample_id: "sample-0".into(),
+        annotation: json!({"kind":"class","class_id":0}),
+        source: LabelSource::ObservedOutcome,
+        reviewer: "gauge".into(),
+        available_at_ms: 150,
+        revision: 1,
+        outcome: Some(outcome),
+    };
+    for malformed in [
+        json!({"value":3}),
+        json!({"available_at_ms":140,"target_start_ms":130,"target_end_ms":120}),
+        json!({"available_at_ms":110,"target_start_ms":100,"target_end_ms":120}),
+        json!({"available_at_ms":160,"target_start_ms":100,"target_end_ms":120}),
+    ] {
+        let error = repo
+            .record_learning_review(&project.id, &measured(malformed))
+            .unwrap_err();
+        assert!(
+            matches!(&error, Error::Invalid(message) if message.contains("sample-0")),
+            "{error}"
+        );
+    }
+    assert!(
+        repo.record_learning_review(
+            &project.id,
+            &measured(json!({"available_at_ms":140,"target_start_ms":100,"target_end_ms":120})),
+        )
+        .unwrap()
+    );
+}
+
+#[test]
+fn audit_review_corrections_reject_the_waiting_candidate() {
+    let (_directory, repo, project, budget) = setup();
+    let (cycle, data, exp) = attached_cycle(&repo, &project, &budget, "first", &[4, 5], 101);
+    finish(&repo, &exp, &data, true, 104);
+    repo.settle_learning_cycle(&cycle.id, 112).unwrap();
+    review(&repo, &project, 5, 113);
+    assert!(
+        repo.compare_learning_cycle(&cycle.id, 114)
+            .unwrap()
+            .eligible
+    );
+    repo.record_learning_observation(&project.id, &observation(4, "good", 0.9, 0.))
+        .unwrap();
+    repo.record_learning_review(
+        &project.id,
+        &LearningReview {
+            sample_id: "sample-4".into(),
+            annotation: json!({"kind":"class","class_id":1}),
+            source: LabelSource::Reviewed,
+            reviewer: "operator".into(),
+            available_at_ms: 115,
+            revision: 1,
+            outcome: None,
+        },
+    )
+    .unwrap();
+    let comparison = repo.compare_learning_cycle(&cycle.id, 116).unwrap();
+    assert!(!comparison.eligible);
+    assert!(comparison.reasons.contains(&"audit_review_changed".into()));
+    let value = repo.get_learning_project(&project.id).unwrap();
+    assert!(value.candidate_artifact_id.is_none());
+    assert_eq!(value.state, LearningState::Collecting);
+    assert!(
+        repo.get_learning_cycle(&cycle.id)
+            .unwrap()
+            .error
+            .unwrap()
+            .contains("sample-4")
+    );
+    assert!(repo.promote_learning_cycle(&cycle.id, 0, 117).is_err());
+}
+
+#[test]
+fn rejecting_a_candidate_seals_canary_traffic_and_reopens_training() {
+    let (_directory, repo, project, cycle, champion, _candidate) = canary_review_fixture(true);
+    let before = repo.get_learning_project(&project.id).unwrap();
+    assert_eq!(before.state, LearningState::Canary);
+    assert!(matches!(
+        repo.reject_learning_candidate(&project.id, Some(before.generation - 1), 140),
+        Err(Error::Conflict(_))
+    ));
+    let rejected = repo
+        .reject_learning_candidate(&project.id, Some(before.generation), 140)
+        .unwrap();
+    assert_eq!(rejected.state, LearningState::Active);
+    assert!(rejected.candidate_artifact_id.is_none());
+    assert!(rejected.canary_started_at_ms.is_none());
+    assert_eq!(
+        rejected.champion_artifact_id.as_deref(),
+        Some(champion.id.as_str())
+    );
+    assert_eq!(
+        repo.get_learning_cycle(&cycle.id)
+            .unwrap()
+            .canary_sample_ids
+            .len(),
+        2
+    );
+    assert!(
+        repo.learning_dataset_exclusions(&project.id)
+            .unwrap()
+            .sealed_audit_sample_ids
+            .contains(&"sample-100".into())
+    );
+    let comparison = repo.get_learning_comparison(&cycle.id).unwrap();
+    assert!(!comparison.eligible);
+    assert!(comparison.reasons.contains(&"candidate_rejected".into()));
+    let again = repo
+        .reject_learning_candidate(&project.id, Some(before.generation), 141)
+        .unwrap();
+    assert_eq!(again.generation, rejected.generation);
+    assert!(
+        matches!(repo.learning_route(&project.id,"same").unwrap(),LearningRoute::Champion {artifact_id} if artifact_id==champion.id)
+    );
+    review(&repo, &project, 200, 151);
+    review(&repo, &project, 201, 151);
+    assert!(
+        repo.learning_next_actions(&project.id, 152)
+            .unwrap()
+            .ready_to_train
+    );
+}
+
+#[test]
+fn exhausted_aggregate_budget_blocks_training_and_ends_in_budget_exhausted() {
+    let (_directory, repo, initial, budget) = setup();
+    let mut request = initial.request.clone();
+    request.stream.stream_id = "tight".into();
+    request.deployment_id = "tight".into();
+    request.budget.maximum_artifact_bytes = budget.maximum_artifact_bytes + 1;
+    let project = repo.create_learning_project(request, 100).unwrap();
+    let (cycle, data, exp) = attached_cycle(&repo, &project, &budget, "first", &[4, 5], 101);
+    let champion = finish(&repo, &exp, &data, true, 104);
+    repo.settle_learning_cycle(&cycle.id, 112).unwrap();
+    repo.promote_learning_cycle(&cycle.id, 0, 113).unwrap();
+    let exhausted = repo.get_learning_project(&project.id).unwrap();
+    assert_eq!(exhausted.state, LearningState::BudgetExhausted);
+    assert_eq!(
+        exhausted.champion_artifact_id.as_deref(),
+        Some(champion.id.as_str())
+    );
+    review(&repo, &project, 8, 114);
+    review(&repo, &project, 9, 114);
+    let next = repo.learning_next_actions(&project.id, 115).unwrap();
+    assert!(!next.ready_to_train);
+    assert!(next.blocking.contains(&"aggregate_budget_exhausted".into()));
+    assert!(
+        matches!(repo.learning_route(&project.id,"part").unwrap(),LearningRoute::Champion {artifact_id} if artifact_id==champion.id)
+    );
+}
+
+#[test]
+fn settling_accepts_a_cancelled_experiment_whose_trial_kept_its_reservation() {
+    let (_directory, repo, project, budget) = setup();
+    let (cycle, _, exp) = attached_cycle(&repo, &project, &budget, "cycle:0", &[4, 5], 101);
+    let trial = repo
+        .submit_experiment_trial(&exp.id, 0, "candidate", 104)
+        .unwrap();
+    let lease = repo.claim_job(&trial.job_id, "worker", 100, 105).unwrap();
+    repo.cancel_experiment(&exp.id, 106).unwrap();
+    repo.acknowledge_cancel(&lease, 107).unwrap();
+    let stopped = repo.get_experiment(&exp.id).unwrap();
+    assert_eq!(stopped.status, ExperimentStatus::Cancelled);
+    assert_ne!(stopped.usage.reserved_training_time_ms, 0);
+    let settled = repo.settle_learning_cycle(&cycle.id, 108).unwrap();
+    assert_eq!(settled.state, LearningCycleState::Settled);
+    let value = repo.get_learning_project(&project.id).unwrap();
+    assert!(value.active_cycle_id.is_none());
+    assert_eq!(value.state, LearningState::Collecting);
+    assert_eq!(value.usage.reserved.training_time_ms, 0);
+    assert_eq!(value.usage.cycles_finished, 1);
+}
+
+fn unit(seed: &mut u64) -> f64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    (*seed >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// The previous selection, which rescanned every chosen review for each candidate.
+fn quadratic_reference_selection(
+    mut pool: Vec<LearningObservation>,
+    policy: &LearningPolicy,
+) -> Vec<LearningReviewItem> {
+    pool.sort_by(|a, b| a.sample_id.cmp(&b.sample_id));
+    let mut support = BTreeMap::<String, usize>::new();
+    for observation in &pool {
+        if let Some(label) = observation.student.as_ref().and_then(|p| p.label.as_ref()) {
+            *support.entry(label.clone()).or_default() += 1;
+        }
+    }
+    let mut chosen = Vec::<LearningReviewItem>::new();
+    let mut selected_classes = BTreeMap::<String, usize>::new();
+    while !pool.is_empty() && chosen.len() < policy.review_batch_size {
+        let mut best = 0;
+        let mut best_score = f64::NEG_INFINITY;
+        let mut best_quota_priority = 0.;
+        let mut best_reasons = vec![];
+        for (index, observation) in pool.iter().enumerate() {
+            let uncertainty = observation
+                .student
+                .as_ref()
+                .map_or(1., |prediction| 1. - prediction.confidence);
+            let disagreement = match (&observation.student, &observation.teacher) {
+                (Some(a), Some(b))
+                    if a.label.is_some() && b.label.is_some() && a.label != b.label =>
+                {
+                    1.
+                }
+                (Some(a), Some(b))
+                    if !a.probabilities.is_empty()
+                        && a.probabilities.len() == b.probabilities.len() =>
+                {
+                    let sa: f64 = a.probabilities.iter().sum();
+                    let sb: f64 = b.probabilities.iter().sum();
+                    if sa > 0. && sb > 0. {
+                        0.5 * a
+                            .probabilities
+                            .iter()
+                            .zip(&b.probabilities)
+                            .map(|(a, b)| (a / sa - b / sb).abs())
+                            .sum::<f64>()
+                    } else {
+                        0.
+                    }
+                }
+                _ => 0.,
+            };
+            let distance = chosen
+                .iter()
+                .filter_map(|previous| {
+                    embedding_distance(&observation.embedding, &previous.observation.embedding)
+                })
+                .reduce(f64::min)
+                .map_or(0., |d| d / (1. + d));
+            let label = observation.student.as_ref().and_then(|p| p.label.as_ref());
+            let rare = label.is_some_and(|label| {
+                selected_classes.get(label).copied().unwrap_or(0) < policy.rare_class_quota
+            });
+            let class_bonus = if rare {
+                1. + 1. / label
+                    .and_then(|label| support.get(label))
+                    .copied()
+                    .unwrap_or(1) as f64
+            } else {
+                0.
+            };
+            let score = policy.uncertainty_weight * uncertainty
+                + policy.disagreement_weight * disagreement
+                + policy.diversity_weight * distance
+                + class_bonus;
+            if class_bonus > best_quota_priority
+                || (class_bonus == best_quota_priority && score > best_score)
+            {
+                best = index;
+                best_score = score;
+                best_quota_priority = class_bonus;
+                best_reasons = vec![format!("uncertainty={uncertainty:.4}")];
+                if disagreement > 0. {
+                    best_reasons.push("teacher_student_disagreement".into());
+                }
+                if distance > 0. {
+                    best_reasons.push("embedding_diversity".into());
+                }
+                if rare {
+                    best_reasons.push("class_quota".into());
+                }
+            }
+        }
+        let observation = pool.remove(best);
+        if let Some(label) = observation.student.as_ref().and_then(|p| p.label.as_ref()) {
+            *selected_classes.entry(label.clone()).or_default() += 1;
+        }
+        chosen.push(LearningReviewItem {
+            observation,
+            score: best_score,
+            reasons: best_reasons,
+        });
+    }
+    chosen
+}
+
+#[test]
+fn review_selection_matches_the_quadratic_reference() {
+    let mut seed = 7;
+    let labels = ["good", "bad", "scratch"];
+    let mut pool = vec![];
+    for index in 0..64 {
+        let confidence = unit(&mut seed);
+        let mut item = observation(index, labels[index % 3], confidence, 0.);
+        item.embedding = match index % 5 {
+            0 => vec![],
+            1 => vec![unit(&mut seed), unit(&mut seed)],
+            _ => (0..4).map(|_| unit(&mut seed) * 3.).collect(),
+        };
+        if index % 2 == 0 {
+            let student = unit(&mut seed);
+            let teacher = unit(&mut seed);
+            item.student.as_mut().unwrap().probabilities = vec![student, 1. - student];
+            item.teacher.as_mut().unwrap().probabilities = vec![teacher, 1. - teacher];
+        }
+        if index % 11 == 0 {
+            item.student = None;
+        }
+        pool.push(item);
+    }
+    for batch in [12, 100] {
+        let policy = LearningPolicy {
+            review_batch_size: batch,
+            rare_class_quota: 2,
+            ..Default::default()
+        };
+        let fast = select_diverse_reviews(pool.clone(), &policy);
+        assert_eq!(fast.len(), batch.min(pool.len()));
+        assert_eq!(
+            serde_json::to_value(&fast).unwrap(),
+            serde_json::to_value(quadratic_reference_selection(pool.clone(), &policy)).unwrap()
+        );
+    }
 }

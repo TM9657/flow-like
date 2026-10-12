@@ -54,21 +54,38 @@ pub fn ks_test(reference: &[f64], current: &[f64], alpha: f64) -> Result<KsResul
     })
 }
 
+/// Fewer samples per bin let sampling noise dominate PSI: with no drift its expected value is
+/// about (bins - 1) * (1/reference + 1/current).
+const PSI_MINIMUM_SAMPLES_PER_BIN: usize = 5;
+
 pub fn population_stability_index(
     reference: &[f64],
     current: &[f64],
     edges: &[f64],
 ) -> Result<f64> {
     require(
-        !reference.is_empty()
-            && !current.is_empty()
-            && reference
-                .iter()
-                .chain(current)
-                .chain(edges)
-                .all(|v| v.is_finite())
+        !edges.is_empty(),
+        "PSI needs at least one bin edge; a single bin always yields 0",
+    )?;
+    require(
+        reference
+            .iter()
+            .chain(current)
+            .chain(edges)
+            .all(|v| v.is_finite())
             && edges.windows(2).all(|w| w[0] < w[1]),
         "PSI needs finite samples and increasing bin edges",
+    )?;
+    let bin_count = edges.len() + 1;
+    let minimum = bin_count.saturating_mul(PSI_MINIMUM_SAMPLES_PER_BIN);
+    require(
+        reference.len() >= minimum && current.len() >= minimum,
+        format!(
+            "PSI over {bin_count} bins needs {minimum} reference and {minimum} current samples \
+             ({PSI_MINIMUM_SAMPLES_PER_BIN} per bin); got {} and {}",
+            reference.len(),
+            current.len()
+        ),
     )?;
     let count = |values: &[f64]| {
         let mut bins = vec![0.5; edges.len() + 1];
@@ -141,6 +158,16 @@ mod tests {
         assert!(ks_test(&a, &b, 0.05).unwrap().drift);
         assert_eq!(population_stability_index(&a, &a, &[0.5]).unwrap(), 0.0);
         assert!(population_stability_index(&a, &b, &[0.5]).unwrap() > 1.0);
+    }
+    #[test]
+    fn psi_rejects_a_single_bin_and_windows_too_small_for_their_bins() {
+        let reference: Vec<f64> = (0..1000).map(|i| i as f64).collect();
+        let deciles: Vec<f64> = (1..10).map(|i| i as f64 * 100.0 - 0.5).collect();
+        assert!(population_stability_index(&reference, &reference, &[]).is_err());
+        assert!(population_stability_index(&reference, &reference[..49], &deciles).is_err());
+        assert!(population_stability_index(&reference[..49], &reference, &deciles).is_err());
+        let current: Vec<f64> = (0..50).map(|i| i as f64 * 20.0).collect();
+        assert!(population_stability_index(&reference, &current, &deciles).unwrap() < 0.1);
     }
     #[test]
     fn page_hinkley_detects_loss_increase_and_resets() {

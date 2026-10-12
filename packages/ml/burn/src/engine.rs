@@ -14,6 +14,8 @@ use std::{
 
 pub const MANIFEST_FILE: &str = "state.json";
 const FORMAT_VERSION: u32 = 1;
+const EVALUATION_SEED: u64 = 0xa076_1d64_78bd_642f;
+const INITIAL_EVALUATION: u64 = u64::MAX;
 static CHECKPOINT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -164,6 +166,14 @@ fn run(
         previous.as_ref().map(|state| &state.config.backend),
     )?;
     let config = &resolved_config;
+    let fingerprint = match validation {
+        Some(validation) => format!(
+            "{}:{}",
+            dataset_fingerprint(data)?,
+            dataset_fingerprint(validation)?
+        ),
+        None => format!("{}:none", dataset_fingerprint(data)?),
+    };
     let device = backend::device(&config.backend, true)?;
     let initialization_guard = crate::execution::lock(Some(cancellation))?;
     device.seed(config.seed);
@@ -203,60 +213,67 @@ fn run(
     let mut optimizer = AdamConfig::new()
         .init()
         .with_grad_clipping(GradientClippingConfig::Norm(config.gradient_clip).init());
-    let fingerprint = match validation {
-        Some(validation) => format!(
-            "{}:{}",
-            dataset_fingerprint(data)?,
-            dataset_fingerprint(validation)?
-        ),
-        None => format!("{}:none", dataset_fingerprint(data)?),
+    let resumed = match previous {
+        Some(previous) => {
+            let mut expected = previous.config.clone();
+            expected.epochs = config.epochs;
+            expected.backend = config.backend.clone();
+            if expected != *config || previous.dataset_fingerprint != fingerprint {
+                return Err(Error::Invalid(
+                    "Resume configuration or dataset differs from its checkpoint".into(),
+                ));
+            }
+            ensure_resumable(config.epochs, previous.next_epoch, previous.next_batch)?;
+            let checkpoint = checked_checkpoint(dir, &previous.checkpoint)?;
+            model = model
+                .try_load_file(checkpoint.join("model.bpk"))
+                .map_err(record_error)?
+                .train();
+            if let Some(pretrained) = &previous.pretrained {
+                model = model.configure_fine_tuning(pretrained.options.freeze_backbone)?;
+            }
+            optimizer = optimizer
+                .load(checkpoint.join("optimizer.bpk"))
+                .map_err(record_error)?;
+            Some(previous)
+        }
+        None => None,
     };
-    let mut state = if let Some(previous) = previous {
-        let mut expected = previous.config.clone();
-        expected.epochs = config.epochs;
-        expected.backend = config.backend.clone();
-        if expected != *config
-            || previous.dataset_fingerprint != fingerprint
-            || config.epochs < previous.next_epoch
-        {
-            return Err(Error::Invalid(
-                "Resume configuration or dataset differs from its checkpoint".into(),
-            ));
-        }
-        let checkpoint = checked_checkpoint(dir, &previous.checkpoint)?;
-        model = model
-            .try_load_file(checkpoint.join("model.bpk"))
-            .map_err(record_error)?
-            .train();
-        if let Some(pretrained) = &previous.pretrained {
-            model = model.configure_fine_tuning(pretrained.options.freeze_backbone)?;
-        }
-        optimizer = optimizer
-            .load(checkpoint.join("optimizer.bpk"))
-            .map_err(record_error)?;
-        previous
-    } else {
-        let initial_loss = evaluate_loss(&model, data, &device, config.batch_size)?;
-        State {
-            version: FORMAT_VERSION,
-            config: config.clone(),
-            requested_backend: requested_backend.clone(),
-            input_shape: data.inputs.shape[1..].to_vec(),
-            dataset_fingerprint: fingerprint,
-            checkpoint: String::new(),
-            next_epoch: 0,
-            next_batch: 0,
-            report: TrainingReport {
-                backend: Some(config.backend.clone()),
-                completed_epochs: 0,
-                steps: 0,
-                initial_loss,
-                final_loss: initial_loss,
-                validation_loss: None,
-                history: Vec::new(),
-            },
-            pretrained,
-            imported: None,
+    // Lazy parameters draw their initial values on first read; read them all under the seed.
+    crate::execution::materialize(&model)?;
+    drop(initialization_guard);
+    let mut state = match resumed {
+        Some(previous) => previous,
+        None => {
+            let initial_loss = evaluate_loss(
+                &model,
+                data,
+                &device,
+                config.batch_size,
+                evaluation_seed(config.seed, INITIAL_EVALUATION),
+                cancellation,
+            )?;
+            State {
+                version: FORMAT_VERSION,
+                config: config.clone(),
+                requested_backend: requested_backend.clone(),
+                input_shape: data.inputs.shape[1..].to_vec(),
+                dataset_fingerprint: fingerprint,
+                checkpoint: String::new(),
+                next_epoch: 0,
+                next_batch: 0,
+                report: TrainingReport {
+                    backend: Some(config.backend.clone()),
+                    completed_epochs: 0,
+                    steps: 0,
+                    initial_loss,
+                    final_loss: initial_loss,
+                    validation_loss: None,
+                    history: Vec::new(),
+                },
+                pretrained,
+                imported: None,
+            }
         }
     };
     // Establish a complete checkpoint before doing work so a cancellation always leaves a loadable model.
@@ -264,7 +281,6 @@ fn run(
     state.requested_backend = requested_backend;
     state.report.backend = Some(config.backend.clone());
     checkpoint(dir, &model, &optimizer, &mut state)?;
-    drop(initialization_guard);
     let batches = data.inputs.shape[0].div_ceil(config.batch_size);
     for epoch in state.next_epoch..config.epochs {
         let indices =
@@ -295,7 +311,7 @@ fn run(
                     .wrapping_add(state.report.steps as u64)
                     .wrapping_mul(0x9e3779b97f4a7c15),
             );
-            let loss = model.loss(&batch, &device)?;
+            let loss = model.loss(&batch, &device, true)?;
             let loss_value = scalar(loss.clone())?;
             if !loss_value.is_finite() {
                 return Err(Error::Invalid(
@@ -320,23 +336,28 @@ fn run(
                 return Err(Error::Cancelled);
             }
         }
-        let evaluation_guard = match crate::execution::lock(Some(cancellation)) {
-            Ok(guard) => guard,
-            Err(error) => {
+        let (final_loss, validation_loss) = match evaluate_epoch(
+            &model,
+            data,
+            validation,
+            &device,
+            config,
+            epoch,
+            cancellation,
+        ) {
+            Ok(losses) => losses,
+            Err(Error::Cancelled) => {
+                // The cursor still points past the last trained batch, so resume re-evaluates.
                 checkpoint(dir, &model, &optimizer, &mut state)?;
-                return Err(error);
+                return Err(Error::Cancelled);
             }
+            Err(error) => return Err(error),
         };
-        // Mask R-CNN samples evaluation ROIs too. Give that phase its own stable seed.
-        device.seed(config.seed ^ 0xa076_1d64_78bd_642f ^ epoch as u64);
         state.next_epoch = epoch + 1;
         state.next_batch = 0;
         state.report.completed_epochs = epoch + 1;
-        state.report.final_loss = evaluate_loss(&model, data, &device, config.batch_size)?;
-        state.report.validation_loss = validation
-            .map(|v| evaluate_loss(&model, v, &device, config.batch_size))
-            .transpose()?;
-        drop(evaluation_guard);
+        state.report.final_loss = final_loss;
+        state.report.validation_loss = validation_loss;
         let event = TrainingProgress {
             epoch: epoch + 1,
             batch: batches,
@@ -354,20 +375,67 @@ fn run(
     Ok(state.report)
 }
 
+fn evaluation_seed(seed: u64, phase: u64) -> u64 {
+    seed ^ EVALUATION_SEED ^ phase
+}
+
+fn evaluate_epoch(
+    model: &Model,
+    data: &TensorDataset,
+    validation: Option<&TensorDataset>,
+    device: &Device,
+    config: &TrainingConfig,
+    epoch: usize,
+    cancellation: &CancellationToken,
+) -> Result<(f32, Option<f32>)> {
+    let phase = (epoch as u64) << 1;
+    let training = evaluate_loss(
+        model,
+        data,
+        device,
+        config.batch_size,
+        evaluation_seed(config.seed, phase),
+        cancellation,
+    )?;
+    let validation = validation
+        .map(|validation| {
+            evaluate_loss(
+                model,
+                validation,
+                device,
+                config.batch_size,
+                evaluation_seed(config.seed, phase | 1),
+                cancellation,
+            )
+        })
+        .transpose()?;
+    Ok((training, validation))
+}
+
+/// Mask R-CNN samples evaluation ROIs, so each batch reseeds the shared RNG under its lock.
+/// The lock is released between batches and acquiring it observes cancellation.
 fn evaluate_loss(
     model: &Model,
     data: &TensorDataset,
     device: &Device,
     batch_size: usize,
+    seed: u64,
+    cancellation: &CancellationToken,
 ) -> Result<f32> {
     let model = model.valid();
+    let count = data.inputs.shape[0];
     let mut total = 0.0f64;
-    for start in (0..data.inputs.shape[0]).step_by(batch_size) {
-        let end = (start + batch_size).min(data.inputs.shape[0]);
+    for (index, start) in (0..count).step_by(batch_size).enumerate() {
+        let end = (start + batch_size).min(count);
         let batch = data.batch(&(start..end).collect::<Vec<_>>());
-        total += scalar(model.loss(&batch, device)?)? as f64 * (end - start) as f64;
+        let _rng = crate::execution::lock(Some(cancellation))?;
+        device.seed(
+            seed.wrapping_add(index as u64)
+                .wrapping_mul(0x9e3779b97f4a7c15),
+        );
+        total += scalar(model.loss(&batch, device, false)?)? as f64 * (end - start) as f64;
     }
-    let result = (total / data.inputs.shape[0] as f64) as f32;
+    let result = (total / count as f64) as f32;
     if !result.is_finite() {
         return Err(Error::Invalid("Evaluation produced non-finite loss".into()));
     }
@@ -375,7 +443,8 @@ fn evaluate_loss(
 }
 fn scalar(tensor: Tensor<1>) -> Result<f32> {
     let values = tensor
-        .into_data()
+        .try_into_data()
+        .map_err(crate::execution::device_error)?
         .try_to_vec::<f32>()
         .map_err(record_error)?;
     values
@@ -416,8 +485,19 @@ fn checkpoint(
     sync_record(&target.join("optimizer.bpk"))?;
     sync_directory(&target)?;
     sync_directory(dir)?;
-    state.checkpoint = name;
-    let temporary = dir.join("state.json.pending");
+    let superseded = std::mem::replace(&mut state.checkpoint, name);
+    commit_checkpoint(
+        dir,
+        MANIFEST_FILE,
+        state,
+        &state.checkpoint,
+        checked_checkpoint(dir, &superseded).ok(),
+    )
+}
+
+/// Atomically replace `manifest` with `state` and make the rename durable.
+pub(crate) fn write_manifest(dir: &Path, manifest: &str, state: &impl Serialize) -> Result<()> {
+    let temporary = dir.join(format!("{manifest}.pending"));
     let file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -426,8 +506,37 @@ fn checkpoint(
     serde_json::to_writer_pretty(&file, state)?;
     file.sync_all()?;
     drop(file);
-    fs::rename(temporary, dir.join(MANIFEST_FILE))?;
-    sync_directory(dir)?;
+    fs::rename(temporary, dir.join(manifest))?;
+    sync_directory(dir)
+}
+
+/// Point `manifest` at the `current` checkpoint `state` names, then delete the one it superseded.
+/// Saving read every lazily loaded weight, so nothing in memory still needs the old files.
+/// Removal is best effort: the committed manifest no longer references that directory.
+pub(crate) fn commit_checkpoint(
+    dir: &Path,
+    manifest: &str,
+    state: &impl Serialize,
+    current: &str,
+    superseded: Option<PathBuf>,
+) -> Result<()> {
+    write_manifest(dir, manifest, state)?;
+    if let Some(superseded) = superseded
+        && superseded != dir.join(current)
+    {
+        let _ = fs::remove_dir_all(superseded);
+    }
+    Ok(())
+}
+
+/// Resuming must not end before the epoch the checkpoint already started.
+pub(crate) fn ensure_resumable(epochs: usize, next_epoch: usize, next_batch: usize) -> Result<()> {
+    let required = next_epoch.saturating_add(usize::from(next_batch > 0));
+    if epochs < required {
+        return Err(Error::Invalid(format!(
+            "Resume needs at least {required} epochs: its checkpoint completed {next_epoch} epochs and {next_batch} batches of the next"
+        )));
+    }
     Ok(())
 }
 
@@ -588,7 +697,7 @@ impl Predictor {
             .try_load_file(checked_checkpoint(dir, &state.checkpoint)?.join("model.bpk"))
             .map_err(record_error)?
             .valid();
-        crate::execution::materialize(&model);
+        crate::execution::materialize(&model)?;
         Ok(Self {
             model,
             device,
@@ -681,7 +790,8 @@ impl Predictor {
         };
         let shape = output.dims().to_vec();
         let values = output
-            .into_data()
+            .try_into_data()
+            .map_err(crate::execution::device_error)?
             .try_to_vec::<f32>()
             .map_err(record_error)?;
         Ok(TensorData { shape, values })
@@ -713,5 +823,61 @@ impl Predictor {
         self.model
             .forward(input, &self.device)?
             .prediction(&self.recipe, input, options)
+    }
+}
+
+#[cfg(all(test, feature = "cpu"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resume_must_cover_the_epoch_its_checkpoint_started() {
+        assert!(ensure_resumable(3, 3, 0).is_ok());
+        assert!(ensure_resumable(4, 3, 2).is_ok());
+        assert!(ensure_resumable(3, 3, 2).is_err());
+        assert!(ensure_resumable(2, 3, 0).is_err());
+    }
+
+    #[test]
+    fn evaluation_checks_cancellation_before_each_batch() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let device = backend::device(&BackendChoice::Cpu, false).unwrap();
+        let model = Model::new(
+            &Recipe::Mlp {
+                input_features: 2,
+                hidden: 3,
+                outputs: 2,
+                objective: Objective::Classification,
+            },
+            &device,
+        )
+        .unwrap();
+        {
+            let _rng = crate::execution::lock(None).unwrap();
+            device.seed(5);
+            crate::execution::materialize(&model).unwrap();
+        }
+        let data = TensorDataset {
+            inputs: TensorData {
+                shape: vec![4, 2],
+                values: vec![0.5, -0.5, 1.0, 0.0, -1.0, 0.25, 0.0, 1.0],
+            },
+            targets: Targets::Classes {
+                values: vec![0, 1, 0, 1],
+            },
+        };
+        let cancellation = CancellationToken::new();
+        assert!(
+            evaluate_loss(&model, &data, &device, 2, 7, &cancellation)
+                .unwrap()
+                .is_finite()
+        );
+        cancellation.cancel();
+        assert!(matches!(
+            evaluate_loss(&model, &data, &device, 2, 7, &cancellation),
+            Err(Error::Cancelled)
+        ));
     }
 }

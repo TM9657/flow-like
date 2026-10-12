@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/storytold/photocraft.git",
+  "revision": "8d49ecf50d59885fb2dcf38a203d62b314565726",
+  "version": "0.8.0",
+  "wasmBindgen": "0.2.129",
+  "cargoPackage": "photocraft-web",
+  "label": "Flows Photo",
+  "canvasId": "craft_canvas",
+  "extensions": ["pcraft", "ora", "psd", "psb", "psdt", "png", "apng", "jpg", "jpeg", "jpe", "jfif", "tif", "tiff", "webp", "gif", "bmp", "dib", "tga", "icb", "vda", "vst", "ico", "qoi", "exr", "hdr", "pnm", "pbm", "pgm", "ppm", "pam", "pfm", "fits", "fit", "fts", "pdn", "pcx", "kra", "dng", "cr2", "cr3", "nef", "nrw", "arw", "pef", "orf", "rw2", "raf", "afphoto"]
+}

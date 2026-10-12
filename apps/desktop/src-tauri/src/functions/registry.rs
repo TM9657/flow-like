@@ -782,6 +782,35 @@ async fn describe_widget_policy(
     .map_err(|error| TauriFunctionError::new(&error))
 }
 
+/// Fetches the widget bundle `bundle_hash` of `package_id@version` from the
+/// profile's hub into the widget store, without installing the version: the
+/// bundle a page places when this device holds another version or none. With
+/// `app_id` the hub hands it out through that project.
+#[tauri::command]
+pub async fn registry_cache_widget_bundle(
+    app_handle: AppHandle,
+    package_id: String,
+    version: String,
+    bundle_hash: String,
+    token: Option<String>,
+    app_id: Option<String>,
+) -> Result<(), TauriFunctionError> {
+    let registry_client = get_client_with_token(&app_handle, token.clone()).await?;
+    registry_client
+        .cache_widget_bundle(
+            &package_id,
+            &version,
+            &bundle_hash,
+            token.as_deref(),
+            app_id.as_deref(),
+        )
+        .await
+        .inspect_err(|error| {
+            log_registry_package_error("registry_cache_widget_bundle", &package_id, error)
+        })?;
+    Ok(())
+}
+
 /// Authoritative policy of one widget of an unpacked bundle, derived from its
 /// declared `contract.json` plus the runtime sources the host extracted for
 /// its declared network inputs. The host renders consent from this

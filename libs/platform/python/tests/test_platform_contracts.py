@@ -349,6 +349,7 @@ ROUTES = [
     ("alter_table_column", ["app", "table", {"column": "name", "rename": "label"}], "PUT", "/apps/app/db/table/columns", {"column": "name", "rename": "label"}),
     ("drop_table_columns", ["app", "table", {"columns": ["label"]}], "DELETE", "/apps/app/db/table/columns", {"columns": ["label"]}),
     ("set_table_primary_key", ["app", "table", {"column": "id"}], "PUT", "/apps/app/db/table/primary-key", {"column": "id"}),
+    ("set_table_column_metadata", ["app", "table", "salary", {"pii": True}], "PUT", "/apps/app/db/table/columns/salary/metadata", {"pii": True}),
     ("build_table_index", ["app", "table", {"column": "id", "index_type": "BTree", "optimize": False}], "POST", "/apps/app/db/table/index", {"column": "id", "index_type": "BTree", "optimize": False}),
     ("drop_table_index", ["app", "table", "id_idx"], "DELETE", "/apps/app/db/table/index/id_idx", None),
     ("table_reference_action", ["app", "table", {"action": "create_tag", "name": "release"}], "POST", "/apps/app/db/table/references", {"action": "create_tag", "name": "release"}),

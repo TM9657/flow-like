@@ -17,7 +17,15 @@ import {
 	XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	Suspense,
+	lazy,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { toast } from "sonner";
 import {
 	BulkUploadPartialFailureError,
@@ -36,6 +44,9 @@ import { humanFileSize } from "../../lib/utils";
 import {
 	Badge,
 	Button,
+	Dialog,
+	DialogContent,
+	DialogTitle,
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
@@ -55,7 +66,17 @@ import {
 	isText,
 } from "../ui";
 import { StorageBreadcrumbs } from "./storage-breadcrumbs";
+import { createStorageDocx, isStorageDocx } from "./storage-docx";
+import { useStorageDocxHistory } from "./storage-docx-history";
 import { FileOrFolder } from "./storage-file-or-folder";
+
+const WordcraftDocument = lazy(() =>
+	import("./wordcraft-document").then((module) => ({
+		default: module.WordcraftDocument,
+	})),
+);
+
+const EMPTY_PREVIEW = { url: "", file: "", folder: "" };
 
 interface StorageOperationResult {
 	prefix: string;
@@ -144,6 +165,8 @@ export function StorageSystem({
 	revealInExplorer,
 	openWithApp,
 	listAppsForFile,
+	enableDocx = false,
+	canWrite = true,
 }: Readonly<{
 	appId: string;
 	prefix: string;
@@ -157,6 +180,8 @@ export function StorageSystem({
 	listAppsForFile?: (
 		location: string,
 	) => Promise<import("./storage-file-or-folder").AppEntry[]>;
+	enableDocx?: boolean;
+	canWrite?: boolean;
 }>) {
 	// Responsive helper: detect small screens (<= Tailwind 'sm')
 	const useIsSmallScreen = () => {
@@ -235,10 +260,89 @@ export function StorageSystem({
 		}),
 		[backend.storageState, operations],
 	);
-	const [preview, setPreview] = useState({
-		url: "",
-		file: "",
-	});
+	const [preview, setPreview] = useState(EMPTY_PREVIEW);
+	const docxDirty = useRef(false);
+	const docxBusy = useRef(false);
+	const previewRequest = useRef(0);
+	const onDocxDirtyChange = useCallback((dirty: boolean) => {
+		docxDirty.current = dirty;
+	}, []);
+	const onDocxBusyChange = useCallback((busy: boolean) => {
+		docxBusy.current = busy;
+	}, []);
+	const confirmPreviewLeave = useCallback(() => {
+		if (docxBusy.current) {
+			toast.info("Wait for the document to finish saving.");
+			return false;
+		}
+		return (
+			!docxDirty.current || window.confirm("Discard unsaved document changes?")
+		);
+	}, []);
+	const dismissPreview = useCallback(() => {
+		previewRequest.current++;
+		docxDirty.current = false;
+		setPreview(EMPTY_PREVIEW);
+	}, []);
+	const { openHistory, closeHistory } = useStorageDocxHistory(
+		confirmPreviewLeave,
+		dismissPreview,
+	);
+	const closePreview = useCallback(async () => {
+		if (!confirmPreviewLeave() || !(await closeHistory())) return false;
+		dismissPreview();
+		return true;
+	}, [closeHistory, confirmPreviewLeave, dismissPreview]);
+	const navigatePrefix = useCallback(
+		async (nextPrefix: string) => {
+			if (await closePreview()) updatePrefix(nextPrefix);
+		},
+		[closePreview, updatePrefix],
+	);
+	useEffect(() => {
+		const protectDocument = (event: BeforeUnloadEvent) => {
+			if (!docxDirty.current && !docxBusy.current) return;
+			event.preventDefault();
+			event.returnValue = "";
+		};
+		const protectLinkNavigation = (event: MouseEvent) => {
+			if (
+				(!docxDirty.current && !docxBusy.current) ||
+				event.button !== 0 ||
+				event.metaKey ||
+				event.ctrlKey ||
+				event.shiftKey ||
+				event.altKey
+			)
+				return;
+			const anchor =
+				event.target instanceof Element
+					? event.target.closest("a[href]")
+					: null;
+			if (
+				!(anchor instanceof HTMLAnchorElement) ||
+				anchor.download ||
+				anchor.target === "_blank"
+			)
+				return;
+			const destination = new URL(anchor.href, window.location.href);
+			if (
+				destination.pathname === window.location.pathname &&
+				destination.search === window.location.search
+			)
+				return;
+			if (!confirmPreviewLeave()) {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+			}
+		};
+		window.addEventListener("beforeunload", protectDocument);
+		document.addEventListener("click", protectLinkNavigation, true);
+		return () => {
+			window.removeEventListener("beforeunload", protectDocument);
+			document.removeEventListener("click", protectLinkNavigation, true);
+		};
+	}, [confirmPreviewLeave]);
 	const [uploadProgress, setUploadProgress] = useState<{
 		isUploading: boolean;
 		progress: number;
@@ -520,11 +624,14 @@ export function StorageSystem({
 	const loadFile = useCallback(
 		async (file: string) => {
 			if (preview.file === file) {
-				setPreview((old) => ({ ...old, file: "", url: "" }));
+				closePreview();
 				return;
 			}
+			if (!confirmPreviewLeave()) return;
+			const request = ++previewRequest.current;
 
 			const url = await storageApi.downloadStorageItems(appId, [file]);
+			if (request !== previewRequest.current) return;
 
 			if (url.length === 0 || !url[0]?.url) {
 				toast.error("Failed to load file preview");
@@ -532,13 +639,52 @@ export function StorageSystem({
 			}
 
 			const fileUrl = url[0].url;
+			if (enableDocx && isStorageDocx(file)) openHistory();
+			else if (!(await closeHistory())) return;
+			if (request !== previewRequest.current) return;
 
+			docxDirty.current = false;
 			setPreview({
 				url: fileUrl,
 				file,
+				folder: prefix,
 			});
 		},
-		[appId, preview, storageApi],
+		[
+			appId,
+			closeHistory,
+			closePreview,
+			confirmPreviewLeave,
+			enableDocx,
+			openHistory,
+			prefix,
+			preview.file,
+			storageApi,
+		],
+	);
+
+	const saveDocx = useCallback(
+		async (file: File) => {
+			if (!enableDocx || !canWrite || !isStorageDocx(preview.file)) {
+				throw new Error("You do not have permission to save this document.");
+			}
+			const document = createStorageDocx(file, preview.file);
+			try {
+				await storageApi.uploadStorageItems(appId, preview.folder, [document]);
+			} finally {
+				await refreshFiles();
+			}
+			toast.success(`Saved ${storageDisplayName(preview.file)}`);
+		},
+		[
+			appId,
+			canWrite,
+			enableDocx,
+			preview.file,
+			preview.folder,
+			refreshFiles,
+			storageApi,
+		],
 	);
 
 	const saveFile = useCallback(
@@ -572,11 +718,12 @@ export function StorageSystem({
 		() => storageDisplayName(preview.file),
 		[preview.file],
 	);
+	const isDocxPreview = enableDocx && isStorageDocx(preview.file);
 
 	const downloadFile = useCallback(
 		async (file: string) => {
 			if (preview.file === file) {
-				setPreview((old) => ({ ...old, file: "", url: "" }));
+				closePreview();
 				return;
 			}
 
@@ -607,7 +754,7 @@ export function StorageSystem({
 			document.body.removeChild(a);
 			URL.revokeObjectURL(url);
 		},
-		[appId, preview, storageApi],
+		[appId, closePreview, preview, storageApi],
 	);
 
 	const filteredFiles = useMemo(
@@ -658,26 +805,35 @@ export function StorageSystem({
 		[filteredFiles, sortBy, sortOrder],
 	);
 
-	// One definition for both render sites. They used to carry byte-identical
-	// copies of this prop block, differing only in whether navigating into a
-	// folder also closes the open preview.
 	const renderFile = useCallback(
 		(file: IStorageItem, clearPreviewOnNavigate: boolean) => (
 			<FileOrFolder
 				appId={appId}
 				highlight={preview.file === file.location}
 				file={file}
+				previewable={
+					enableDocx && isStorageDocx(file.location) ? true : undefined
+				}
 				changePrefix={(newPrefix) => {
-					if (clearPreviewOnNavigate) setPreview({ url: "", file: "" });
-					updatePrefix(`${prefix}/${newPrefix}`);
+					if (isDocxPreview || clearPreviewOnNavigate) {
+						navigatePrefix(`${prefix}/${newPrefix}`);
+					} else {
+						updatePrefix(`${prefix}/${newPrefix}`);
+					}
 				}}
 				loadFile={loadFile}
 				revealInExplorer={revealInExplorer}
 				openWithApp={openWithApp}
 				listAppsForFile={listAppsForFile}
 				deleteFile={async (target) => {
+					const deletingPreview = storageDisplayName(preview.file) === target;
+					if (deletingPreview && !confirmPreviewLeave()) return;
 					try {
 						await storageApi.deleteStorageItems(appId, [`${prefix}/${target}`]);
+						if (deletingPreview) {
+							docxDirty.current = false;
+							await closePreview();
+						}
 						toast.success("Deleted successfully");
 					} catch (error) {
 						console.error(error);
@@ -706,10 +862,15 @@ export function StorageSystem({
 		),
 		[
 			appId,
+			closePreview,
+			confirmPreviewLeave,
 			downloadFile,
+			enableDocx,
 			refreshFiles,
 			listAppsForFile,
+			isDocxPreview,
 			loadFile,
+			navigatePrefix,
 			openWithApp,
 			prefix,
 			preview.file,
@@ -988,7 +1149,7 @@ export function StorageSystem({
 						<StorageBreadcrumbs
 							appId={appId}
 							prefix={prefix}
-							updatePrefix={(prefix) => updatePrefix(prefix)}
+							updatePrefix={navigatePrefix}
 						/>
 					</div>
 					{(filesWithVirtual.length ?? 0) > 0 && (
@@ -1051,7 +1212,7 @@ export function StorageSystem({
 			<Separator className="shrink-0 my-4" />
 
 			{/* Content Section */}
-			{(filesWithVirtual.length ?? 0) === 0 && (
+			{(filesWithVirtual.length ?? 0) === 0 && !isDocxPreview && (
 				<div className="flex flex-col flex-1 min-h-0 w-full relative px-4 pb-4">
 					<EmptyState
 						className="w-full h-full max-w-full border-2 border-dashed border-muted-foreground/25 rounded-lg"
@@ -1076,9 +1237,52 @@ export function StorageSystem({
 				</div>
 			)}
 
-			{(filesWithVirtual.length ?? 0) > 0 && (
+			{((filesWithVirtual.length ?? 0) > 0 || isDocxPreview) && (
 				<div className="flex flex-col flex-1 min-h-0 px-4 pb-4">
-					{preview.url !== "" && (
+					{preview.url !== "" && isDocxPreview && (
+						<Dialog
+							open
+							onOpenChange={(open) => {
+								if (!open) closePreview();
+							}}
+						>
+							<DialogContent
+								className="flex h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-2rem)] [&>[data-slot=dialog-close]]:top-5"
+								aria-describedby={undefined}
+							>
+								<div className="h-full min-h-0 flex-1 overflow-hidden">
+									<Suspense
+										fallback={
+											<div className="px-3 py-2 pr-12">
+												<DialogTitle className="truncate text-base">
+													{previewName}
+												</DialogTitle>
+												<p className="mt-2 text-sm text-muted-foreground">
+													Loading Flows Word...
+												</p>
+											</div>
+										}
+									>
+										<WordcraftDocument
+											key={preview.file}
+											url={preview.url}
+											filename={previewName}
+											title={
+												<DialogTitle className="min-w-0 truncate text-base">
+													{previewName}
+												</DialogTitle>
+											}
+											editable={canWrite}
+											onSave={saveDocx}
+											onDirtyChange={onDocxDirtyChange}
+											onBusyChange={onDocxBusyChange}
+										/>
+									</Suspense>
+								</div>
+							</DialogContent>
+						</Dialog>
+					)}
+					{preview.url !== "" && !isDocxPreview && (
 						<>
 							{(isSmallScreen || isPreviewMaximized) && (
 								<div className="fixed inset-0 z-50 bg-background">
@@ -1092,7 +1296,7 @@ export function StorageSystem({
 												size="sm"
 												onClick={() => {
 													if (isSmallScreen) {
-														setPreview((p) => ({ ...p, url: "", file: "" }));
+														closePreview();
 													} else {
 														setIsPreviewMaximized(false);
 													}
@@ -1180,7 +1384,7 @@ export function StorageSystem({
 							)}
 						</>
 					)}
-					{preview.url === "" && (
+					{(preview.url === "" || isDocxPreview) && (
 						<div className="flex flex-col flex-1 min-h-0 border rounded-lg p-3 sm:p-4 bg-background">
 							<div className="flex items-center gap-2 mb-2 shrink-0">
 								<h3 className="font-medium text-sm text-muted-foreground">

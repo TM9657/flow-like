@@ -126,6 +126,14 @@ pub struct ExperimentUsage {
     pub dataset_bytes: u64,
 }
 
+/// Wall time is charged only while a controller works on the experiment, never while it waits
+/// in a queue or stays stopped.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct ExperimentClock {
+    pub active_since_ms: Option<i64>,
+    pub elapsed_ms: u64,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct Experiment {
     pub id: String,
@@ -144,6 +152,33 @@ pub struct Experiment {
     pub stop_reason: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
+    /// Absent on records written before active wall-time accounting; those count from creation.
+    #[serde(default)]
+    pub clock: Option<ExperimentClock>,
+}
+
+impl Experiment {
+    /// Wall time charged against `maximum_wall_time_ms` up to `now_ms`.
+    pub fn wall_elapsed_ms(&self, now_ms: i64) -> u64 {
+        let Some(clock) = &self.clock else {
+            return elapsed_between(self.created_at_ms, now_ms);
+        };
+        let active = clock
+            .active_since_ms
+            .map_or(0, |since| elapsed_between(since, now_ms));
+        clock.elapsed_ms.saturating_add(active)
+    }
+
+    pub fn wall_remaining_ms(&self, now_ms: i64) -> u64 {
+        self.request
+            .budget
+            .maximum_wall_time_ms
+            .saturating_sub(self.wall_elapsed_ms(now_ms))
+    }
+}
+
+fn elapsed_between(start_ms: i64, end_ms: i64) -> u64 {
+    u64::try_from(end_ms.saturating_sub(start_ms)).unwrap_or(0)
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]

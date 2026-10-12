@@ -47,6 +47,18 @@ fn authorized_source(
     Ok(source)
 }
 
+/// Packed state files print f32 values in their shortest form, while manifests built with
+/// `json!` widen them to f64, so configs are compared as typed values.
+pub(super) fn same_training_config(left: &Value, right: &Value) -> bool {
+    match (
+        serde_json::from_value::<burn::TrainingConfig>(left.clone()),
+        serde_json::from_value::<burn::TrainingConfig>(right.clone()),
+    ) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
 fn unpack_source(
     repository: &TrainingRepository,
     source: &PretrainedSource,
@@ -57,7 +69,7 @@ fn unpack_source(
     unpack(&bytes, directory.path(), maximum_bytes)?;
     let state: Value =
         serde_json::from_slice(&fs::read(directory.path().join(burn::MANIFEST_FILE))?)?;
-    if state["config"] != source.manifest["config"]
+    if !same_training_config(&state["config"], &source.manifest["config"])
         || state["input_shape"] != source.manifest["input_shape"]
         || state.get("imported").filter(|value| !value.is_null())
             != source
@@ -103,19 +115,10 @@ pub fn pretrained_source_features(
         .recipe
         .validate_shape(&batch_shape)
         .map_err(engine_error)?;
-    let workspace = match &config.recipe {
-        burn::Recipe::DinoV2 { config } => {
-            // Inference retains one transformer block at a time. Reserve attention
-            // matrices, projected tokens, normalization and input/output copies.
-            let batch = batch_shape[0] as u128;
-            let tokens = (batch_shape[2] as u128 / 14) * (batch_shape[3] as u128 / 14) + 1;
-            let bytes = batch
-                * (tokens * tokens * config.variant.heads() as u128 * 16
-                    + tokens * config.variant.embedding_dim() as u128 * 128)
-                + input.values.len() as u128 * 16;
-            u64::try_from(bytes).map_err(|_| invalid("feature workspace estimate overflows"))?
-        }
-        _ => config
+    let workspace = match attention_workspace_bytes(&config.recipe, &expected) {
+        Some(per_image) => u64::try_from(per_image * batch_shape[0] as u128)
+            .map_err(|_| invalid("feature workspace estimate overflows"))?,
+        None => config
             .recipe
             .estimated_training_bytes(&expected, batch_shape[0])
             .map_err(engine_error)?,
@@ -195,6 +198,121 @@ pub fn validate_burn_pretrained_source(
     Ok(source)
 }
 
+/// Reject declared input normalization that clearly differs from the normalization the
+/// source's weights expect. Tensors carry no provenance, so undeclared steps are not checked.
+pub fn validate_burn_pretrained_preprocessing(
+    source: &PretrainedSource,
+    preprocessing: &[PreprocessingStep],
+) -> Result<()> {
+    let (Some(expected), Some(declared)) = (
+        input_normalization(&expected_image_steps(&source.manifest)?)?,
+        input_normalization(preprocessing)?,
+    ) else {
+        return Ok(());
+    };
+    let channels = expected.0.len().max(declared.0.len());
+    let compatible = (0..channels).all(|index| match (
+        channel(&expected.0, index),
+        channel(&expected.1, index),
+        channel(&declared.0, index),
+        channel(&declared.1, index),
+    ) {
+        (Some(mean), Some(deviation), Some(declared_mean), Some(declared_deviation)) => {
+            (mean - declared_mean).abs() <= 0.1
+                && declared_deviation > 0.0
+                && (deviation / declared_deviation).max(declared_deviation / deviation) <= 2.0
+        }
+        _ => false,
+    });
+    if !compatible {
+        return Err(invalid(format!(
+            "pretrained source {} expects images normalized with mean [{}] and std [{}], but the dataset declares mean [{}] and std [{}]; prepare inputs with the source's recommended preprocessing",
+            source.id,
+            channels_text(&expected.0),
+            channels_text(&expected.1),
+            channels_text(&declared.0),
+            channels_text(&declared.1),
+        )));
+    }
+    Ok(())
+}
+
+/// Per-channel mean and standard deviation of the composed Normalize steps, or `None` when
+/// the steps declare no image preprocessing at all.
+fn input_normalization(steps: &[PreprocessingStep]) -> Result<Option<(Vec<f64>, Vec<f64>)>> {
+    if !steps.iter().any(is_image_step) {
+        return Ok(None);
+    }
+    let (mut mean, mut deviation) = (vec![0.0], vec![1.0]);
+    for step in steps {
+        let PreprocessingStep::Normalize {
+            mean: step_mean,
+            std: step_deviation,
+        } = step
+        else {
+            continue;
+        };
+        let step_mean: Vec<f64> = step_mean.iter().map(|v| f64::from(*v)).collect();
+        let step_deviation: Vec<f64> = step_deviation.iter().map(|v| f64::from(*v)).collect();
+        let channels = mean.len().max(step_mean.len());
+        let mut next = (Vec::with_capacity(channels), Vec::with_capacity(channels));
+        for index in 0..channels {
+            // (x - a) / b, then (y - c) / d, equals (x - (a + c b)) / (b d).
+            let (Some(a), Some(b), Some(c), Some(d)) = (
+                channel(&mean, index),
+                channel(&deviation, index),
+                channel(&step_mean, index),
+                channel(&step_deviation, index),
+            ) else {
+                return Err(invalid(
+                    "image normalization steps have incompatible channel counts",
+                ));
+            };
+            next.0.push(a + c * b);
+            next.1.push(b * d);
+        }
+        (mean, deviation) = next;
+    }
+    Ok(Some((mean, deviation)))
+}
+
+fn channel(values: &[f64], index: usize) -> Option<f64> {
+    match values {
+        [single] => Some(*single),
+        _ => values.get(index).copied(),
+    }
+}
+
+fn channels_text(values: &[f64]) -> String {
+    values
+        .iter()
+        .map(|value| format!("{value:.3}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Fine-tuning from an in-project model must not validate or audit on data that model's
+/// lineage consumed, or selection and final metrics would stop being independent.
+fn ensure_independent_initialization(
+    work: &TrainingWork,
+    source: &PretrainedSource,
+) -> Result<()> {
+    if source.source_kind != PretrainedSourceKind::TrainingArtifact {
+        return Ok(());
+    }
+    let connection = work.repository.connection()?;
+    let lineage = lineage_digests(&connection, &source.id)?;
+    let groups = contaminated_groups(&connection, &work.job.id, &work.snapshot, &lineage)?;
+    if let Some(example) = groups.first() {
+        return Err(invalid(format!(
+            "pretrained source {} or a model it was initialized from consumed data in {} validation/test groups of this run (for example {example}); initialize from imported weights or keep that data in training",
+            source.id,
+            groups.len()
+        )));
+    }
+    Ok(())
+}
+
 /// Register a converted Burn model as initialization weights without inventing training evidence.
 pub fn publish_burn_pretrained_source(
     repository: &TrainingRepository,
@@ -235,7 +353,7 @@ pub fn publish_burn_pretrained_source(
         project_id,
         &model_bytes,
         serde_json::json!({
-            "engine":"burn", "format_version":1, "config":config,
+            "engine":"burn", "format_version":1, "config":state["config"],
             "input_shape":input_shape, "labels":labels,
             "imported":state["imported"], "pretrained":state["pretrained"],
             "recommended_preprocessing":recommended_preprocessing,
@@ -250,11 +368,104 @@ fn source_limit(compute: &ComputeConfig) -> u64 {
     (compute.memory_limit_bytes / 4).min(512 * 1024 * 1024)
 }
 
+/// Called with the job and step after each durable Burn epoch checkpoint is published.
+pub type CheckpointObserver = Arc<dyn Fn(&TrainingJob, u64) + Send + Sync>;
+
 pub fn register_burn_engine(worker: &mut TrainingWorker) -> Result<()> {
-    worker.register("burn", Arc::new(BurnEngine))
+    worker.register("burn", Arc::new(BurnEngine { observer: None }))
 }
 
-struct BurnEngine;
+pub fn register_observed_burn_engine(
+    worker: &mut TrainingWorker,
+    observer: CheckpointObserver,
+) -> Result<()> {
+    worker.register(
+        "burn",
+        Arc::new(BurnEngine {
+            observer: Some(observer),
+        }),
+    )
+}
+
+struct BurnEngine {
+    observer: Option<CheckpointObserver>,
+}
+
+/// Publish a resumable checkpoint. A job's latest checkpoint stays retained after training,
+/// so it must fit the artifact reservation of an experiment trial.
+pub(super) fn publish_checkpoint(
+    work: &TrainingWork,
+    control: &WorkerControl,
+    directory: &Path,
+    manifest: &str,
+    step: u64,
+    metadata: Value,
+) -> Result<()> {
+    let bytes = pack_named(
+        directory,
+        manifest,
+        true,
+        control.limits().maximum_checkpoint_bytes,
+    )?;
+    work.repository
+        .check_experiment_artifact_budget(&work.job.id, bytes.len() as u64)
+        .map_err(|error| match error {
+            Error::Invalid(_) => invalid(format!(
+                "checkpoint of {} bytes exceeds the experiment trial's artifact reservation",
+                bytes.len()
+            )),
+            other => other,
+        })?;
+    control.checkpoint(&bytes, step, metadata)?;
+    Ok(())
+}
+
+/// Peak inference workspace of one image for attention backbones, whose activations grow
+/// quadratically with the token count. Inference retains one transformer block at a time:
+/// attention matrices, projected tokens, normalization and input/output copies.
+pub(super) fn attention_workspace_bytes(
+    recipe: &burn::Recipe,
+    sample_shape: &[usize],
+) -> Option<u128> {
+    let [_, height, width] = sample_shape else {
+        return None;
+    };
+    // RF-DETR's windowed backbone is a ViT-S whose global blocks attend over all patches.
+    let (patch, heads, embedding) = match recipe {
+        burn::Recipe::DinoV2 { config } => (
+            burn::DinoV2Config::PATCH_SIZE,
+            config.variant.heads(),
+            config.variant.embedding_dim(),
+        ),
+        burn::Recipe::RfDetr { config } => (config.variant.patch_size(), 6, 384),
+        _ => return None,
+    };
+    let tokens = (*height / patch) as u128 * (*width / patch) as u128 + 1;
+    let elements = sample_shape.iter().map(|d| *d as u128).product::<u128>();
+    Some(
+        tokens * tokens * heads as u128 * 16 + tokens * embedding as u128 * 128 + elements * 16,
+    )
+}
+
+/// Images per forward pass that keep attention workspaces inside the memory left after
+/// loading a model. Other recipes are bounded by the input element budget alone.
+pub(super) fn inference_batch_limit(
+    recipe: &burn::Recipe,
+    sample_shape: &[usize],
+    available_bytes: u64,
+) -> Result<usize> {
+    let Some(per_image) = attention_workspace_bytes(recipe, sample_shape) else {
+        return Ok(usize::MAX);
+    };
+    let limit = u128::from(available_bytes) / per_image.max(1);
+    if limit == 0 {
+        return Err(invalid(format!(
+            "inference needs an estimated {per_image} bytes per image, but only {available_bytes} bytes remain after loading the model"
+        )));
+    }
+    Ok(usize::try_from(limit).unwrap_or(usize::MAX))
+}
+
 pub(super) fn resource_key(compute: &ComputeConfig) -> Result<String> {
     Ok(match backend(compute)? {
         burn::BackendChoice::Auto => return Err(engine_error("backend resolution returned Auto")),
@@ -360,6 +571,10 @@ impl TrainingEngine for BurnEngine {
                 )
             })
             .transpose()?;
+        if let Some(source) = &pretrained {
+            validate_burn_pretrained_preprocessing(source, &recipe.preprocessing)?;
+            ensure_independent_initialization(work, source)?;
+        }
         let source_directory = if work.resume_checkpoint.is_none() {
             pretrained
                 .as_ref()
@@ -383,13 +598,22 @@ impl TrainingEngine for BurnEngine {
             }
             // Burn publishes its epoch checkpoint before emitting validation progress.
             if progress.validation_loss.is_some() && progress.steps > latest_published {
-                let result=pack(directory.path(),true,control.limits().maximum_checkpoint_bytes)
-                    .and_then(|bytes|control.checkpoint(&bytes,progress.steps as u64,serde_json::json!({"engine":"burn","format_version":1,"epoch":progress.epoch,"steps":progress.steps})).map(|_|()));
+                let result = publish_checkpoint(
+                    work,
+                    control,
+                    directory.path(),
+                    burn::MANIFEST_FILE,
+                    progress.steps as u64,
+                    serde_json::json!({"engine":"burn","format_version":1,"epoch":progress.epoch,"steps":progress.steps}),
+                );
                 if let Err(error) = result {
                     checkpoint_error = Some(error);
                     cancellation.cancel();
                 } else {
                     latest_published = progress.steps;
+                    if let Some(observer) = &self.observer {
+                        observer(&work.job, progress.steps as u64);
+                    }
                 }
             }
         };
@@ -454,13 +678,11 @@ impl TrainingEngine for BurnEngine {
             }
         })?;
         control.check_cancel()?;
-        let bytes = pack(
+        publish_checkpoint(
+            work,
+            control,
             directory.path(),
-            true,
-            control.limits().maximum_checkpoint_bytes,
-        )?;
-        control.checkpoint(
-            &bytes,
+            burn::MANIFEST_FILE,
             report.steps as u64,
             serde_json::json!({"engine":"burn","format_version":1,"steps":report.steps}),
         )?;
@@ -471,6 +693,12 @@ impl TrainingEngine for BurnEngine {
         )?;
         let state: Value =
             serde_json::from_slice(&fs::read(directory.path().join(burn::MANIFEST_FILE))?)?;
+        let recommended = match &pretrained {
+            Some(source) if input_normalization(&recipe.preprocessing)?.is_none() => {
+                expected_image_steps(&source.manifest)?
+            }
+            _ => Vec::new(),
+        };
         let initialization = pretrained.map(|source| {
             serde_json::json!({
                 "source_id":source.id, "source_kind":source.source_kind,
@@ -478,9 +706,14 @@ impl TrainingEngine for BurnEngine {
                 "options":recipe.pretrained, "training":state["pretrained"],
             })
         });
+        // The packed state's own config keeps loading exact for non-dyadic f32 values.
+        let mut manifest = serde_json::json!({"engine":"burn","format_version":1,"config":state["config"],"labels":recipe.labels,"input_shape":training.inputs.shape[1..],"preprocessing":recipe.preprocessing,"report":report,"pretrained":initialization});
+        if !recommended.is_empty() {
+            manifest["recommended_preprocessing"] = serde_json::to_value(&recommended)?;
+        }
         Ok(EngineOutput {
             model_bytes,
-            manifest: serde_json::json!({"engine":"burn","format_version":1,"config":recipe.config,"labels":recipe.labels,"input_shape":training.inputs.shape[1..],"preprocessing":recipe.preprocessing,"report":report,"pretrained":initialization}),
+            manifest,
         })
     }
 }
@@ -957,5 +1190,137 @@ mod tests {
             corrupt.extend_from_slice(&u64::MAX.to_le_bytes());
         }
         assert!(unpack(&corrupt, dir.path(), 1024).is_err());
+    }
+
+    #[test]
+    fn packed_state_configs_match_manifests_that_widened_f32_values() {
+        let config = burn::TrainingConfig {
+            recipe: burn::Recipe::Mlp {
+                input_features: 1,
+                hidden: 2,
+                outputs: 1,
+                objective: burn::Objective::Regression,
+            },
+            backend: burn::BackendChoice::Cpu,
+            epochs: 1,
+            batch_size: 1,
+            learning_rate: 0.01,
+            seed: 7,
+            gradient_clip: 0.1,
+        };
+        let widened = serde_json::json!(config);
+        let shortest: Value =
+            serde_json::from_str(&serde_json::to_string_pretty(&config).unwrap()).unwrap();
+        assert!(same_training_config(&shortest, &widened));
+        let mut changed = widened.clone();
+        changed["seed"] = serde_json::json!(8);
+        assert!(!same_training_config(&shortest, &changed));
+        assert!(!same_training_config(&shortest, &serde_json::json!({})));
+    }
+
+    fn source_with(manifest: Value) -> PretrainedSource {
+        PretrainedSource {
+            id: "pretrained:fixture".into(),
+            project_id: "project".into(),
+            source_kind: PretrainedSourceKind::Imported,
+            blob: BlobRef {
+                sha256: "0".repeat(64),
+                bytes: 1,
+                path: format!("{}.blob", "0".repeat(64)),
+            },
+            manifest,
+            origin: serde_json::json!({}),
+            created_at_ms: 0,
+        }
+    }
+
+    fn normalize(mean: f32, std: f32) -> PreprocessingStep {
+        PreprocessingStep::Normalize {
+            mean: vec![mean],
+            std: vec![std],
+        }
+    }
+
+    #[test]
+    fn declared_image_normalization_must_match_the_source_recommendation() {
+        let imagenet = source_with(serde_json::json!({"recommended_preprocessing":[
+            {"kind":"resize","width":8,"height":8},
+            {"kind":"normalize","mean":[0.485,0.456,0.406],"std":[0.229,0.224,0.225]}
+        ]}));
+        let resize = PreprocessingStep::Resize {
+            width: 8,
+            height: 8,
+        };
+        let error = validate_burn_pretrained_preprocessing(&imagenet, &[resize.clone()])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("expects images normalized"), "{error}");
+        assert!(
+            validate_burn_pretrained_preprocessing(
+                &imagenet,
+                &[resize.clone(), normalize(0.5, 0.5)]
+            )
+            .is_err()
+        );
+        validate_burn_pretrained_preprocessing(
+            &imagenet,
+            &[
+                resize.clone(),
+                PreprocessingStep::Normalize {
+                    mean: vec![0.485, 0.456, 0.406],
+                    std: vec![0.229, 0.224, 0.225],
+                },
+            ],
+        )
+        .unwrap();
+        // (x - 0.4) / 0.25 followed by (y - 0.3) / 0.9 is (x - 0.475) / 0.225.
+        validate_burn_pretrained_preprocessing(
+            &imagenet,
+            &[normalize(0.4, 0.25), normalize(0.3, 0.9)],
+        )
+        .unwrap();
+        validate_burn_pretrained_preprocessing(&imagenet, &[]).unwrap();
+        validate_burn_pretrained_preprocessing(
+            &imagenet,
+            &[PreprocessingStep::Features {
+                names: vec!["feature".into()],
+            }],
+        )
+        .unwrap();
+        validate_burn_pretrained_preprocessing(&source_with(serde_json::json!({})), &[resize])
+            .unwrap();
+    }
+
+    #[test]
+    fn attention_backbones_split_inference_batches_by_their_quadratic_workspace() {
+        let dinov2 = burn::Recipe::DinoV2 {
+            config: burn::DinoV2Config::default(),
+        };
+        let large = [3, 896, 896];
+        let per_image = attention_workspace_bytes(&dinov2, &large).unwrap();
+        let tokens = 64u128 * 64 + 1;
+        assert!(per_image > tokens * tokens * 6 * 16);
+        let budget = 2 * 1024 * 1024 * 1024u64;
+        let limit = inference_batch_limit(&dinov2, &large, budget).unwrap();
+        assert_eq!(limit as u128, u128::from(budget) / per_image);
+        assert!(limit < 11, "11 such images must not share one forward pass");
+        assert!(
+            inference_batch_limit(&dinov2, &large, 154 * 1024 * 1024)
+                .unwrap_err()
+                .to_string()
+                .contains("per image")
+        );
+        let small = [3, 28, 28];
+        assert!(inference_batch_limit(&dinov2, &small, budget).unwrap() > 1000);
+        let resnet = burn::Recipe::ResNet18 {
+            input_channels: 3,
+            classes: 2,
+            base_channels: 8,
+        };
+        assert_eq!(attention_workspace_bytes(&resnet, &large), None);
+        assert_eq!(
+            inference_batch_limit(&resnet, &large, 1).unwrap(),
+            usize::MAX
+        );
     }
 }

@@ -454,6 +454,28 @@ pub struct LocalRegistryState {
     pub cache_metadata: HashMap<String, CacheMetadata>,
     /// Last index refresh times per registry
     pub index_refresh: HashMap<String, chrono::DateTime<chrono::Utc>>,
+    /// Widget bundles kept by hash outside any install (package id -> bundle hash -> bundle)
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub widget_bundles: HashMap<String, HashMap<String, CachedWidgetBundle>>,
+}
+
+/// A widget bundle this device keeps for pages that place a version it has not
+/// installed, such as an older one a project's pin still covers.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CachedWidgetBundle {
+    pub version: String,
+    pub registry_url: String,
+    pub cached_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Answer of `GET {registry}/package/{id}/widget-bundle/{version}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetBundleDownload {
+    pub package_id: String,
+    pub version: String,
+    pub bundle_hash: String,
+    pub download_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

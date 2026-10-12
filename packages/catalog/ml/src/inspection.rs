@@ -85,17 +85,22 @@ fn operation_node<I: JsonSchema + serde::Serialize, O: JsonSchema + serde::Seria
 }
 
 macro_rules! operation {
-    ($node:ident, $id:literal, $name:literal, $description:literal, $function:literal, $category:literal, $input:ty, $output:ty, $handler:path) => {
+    ($node:ident, $id:literal, $name:literal, $description:literal, $function:literal, $category:literal, $input:ty, $output:ty, $handler:path $(, version = $version:literal)?) => {
         #[flow_like_types::async_trait]
         impl flow_like::flow::node::NodeLogic for $node {
             fn get_node(&self) -> flow_like::flow::node::Node {
-                super::operation_node::<$input, $output>(
+                let node = super::operation_node::<$input, $output>(
                     $id,
                     $name,
                     $description,
                     $function,
                     $category,
-                )
+                );
+                $(
+                    let mut node = node;
+                    node.set_version($version);
+                )?
+                node
             }
             async fn run(
                 &self,

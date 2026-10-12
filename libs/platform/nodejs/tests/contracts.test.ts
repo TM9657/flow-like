@@ -558,6 +558,17 @@ const routeCases: {
 		body: { column: "id" },
 	},
 	{
+		name: "column metadata",
+		invoke: (s) =>
+			s.setTableColumnMetadata("a", "t", "salary", {
+				classification: "confidential",
+				read_attributes: ["hr"],
+			}),
+		method: "PUT",
+		path: "/apps/a/db/t/columns/salary/metadata",
+		body: { classification: "confidential", read_attributes: ["hr"] },
+	},
+	{
 		name: "column removal",
 		invoke: (s) => s.dropTableColumns("a", "t", ["old"]),
 		method: "DELETE",

@@ -1,3 +1,4 @@
+use crate::routes::app::db::column_reader;
 use crate::{
     ensure_any_permission, error::ApiError, middleware::jwt::AppUser,
     permission::role_permission::RolePermissions, state::AppState,
@@ -63,7 +64,7 @@ pub async fn sample_nodes(
     Path((app_id, overlay_id)): Path<(String, String)>,
     Query(params): Query<SampleParams>,
 ) -> Result<Json<Vec<flow_like_types::Value>>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -75,6 +76,9 @@ pub async fn sample_nodes(
 
     let (connection, overlay) =
         super::load_scoped_overlay(&state, &user, &app_id, &overlay_id, &scope).await?;
+    let overlay =
+        lancegraph::restrict_overlay(&connection, overlay, &column_reader(&permission, &scope))
+            .await?;
     let results =
         lancegraph::sample_overlay(&connection, &overlay, &params.label, params.n.min(500)).await?;
 

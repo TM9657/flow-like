@@ -51,6 +51,7 @@ const MINIMAL_ACTIONS: &[&str] = &[
     "template.delete",
     "route.delete",
     "database.table.drop",
+    "database.column.access",
     "graph.overlay.delete",
 ];
 
@@ -186,6 +187,8 @@ mod tests {
         ("board.flowscript.apply", AuditLevel::Standard),
         ("board.update", AuditLevel::Standard),
         ("board.version", AuditLevel::Standard),
+        ("database.column.access", AuditLevel::Minimal),
+        ("database.column.metadata", AuditLevel::Standard),
         ("database.rows.delete", AuditLevel::Standard),
         ("database.rows.insert", AuditLevel::Standard),
         ("database.rows.offline_replay", AuditLevel::Verbose),

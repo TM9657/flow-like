@@ -3283,11 +3283,12 @@ declare namespace md {
      * @param images (optional) — How to render image nodes
      * @param fullDocument (optional) — Wrap the output in a complete HTML document with default styling
      * @param title (optional) — Document title, used only when Full Document is enabled
+     * @param mediaUrls (optional) — JSON object mapping stored media references to permanent public URLs or embedded data URLs
      * @returns html — The converted HTML
      * @returns media — Every image, video, audio and file reference found in the document
      * @impure has side effects / drives control flow
      */
-    function plateToHtml({ document: string, images?: string, fullDocument?: bool, title?: string }): { html: string, media: string[] };
+    function plateToHtml({ document: string, images?: string, fullDocument?: bool, title?: string, mediaUrls?: string }): { html: string, media: string[] };
 
     /**
      * Renders GitHub-flavoured Markdown as HTML

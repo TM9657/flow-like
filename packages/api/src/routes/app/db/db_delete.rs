@@ -3,7 +3,10 @@ use crate::{
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
-    routes::app::db::{ScopeParams, resolve_write_connection, validate_table_name},
+    routes::app::db::{
+        ScopeParams, column_reader, resolve_write_connection, table_input_error,
+        validate_table_name,
+    },
     state::AppState,
 };
 use axum::{
@@ -52,7 +55,7 @@ pub async fn delete_from_table(
     Query(selector): Query<DatabaseSelector>,
     Json(payload): Json<DeleteFromDBPayload>,
 ) -> Result<Json<()>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -64,9 +67,10 @@ pub async fn delete_from_table(
 
     let connection = resolve_write_connection(&state, &user, &app_id, &scope).await?;
     let db = LanceDBVectorStore::from_connection_with_selector(connection, table.clone(), selector)
-        .await?;
+        .await?
+        .with_column_reader(column_reader(&permission, &scope));
 
-    db.delete(&payload.query).await?;
+    db.delete(&payload.query).await.map_err(table_input_error)?;
 
     audit_branch!(
         state,

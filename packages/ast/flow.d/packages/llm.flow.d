@@ -307,6 +307,31 @@ declare namespace ai {
         // === AI/Embedding ===
 
         /**
+         * Embeds ordered text, image, audio, and video parts into one vector
+         * @node embed_content @alias embedContent
+         * @param model — A loaded embedding model
+         * @param purpose (optional) — The model task, such as a search query or indexed document
+         * @param options (optional) — Optional output dimensions supported by the model
+         * @param content — Ordered parts to encode jointly; images reference the workflow image cache
+         * @returns result — Vectors with their embedding space, model revision, and usage
+         * @returns vector — The content embedding
+         * @impure has side effects / drives control flow
+         */
+        function embedContent({ model: Struct, purpose?: string, options?: Struct, content: Struct }): { result: Struct, vector: float[] };
+
+        /**
+         * Embeds each structured item into one vector in input order
+         * @node embed_contents @alias embedContents
+         * @param model — A loaded embedding model
+         * @param purpose (optional) — The model task, such as a search query or indexed document
+         * @param options (optional) — Optional output dimensions supported by the model
+         * @param contents — Each item contains the parts to encode jointly
+         * @returns result — Vectors with their embedding space, model revision, and usage
+         * @impure has side effects / drives control flow
+         */
+        function embedContents({ model: Struct, purpose?: string, options?: Struct, contents: Struct[] }): Struct;
+
+        /**
          * Creates an embedding vector for a document string using a cached embedding model
          * @node embed_document @alias embedDocument
          * @param queryString — Document text that should be embedded
@@ -344,6 +369,15 @@ declare namespace ai {
          * @impure has side effects / drives control flow
          */
         function loadModel({ bit: Struct }): Struct;
+
+        /**
+         * Reads supported modalities, joint inputs, tasks, limits, and embedding space
+         * @node embedding_model_info @alias embeddingModelInfo
+         * @param model — A loaded embedding model
+         * @returns descriptor — The loaded model's effective capabilities
+         * @impure has side effects / drives control flow
+         */
+        function modelInfo({ model: Struct }): Struct;
     }
 
     namespace memory {
@@ -952,6 +986,74 @@ declare namespace ai {
          */
         function getRole(this: ResponseMessage, { message: Struct }): string;
     }
+
+    namespace systemone {
+        // === AI/Decisions ===
+
+        /**
+         * Selects a named option and returns its probability distribution.
+         * @node ai_systemone_choice @alias aiSystemoneChoice
+         * @param model — A SystemOne decision model Bit from Find Decision Model or Load Bit
+         * @param state (optional) — Text to assess
+         * @param instructions (optional) — The question to answer about the state
+         * @param images (optional) — Optional images; requires an image-capable decision model and projector
+         * @param criteria (optional) — Map each option name to its description
+         * @returns choice — The selected option name
+         * @returns probabilities — Probability of each choice or zero-based level index
+         * @returns confidence — The model's confidence value, from 0 to 1
+         * @impure has side effects / drives control flow
+         */
+        function choice({ model: Struct, state?: string, instructions?: string, images?: Struct[], criteria?: Map<string, string> }): { choice: string, probabilities: Map<string, float>, confidence: float };
+
+        /**
+         * Selects the first available SystemOne model in the active profile's model order.
+         * @node ai_systemone_find_model @alias aiSystemoneFindModel
+         * @returns model — A SystemOne Bit for the decision nodes
+         * @impure has side effects / drives control flow
+         */
+        function findModel(): Struct;
+
+        /**
+         * Answers typed questions about text or data with a local or hosted decision model.
+         * @node ai_systemone_invoke @alias aiSystemoneInvoke
+         * @param model — A SystemOne decision model Bit from Find Decision Model or Load Bit
+         * @param request (optional) — The state to assess and named choice, score, or yes/no questions
+         * @returns result — Typed answers and usage returned by the model
+         * @impure has side effects / drives control flow
+         */
+        function invoke({ model: Struct, request?: Struct }): Struct;
+
+        /**
+         * Returns the probability that a yes/no assessment is true.
+         * @node ai_systemone_noul @alias aiSystemoneNoul
+         * @param model — A SystemOne decision model Bit from Find Decision Model or Load Bit
+         * @param state (optional) — Text to assess
+         * @param instructions (optional) — The question to answer about the state
+         * @param images (optional) — Optional images; requires an image-capable decision model and projector
+         * @param threshold (optional) — Branch True when the probability is at least this value, from 0 to 1
+         * @param trueDescription (optional) — Optional description of a true answer
+         * @param falseDescription (optional) — Optional description of a false answer
+         * @returns probability — Probability that the assessment is true, from 0 to 1
+         * @impure has side effects / drives control flow
+         */
+        function noul({ model: Struct, state?: string, instructions?: string, images?: Struct[], threshold?: float, trueDescription?: string, falseDescription?: string }): float;
+
+        /**
+         * Scores a state against ordered levels and returns the weighted level index.
+         * @node ai_systemone_score @alias aiSystemoneScore
+         * @param model — A SystemOne decision model Bit from Find Decision Model or Load Bit
+         * @param state (optional) — Text to assess
+         * @param instructions (optional) — The question to answer about the state
+         * @param images (optional) — Optional images; requires an image-capable decision model and projector
+         * @param criteria (optional) — Two to ten descriptions ordered from lowest to highest
+         * @returns score — Weighted level index, from 0 to the number of levels minus 1
+         * @returns legend — Maps zero-based level indices to their descriptions
+         * @returns probabilities — Probability of each choice or zero-based level index
+         * @returns confidence — The model's confidence value, from 0 to 1
+         * @impure has side effects / drives control flow
+         */
+        function score({ model: Struct, state?: string, instructions?: string, images?: Struct[], criteria?: string[] }): { score: float, legend: Map<string, string>, probabilities: Map<string, float>, confidence: float };
+    }
 }
 
 declare namespace chat {
@@ -1468,4 +1570,78 @@ declare namespace history {
      * @impure has side effects / drives control flow
      */
     function pushContent(this: HistoryMessage, { message: Struct, type?: string, text?: string, image?: string, audio?: string, video?: string, document?: string, detail?: string, mime?: string }): Struct;
+}
+
+declare namespace inspection {
+    // === AI/ML/Auto Training ===
+
+    /**
+     * Train from table columns with default search settings, optional LLM consultation and an independent final test
+     * @node ml_auto_train_agent @alias mlAutoTrainAgent
+     * @param request (optional) — Optional full configuration, overriding all table inputs. Use for custom budgets, ordered classes, vision, forecasts or resuming an experiment
+     * @param model (optional) — Optional model with structured output support
+     * @param history (optional) — Optional task context; the controller supplies training profiles and validation results
+     * @param database (optional) — Connect Open Database for tabular training. Advanced Configuration overrides these table inputs
+     * @param task (optional) — Classification predicts a category; Regression predicts a number
+     * @param targetColumn (optional) — Column containing measured target values to predict. Classification discovers its class labels from this column
+     * @param numericColumns (optional) — Comma-separated numeric feature columns, for example temperature, vibration. Supply numeric or categorical features
+     * @param categoricalColumns (optional) — Optional comma-separated categorical feature columns, for example material, machine_type
+     * @param rowIdColumn (optional) — Column containing a unique, stable string or integer for each row
+     * @param groupColumn (optional) — Optional column keeping related rows in the same partition. Defaults to Row ID Column; split is 70% training, 15% validation, 15% test
+     * @returns result — Model identifier, table versions, experiment artifacts and consultation usage
+     * @impure has side effects / drives control flow
+     */
+    function autoTrainAgent({ request?: Struct, model?: Struct, history?: Struct, database?: Struct, task?: string, targetColumn?: string, numericColumns?: string, categoricalColumns?: string, rowIdColumn?: string, groupColumn?: string }): Struct;
+
+    // === AI/ML/Continuous Learning ===
+
+    /**
+     * Continue a persistent learning project with optional feature and model consultation
+     * @node ml_learning_project_agent @alias mlLearningProjectAgent
+     * @param request (optional) — Optional saved project identifier and custom consultation limits. Overrides Project ID when supplied
+     * @param model (optional) — Optional model with structured output support
+     * @param history (optional) — Optional task context for the consultant
+     * @param projectId (optional) — Saved identifier from Create Learning Project. Uses the project's dataset and budgets with default consultation limits
+     * @returns result — Project state, model artifacts, data tables and consultation decisions
+     * @impure has side effects / drives control flow
+     */
+    function learningProjectAgent({ request?: Struct, model?: Struct, history?: Struct, projectId?: string }): Struct;
+
+    // === AI/ML/Inspection ===
+
+    /**
+     * Turn an inspection description into a validated task, label schema and input contract
+     * @node ml_build_inspection_spec @alias mlBuildInspectionSpec
+     * @param model — A model supporting structured tool output
+     * @param history — Inspection description and relevant images or sensor evidence
+     * @returns stats — Teacher model usage
+     * @returns spec — Validated task specification
+     * @impure has side effects / drives control flow
+     */
+    function buildSpec({ model: Struct, history: Struct }): { stats: Struct, spec: Struct };
+
+    /**
+     * Select a supported Burn architecture and bounded training configuration from an inspection specification
+     * @node ml_plan_inspection_training @alias mlPlanInspectionTraining
+     * @param model — A model supporting structured tool output
+     * @param history — Inspection description and relevant images or sensor evidence
+     * @param spec — Task, input dimensions and label order
+     * @returns stats — Teacher model usage
+     * @returns config — Validated architecture and optimizer configuration
+     * @impure has side effects / drives control flow
+     */
+    function planTraining({ model: Struct, history: Struct, spec: Struct }): { stats: Struct, config: Struct };
+
+    /**
+     * Label supplied inspection evidence and preserve the teacher provenance
+     * @node ml_teacher_label @alias mlTeacherLabel
+     * @param model — A model supporting structured tool output
+     * @param history — Inspection description and relevant images or sensor evidence
+     * @param spec — Task and class order
+     * @param sample — Sample whose evidence is included in History
+     * @returns stats — Teacher model usage
+     * @returns labelledSample — Teacher label with model and prompt provenance
+     * @impure has side effects / drives control flow
+     */
+    function teacherLabel({ model: Struct, history: Struct, spec: Struct, sample: Struct }): { stats: Struct, labelledSample: Struct };
 }
