@@ -1,7 +1,10 @@
 import { afterAll, afterEach, expect, mock, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
-import type { IIndexConfig } from "../../state/backend-state/db-state";
+import type {
+	IAddColumnPayload,
+	IIndexConfig,
+} from "../../state/backend-state/db-state";
 import type { LanceSchema } from "./lance-viewer";
 
 const window = new Window({ url: "https://localhost" });
@@ -245,10 +248,10 @@ test("Set as key is disabled for columns that can't be the key", async () => {
 });
 
 test("a new column needs a literal that matches its type", async () => {
-	const added: [string, string][] = [];
+	const added: IAddColumnPayload[] = [];
 	const dialog = await openDialog({
-		onAddColumn: async (name, expression) => {
-			added.push([name, expression]);
+		onAddColumn: async (column) => {
+			added.push(column);
 		},
 	});
 	await click(buttonNamed("New column"));
@@ -272,7 +275,79 @@ test("a new column needs a literal that matches its type", async () => {
 
 	await type(value, "0.5");
 	await click(buttonNamed("Add Column"));
-	expect(added).toEqual([["confidence", "CAST(0.5 AS DOUBLE)"]]);
+	expect(added).toEqual([
+		{ name: "confidence", sql_expression: "CAST(0.5 AS DOUBLE)" },
+	]);
+});
+
+test("the last column cannot be dropped", async () => {
+	const dropped = mock(async (_columns: string[]) => {});
+	const dialog = await openDialog({
+		schema: {
+			table: "vectors",
+			fields: [{ name: "embedding", kind: "vector", dims: 384 }],
+		},
+		onDropColumns: dropped,
+	});
+	expect(dialog.textContent).toContain(
+		"Add a replacement before dropping this one",
+	);
+	expect(() => buttonNamed("Drop column")).toThrow();
+	expect(dropped).not.toHaveBeenCalled();
+});
+
+test("vector columns can be dropped after confirmation", async () => {
+	const dropped = mock(async (_columns: string[]) => {});
+	const dialog = await openDialog({
+		schema: {
+			...schema,
+			fields: [
+				...schema.fields,
+				{ name: "embedding", kind: "vector", dims: 384 },
+			],
+		},
+		onGetIndices: async () => [
+			{ name: "embedding_idx", index_type: "IvfPq", columns: ["embedding"] },
+		],
+		onDropColumns: dropped,
+	});
+	await click(railItem("embedding"));
+	await click(buttonNamed("Drop column"));
+	expect(dropped).not.toHaveBeenCalled();
+	expect(dialog.textContent).toContain("Deletes the column and its");
+	await click(buttonNamed("Drop embedding"));
+	expect(dropped).toHaveBeenCalledWith(["embedding"]);
+});
+
+test("a replacement vector column requires a valid dimension and starts empty", async () => {
+	const added = mock(async (_column: IAddColumnPayload) => {});
+	const dialog = await openDialog({ onAddColumn: added });
+	await click(buttonNamed("New column"));
+	await type(
+		dialog.querySelector(
+			'input[placeholder="column_name"]',
+		) as unknown as HTMLInputElement,
+		"embedding",
+	);
+	await click(buttonNamed("VectorFloat32"));
+	const dimensions = dialog.querySelector(
+		'input[type="number"]',
+	) as unknown as HTMLInputElement;
+	expect(dialog.textContent).toContain("Existing rows start with NULL");
+	expect(() => buttonNamed("A value")).toThrow();
+	for (const invalid of ["", "0", "-1", "1.5", "2147483648"]) {
+		await type(dimensions, invalid);
+		await click(buttonNamed("Add Column"));
+		expect(added).not.toHaveBeenCalled();
+		expect(dimensions.getAttribute("aria-invalid")).toBe("true");
+	}
+	await type(dimensions, "1536");
+	await click(buttonNamed("Add Column"));
+	expect(added).toHaveBeenCalledWith({
+		name: "embedding",
+		type: "vector",
+		vector_size: 1536,
+	});
 });
 
 test("without write callbacks the dialog is read-only", async () => {

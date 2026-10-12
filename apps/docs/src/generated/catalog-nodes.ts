@@ -68248,7 +68248,7 @@ export const catalogNodes: CatalogNode[] = [
     "packageName": "data",
     "name": "add_column_local_db",
     "friendlyName": "Add Column",
-    "description": "Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). Flow-Like requires an explicit type for NULL. Use CAST(NULL AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.",
+    "description": "Adds a column from a typed SQL expression or creates an empty vector column with a fixed dimension. Vector dimensions must match the embedding model's output length. Existing rows get NULL vectors until embeddings are written.",
     "category": "Data/Database/Schema",
     "categoryPath": [
       "Data",
@@ -68301,6 +68301,32 @@ export const catalogNodes: CatalogNode[] = [
         "index": 4
       },
       {
+        "name": "mode",
+        "friendlyName": "Mode",
+        "description": "SQL Expression computes values from SQL Expression. Vector creates a nullable Float32 vector column and ignores SQL Expression.",
+        "pinType": "Input",
+        "dataType": "String",
+        "valueType": "Normal",
+        "defaultValue": "SQL Expression",
+        "index": 5,
+        "options": {
+          "validValues": [
+            "SQL Expression",
+            "Vector"
+          ]
+        }
+      },
+      {
+        "name": "vector_size",
+        "friendlyName": "Vector Dimensions",
+        "description": "Required in Vector mode: the positive number of values in each embedding. Set this to the embedding model's output length. Ignored in SQL Expression mode.",
+        "pinType": "Input",
+        "dataType": "Integer",
+        "valueType": "Normal",
+        "defaultValue": 0,
+        "index": 6
+      },
+      {
         "name": "exec_out",
         "friendlyName": "Done",
         "description": "Done altering schema",
@@ -68320,10 +68346,10 @@ export const catalogNodes: CatalogNode[] = [
         "index": 2
       }
     ],
-    "inputCount": 4,
+    "inputCount": 6,
     "outputCount": 2,
     "flags": [],
-    "version": 2,
+    "version": 3,
     "oauthProviders": [],
     "requiredOauthScopes": {},
     "permissions": []

@@ -13,6 +13,7 @@ import { RolePermissions } from "../../../lib/permission/role-permission";
 import { asArray } from "../../../lib/response-shape";
 import { useBackend } from "../../../state/backend-state";
 import {
+	type IAddColumnPayload,
 	type IDatabaseSelector,
 	parseIndexType,
 } from "../../../state/backend-state/db-state";
@@ -339,17 +340,19 @@ function TableInspectorData({
 	);
 
 	const handleAddColumn = useCallback(
-		async (name: string, sqlExpression: string) => {
+		async (column: IAddColumnPayload) => {
 			try {
 				await backend.dbState.addColumn(
 					appId,
 					table,
-					{ name, sql_expression: sqlExpression },
+					column,
 					userScoped,
 					selector,
 				);
 				toast.success(
-					t("addedColumnName", 'Added column "{{name}}"', { name }),
+					t("addedColumnName", 'Added column "{{name}}"', {
+						name: column.name,
+					}),
 				);
 				handleRefresh();
 			} catch (err) {

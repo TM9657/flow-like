@@ -222,6 +222,23 @@ describe("reference-aware table inspector", () => {
 			true,
 			selector,
 		]);
+		await explorer?.onDropColumns?.(["embedding"]);
+		expect(calls.find((call) => call.name === "dropColumns")?.args).toEqual([
+			"app",
+			"samples",
+			["embedding"],
+			true,
+			selector,
+		]);
+		const column = { name: "embedding", type: "vector", vector_size: 1536 };
+		await explorer?.onAddColumn?.(column);
+		expect(calls.find((call) => call.name === "addColumn")?.args).toEqual([
+			"app",
+			"samples",
+			column,
+			true,
+			selector,
+		]);
 	});
 	test("historical views hide row, schema and index mutations while preserving index reads", () => {
 		for (const selector of [
