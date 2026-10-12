@@ -1,0 +1,38 @@
+[package]
+name = "flow-like-dds-container"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+name = "flow_like_industrial"
+path = "lib.rs"
+
+[features]
+default = ["dds"]
+execute = ["dds"]
+dds = []
+
+[dependencies]
+libloading = "0.8"
+roxmltree = "0.21"
+anyhow = "=1.0.104"
+dust_dds = "=0.16.0"
+schemars = "=1.2.1"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+thiserror = "=2.0.18"
+tokio = { version = "=1.52.3", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio-util = { version = "=0.7.18", features = ["rt"] }
+
+[[test]]
+name = "dds_e2e"
+path = "../../../../packages/industrial/tests/dds_e2e.rs"
+
+[profile.dev]
+debug = 0
+
+[patch.crates-io]
+dust_dds = { path = "../../../../packages/vendor/dust-dds" }

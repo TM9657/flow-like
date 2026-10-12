@@ -9,7 +9,9 @@ import socket
 import sys
 
 from asyncua import Client, Server, ua
+from asyncua.common.utils import ServiceError
 from asyncua.crypto.permission_rules import User, UserRole
+from asyncua.crypto.validator import CertificateValidator, CertificateValidatorOptions
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -18,23 +20,50 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 PKI = Path("/fixture-pki")
 SERVER_URI = "urn:flow-like:test:asyncua"
+CUSTOM_CLIENT_URI = "urn:flow-like:test:custom-client"
 ENDPOINT = "opc.tcp://0.0.0.0:4840/flow-like/"
 
 
-def certificate(name, application_uri):
+def certificate(name, application_uri=None, issuer=None, ca=False, path_length=None):
     # Test credentials exist only for the lifetime of this container.
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
     now = datetime.now(timezone.utc)
-    cert = (
+    builder = (
         x509.CertificateBuilder()
         .subject_name(subject)
-        .issuer_name(subject)
+        .issuer_name(issuer[0].subject if issuer else subject)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - timedelta(days=1))
         .not_valid_after(now + timedelta(days=7))
+        .add_extension(x509.BasicConstraints(ca=ca, path_length=path_length), critical=True)
         .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False
+        )
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(
+                issuer[1].public_key() if issuer else key.public_key()
+            ),
+            critical=False,
+        )
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=True,
+                key_encipherment=True,
+                data_encipherment=True,
+                key_agreement=False,
+                key_cert_sign=ca,
+                crl_sign=ca,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+    )
+    if application_uri:
+        builder = builder.add_extension(
             x509.SubjectAlternativeName(
                 [
                     x509.UniformResourceIdentifier(application_uri),
@@ -44,31 +73,15 @@ def certificate(name, application_uri):
                 ]
             ),
             critical=False,
-        )
-        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
-        .add_extension(
-            x509.KeyUsage(
-                digital_signature=True,
-                content_commitment=True,
-                key_encipherment=True,
-                data_encipherment=True,
-                key_agreement=False,
-                key_cert_sign=False,
-                crl_sign=False,
-                encipher_only=False,
-                decipher_only=False,
-            ),
-            critical=True,
-        )
-        .add_extension(
+        ).add_extension(
             x509.ExtendedKeyUsage(
                 [ExtendedKeyUsageOID.SERVER_AUTH, ExtendedKeyUsageOID.CLIENT_AUTH]
             ),
             critical=False,
         )
-        .sign(key, hashes.SHA256())
-    )
+    cert = builder.sign(issuer[1] if issuer else key, hashes.SHA256())
     (PKI / f"{name}.der").write_bytes(cert.public_bytes(serialization.Encoding.DER))
+    (PKI / f"{name}.crt.pem").write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     private_key = PKI / f"{name}.pem"
     private_key.write_bytes(
         key.private_bytes(
@@ -78,6 +91,31 @@ def certificate(name, application_uri):
         )
     )
     private_key.chmod(0o600)
+    return cert, key
+
+
+def certificates():
+    root = certificate("root-ca", ca=True, path_length=1)
+    issuer = certificate("issuer-ca", issuer=root, ca=True, path_length=0)
+    certificate("wrong-ca", ca=True, path_length=1)
+    certificate("server", SERVER_URI, issuer=issuer)
+    legacy = certificate("client", "urn:flow-like:inspection")
+    custom = certificate("custom-client", CUSTOM_CLIENT_URI, issuer=root)
+    return {identity[0].fingerprint(hashes.SHA256()) for identity in (legacy, custom)}
+
+
+def client_validator(trusted_fingerprints):
+    validator = CertificateValidator(
+        CertificateValidatorOptions.EXT_VALIDATION
+        | CertificateValidatorOptions.PEER_CLIENT
+    )
+
+    async def validate(cert, application):
+        await validator.validate(cert, application)
+        if cert.fingerprint(hashes.SHA256()) not in trusted_fingerprints:
+            raise ServiceError(ua.StatusCodes.BadCertificateUntrusted)
+
+    return validate
 
 
 class FixtureUsers:
@@ -126,8 +164,7 @@ async def populate(server):
 
 async def serve():
     PKI.mkdir(parents=True, exist_ok=True)
-    certificate("server", SERVER_URI)
-    certificate("client", "urn:flow-like:inspection")
+    trusted_clients = certificates()
     server = Server(user_manager=FixtureUsers())
     await server.init()
     server.set_endpoint(ENDPOINT)
@@ -135,6 +172,7 @@ async def serve():
     await server.set_application_uri(SERVER_URI)
     await server.load_certificate(PKI / "server.der")
     await server.load_private_key(PKI / "server.pem")
+    server.set_certificate_validator(client_validator(trusted_clients))
     server.set_security_policy(
         [
             ua.SecurityPolicyType.NoSecurity,

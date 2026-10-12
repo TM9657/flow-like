@@ -1,0 +1,11 @@
+module Fixture {
+    @final
+    struct Telemetry {
+        @key unsigned long id;
+        string label;
+        double temperature;
+        sequence<short> samples;
+        boolean ready;
+        unsigned long long counter;
+    };
+};

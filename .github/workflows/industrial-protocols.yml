@@ -22,6 +22,7 @@ on:
       - 'packages/vendor/profirust/**'
       - 'packages/vendor/telegenic/**'
       - 'packages/vendor/ads/**'
+      - 'packages/vendor/dust-dds/**'
   workflow_dispatch:
 
 permissions:
@@ -72,13 +73,21 @@ jobs:
           trap 'rm -rf "$TEST_DIR"' EXIT
           cp -R packages/vendor/ads "$TEST_DIR/ads"
           cargo test --locked --manifest-path "$TEST_DIR/ads/Cargo.toml" --lib
+      - name: Vendored DDS library regressions
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          TEST_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TEST_DIR"' EXIT
+          cp -R packages/vendor/dust-dds "$TEST_DIR/dust-dds"
+          cargo test --locked --manifest-path "$TEST_DIR/dust-dds/Cargo.toml" --features xtypes-xml --lib
 
   docker-devices:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - name: GigE Vision, Iroh, EtherCAT, and Modbus RTU interoperability
+      - name: GigE Vision, Iroh, EtherCAT, Modbus RTU, OPC UA PubSub, and DDS interoperability
         run: bash tools/test-industrial-e2e.sh --devices
 
   catalog:
