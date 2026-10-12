@@ -21,6 +21,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "../../lib";
 import { asArray } from "../../lib/response-shape";
 import {
+	type IAddColumnPayload,
 	type IIndexConfig,
 	IIndexType,
 	parseIndexType,
@@ -61,7 +62,7 @@ export interface TableSchemaDialogProps {
 	tableName?: string;
 	rowCount?: number;
 	onDropColumns?: (columns: string[]) => Promise<void>;
-	onAddColumn?: (name: string, sqlExpression: string) => Promise<void>;
+	onAddColumn?: (column: IAddColumnPayload) => Promise<void>;
 	onAlterColumn?: (column: string, nullable: boolean) => Promise<void>;
 	onSetPrimaryKey?: (column: string) => Promise<void>;
 	onBuildIndex?: (column: string, indexType: string) => Promise<void>;
@@ -276,6 +277,7 @@ function SchemaWorkspace({
 			<ColumnPane
 				key={selected.name}
 				field={selected}
+				isLastColumn={fields.length === 1}
 				primaryKey={schema?.primaryKey}
 				index={columnIndex(indices, selected.name)}
 				indexStatus={status}
@@ -510,6 +512,7 @@ function RailButton({
 
 function ColumnPane({
 	field,
+	isLastColumn,
 	primaryKey,
 	index,
 	indexStatus,
@@ -523,6 +526,7 @@ function ColumnPane({
 	onDropped,
 }: Readonly<{
 	field: LanceField;
+	isLastColumn: boolean;
 	primaryKey?: string;
 	index?: IIndexConfig;
 	indexStatus: IndexStatus;
@@ -572,7 +576,7 @@ function ColumnPane({
 			await onIndicesChanged();
 	};
 	const dropColumn = async () => {
-		if (!onDropColumns) return;
+		if (!onDropColumns || isKey || isLastColumn) return;
 		if (await run("drop", () => onDropColumns([field.name])))
 			onDropped(field.name);
 	};
@@ -815,24 +819,34 @@ function ColumnPane({
 				)}
 			</div>
 
-			{onDropColumns && isKey && (
+			{onDropColumns && (isKey || isLastColumn) && (
 				<div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
 					<div className="min-w-0 flex-1 space-y-1">
 						<p className="text-sm font-medium">
 							{t("schemaDropColumn", "Drop column")}
 						</p>
 						<p className="text-xs leading-relaxed text-muted-foreground">
-							{t(
-								"schemaKeyCannotBeDropped",
-								"The table key can't be dropped. Upserts rely on it to keep rows unique.",
-							)}
+							{isKey
+								? t(
+										"schemaKeyCannotBeDropped",
+										"The table key can't be dropped. Upserts rely on it to keep rows unique.",
+									)
+								: t(
+										"schemaLastColumnCannotBeDropped",
+										"A table needs at least one column. Add a replacement before dropping this one.",
+									)}
 						</p>
 					</div>
-					<LockNote>{t("schemaPermanent", "Permanent")}</LockNote>
+					<LockNote>
+						{isKey
+							? t("schemaPermanent", "Permanent")
+							: t("schemaLastColumn", "Last column")}
+					</LockNote>
 				</div>
 			)}
 			{onDropColumns &&
 				!isKey &&
+				!isLastColumn &&
 				(confirm === "drop" ? (
 					<ConfirmPanel
 						destructive
@@ -1047,9 +1061,10 @@ function IndexChip({ children }: Readonly<{ children: React.ReactNode }>) {
 	);
 }
 
-const ADD_COLUMN_TYPES = EDIT_COLUMN_TYPE_GROUPS.flatMap(
-	(group) => group.options,
-);
+const ADD_COLUMN_TYPES = [
+	...EDIT_COLUMN_TYPE_GROUPS.flatMap((group) => group.options),
+	{ value: "vector", label: "Vector" },
+];
 
 const DEFAULT_PLACEHOLDERS: Record<string, string> = {
 	string: "unknown",
@@ -1070,7 +1085,7 @@ function NewColumnPane({
 }: Readonly<{
 	fields: LanceField[];
 	rowCount?: number;
-	onAddColumn: (name: string, sqlExpression: string) => Promise<void>;
+	onAddColumn: (column: IAddColumnPayload) => Promise<void>;
 	onAdded: (name: string) => void;
 	onCancel: () => void;
 }>) {
@@ -1081,6 +1096,7 @@ function NewColumnPane({
 	const [type, setType] = useState("string");
 	const [fill, setFill] = useState("null");
 	const [value, setValue] = useState("");
+	const [dimensions, setDimensions] = useState("");
 	const [submitted, setSubmitted] = useState(false);
 	const [busy, setBusy] = useState(false);
 
@@ -1090,6 +1106,7 @@ function NewColumnPane({
 
 	const trimmedName = name.trim();
 	const isBoolean = type === "boolean";
+	const isVector = type === "vector";
 	const fillValue =
 		fill === "value" ? (isBoolean ? value || "true" : value) : "";
 	const nameError =
@@ -1099,14 +1116,27 @@ function NewColumnPane({
 					name: trimmedName,
 				})
 			: null);
-	const valueError =
-		fill === "value" && !fillValue.trim()
+	const valueError = isVector
+		? null
+		: fill === "value" && !fillValue.trim()
 			? t("schemaEnterAValue", "Enter a value")
 			: validateColumnDefault(type, fillValue);
 	const expression = buildAddColumnExpression(type, fillValue);
+	const dimensionError =
+		isVector &&
+		(!/^\d+$/.test(dimensions) ||
+			Number(dimensions) < 1 ||
+			Number(dimensions) > 2147483647)
+			? t(
+					"schemaVectorDimensionsInvalid",
+					"Enter a whole number between 1 and 2147483647.",
+				)
+			: null;
 	const showNameError = Boolean(nameError) && (submitted || name.length > 0);
 	const showValueError =
 		Boolean(valueError) && (submitted || value.trim().length > 0);
+	const showDimensionError =
+		Boolean(dimensionError) && (submitted || dimensions.length > 0);
 	const fillLegend = rowCount
 		? t("schemaValueForExistingRows", {
 				count: rowCount,
@@ -1119,9 +1149,20 @@ function NewColumnPane({
 	const submit = async (event: React.FormEvent) => {
 		event.preventDefault();
 		setSubmitted(true);
-		if (nameError || valueError || !expression) return;
+		if (busy || nameError || valueError || dimensionError) return;
+		let column: IAddColumnPayload;
+		if (isVector) {
+			column = {
+				name: trimmedName,
+				type: "vector",
+				vector_size: Number(dimensions),
+			};
+		} else {
+			if (!expression) return;
+			column = { name: trimmedName, sql_expression: expression };
+		}
 		setBusy(true);
-		const ok = await attempt(() => onAddColumn(trimmedName, expression));
+		const ok = await attempt(() => onAddColumn(column));
 		setBusy(false);
 		if (ok) onAdded(trimmedName);
 	};
@@ -1138,10 +1179,15 @@ function NewColumnPane({
 						{t("newColumn", "New column")}
 					</h3>
 					<p className="text-sm text-muted-foreground">
-						{t(
-							"schemaNewColumnDescription",
-							"Added as a nullable column. Existing rows get the value you choose below.",
-						)}
+						{isVector
+							? t(
+									"schemaNewVectorColumnDescription",
+									"Adds an empty vector column with the dimensions your embedding model requires.",
+								)
+							: t(
+									"schemaNewColumnDescription",
+									"Added as a nullable column. Existing rows get the value you choose below.",
+								)}
 					</p>
 				</div>
 
@@ -1196,65 +1242,103 @@ function NewColumnPane({
 							>
 								<span className="text-sm font-medium">{option.label}</span>
 								<span className="font-mono text-[11px] text-muted-foreground">
-									{addColumnSqlType(option.value)}
+									{option.value === "vector"
+										? "Float32"
+										: addColumnSqlType(option.value)}
 								</span>
 							</RadioGroupPrimitive.Item>
 						))}
 					</RadioGroupPrimitive.Root>
-					<p className="text-xs text-muted-foreground">
-						{t(
-							"schemaVectorGeometryNote",
-							"Vector and geometry columns can only be defined when the table is created.",
-						)}
-					</p>
 				</fieldset>
 
-				<fieldset className="space-y-2">
-					<legend className="mb-2 text-sm font-medium">{fillLegend}</legend>
-					<div className="flex flex-wrap items-center gap-3">
-						<Segmented
-							label={fillLegend}
-							value={fill}
-							onValueChange={setFill}
-							options={[
-								{ value: "null", label: "NULL" },
-								{ value: "value", label: t("schemaFillWithValue", "A value") },
-							]}
+				{isVector ? (
+					<div className="space-y-2">
+						<Label htmlFor={`${ids}-dimensions`}>
+							{t("schemaVectorDimensions", "Dimensions")}
+						</Label>
+						<Input
+							id={`${ids}-dimensions`}
+							type="number"
+							min={1}
+							max={2147483647}
+							step={1}
+							className="max-w-xs font-mono"
+							placeholder="1536"
+							value={dimensions}
+							onChange={(event) => setDimensions(event.target.value)}
+							aria-invalid={showDimensionError}
+							aria-describedby={`${ids}-dimensions-hint`}
 						/>
-						{fill === "value" && isBoolean && (
+						<p
+							id={`${ids}-dimensions-hint`}
+							className={cn(
+								"text-xs",
+								showDimensionError
+									? "text-destructive"
+									: "text-muted-foreground",
+							)}
+						>
+							{showDimensionError
+								? dimensionError
+								: t(
+										"schemaVectorDimensionsHint",
+										"Use the dimension count from your embedding model. Existing rows start with NULL; generate new embeddings before searching this column.",
+									)}
+						</p>
+					</div>
+				) : (
+					<fieldset className="space-y-2">
+						<legend className="mb-2 text-sm font-medium">{fillLegend}</legend>
+						<div className="flex flex-wrap items-center gap-3">
 							<Segmented
-								label={defaultLabel}
-								value={fillValue}
-								onValueChange={setValue}
+								label={fillLegend}
+								value={fill}
+								onValueChange={setFill}
 								options={[
-									{ value: "true", label: "true" },
-									{ value: "false", label: "false" },
+									{ value: "null", label: "NULL" },
+									{
+										value: "value",
+										label: t("schemaFillWithValue", "A value"),
+									},
 								]}
 							/>
+							{fill === "value" && isBoolean && (
+								<Segmented
+									label={defaultLabel}
+									value={fillValue}
+									onValueChange={setValue}
+									options={[
+										{ value: "true", label: "true" },
+										{ value: "false", label: "false" },
+									]}
+								/>
+							)}
+							{fill === "value" && !isBoolean && (
+								<Input
+									className="max-w-xs font-mono"
+									aria-label={defaultLabel}
+									aria-invalid={showValueError}
+									placeholder={DEFAULT_PLACEHOLDERS[type]}
+									value={value}
+									onChange={(event) => setValue(event.target.value)}
+								/>
+							)}
+						</div>
+						{showValueError && (
+							<p className="text-xs text-destructive">{valueError}</p>
 						)}
-						{fill === "value" && !isBoolean && (
-							<Input
-								className="max-w-xs font-mono"
-								aria-label={defaultLabel}
-								aria-invalid={showValueError}
-								placeholder={DEFAULT_PLACEHOLDERS[type]}
-								value={value}
-								onChange={(event) => setValue(event.target.value)}
-							/>
-						)}
-					</div>
-					{showValueError && (
-						<p className="text-xs text-destructive">{valueError}</p>
-					)}
-				</fieldset>
+					</fieldset>
+				)}
 			</div>
 
 			<div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t bg-background px-6 py-3">
 				<span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-					SQL
+					{isVector ? t("schemaTypeLabel", "Type") : "SQL"}
 				</span>
 				<code className="min-w-0 flex-1 break-all font-mono text-xs">
-					{expression}
+					{isVector
+						? `vector${!dimensionError ? `(${dimensions})` : ""}`
+						: expression}
 				</code>
 				<div className="flex gap-2">
 					<Button

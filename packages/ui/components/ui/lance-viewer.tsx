@@ -75,7 +75,10 @@ import {
 import { geoArrowIndexKind } from "../../lib/geoarrow-index";
 import { resolveStorageFile } from "../../lib/storage-file";
 import { looksLikeUserColumnName } from "../../lib/user-display";
-import type { IIndexConfig } from "../../state/backend-state/db-state";
+import type {
+	IAddColumnPayload,
+	IIndexConfig,
+} from "../../state/backend-state/db-state";
 import { accountIdFromValue } from "../../state/backend-state/user-state";
 import {
 	Badge,
@@ -203,7 +206,7 @@ export interface LanceDBExplorerProps {
 	) => Promise<void>;
 	onOptimize?: (keepVersions?: boolean) => Promise<void>;
 	onDropColumns?: (columns: string[]) => Promise<void>;
-	onAddColumn?: (name: string, sqlExpression: string) => Promise<void>;
+	onAddColumn?: (column: IAddColumnPayload) => Promise<void>;
 	onAlterColumn?: (column: string, nullable: boolean) => Promise<void>;
 	/** Marks a column as the permanent table key; the host refreshes the schema. */
 	onSetPrimaryKey?: (column: string) => Promise<void>;

@@ -68,9 +68,8 @@ export const CREATE_COLUMN_TYPE_GROUPS: ColumnTypeGroup[] = [
 ];
 
 /**
- * Types that can be added to an *existing* table. LanceDB only lets us add a
- * column through a typed SQL expression, so this is the subset that maps to a
- * `CAST(... AS <type>)` expression (no vector / unsigned / narrow int columns).
+ * Types offered with a SQL default when adding a column to an existing table.
+ * Vector columns use a typed column definition instead.
  */
 export const EDIT_COLUMN_TYPE_GROUPS: ColumnTypeGroup[] = [
 	{ label: "Text", options: [{ value: "string", label: "String" }] },

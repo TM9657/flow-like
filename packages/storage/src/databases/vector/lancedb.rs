@@ -4950,6 +4950,80 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn regression_drop_and_recreate_vector_column() -> Result<()> {
+        let test_path = PathBuf::from(format!("./tmp/{}", create_id()));
+        std::fs::create_dir_all(&test_path)?;
+        let mut db = LanceDBVectorStore::new(test_path.clone(), "embeddings".into()).await?;
+        insert_scattered_vectors(&mut db, 64).await?;
+        db.add_column("label", "CAST(id AS STRING)").await?;
+        db.set_primary_key("id").await?;
+        db.index("id", Some("BTREE")).await?;
+        db.index("vector", Some("VECTOR")).await?;
+        assert_eq!(db.list_indices().await?.len(), 2);
+
+        let mut expected = db
+            .list(Some(vec!["id".into(), "label".into()]), 64, 0)
+            .await?;
+        expected.sort_by_key(|row| row["id"].as_i64());
+
+        db.drop_columns(&["vector"]).await?;
+        assert!(db.schema().await?.field_with_name("vector").is_err());
+        let remaining_indices = db.list_indices().await?;
+        assert_eq!(remaining_indices.len(), 1);
+        assert_eq!(remaining_indices[0].columns, vec!["id"]);
+
+        db.add_typed_column("vector", "vector", Some(8)).await?;
+        let schema = db.schema().await?;
+        let field = schema.field_with_name("vector")?;
+        assert!(field.is_nullable());
+        assert!(matches!(
+            field.data_type(),
+            DataType::FixedSizeList(item, 8) if item.data_type() == &DataType::Float32
+        ));
+        assert_eq!(db.primary_key().await?.as_deref(), Some("id"));
+        assert_eq!(db.count(None).await?, 64);
+        assert_eq!(db.count(Some("vector IS NULL".into())).await?, 64);
+        let mut preserved = db
+            .list(Some(vec!["id".into(), "label".into()]), 64, 0)
+            .await?;
+        preserved.sort_by_key(|row| row["id"].as_i64());
+        assert_eq!(preserved, expected);
+
+        let mut old_dimension = expected[0].clone();
+        old_dimension["vector"] = json!(vec![1.0_f32; 16]);
+        assert!(
+            db.upsert(vec![old_dimension], "id".into()).await.is_err(),
+            "the replacement must reject embeddings with the old dimension"
+        );
+        assert_eq!(db.count(Some("vector IS NULL".into())).await?, 64);
+
+        let mut reembedded = expected.clone();
+        for (row_index, row) in reembedded.iter_mut().enumerate() {
+            row["vector"] = json!(
+                (row_index * 8..(row_index + 1) * 8)
+                    .map(scattered_unit_value)
+                    .collect::<Vec<_>>()
+            );
+        }
+        db.upsert(reembedded, "id".into()).await?;
+        assert_eq!(db.count(None).await?, 64);
+        assert_eq!(db.count(Some("vector IS NULL".into())).await?, 0);
+        db.index("vector", Some("VECTOR")).await?;
+        assert_eq!(db.list_indices().await?.len(), 2);
+        let query = (0..8)
+            .map(|index| f64::from(scattered_unit_value(index)))
+            .collect();
+        let matches = db
+            .vector_search(query, None, Some(vec!["id".into(), "label".into()]), 1, 0)
+            .await?;
+        assert_eq!(matches[0]["id"], json!(0));
+        assert_eq!(matches[0]["label"], json!("0"));
+
+        std::fs::remove_dir_all(test_path)?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_lance_add_column_bare_null_fails() -> Result<()> {
         let test_path = format!("./tmp/{}", create_id());
         std::fs::create_dir_all(&test_path).unwrap();
