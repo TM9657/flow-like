@@ -1251,6 +1251,19 @@ fn immutable_lance_data(path: &ObjectPath) -> bool {
             .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
 }
 
+// Published model folders are write-once: weights.bin and preprocessing.json are written
+// before the manifest that records their sha256, and none of them is ever replaced.
+// Pointer files under models/{experiments,learning,deployments}/ remain revalidated.
+fn immutable_model_artifact(path: &ObjectPath) -> bool {
+    let parts: Vec<_> = path.as_ref().split('/').collect();
+    matches!(
+        parts.as_slice(),
+        ["apps", _, "storage", "models", "artifacts", _, file]
+            | ["users", _, "apps", _, "models", "artifacts", _, file]
+            if matches!(*file, "weights.bin" | "manifest.json" | "preprocessing.json")
+    )
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct ReadCache {
     inner: Arc<dyn ObjectStore>,
@@ -1418,7 +1431,9 @@ impl ObjectStore for ReadCache {
         options: GetOptions,
     ) -> object_store::Result<GetResult> {
         self.control.scope(path, false)?;
-        if immutable_lance_data(path) && self.control.immutable_trusted(path)? {
+        if (immutable_lance_data(path) || immutable_model_artifact(path))
+            && self.control.immutable_trusted(path)?
+        {
             if let Some(result) = self.cached(path, &options)? {
                 return Ok(result);
             }
@@ -2767,6 +2782,68 @@ mod tests {
         ] {
             assert!(!immutable_lance_data(&ObjectPath::from(name)), "{name}");
         }
+    }
+
+    #[test]
+    fn only_published_model_files_inside_artifact_folders_skip_revalidation() {
+        for name in [
+            "apps/project/storage/models/artifacts/model-1/weights.bin",
+            "apps/project/storage/models/artifacts/model-1/manifest.json",
+            "apps/project/storage/models/artifacts/model-1/preprocessing.json",
+            "users/alice/apps/project/models/artifacts/model-1/weights.bin",
+            "users/alice/apps/project/models/artifacts/model-1/manifest.json",
+            "users/alice/apps/project/models/artifacts/model-1/preprocessing.json",
+        ] {
+            assert!(immutable_model_artifact(&ObjectPath::from(name)), "{name}");
+        }
+        for name in [
+            "apps/project/storage/models/experiments/experiment.json",
+            "apps/project/storage/models/learning/project.json",
+            "apps/project/storage/models/deployments/deployment.json",
+            "apps/project/storage/models/artifacts/model-1/weights.bin.s3flowEtag",
+            "apps/project/storage/models/artifacts/model-1/model.bin",
+            "apps/project/storage/models/artifacts/model-1/dependencies/source/weights.bin",
+            "apps/project/storage/models/artifacts/weights.bin",
+            "apps/project/storage/artifacts/model-1/weights.bin",
+            "apps/project/upload/models/artifacts/model-1/weights.bin",
+            "apps/project/models/artifacts/model-1/weights.bin",
+            "users/alice/apps/project/storage/models/artifacts/model-1/weights.bin",
+            "users/alice/models/artifacts/model-1/weights.bin",
+        ] {
+            assert!(!immutable_model_artifact(&ObjectPath::from(name)), "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn trusted_cached_model_files_are_served_without_a_cloud_read() {
+        let root = tempfile::tempdir().unwrap();
+        let cloud = Arc::new(Cloud::default());
+        let cache = ReadCache::new(
+            cloud.clone(),
+            control(root.path(), "models", 4 * 1024 * 1024),
+        );
+        let weights = ObjectPath::from("apps/project/storage/models/artifacts/model-1/weights.bin");
+        let private =
+            ObjectPath::from("users/alice/apps/project/models/artifacts/model-1/manifest.json");
+        let pointer = ObjectPath::from("apps/project/storage/models/learning/project.json");
+        for path in [&weights, &private, &pointer] {
+            cloud.memory.put(path, "stored".into()).await.unwrap();
+            assert_eq!(body(cache.as_ref(), path).await, "stored");
+        }
+        let before = cloud.reads.load(Ordering::SeqCst);
+        assert_eq!(body(cache.as_ref(), &weights).await, "stored");
+        assert_eq!(body(cache.as_ref(), &private).await, "stored");
+        assert_eq!(
+            cloud.reads.load(Ordering::SeqCst),
+            before,
+            "verified model artifact files should not hit cloud"
+        );
+        assert_eq!(body(cache.as_ref(), &pointer).await, "stored");
+        assert_eq!(
+            cloud.reads.load(Ordering::SeqCst),
+            before + 1,
+            "pointer files are revalidated"
+        );
     }
 
     #[cfg(unix)]

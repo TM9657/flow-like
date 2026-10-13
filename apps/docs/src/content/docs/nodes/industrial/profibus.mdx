@@ -1,0 +1,30 @@
+---
+title: "PROFIBUS Node Catalog"
+description: "Industrial/PROFIBUS Flow-Like node category with 6 generated node references."
+sidebar:
+  order: 0
+  label: "PROFIBUS"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "PROFIBUS nodes, Industrial/PROFIBUS, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "Industrial/PROFIBUS"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"PROFIBUS Node Catalog\",\"description\":\"Industrial/PROFIBUS Flow-Like node category with 6 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/industrial/profibus/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"Industrial/PROFIBUS\",\"keywords\":\"PROFIBUS nodes, Industrial/PROFIBUS, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"Industrial/PROFIBUS"}
+	label="PROFIBUS"
+	nodes={nodesByCategory["Industrial/PROFIBUS"] ?? []}
+	client:load
+/>

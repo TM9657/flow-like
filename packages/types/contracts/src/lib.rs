@@ -7,6 +7,9 @@ pub mod authorization;
 #[cfg(feature = "storage-paths")]
 pub mod storage;
 
+#[cfg(feature = "data-classification")]
+pub mod data_classification;
+
 #[cfg(feature = "geometry")]
 pub mod geometry;
 

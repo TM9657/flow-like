@@ -1865,7 +1865,7 @@ declare namespace mqtt {
     // === Web/MQTT ===
 
     /**
-     * Binds a lightweight MQTT broker for daemon workflows. Typed lifecycle events are exposed as pins; published messages are delivered to the referenced on-message handler.
+     * Binds a clean-session MQTT 3.1.1 broker with QoS 0/1, wildcard subscriptions, retained messages in memory, and Last Will delivery. QoS 2 and persistent sessions are refused. Published messages reach the referenced on-message handler.
      * @node mqtt_broker @alias mqttBroker
      * @param config — MQTT broker configuration
      * @returns localAddr — Bound broker socket address
@@ -1898,14 +1898,15 @@ declare namespace mqtt {
      * @param session — MQTT session reference (receiver: `this` in `x.publish(...)`)
      * @param topic — The MQTT topic to publish to
      * @param payload — The message content to publish
+     * @param payloadBytes (optional) — Optional raw message bytes. When connected, these take precedence over Payload.
      * @param qos (optional) — Quality of Service level
      * @param retain (optional) — Whether the broker should retain this message
      * @impure has side effects / drives control flow
      */
-    function publish(this: MqttSession, { session: Struct, topic: string, payload: string, qos?: string, retain?: bool }): void;
+    function publish(this: MqttSession, { session: Struct, topic: string, payload: string, payloadBytes?: bytes, qos?: string, retain?: bool }): void;
 
     /**
-     * Subscribes to an MQTT topic and invokes a handler for each incoming message. Holds execution until the connection closes or timeout, then triggers on_close.
+     * Subscribes to an MQTT topic and invokes a handler for each incoming message. Receives text or raw bytes through payload_bytes on the handler. Holds execution until the connection closes or timeout, then triggers on_close.
      * @node mqtt_subscribe @receiver session @alias mqttSubscribe
      * @param session — MQTT session reference (receiver: `this` in `x.subscribe(...)`)
      * @param topic — The MQTT topic filter to subscribe to

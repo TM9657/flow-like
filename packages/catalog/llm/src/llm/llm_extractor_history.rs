@@ -273,6 +273,26 @@ impl NodeLogic for LLMExtractHistoryNode {
     }
 }
 
+/// A failed extraction. `usage` is the provider's report for a reply the extractor rejected,
+/// one without a 'submit' call or whose value does not match the schema; failures before or
+/// during the provider call have none.
+#[cfg(feature = "execute")]
+#[derive(Debug)]
+pub(crate) struct ExtractionFailure {
+    pub(crate) error: flow_like_types::Error,
+    pub(crate) usage: Option<LLMUsageStats>,
+}
+
+#[cfg(feature = "execute")]
+impl ExtractionFailure {
+    fn before_reply(error: impl Into<flow_like_types::Error>) -> Self {
+        Self {
+            error: error.into(),
+            usage: None,
+        }
+    }
+}
+
 #[cfg(feature = "execute")]
 pub(crate) async fn extract_structured_history(
     context: &mut ExecutionContext,
@@ -281,7 +301,36 @@ pub(crate) async fn extract_structured_history(
     schema_str: String,
     hint: String,
 ) -> flow_like_types::Result<(Value, LLMUsageStats)> {
-    let prepared_schema = prepare_schema(&schema_str)?;
+    let failure =
+        match extract_structured_history_with_usage(context, model_bit, history, schema_str, hint)
+            .await
+        {
+            Ok(reply) => return Ok(reply),
+            Err(failure) => failure,
+        };
+    if let Some(stats) = &failure.usage {
+        context.log_message(
+            &format!(
+                "The provider reply was rejected after using {} tokens",
+                stats.usage.total_tokens
+            ),
+            LogLevel::Debug,
+        );
+    }
+    Err(failure.error)
+}
+
+/// `extract_structured_history` that keeps the provider usage of a reply it rejects, so callers
+/// that charge for calls can settle with what the provider reported.
+#[cfg(feature = "execute")]
+pub(crate) async fn extract_structured_history_with_usage(
+    context: &mut ExecutionContext,
+    model_bit: Bit,
+    history: History,
+    schema_str: String,
+    hint: String,
+) -> Result<(Value, LLMUsageStats), ExtractionFailure> {
+    let prepared_schema = prepare_schema(&schema_str).map_err(ExtractionFailure::before_reply)?;
 
     context.log_message(
         &format!("Using extraction mode: {:?}", prepared_schema.mode),
@@ -297,13 +346,14 @@ pub(crate) async fn extract_structured_history(
         )
     };
 
-    let (prompt, chat_history) = history
-        .extract_prompt_and_history()
-        .map_err(|e| anyhow!("Failed to convert history into rig messages: {e}"))?;
+    let (prompt, chat_history) = history.extract_prompt_and_history().map_err(|e| {
+        ExtractionFailure::before_reply(anyhow!("Failed to convert history into rig messages: {e}"))
+    })?;
 
     let agent_builder = model_bit
         .agent(context, &Some(history))
-        .await?
+        .await
+        .map_err(ExtractionFailure::before_reply)?
         .preamble(&preamble)
         .tool(DynamicSubmitTool {
             parameters: prepared_schema.tool_parameters.clone(),
@@ -317,10 +367,12 @@ pub(crate) async fn extract_structured_history(
     let response = agent
         .completion(prompt, chat_history.into_iter().collect::<Vec<_>>())
         .await
-        .map_err(|e| anyhow!("Model completion failed: {}", e))?
+        .map_err(|e| ExtractionFailure::before_reply(anyhow!("Model completion failed: {}", e)))?
         .send()
         .await
-        .map_err(|e| anyhow!("Failed to send completion request: {}", e))?;
+        .map_err(|e| {
+            ExtractionFailure::before_reply(anyhow!("Failed to send completion request: {}", e))
+        })?;
     let duration_ms = start.elapsed().as_millis() as u64;
 
     let stats = LLMUsageStats {
@@ -345,13 +397,20 @@ pub(crate) async fn extract_structured_history(
         }
     }
 
-    let args = last_args.ok_or_else(|| {
-        anyhow!(
-            "Model did not return a 'submit' tool call. Ensure the model supports function calling."
-        )
-    })?;
+    let Some(args) = last_args else {
+        return Err(ExtractionFailure {
+            error: anyhow!(
+                "Model did not return a 'submit' tool call. Ensure the model supports function calling."
+            ),
+            usage: Some(stats),
+        });
+    };
 
-    let extracted = validate_extracted_value(&prepared_schema, args)?;
-
-    Ok((extracted, stats))
+    match validate_extracted_value(&prepared_schema, args) {
+        Ok(extracted) => Ok((extracted, stats)),
+        Err(error) => Err(ExtractionFailure {
+            error,
+            usage: Some(stats),
+        }),
+    }
 }

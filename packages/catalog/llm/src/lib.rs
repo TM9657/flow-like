@@ -1,6 +1,8 @@
 //! LLM/Generative AI catalog for Flow-Like
 //!
 //! This crate contains LLM invocation, embedding, agents, and MCP tools.
+// Training agent futures reach Lance and object-store readers, which need deeper Send trait evaluation.
+#![recursion_limit = "256"]
 
 extern crate flow_like_runtime as flow_like;
 

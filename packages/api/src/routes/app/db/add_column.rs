@@ -4,7 +4,8 @@ use crate::{
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
     routes::app::db::{
-        ScopeParams, resolve_write_connection, table_input_error, validate_table_name,
+        ScopeParams, column_reader, resolve_write_connection, table_input_error,
+        validate_table_name,
     },
     state::AppState,
 };
@@ -67,7 +68,7 @@ pub async fn add_column(
     Query(selector): Query<DatabaseSelector>,
     Json(payload): Json<AddColumnPayload>,
 ) -> Result<Json<()>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -79,7 +80,9 @@ pub async fn add_column(
     validate_column_definition(&payload)?;
 
     let connection = resolve_write_connection(&state, &user, &app_id, &scope).await?;
-    let db = LanceDBVectorStore::from_connection_with_selector(connection, table, selector).await?;
+    let db = LanceDBVectorStore::from_connection_with_selector(connection, table, selector)
+        .await?
+        .with_column_reader(column_reader(&permission, &scope));
 
     db.add_column_definition(
         &payload.name,

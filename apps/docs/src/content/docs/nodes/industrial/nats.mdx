@@ -1,0 +1,30 @@
+---
+title: "NATS Node Catalog"
+description: "Industrial/NATS Flow-Like node category with 4 generated node references."
+sidebar:
+  order: 0
+  label: "NATS"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "NATS nodes, Industrial/NATS, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "Industrial/NATS"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"NATS Node Catalog\",\"description\":\"Industrial/NATS Flow-Like node category with 4 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/industrial/nats/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"Industrial/NATS\",\"keywords\":\"NATS nodes, Industrial/NATS, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"Industrial/NATS"}
+	label="NATS"
+	nodes={nodesByCategory["Industrial/NATS"] ?? []}
+	client:load
+/>

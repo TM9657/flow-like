@@ -1,7 +1,7 @@
 use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
 #[cfg(any(feature = "execute", test))]
 use flow_like_industrial::opcua::OpcUaReadConfig;
-use flow_like_industrial::opcua::{OpcUaReading, OpcUaSecurityMode};
+use flow_like_industrial::opcua::{OpcUaCertificates, OpcUaReading, OpcUaSecurityMode};
 use flow_like_industrial::{
     ModbusReadRequest, ModbusValues, RegisterEncoding, SensorValue, WordOrder,
 };
@@ -36,6 +36,7 @@ impl NodeLogic for CaptureGenicamFrameNode {
             "Capture a complete GigE Vision frame and preserve camera and host timestamps",
             "captureGenicam",
             "AI/ML/Sensors",
+            false,
         )
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
@@ -98,6 +99,7 @@ impl NodeLogic for ReadModbusSensorNode {
             "Read Modbus TCP input/holding registers or discrete inputs with bounded timeout",
             "readModbus",
             "AI/ML/Sensors",
+            false,
         )
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
@@ -175,6 +177,9 @@ pub struct ReadOpcUaRequest {
     pub node_ids: Vec<String>,
     pub timeout_ms: u64,
     pub max_age_ms: f64,
+    /// Omit to use the executor app certificate store.
+    #[serde(default)]
+    pub certificates: Option<OpcUaCertificates>,
 }
 
 impl ReadOpcUaRequest {
@@ -188,6 +193,7 @@ impl ReadOpcUaRequest {
             node_ids: self.node_ids,
             timeout_ms: self.timeout_ms,
             max_age_ms: self.max_age_ms,
+            certificates: self.certificates,
         }
     }
 }
@@ -201,9 +207,10 @@ impl NodeLogic for ReadOpcUaSensorNode {
         operation_node::<ReadOpcUaRequest, Vec<OpcUaReading>>(
             "ml_read_opcua_sensor",
             "Read OPC UA Sensor",
-            "Read timestamped values and quality over a verified OPC UA session; PKI comes from executor app storage",
+            "Read timestamped values over a verified OPC UA session with app certificates or a custom identity and server trust",
             "readOpcUa",
             "AI/ML/Sensors",
+            true,
         )
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
@@ -225,6 +232,7 @@ impl NodeLogic for ReadOpcUaSensorNode {
                     let config = OpcUaConnectConfig {
                         endpoint: input.endpoint, pki_dir: input.pki_dir, security_policy: input.security_policy,
                         security_mode: input.security_mode, timeout_ms: input.timeout_ms,
+                        certificates: input.certificates,
                     };
                     let client = OpcUaClient::connect_resolved(&config, None, &addresses).await?;
                     let result = client.read(&OpcUaReadRequest { node_ids: input.node_ids, max_age_ms: input.max_age_ms }).await;
@@ -281,8 +289,17 @@ fn operation_node<I: JsonSchema + Serialize, O: JsonSchema + Serialize>(
     description: &str,
     function: &str,
     category: &str,
+    sensitive_input: bool,
 ) -> flow_like::flow::node::Node {
-    crate::node::operation_node::<I, O>(id, name, description, "inspection", function, category)
+    crate::node::operation_node::<I, O>(
+        id,
+        name,
+        description,
+        "inspection",
+        function,
+        category,
+        sensitive_input,
+    )
 }
 
 #[cfg(feature = "execute")]

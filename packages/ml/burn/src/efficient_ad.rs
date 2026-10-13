@@ -19,9 +19,19 @@ use std::{
 };
 
 const MANIFEST: &str = "efficient-ad-state.json";
+const MAP_SIZE: usize = 256 * 256;
+/// Device activation workspace that bounds each chunk of [`EfficientAdPredictor::predict`].
+pub const EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES: u64 = 256 * 1024 * 1024;
 static CHECKPOINT_ID: AtomicU64 = AtomicU64::new(0);
 fn record(error: impl std::fmt::Display) -> Error {
     Error::Record(error.to_string())
+}
+fn read<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
+    tensor
+        .try_into_data()
+        .map_err(crate::execution::device_error)?
+        .try_to_vec::<f32>()
+        .map_err(record)
 }
 
 #[derive(Module, Debug)]
@@ -195,15 +205,7 @@ impl EfficientAdModel {
         let teacher = self.teacher_features(images.clone(), normalization);
         let student = self.student.forward(images).narrow(1, 0, self.features);
         let distance = (teacher - student).square();
-        let threshold = quantile_value(
-            distance
-                .clone()
-                .detach()
-                .into_data()
-                .try_to_vec::<f32>()
-                .map_err(record)?,
-            quantile,
-        )?;
+        let threshold = quantile_value(read(distance.clone().detach())?, quantile)?;
         let mask = distance
             .clone()
             .detach()
@@ -264,6 +266,22 @@ impl From<&EfficientAdConfig> for Architecture {
             features: c.teacher.feature_channels,
             autoencoder_width: c.autoencoder_channels,
         }
+    }
+}
+impl Architecture {
+    /// Peak inference activations for one 256x256 image: PDN's unpadded first convolution
+    /// (253x253), its activation and pooled map dominate, then the teacher and student feature
+    /// maps, the autoencoder's 128x128 decoder stage and the upsampled anomaly maps.
+    fn inference_bytes_per_image(&self) -> usize {
+        let input = self.input * MAP_SIZE;
+        let pdn = self.width * (2 * 253 * 253 + 126 * 126);
+        let features = 3 * self.features * 56 * 56;
+        let autoencoder = 3 * self.autoencoder_width * 128 * 128;
+        (input + pdn + features + autoencoder + 4 * MAP_SIZE) * size_of::<f32>()
+    }
+    fn inference_chunk(&self) -> usize {
+        let workspace = EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES as usize;
+        (workspace / self.inference_bytes_per_image()).max(1)
     }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -358,6 +376,11 @@ fn run(
         previous.as_ref().and_then(|state| state.backend.as_ref()),
     )?;
     let config = &resolved_config;
+    let mut fingerprint_config = config.clone();
+    fingerprint_config.epochs = 1;
+    fingerprint_config.backend = BackendChoice::Cpu;
+    let settings_fingerprint = fingerprint(&fingerprint_config)?;
+    let dataset_fingerprint = fingerprint(&(data, validation_normal))?;
     let device = backend::device(&config.backend, true)?;
     let initialization_guard = crate::execution::lock(Some(cancellation))?;
     device.seed(config.seed);
@@ -366,58 +389,66 @@ fn run(
     let mut optimizer = AdamConfig::new()
         .init()
         .with_grad_clipping(GradientClippingConfig::Norm(config.gradient_clip).init());
-    let mut fingerprint_config = config.clone();
-    fingerprint_config.epochs = 1;
-    fingerprint_config.backend = BackendChoice::Cpu;
-    let settings_fingerprint = fingerprint(&fingerprint_config)?;
-    let dataset_fingerprint = fingerprint(&(data, validation_normal))?;
-    let mut state = if let Some(state) = previous {
-        if state.settings_fingerprint != settings_fingerprint
-            || state.dataset_fingerprint != dataset_fingerprint
-            || config.epochs < state.next_epoch
-        {
-            return Err(Error::Invalid(
-                "EfficientAD resume configuration or data differs".into(),
-            ));
+    let resumed = match previous {
+        Some(state) => {
+            if state.settings_fingerprint != settings_fingerprint
+                || state.dataset_fingerprint != dataset_fingerprint
+            {
+                return Err(Error::Invalid(
+                    "EfficientAD resume configuration or data differs".into(),
+                ));
+            }
+            crate::engine::ensure_resumable(config.epochs, state.next_epoch, state.next_batch)?;
+            let path = crate::engine::checked_checkpoint(dir, &state.checkpoint)?;
+            model = model
+                .try_load_file(path.join("model.bpk"))
+                .map_err(record)?
+                .train();
+            optimizer = optimizer.load(path.join("optimizer.bpk")).map_err(record)?;
+            Some(state)
         }
-        let path = crate::engine::checked_checkpoint(dir, &state.checkpoint)?;
-        model = model
-            .try_load_file(path.join("model.bpk"))
-            .map_err(record)?
-            .train();
-        optimizer = optimizer.load(path.join("optimizer.bpk")).map_err(record)?;
-        state
-    } else {
-        model.teacher.import(&config.teacher, &device);
-        let normalization = teacher_normalization(
-            &model,
-            &data.images,
-            config.batch_size,
-            &device,
-            cancellation,
-        )?;
-        let initial_loss = evaluate(&model, data, &normalization, config, &device, cancellation)?;
-        State {
-            version: 1,
-            requested_backend: requested_backend.clone(),
-            backend: Some(config.backend.clone()),
-            architecture,
-            settings_fingerprint,
-            dataset_fingerprint,
-            normalization,
-            calibration: None,
-            checkpoint: String::new(),
-            next_epoch: 0,
-            next_batch: 0,
-            report: TrainingReport {
+        None => {
+            model.teacher.import(&config.teacher, &device);
+            None
+        }
+    };
+    // Lazy parameters draw their initial values on first read; read them all under the seed.
+    crate::execution::materialize(&model)?;
+    drop(initialization_guard);
+    let mut state = match resumed {
+        Some(state) => state,
+        None => {
+            let normalization = teacher_normalization(
+                &model,
+                &data.images,
+                config.batch_size,
+                &device,
+                cancellation,
+            )?;
+            let initial_loss =
+                evaluate(&model, data, &normalization, config, &device, cancellation)?;
+            State {
+                version: 1,
+                requested_backend: requested_backend.clone(),
                 backend: Some(config.backend.clone()),
-                completed_epochs: 0,
-                steps: 0,
-                initial_loss,
-                final_loss: initial_loss,
-                validation_loss: None,
-                history: Vec::new(),
-            },
+                architecture,
+                settings_fingerprint,
+                dataset_fingerprint,
+                normalization,
+                calibration: None,
+                checkpoint: String::new(),
+                next_epoch: 0,
+                next_batch: 0,
+                report: TrainingReport {
+                    backend: Some(config.backend.clone()),
+                    completed_epochs: 0,
+                    steps: 0,
+                    initial_loss,
+                    final_loss: initial_loss,
+                    validation_loss: None,
+                    history: Vec::new(),
+                },
+            }
         }
     };
     state.requested_backend = requested_backend;
@@ -425,7 +456,6 @@ fn run(
     state.report.backend = Some(config.backend.clone());
     state.calibration = None;
     checkpoint(dir, &model, &optimizer, &mut state)?;
-    drop(initialization_guard);
     let batches = data.images.shape[0].div_ceil(config.batch_size);
     let penalty_sampler = PenaltySampler::new(data, config.seed);
     for epoch in state.next_epoch..config.epochs {
@@ -570,7 +600,7 @@ fn teacher_normalization(
             .forward(tensor(&images.batch(&indices), device))
             .detach();
         let [n, c, h, w] = output.dims();
-        let values = output.into_data().try_to_vec::<f32>().map_err(record)?;
+        let values = read(output)?;
         for sample in 0..n {
             for channel in 0..c {
                 for value in
@@ -673,8 +703,8 @@ fn calibrate(
         }
         let indices = (start..(start + batch).min(images.shape[0])).collect::<Vec<_>>();
         let (a, b) = model.maps(tensor(&images.batch(&indices), device), normalization);
-        st.extend(a.into_data().try_to_vec::<f32>().map_err(record)?);
-        ae.extend(b.into_data().try_to_vec::<f32>().map_err(record)?);
+        st.extend(read(a)?);
+        ae.extend(read(b)?);
     }
     Ok(EfficientAdCalibration {
         teacher_student_low: quantile_value(st.clone(), 0.9)?,
@@ -702,7 +732,7 @@ fn tensor<const D: usize>(data: &TensorData, device: &Device) -> Tensor<D> {
     )
 }
 fn scalar(value: Tensor<1>) -> Result<f32> {
-    let values = value.into_data().try_to_vec::<f32>().map_err(record)?;
+    let values = read(value)?;
     if values.len() != 1 || !values[0].is_finite() {
         return Err(Error::Invalid(
             "EfficientAD produced a non-finite loss".into(),
@@ -755,15 +785,14 @@ fn checkpoint(
     engine::sync_record(&target.join("optimizer.bpk"))?;
     engine::sync_directory(&target)?;
     engine::sync_directory(dir)?;
-    state.checkpoint = name;
-    let temporary = dir.join("efficient-ad-state.json.pending");
-    let file = fs::File::create(&temporary)?;
-    serde_json::to_writer_pretty(&file, state)?;
-    file.sync_all()?;
-    drop(file);
-    fs::rename(temporary, dir.join(MANIFEST))?;
-    engine::sync_directory(dir)?;
-    Ok(())
+    let superseded = std::mem::replace(&mut state.checkpoint, name);
+    engine::commit_checkpoint(
+        dir,
+        MANIFEST,
+        state,
+        &state.checkpoint,
+        engine::checked_checkpoint(dir, &superseded).ok(),
+    )
 }
 fn read_state(dir: &Path) -> Result<State> {
     let state: State = serde_json::from_reader(fs::File::open(dir.join(MANIFEST))?)?;
@@ -813,7 +842,7 @@ pub struct EfficientAdPredictor {
     device: Device,
     normalization: Normalization,
     calibration: EfficientAdCalibration,
-    input_channels: usize,
+    architecture: Architecture,
     backend: BackendChoice,
 }
 impl EfficientAdPredictor {
@@ -832,13 +861,13 @@ impl EfficientAdPredictor {
             )
             .map_err(record)?
             .valid();
-        crate::execution::materialize(&model);
+        crate::execution::materialize(&model)?;
         Ok(Self {
             model,
             device,
             normalization: state.normalization,
             calibration,
-            input_channels: state.architecture.input,
+            architecture: state.architecture,
             backend,
         })
     }
@@ -848,35 +877,70 @@ impl EfficientAdPredictor {
     pub fn calibration(&self) -> &EfficientAdCalibration {
         &self.calibration
     }
+    /// Large requests run in chunks so PDN activations stay within a fixed device workspace.
     pub fn predict(&self, images: &TensorData) -> Result<EfficientAdPrediction> {
-        validate_images(images, self.input_channels)?;
-        let (st, ae) = self
-            .model
-            .maps(tensor(images, &self.device), &self.normalization);
-        let c = &self.calibration;
-        let st = (st - c.teacher_student_low)
-            * (0.1 / (c.teacher_student_high - c.teacher_student_low).max(1e-6));
-        let ae =
-            (ae - c.autoencoder_low) * (0.1 / (c.autoencoder_high - c.autoencoder_low).max(1e-6));
-        let combined = (st.clone() + ae.clone()) * 0.5;
-        let display = |x: Tensor<4>| resize(x.pad([(0, 0), (0, 0), (4, 4), (4, 4)], 0.0), 256);
-        let anomaly_maps = to_data(display(combined))?;
-        let scores = anomaly_maps
-            .values
-            .chunks_exact(256 * 256)
+        self.predict_in_chunks(images, self.architecture.inference_chunk())
+    }
+    fn predict_in_chunks(
+        &self,
+        images: &TensorData,
+        chunk: usize,
+    ) -> Result<EfficientAdPrediction> {
+        validate_images(images, self.architecture.input)?;
+        let chunk = chunk.max(1);
+        let count = images.shape[0];
+        let image_len = images.values.len() / count;
+        let mut anomaly = Vec::with_capacity(count * MAP_SIZE);
+        let mut teacher_student = Vec::with_capacity(count * MAP_SIZE);
+        let mut autoencoder = Vec::with_capacity(count * MAP_SIZE);
+        for start in (0..count).step_by(chunk) {
+            let end = (start + chunk).min(count);
+            let batch = Tensor::<4>::from_data(
+                BurnData::new(
+                    images.values[start * image_len..end * image_len].to_vec(),
+                    [end - start, self.architecture.input, 256, 256],
+                ),
+                &self.device,
+            );
+            let (st, ae) = self.model.maps(batch, &self.normalization);
+            let c = &self.calibration;
+            let st = (st - c.teacher_student_low)
+                * (0.1 / (c.teacher_student_high - c.teacher_student_low).max(1e-6));
+            let ae = (ae - c.autoencoder_low)
+                * (0.1 / (c.autoencoder_high - c.autoencoder_low).max(1e-6));
+            let combined = (st.clone() + ae.clone()) * 0.5;
+            anomaly.extend(to_data(display(combined))?.values);
+            teacher_student.extend(to_data(display(st))?.values);
+            autoencoder.extend(to_data(display(ae))?.values);
+        }
+        let scores = anomaly
+            .chunks_exact(MAP_SIZE)
             .map(|x| x.iter().copied().fold(f32::NEG_INFINITY, f32::max))
             .collect();
+        let shape = vec![count, 1, 256, 256];
         Ok(EfficientAdPrediction {
-            anomaly_maps,
-            teacher_student_maps: to_data(display(st))?,
-            autoencoder_maps: to_data(display(ae))?,
+            anomaly_maps: TensorData {
+                shape: shape.clone(),
+                values: anomaly,
+            },
+            teacher_student_maps: TensorData {
+                shape: shape.clone(),
+                values: teacher_student,
+            },
+            autoencoder_maps: TensorData {
+                shape,
+                values: autoencoder,
+            },
             scores,
         })
     }
 }
+fn display(map: Tensor<4>) -> Tensor<4> {
+    resize(map.pad([(0, 0), (0, 0), (4, 4), (4, 4)], 0.0), 256)
+}
 fn to_data<const D: usize>(tensor: Tensor<D>) -> Result<TensorData> {
     let shape = tensor.dims().to_vec();
-    let values = tensor.into_data().try_to_vec::<f32>().map_err(record)?;
+    let values = read(tensor)?;
     let data = TensorData { shape, values };
     data.validate()?;
     Ok(data)
@@ -1023,6 +1087,14 @@ mod tests {
             report.final_loss < report.initial_loss,
             "Anomaly loss should decrease: {report:?}"
         );
+        let only_current_checkpoint = |dir: &Path| {
+            assert_eq!(
+                crate::tests::checkpoint_directories(dir, "checkpoint-"),
+                vec![read_state(dir).unwrap().checkpoint],
+                "Superseded checkpoints must be removed"
+            );
+        };
+        only_current_checkpoint(full.path());
         let first = EfficientAdPredictor::load(full.path(), BackendChoice::Cpu).unwrap();
         let trained_student = to_data(first.model.student.convolutions[3].weight.val()).unwrap();
         let branch_width = trained_student.values.len() / 2;
@@ -1086,6 +1158,7 @@ mod tests {
                 }
             });
         assert!(matches!(result, Err(Error::Cancelled)));
+        only_current_checkpoint(partial.path());
         assert!(
             EfficientAdPredictor::load(partial.path(), BackendChoice::Cpu).is_err(),
             "Uncalibrated checkpoint must not be deployed"
@@ -1109,6 +1182,7 @@ mod tests {
             resumed.final_loss,
             report.final_loss
         );
+        only_current_checkpoint(partial.path());
         let resumed_predictor =
             EfficientAdPredictor::load(partial.path(), BackendChoice::Cpu).unwrap();
         let layers = |model: &EfficientAdModel| {
@@ -1160,6 +1234,89 @@ mod tests {
             )
             .is_err()
         );
+    }
+    #[test]
+    fn efficient_ad_predicts_large_requests_in_chunks_with_identical_maps() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let (config, _, _) = fixture();
+        let architecture = Architecture::from(&config);
+        let device = Device::flex();
+        device.seed(config.seed);
+        let mut model = EfficientAdModel::new(&architecture, &device);
+        model.teacher.import(&config.teacher, &device);
+        crate::execution::materialize(&model).unwrap();
+        let predictor = EfficientAdPredictor {
+            model: model.valid(),
+            device,
+            normalization: Normalization {
+                mean: vec![0.0; architecture.features],
+                std: vec![1.0; architecture.features],
+            },
+            calibration: EfficientAdCalibration {
+                teacher_student_low: 0.0,
+                teacher_student_high: 1.0,
+                autoencoder_low: 0.0,
+                autoencoder_high: 2.0,
+            },
+            architecture,
+            backend: BackendChoice::Cpu,
+        };
+        let images = TensorData {
+            shape: vec![3, 1, 256, 256],
+            values: (0..3 * MAP_SIZE)
+                .map(|i| ((i % 251) as f32 * 0.01).sin() + (i / MAP_SIZE) as f32 * 0.1)
+                .collect(),
+        };
+        let whole = predictor.predict_in_chunks(&images, 3).unwrap();
+        let chunked = predictor.predict_in_chunks(&images, 2).unwrap();
+        for (expected, actual) in [
+            (&whole.anomaly_maps, &chunked.anomaly_maps),
+            (&whole.teacher_student_maps, &chunked.teacher_student_maps),
+            (&whole.autoencoder_maps, &chunked.autoencoder_maps),
+        ] {
+            assert_eq!(expected.shape, vec![3, 1, 256, 256]);
+            assert_eq!(actual.shape, expected.shape);
+            let error = expected
+                .values
+                .iter()
+                .zip(&actual.values)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+            assert!(error < 1e-5, "Chunked maps differ by {error}");
+        }
+        assert_eq!(chunked.scores.len(), 3);
+        for (expected, actual) in whole.scores.iter().zip(&chunked.scores) {
+            assert!((expected - actual).abs() < 1e-5);
+        }
+        let canonical = Architecture {
+            input: 3,
+            width: 128,
+            features: 384,
+            autoencoder_width: 64,
+        };
+        assert!(
+            (1..=4).contains(&canonical.inference_chunk()),
+            "Canonical PDN needs about 100 MB of activations per image"
+        );
+    }
+    #[test]
+    fn one_image_of_the_largest_loadable_architecture_fits_the_inference_workspace() {
+        // read_state's upper bounds. Runtime admission charges the workspace once per request,
+        // so even a chunk of one image must stay within it.
+        let largest = Architecture {
+            input: 16,
+            width: 256,
+            features: 1024,
+            autoencoder_width: 256,
+        };
+        let image = largest.inference_bytes_per_image() as u64;
+        assert!(
+            image <= EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES,
+            "one image needs {image} bytes"
+        );
+        assert_eq!(largest.inference_chunk(), 1);
     }
     #[test]
     fn efficient_ad_rejects_incompatible_teacher_and_image_shapes() {

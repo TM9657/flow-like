@@ -520,6 +520,8 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         crate::routes::app::data::list_files::list_user_files,
         crate::routes::app::data::delete_files::delete_files,
         crate::routes::app::data::delete_files::delete_user_files,
+        crate::routes::app::data::rename_files::rename_file,
+        crate::routes::app::data::rename_files::rename_user_file,
         crate::routes::app::data::presign_data_access::presign_data_access,
         crate::routes::app::data::presign_data_access::presign_user_data_access,
         // Realtime board routes
@@ -549,6 +551,7 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         crate::routes::app::db::get_indices::get_db_indices,
         crate::routes::app::db::add_column::add_column,
         crate::routes::app::db::alter_column::alter_column,
+        crate::routes::app::db::set_column_metadata::set_column_metadata,
         crate::routes::app::db::set_primary_key::set_primary_key,
         crate::routes::app::db::drop_columns::drop_columns,
         crate::routes::app::db::build_index::build_index,
@@ -626,6 +629,7 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         crate::routes::registry::widget_policy::describe_widget_runtime_policy,
         crate::routes::registry::widget_policy::mint_widget_grant,
         crate::routes::registry::widget_access::mint_widget_access,
+        crate::routes::registry::widget_bundle::get_widget_bundle,
         // Bit routes
         crate::routes::bit::get_bit::get_bit,
         crate::routes::bit::get_with_dependencies::get_with_dependencies,
@@ -876,6 +880,7 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         crate::routes::app::graph::import_read::ImportQueryPayload,
         crate::routes::app::db::add_column::AddColumnPayload,
         crate::routes::app::db::alter_column::AlterColumnPayload,
+        crate::routes::app::db::set_column_metadata::ColumnMetadataPayload,
         crate::routes::app::db::set_primary_key::SetPrimaryKeyPayload,
         crate::routes::app::db::build_index::BuildIndexPayload,
         crate::routes::app::db::build_index::IndexType,
@@ -1213,6 +1218,7 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         crate::routes::registry::widget_policy::WidgetGrantResponse,
         crate::routes::registry::widget_access::WidgetAccessRequest,
         crate::routes::registry::widget_access::WidgetAccessResponse,
+        crate::routes::registry::widget_bundle::WidgetBundleResponse,
         // Realtime
         crate::routes::app::board::realtime::RealtimeParams,
         crate::realtime_ice::RealtimeIceServer,
@@ -1221,6 +1227,7 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         crate::routes::app::data::download_files::DownloadFilesPayload,
         crate::routes::app::data::list_files::ListFilesPayload,
         crate::routes::app::data::delete_files::DeleteFilesPayload,
+        crate::routes::app::data::rename_files::RenameFilePayload,
         // University
         crate::routes::user::lookup::UserLookupResponse,
         crate::routes::user::lookup::UserBatchLookupBody,

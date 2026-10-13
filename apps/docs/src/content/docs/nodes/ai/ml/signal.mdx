@@ -1,0 +1,30 @@
+---
+title: "Signal Node Catalog"
+description: "AI/ML/Signal Flow-Like node category with 5 generated node references."
+sidebar:
+  order: 0
+  label: "Signal"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "Signal nodes, AI/ML/Signal, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "AI/ML/Signal"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"Signal Node Catalog\",\"description\":\"AI/ML/Signal Flow-Like node category with 5 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/ai/ml/signal/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"AI/ML/Signal\",\"keywords\":\"Signal nodes, AI/ML/Signal, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"AI/ML/Signal"}
+	label="Signal"
+	nodes={nodesByCategory["AI/ML/Signal"] ?? []}
+	client:load
+/>

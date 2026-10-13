@@ -15,7 +15,8 @@ use crate::{
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
     routes::app::db::{
-        ScopeParams, resolve_connection, resolve_write_connection, validate_table_name,
+        ScopeParams, column_reader, resolve_connection, resolve_write_connection,
+        validate_table_name,
     },
     state::AppState,
 };
@@ -178,7 +179,7 @@ pub async fn compare(
     Query(selector): Query<DatabaseSelector>,
     Json(payload): Json<ComparePayload>,
 ) -> Result<Json<DatabaseDiff>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -194,14 +195,18 @@ pub async fn compare(
         .validate()
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
     let connection = resolve_connection(&state, &user, &app_id, &scope).await?;
+    let reader = column_reader(&permission, &scope);
     let source = LanceDBVectorStore::from_connection_with_selector(
         connection.clone(),
         table.clone(),
         selector,
     )
-    .await?;
+    .await?
+    .with_column_reader(reader.clone());
     let target =
-        LanceDBVectorStore::from_connection_with_selector(connection, table, payload.other).await?;
+        LanceDBVectorStore::from_connection_with_selector(connection, table, payload.other)
+            .await?
+            .with_column_reader(reader);
     Ok(Json(
         source
             .compare(

@@ -3,11 +3,12 @@
 import { useTranslation } from "@flow-like/locales";
 import { AlertTriangle, ArrowLeft, Database, RefreshCw } from "lucide-react";
 import type React from "react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAppPermissions } from "../../../hooks/use-app-permissions";
 import { useInvalidateInvoke, useInvoke } from "../../../hooks/use-invoke";
 import { cn } from "../../../lib";
+import type { IColumnMetadata } from "../../../lib/column-metadata";
 import { getErrorMessage } from "../../../lib/error-message";
 import { RolePermissions } from "../../../lib/permission/role-permission";
 import { asArray } from "../../../lib/response-shape";
@@ -17,6 +18,7 @@ import {
 	type IDatabaseSelector,
 	parseIndexType,
 } from "../../../state/backend-state/db-state";
+import type { IBackendRole } from "../../../state/backend-state/types";
 import { Button } from "../../ui/button";
 import LanceDBExplorer, { LanceTableHeading } from "../../ui/lance-viewer";
 import {
@@ -192,6 +194,12 @@ function TableInspectorData({
 	const canRead = permissions.can(...READ_DATA);
 	const canWrite =
 		permissions.can(...WRITE_DATA) && !isDatabaseSnapshot(selector);
+	// `can` degrades open for a local app's or an unknown role; the API still enforces Admin.
+	const canManageColumnAccess = permissions.can(RolePermissions.Admin);
+	const knownAttributes = useRoleAttributes(
+		appId,
+		Boolean(appId) && canWrite && canManageColumnAccess,
+	);
 
 	const [deleteOperation, setDeleteOperation] =
 		useState<DatabaseDeleteOperation | null>(null);
@@ -422,6 +430,38 @@ function TableInspectorData({
 		[backend.dbState, appId, table, userScoped, selector, handleRefresh, t],
 	);
 
+	const handleSetColumnMetadata = useCallback(
+		async (column: string, metadata: IColumnMetadata) => {
+			try {
+				const saved = await backend.dbState.setColumnMetadata(
+					appId,
+					table,
+					column,
+					metadata,
+					userScoped,
+					selector,
+				);
+				toast.success(
+					t("columnMetadataSavedMessage", 'Saved the details of "{{name}}"', {
+						name: column,
+					}),
+				);
+				handleRefresh();
+				return saved;
+			} catch (err) {
+				toast.error(
+					t(
+						"columnMetadataFailedMessage",
+						"Saving column details failed: {{message}}",
+						{ message: getErrorMessage(err) },
+					),
+				);
+				throw err;
+			}
+		},
+		[backend.dbState, appId, table, userScoped, selector, handleRefresh, t],
+	);
+
 	const handleGetIndices = useCallback(
 		async () => backend.dbState.getIndices(appId, table, userScoped, selector),
 		[backend.dbState, appId, table, userScoped, selector],
@@ -604,6 +644,9 @@ function TableInspectorData({
 				onAddColumn={canWrite ? handleAddColumn : undefined}
 				onAlterColumn={canWrite ? handleAlterColumn : undefined}
 				onSetPrimaryKey={canWrite ? handleSetPrimaryKey : undefined}
+				onSetColumnMetadata={canWrite ? handleSetColumnMetadata : undefined}
+				canManageColumnAccess={canManageColumnAccess}
+				knownAttributes={knownAttributes}
 				onGetIndices={handleGetIndices}
 				onDropIndex={canWrite ? handleDropIndex : undefined}
 				onBuildIndex={canWrite ? handleBuildIndex : undefined}
@@ -623,6 +666,24 @@ function TableInspectorData({
 			</LanceDBExplorer>
 		</div>
 	);
+}
+
+const roleAttributes = (role: IBackendRole) => role.attributes ?? [];
+
+/** The attributes the app's roles hold, sorted; undefined while the roles are unknown. */
+function useRoleAttributes(appId: string, enabled: boolean) {
+	const backend = useBackend();
+	const roles = useInvoke(
+		backend.roleState.getRoles,
+		backend.roleState,
+		[appId],
+		enabled,
+	);
+	return useMemo(() => {
+		if (!roles.data) return undefined;
+		const attributes = asArray(roles.data[1]).flatMap(roleAttributes);
+		return [...new Set(attributes)].toSorted();
+	}, [roles.data]);
 }
 
 const LOADING_COLUMN_KEYS = ["one", "two", "three", "four", "five"];

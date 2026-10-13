@@ -19,6 +19,7 @@ vi.mock(
 	() => ({ forgetMicroWidgetGrants: vi.fn() }),
 );
 
+import type * as MicroWidgetGrant from "@flow-like/flow-like-ui/components/a2ui/use-micro-widget-grant";
 import { RegistryState } from "../../components/tauri-provider/registry-state";
 import { ApiResponseError } from "../api-error";
 import {
@@ -74,6 +75,15 @@ function backend({
 	};
 }
 
+const noBundleRoute = { error: "Failed to fetch widget bundle: 404 Not Found" };
+
+/** A hub that predates the widget-bundle route, unless a test answers the fetch itself. */
+const olderHub: Record<string, (call: number, args: unknown) => unknown> = {
+	registry_cache_widget_bundle: () => {
+		throw noBundleRoute;
+	},
+};
+
 /** Answers native commands from a table; a function value sees its call count. */
 function nativeCommands(
 	answers: Record<string, (call: number, args: unknown) => unknown>,
@@ -82,7 +92,7 @@ function nativeCommands(
 	mocks.invoke.mockImplementation(async (command: string, args: unknown) => {
 		const call = (calls.get(command) ?? 0) + 1;
 		calls.set(command, call);
-		const answer = answers[command];
+		const answer = answers[command] ?? olderHub[command];
 		return answer ? answer(call, args) : undefined;
 	});
 }
@@ -149,6 +159,29 @@ const installUnavailable = (detail: string) => ({
 	code: "widget_bundle_unavailable",
 	message: `Could not install ${PACKAGE}@${PINNED}: ${detail}`,
 });
+const notFetched = (detail = noBundleRoute.error) => ({
+	code: "widget_bundle_unavailable",
+	message: `${notInstalled.error}, and loading it from the hub failed: ${detail}`,
+});
+const bundleFetches = () => callsOf("registry_cache_widget_bundle");
+const bundleFetchArgs = (appId: string, version = PINNED, token = "token") => [
+	"registry_cache_widget_bundle",
+	{ packageId: PACKAGE, version, bundleHash: HASH, token, appId },
+];
+
+/** The bundle is missing until the hub handed it out by its hash. */
+function bundleFollowsFetches() {
+	let bundle = false;
+	return {
+		registry_cache_widget_bundle: () => {
+			bundle = true;
+		},
+		registry_describe_widget_policy: () => {
+			if (!bundle) throw notInstalled;
+			return descriptor;
+		},
+	};
+}
 
 async function bootstrappingBackend(localOnly = false) {
 	const { TauriBackend } = await import("../../components/tauri-provider");
@@ -706,18 +739,20 @@ describe("desktop project pin of a member who cannot list the pins", () => {
 		expect(describes()).toHaveLength(2);
 	});
 
-	test("a widget of another version than the hub names keeps the original error", async () => {
+	test("a widget of another version than the hub names installs nothing when the hub cannot hand out its bundle", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
 		nativeCommands(bundleFollowsInstalls());
 		mocks.fetcher.mockResolvedValue(hubEntry("1.3.0"));
 		const state = new RegistryState(backend({ pins: {} }) as never);
 		await expect(
 			state.describeWidgetPolicy({ ...request, appId: nextProject() }),
-		).rejects.toMatchObject(bundleUnavailable);
+		).rejects.toMatchObject(notFetched());
 		expect(installs()).toEqual([]);
 		expect(describes()).toHaveLength(1);
 	});
 
 	test("the manifest version of an entry that names no pin is never the pin", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
 		nativeCommands({
 			...bundleFollowsInstalls(),
 			registry_get_package: () => installed("1.0.0"),
@@ -733,7 +768,7 @@ describe("desktop project pin of a member who cannot list the pins", () => {
 		);
 		await expect(
 			state.describeWidgetPolicy({ ...request, appId }),
-		).rejects.toMatchObject(bundleUnavailable);
+		).rejects.toMatchObject(notFetched());
 		expect(installs()).toEqual([]);
 	});
 
@@ -1018,9 +1053,7 @@ describe("desktop widget describe for a missing bundle", () => {
 		"a mounted package widget waits for desktop bootstrap (%s)",
 		async (order) => {
 			const { MicroWidgetGrantController } = await vi.importActual<
-				typeof import(
-					"@flow-like/flow-like-ui/components/a2ui/use-micro-widget-grant"
-				)
+				typeof MicroWidgetGrant
 			>("@flow-like/flow-like-ui/components/a2ui/use-micro-widget-grant");
 			nativeCommands(bundleFollowsInstalls());
 			const host = await bootstrappingBackend();
@@ -1133,7 +1166,8 @@ describe("desktop widget describe for a missing bundle", () => {
 		expect(mocks.fetcher).not.toHaveBeenCalled();
 	});
 
-	test("a widget placed with another version than the listed pin and the hub's keeps the original error", async () => {
+	test("a widget placed with another version than the listed pin and the hub's installs nothing", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
 		nativeCommands({
 			registry_describe_widget_policy: () => {
 				throw notInstalled;
@@ -1145,7 +1179,7 @@ describe("desktop widget describe for a missing bundle", () => {
 		);
 		await expect(
 			state.describeWidgetPolicy({ ...request, appId: nextProject() }),
-		).rejects.toMatchObject(bundleUnavailable);
+		).rejects.toMatchObject(notFetched());
 		expect(installs()).toEqual([]);
 		expect(describes()).toHaveLength(1);
 		expect(mocks.fetcher).toHaveBeenCalledTimes(1);
@@ -1236,9 +1270,7 @@ describe("desktop widget describe for a missing bundle", () => {
 	test("a refused package install gives the mounted widget its error without a fallback frame", async () => {
 		vi.spyOn(console, "warn").mockImplementation(() => {});
 		const { MicroWidgetGrantController } = await vi.importActual<
-			typeof import(
-				"@flow-like/flow-like-ui/components/a2ui/use-micro-widget-grant"
-			)
+			typeof MicroWidgetGrant
 		>("@flow-like/flow-like-ui/components/a2ui/use-micro-widget-grant");
 		nativeCommands({
 			registry_describe_widget_policy: () => {
@@ -1318,5 +1350,116 @@ describe("desktop widget describe for a missing bundle", () => {
 		).rejects.toMatchObject(bundleUnavailable);
 		expect(installs()).toHaveLength(1);
 		expect(describes()).toHaveLength(2);
+	});
+});
+
+describe("desktop widget bundles the hub hands out", () => {
+	test("a widget placed with a version older than the pin is fetched by its hash, nothing installed", async () => {
+		nativeCommands(bundleFollowsFetches());
+		const state = new RegistryState(
+			backend({ pins: { [PACKAGE]: "1.3.0" } }) as never,
+		);
+		const appId = nextProject();
+		await expect(
+			state.describeWidgetPolicy({ ...request, appId }),
+		).resolves.toMatchObject({ policyDigest: DIGEST, status: "ok" });
+		expect(bundleFetches()).toEqual([bundleFetchArgs(appId)]);
+		expect(installs()).toEqual([]);
+		expect(describes()).toHaveLength(2);
+		expect(mocks.fetcher).not.toHaveBeenCalled();
+	});
+
+	test("a widget of the pinned version is fetched instead of installing the package", async () => {
+		nativeCommands(bundleFollowsFetches());
+		const state = new RegistryState(backend() as never);
+		const appId = nextProject();
+		await expect(
+			state.describeWidgetPolicy({ ...request, appId }),
+		).resolves.toMatchObject({ status: "ok" });
+		expect(installs()).toEqual([]);
+	});
+
+	test("the widgets of one page fetch their bundle once", async () => {
+		nativeCommands(bundleFollowsFetches());
+		const state = new RegistryState(backend() as never);
+		const appId = nextProject();
+		await Promise.all(
+			Array.from({ length: 3 }, () =>
+				state.describeWidgetPolicy({ ...request, appId }),
+			),
+		);
+		expect(bundleFetches()).toEqual([bundleFetchArgs(appId)]);
+	});
+
+	test("a refused fetch of an unpinned version reports both failures and is not repeated with the same session", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+		const refused = {
+			error: "Failed to fetch widget bundle: 403 Forbidden: Forbidden",
+		};
+		nativeCommands({
+			registry_describe_widget_policy: () => {
+				throw notInstalled;
+			},
+			registry_cache_widget_bundle: () => {
+				throw refused;
+			},
+		});
+		const host = backend({ pins: { [PACKAGE]: "1.3.0" } });
+		const state = new RegistryState(host as never);
+		const appId = nextProject();
+		for (let attempt = 0; attempt < 2; attempt++) {
+			await expect(
+				state.describeWidgetPolicy({ ...request, appId }),
+			).rejects.toMatchObject(notFetched(refused.error));
+		}
+		expect(bundleFetches()).toHaveLength(1);
+		expect(installs()).toEqual([]);
+
+		host.auth = { isAuthenticated: true, user: { access_token: "renewed" } };
+		await expect(
+			state.describeWidgetPolicy({ ...request, appId }),
+		).rejects.toMatchObject(notFetched(refused.error));
+		expect(bundleFetches()).toEqual([
+			bundleFetchArgs(appId),
+			bundleFetchArgs(appId, PINNED, "renewed"),
+		]);
+	});
+
+	test("a fetch that failed in transit is tried again five seconds later", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => {});
+		const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+		const bundle = bundleFollowsFetches();
+		nativeCommands({
+			...bundle,
+			registry_cache_widget_bundle: (call) => {
+				if (call === 1) throw { error: "error sending request" };
+				bundle.registry_cache_widget_bundle();
+			},
+		});
+		const state = new RegistryState(
+			backend({ pins: { [PACKAGE]: "1.3.0" } }) as never,
+		);
+		const appId = nextProject();
+		await expect(
+			state.describeWidgetPolicy({ ...request, appId }),
+		).rejects.toMatchObject(notFetched("error sending request"));
+		now.mockReturnValue(1_000_000 + 5_000);
+		await expect(
+			state.describeWidgetPolicy({ ...request, appId }),
+		).resolves.toMatchObject({ status: "ok" });
+		expect(bundleFetches()).toHaveLength(2);
+	});
+
+	test("offline projects and signed-out sessions ask the hub for nothing", async () => {
+		nativeCommands(bundleFollowsFetches());
+		const offline = new RegistryState(backend({ offline: true }) as never);
+		await expect(
+			offline.describeWidgetPolicy({ ...request, appId: nextProject() }),
+		).rejects.toMatchObject(bundleUnavailable);
+		const signedOut = new RegistryState(backend({ auth: SIGNED_OUT }) as never);
+		await expect(
+			signedOut.describeWidgetPolicy({ ...request, appId: nextProject() }),
+		).rejects.toMatchObject(bundleUnavailable);
+		expect(bundleFetches()).toEqual([]);
 	});
 });

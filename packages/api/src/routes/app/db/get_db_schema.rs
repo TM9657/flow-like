@@ -3,7 +3,7 @@ use crate::{
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
-    routes::app::db::{ScopeParams, resolve_connection, validate_table_name},
+    routes::app::db::{ScopeParams, column_reader, resolve_connection, validate_table_name},
     state::AppState,
 };
 use axum::{
@@ -47,7 +47,7 @@ pub async fn get_db_schema(
     Query(scope): Query<ScopeParams>,
     Query(selector): Query<DatabaseSelector>,
 ) -> Result<Json<Schema>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -60,7 +60,9 @@ pub async fn get_db_schema(
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
 
     let connection = resolve_connection(&state, &user, &app_id, &scope).await?;
-    let db = LanceDBVectorStore::from_connection_with_selector(connection, table, selector).await?;
+    let db = LanceDBVectorStore::from_connection_with_selector(connection, table, selector)
+        .await?
+        .with_column_reader(column_reader(&permission, &scope));
 
     let schema = db.schema().await?;
 

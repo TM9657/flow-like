@@ -11,6 +11,7 @@ pub mod download_files;
 pub mod list_files;
 pub mod paths;
 pub mod presign_data_access;
+pub mod rename_files;
 pub mod upload_files;
 pub mod upload_policy;
 
@@ -31,6 +32,8 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/download", post(download_files::download_files))
         .route("/user/download", post(download_files::download_user_files))
+        .route("/rename", post(rename_files::rename_file))
+        .route("/user/rename", post(rename_files::rename_user_file))
         .route("/list", post(list_files::list_files))
         .route("/user/list", post(list_files::list_user_files))
 }

@@ -7,16 +7,18 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
 };
 use flow_like_catalog_core::NodeDBConnection;
-#[cfg(feature = "execute")]
-use flow_like_ml_native::feature_engineering::FeatureStep;
 use flow_like_ml_native::{
-    feature_engineering::{FeatureLimits, FeaturePipeline, FeaturePolicy},
+    feature_engineering::{FeatureLimits, FeaturePipeline, FeaturePolicy, FeatureStep},
     preprocessing::Imputation,
 };
 use flow_like_types::{Result, Value, anyhow};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashSet},
+    sync::Arc,
+    time::Instant,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct FeaturePlan {
@@ -140,6 +142,28 @@ fn policy(request: &TableDatasetRequest, sources: &[PinnedFeatureSource]) -> Res
     })
 }
 
+/// Upper bounds of the native window state limits.
+const MAXIMUM_WINDOW_GROUPS: usize = 100_000;
+const MAXIMUM_WINDOW_HISTORY_ROWS: usize = 1_000_000;
+
+/// One duration budget for fitting a feature plan and transforming every row with it.
+struct PreparationDeadline {
+    started: Instant,
+    budget_ms: u64,
+}
+impl PreparationDeadline {
+    fn remaining_ms(&self) -> Result<u64> {
+        let elapsed = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        match self.budget_ms.checked_sub(elapsed) {
+            Some(remaining) if remaining > 0 => Ok(remaining),
+            _ => Err(anyhow!(
+                "Feature preparation exceeded its {} ms duration budget",
+                self.budget_ms
+            )),
+        }
+    }
+}
+
 pub fn prepare_feature_rows(
     source: PinnedTableSource,
     request: &TableDatasetRequest,
@@ -148,11 +172,84 @@ pub fn prepare_feature_rows(
     sources: Vec<PinnedFeatureSource>,
     side_rows: &BTreeMap<String, Vec<Value>>,
 ) -> Result<PreparedTableDataset> {
+    prepare_feature_rows_owned(source, request, rows.to_vec(), plan, sources, side_rows)
+}
+
+/// `prepare_feature_rows` for rows the caller hands over. Window features read feature
+/// values only, so one causal pass over every row in time order gives each partition the
+/// history that serving sees; fitted statistics still come from training rows alone.
+pub fn prepare_feature_rows_owned(
+    source: PinnedTableSource,
+    request: &TableDatasetRequest,
+    rows: Vec<Value>,
+    plan: &FeaturePlan,
+    sources: Vec<PinnedFeatureSource>,
+    side_rows: &BTreeMap<String, Vec<Value>>,
+) -> Result<PreparedTableDataset> {
+    prepare_feature_rows_within(
+        Instant::now(),
+        source,
+        request,
+        rows,
+        plan,
+        sources,
+        side_rows,
+    )
+}
+
+/// Side rows whose as-of clock columns are converted to epoch milliseconds, or `None` when no
+/// side source stores them in another unit.
+fn side_rows_in_milliseconds(
+    pipeline: &FeaturePipeline,
+    sources: &[PinnedFeatureSource],
+    side_rows: &BTreeMap<String, Vec<Value>>,
+) -> Result<Option<BTreeMap<String, Vec<Value>>>> {
+    let mut converted: Option<BTreeMap<String, Vec<Value>>> = None;
+    for source in sources {
+        let units = super::auto_training_tables::side_time_units(
+            pipeline,
+            &source.alias,
+            &source.source.temporal_units,
+        );
+        let Some(rows) = side_rows.get(&source.alias).filter(|_| !units.is_empty()) else {
+            continue;
+        };
+        let rows = rows
+            .iter()
+            .map(|row| super::auto_training_tables::row_in_milliseconds(row, &units))
+            .collect::<Result<Vec<_>>>()?;
+        converted
+            .get_or_insert_with(|| side_rows.clone())
+            .insert(source.alias.clone(), rows);
+    }
+    Ok(converted)
+}
+
+/// The preparation, with its duration budget counted from `started`, so fitting the plan and
+/// transforming every row share it.
+pub(crate) fn prepare_feature_rows_within(
+    started: Instant,
+    source: PinnedTableSource,
+    request: &TableDatasetRequest,
+    rows: Vec<Value>,
+    plan: &FeaturePlan,
+    sources: Vec<PinnedFeatureSource>,
+    side_rows: &BTreeMap<String, Vec<Value>>,
+) -> Result<PreparedTableDataset> {
     let policy = policy(request, &sources)?;
     let mut limits = plan.limits.clone();
     limits.maximum_rows = limits.maximum_rows.min(request.budget.maximum_rows);
     limits.maximum_bytes = limits.maximum_bytes.min(request.budget.maximum_bytes);
-    let fitted = plan.pipeline.fit(side_rows, &policy, &limits)?;
+    let deadline = PreparationDeadline {
+        started,
+        budget_ms: limits.maximum_duration_ms,
+    };
+    let converted_sides = side_rows_in_milliseconds(&plan.pipeline, &sources, side_rows)?;
+    let mut fitted = plan.pipeline.fit(
+        converted_sides.as_ref().unwrap_or(side_rows),
+        &policy,
+        &limits,
+    )?;
     let generated = plan.pipeline.generated_columns();
     let allowed: HashSet<_> = policy
         .allowed_input_columns
@@ -173,31 +270,34 @@ pub fn prepare_feature_rows(
     bounded_request.budget.maximum_rows = limits.maximum_rows;
     bounded_request.budget.maximum_bytes = limits.maximum_bytes;
     let original =
-        super::auto_training_tables::prepare_identity_rows(&source, &bounded_request, rows)?;
-    let mut transformed = rows.to_vec();
-    // Reset causal history at partition boundaries; held-out values cannot enter training.
-    for indices in [
-        &original.split.train,
-        &original.split.validation,
-        &original.split.test,
-    ] {
-        let input: Vec<_> = indices.iter().map(|index| rows[*index].clone()).collect();
-        let output = fitted.transform_rows(&input)?;
-        if output.len() != indices.len() {
-            return Err(anyhow!("Feature pipeline changed row membership"));
-        }
-        for (index, row) in indices.iter().zip(output) {
-            transformed[*index] = row;
-        }
+        super::auto_training_tables::prepare_identity_rows(&source, &bounded_request, &rows)?;
+    let temporal_units =
+        super::auto_training_tables::pipeline_time_units(&plan.pipeline, &source.temporal_units);
+    let configured = fitted.limits.clone();
+    // The single causal pass holds the history of every window group in the table at once,
+    // so the table bounds groups and history here; maximum_bytes still caps the state.
+    let window_steps = plan
+        .pipeline
+        .steps
+        .iter()
+        .filter(|step| matches!(step, FeatureStep::WindowFeatures { .. }))
+        .count();
+    let table_state = window_steps.saturating_mul(rows.len());
+    fitted.limits.maximum_groups = configured
+        .maximum_groups
+        .max(table_state.min(MAXIMUM_WINDOW_GROUPS));
+    fitted.limits.maximum_history_rows = configured
+        .maximum_history_rows
+        .max(table_state.min(MAXIMUM_WINDOW_HISTORY_ROWS));
+    fitted.limits.maximum_duration_ms = deadline.remaining_ms()?;
+    let transformed =
+        super::auto_training_tables::transform_feature_rows(&fitted, &rows, &temporal_units, true);
+    fitted.limits = configured;
+    let transformed = transformed?;
+    if transformed.len() != rows.len() {
+        return Err(anyhow!("Feature pipeline changed row membership"));
     }
-    for index in &original.split.purged {
-        let row = transformed[*index]
-            .as_object_mut()
-            .ok_or_else(|| anyhow!("Feature rows must be objects"))?;
-        for column in &generated {
-            row.entry(column.clone()).or_insert(Value::Null);
-        }
-    }
+    deadline.remaining_ms()?;
     let mut prepared_request = bounded_request;
     let FeatureSource::Tabular { options } = &mut prepared_request.mapping.features else {
         unreachable!()
@@ -207,9 +307,21 @@ pub fn prepare_feature_rows(
     options.standardize = plan.standardize;
     options.imputation = plan.imputation.clone();
     let mut prepared =
-        super::auto_training_tables::prepare_rows(source, &prepared_request, &transformed)?;
+        super::auto_training_tables::prepare_rows_owned(source, &prepared_request, transformed)?;
     prepared.raw_content_digests = original.raw_content_digests;
-    prepared.raw_rows = rows.to_vec();
+    prepared.raw_rows = Arc::new(rows);
+    let profiled: BTreeSet<String> =
+        super::auto_training_tables::profiled_columns(&request.mapping)
+            .into_iter()
+            .chain(super::auto_training_tables::profiled_columns(
+                &prepared_request.mapping,
+            ))
+            .collect();
+    prepared.profile = super::auto_training_tables::profile_training_rows(
+        &prepared.rows,
+        &prepared.split.train,
+        &profiled.into_iter().collect::<Vec<_>>(),
+    )?;
     let projection = if let Some(components) = plan.pca_components {
         let inputs: Vec<_> = prepared
             .samples
@@ -223,10 +335,11 @@ pub fn prepare_feature_rows(
         )?;
         let projected =
             projection.transform_rows(&inputs, request.budget.maximum_tensor_elements)?;
+        let prepared_rows = Arc::make_mut(&mut prepared.rows);
         for ((sample, row), input) in prepared
             .samples
             .iter_mut()
-            .zip(&mut prepared.rows)
+            .zip(prepared_rows.iter_mut())
             .zip(projected)
         {
             for (component, value) in input.values.iter().enumerate() {
@@ -248,7 +361,7 @@ pub fn prepare_feature_rows(
         None
     };
     let mut output_bytes = 0usize;
-    for row in &prepared.rows {
+    for row in prepared.rows.iter() {
         if row.as_object().map_or(0, |row| row.len()) > limits.maximum_columns {
             return Err(anyhow!("Prepared features exceed the column budget"));
         }
@@ -264,6 +377,7 @@ pub fn prepare_feature_rows(
         preprocessing: Box::new(prepared.preprocessing),
         projection,
         plan: Some(Box::new(plan.clone())),
+        temporal_units,
     };
     prepared.feature_sources = sources;
     prepared.digest = flow_like_ml_core::content_digest(&flow_like_types::json::to_vec(&(
@@ -319,21 +433,22 @@ pub async fn prepare_pinned_feature_dataset(
     plan: &FeaturePlan,
     mut sources: Vec<PinnedFeatureSource>,
 ) -> Result<PreparedTableDataset> {
-    source.database = super::auto_training_tables::reopen_pinned_source(context, &source).await?;
-    let rows =
-        super::auto_training_tables::read_rows(context, &source, &request.budget, 512).await?;
+    use super::auto_training_tables::{
+        prepared_columns, read_columns, reopen_pinned_source, serialized_json_size,
+    };
+    source.database = reopen_pinned_source(context, &source).await?;
+    let columns = prepared_columns(&request.mapping);
+    let rows = read_columns(context, &source, &request.budget, &columns).await?;
     let mut side_rows = BTreeMap::new();
     let mut aggregate_bytes = 0usize;
     for side in &mut sources {
-        side.source.database =
-            super::auto_training_tables::reopen_pinned_source(context, &side.source).await?;
+        side.source.database = reopen_pinned_source(context, &side.source).await?;
         let mut budget = request.budget.clone();
         budget.maximum_rows = budget.maximum_rows.min(plan.limits.maximum_join_rows);
         budget.maximum_bytes = budget.maximum_bytes.min(plan.limits.maximum_bytes);
-        let rows =
-            super::auto_training_tables::read_rows(context, &side.source, &budget, 512).await?;
+        let rows = read_columns(context, &side.source, &budget, &side.allowed_columns).await?;
         aggregate_bytes = aggregate_bytes
-            .checked_add(flow_like_types::json::to_vec(&rows)?.len())
+            .checked_add(serialized_json_size(&rows)?)
             .ok_or_else(|| anyhow!("Side source byte count overflow"))?;
         if aggregate_bytes > plan.limits.maximum_bytes {
             return Err(anyhow!("Combined feature sources exceed the byte budget"));
@@ -342,7 +457,12 @@ pub async fn prepare_pinned_feature_dataset(
             return Err(anyhow!("Duplicate feature source alias"));
         }
     }
-    prepare_feature_rows(source, request, &rows, plan, sources, &side_rows)
+    let request = request.clone();
+    let plan = plan.clone();
+    tokio::task::spawn_blocking(move || {
+        prepare_feature_rows_owned(source, &request, rows, &plan, sources, &side_rows)
+    })
+    .await?
 }
 
 #[cfg(feature = "execute")]
@@ -426,13 +546,16 @@ macro_rules! feature_node {
         #[flow_like_types::async_trait]
         impl NodeLogic for $node {
             fn get_node(&self) -> Node {
-                super::operation_node::<FeatureTransformRequest, FeatureTransformResult>(
-                    $id,
-                    $name,
-                    "Create named feature columns in pinned derived tables",
-                    $function,
-                    "AI/ML/Feature Engineering",
-                )
+                let mut node =
+                    super::operation_node::<FeatureTransformRequest, FeatureTransformResult>(
+                        $id,
+                        $name,
+                        "Create named feature columns in pinned derived tables",
+                        $function,
+                        "AI/ML/Feature Engineering",
+                    );
+                node.set_version(1);
+                node
             }
             async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
                 #[cfg(feature = "execute")]
@@ -494,13 +617,15 @@ pub struct FitPreprocessingNode;
 #[flow_like_types::async_trait]
 impl NodeLogic for FitPreprocessingNode {
     fn get_node(&self) -> Node {
-        super::operation_node::<FitPreprocessingRequest, PreparedTableDataset>(
+        let mut node = super::operation_node::<FitPreprocessingRequest, PreparedTableDataset>(
             "ml_fit_preprocessing",
             "Fit Preprocessing",
             "Fit imputation, encoding and scaling on training rows",
             "fitPreprocessing",
             "AI/ML/Feature Engineering",
-        )
+        );
+        node.set_version(1);
+        node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         #[cfg(feature = "execute")]
@@ -530,13 +655,15 @@ pub struct MaterializeDatasetNode;
 #[flow_like_types::async_trait]
 impl NodeLogic for MaterializeDatasetNode {
     fn get_node(&self) -> Node {
-        super::operation_node::<MaterializeDatasetRequest, Vec<MaterializedTable>>(
+        let mut node = super::operation_node::<MaterializeDatasetRequest, Vec<MaterializedTable>>(
             "ml_materialize_dataset",
             "Materialize Dataset",
-            "Write prepared partitions with original and generated named columns",
+            "Write prepared partitions with their mapped source columns and generated named columns",
             "materializeDataset",
             "AI/ML/Feature Engineering",
-        )
+        );
+        node.set_version(1);
+        node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         #[cfg(feature = "execute")]
@@ -561,5 +688,34 @@ impl NodeLogic for MaterializeDatasetNode {
             let _ = context;
             Err(anyhow!("Feature materialization requires a native build"))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preparation_deadline_spans_fit_and_transform() {
+        let started = Instant::now()
+            .checked_sub(std::time::Duration::from_millis(50))
+            .unwrap();
+        let spent = PreparationDeadline {
+            started,
+            budget_ms: 40,
+        };
+        assert!(
+            spent
+                .remaining_ms()
+                .unwrap_err()
+                .to_string()
+                .contains("40 ms duration budget")
+        );
+        let open = PreparationDeadline {
+            started,
+            budget_ms: 60_000,
+        };
+        let remaining = open.remaining_ms().unwrap();
+        assert!(remaining <= 59_950 && remaining > 0);
     }
 }

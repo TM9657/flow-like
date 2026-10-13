@@ -7,8 +7,9 @@ MODE="${1:---all}"
 case "$MODE" in
   --all|--adapters) SERVICES=(nats redis rabbitmq redpanda modbus opcua mosquitto cip ads hart iolink-contract zenoh zenoh-peer sparkplug-peer) ;;
   --mqtt) SERVICES=(mosquitto) ;;
-  --devices) SERVICES=() ;;
-  *) echo "Usage: $0 [--all|--adapters|--mqtt|--devices]" >&2; exit 2 ;;
+  --security) SERVICES=(opcua) ;;
+  --devices|--pubsub) SERVICES=() ;;
+  *) echo "Usage: $0 [--all|--adapters|--mqtt|--devices|--pubsub|--security]" >&2; exit 2 ;;
 esac
 
 # Build native fixtures even when the active Buildx builder defaults to a remote
@@ -46,6 +47,18 @@ run_ignored_library_tests() {
   fi
   cargo test --locked -p "$package" --features execute --lib "$filter" -- --ignored --test-threads=1
 }
+if [[ "$MODE" == --security ]]; then
+  export INDUSTRIAL_OPCUA_ENDPOINT=opc.tcp://127.0.0.1:14840/flow-like/
+  export INDUSTRIAL_OPCUA_CERT_DIR="$TEST_DIR/opcua"
+  mkdir -p "$INDUSTRIAL_OPCUA_CERT_DIR"
+  "${COMPOSE[@]}" cp opcua:/fixture-pki/. "$INDUSTRIAL_OPCUA_CERT_DIR"
+  cargo test --locked -p flow-like-industrial --no-default-features --features opcua --test opcua_e2e -- --ignored --list > "$TEST_DIR/opcua_e2e.txt"
+  if ! grep -q ': test$' "$TEST_DIR/opcua_e2e.txt"; then
+    echo "No ignored OPC UA security tests found" >&2
+    exit 1
+  fi
+  cargo test --locked -p flow-like-industrial --no-default-features --features opcua --test opcua_e2e -- --ignored --test-threads=1
+fi
 if [[ "$MODE" == --all || "$MODE" == --adapters ]]; then
   export FLOW_LIKE_NATS_URL=nats://127.0.0.1:18422
   export FLOW_LIKE_REDIS_URL=redis://127.0.0.1:16379
@@ -89,4 +102,9 @@ if [[ "$MODE" == --all || "$MODE" == --devices ]]; then
   "${COMPOSE[@]}" run --build --rm iroh
   "${COMPOSE[@]}" run --build --rm ethercat
   "${COMPOSE[@]}" run --build --rm modbus-rtu
+fi
+if [[ "$MODE" == --all || "$MODE" == --devices || "$MODE" == --pubsub || "$MODE" == --security ]]; then
+  # Keep discovery and UDP traffic with the independent peer inside Linux.
+  "${COMPOSE[@]}" run --build --rm opcua-pubsub
+  "${COMPOSE[@]}" run --build --rm dds
 fi

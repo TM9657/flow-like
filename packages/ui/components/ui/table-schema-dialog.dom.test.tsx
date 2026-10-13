@@ -1,21 +1,43 @@
 import { afterAll, afterEach, expect, mock, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
+import type { IColumnMetadata } from "../../lib/column-metadata";
 import type {
 	IAddColumnPayload,
 	IIndexConfig,
 } from "../../state/backend-state/db-state";
 import type { LanceSchema } from "./lance-viewer";
 
+class InertObserver {
+	observe() {}
+	unobserve() {}
+	disconnect() {}
+	takeRecords() {
+		return [];
+	}
+}
+
 const window = new Window({ url: "https://localhost" });
 Object.assign(window, { SyntaxError, TypeError, Error });
+// Radix Select scrolls and captures pointers on elements; happy-dom lacks both.
+const elementProto = window.Element.prototype as unknown as Record<
+	string,
+	unknown
+>;
+elementProto.scrollIntoView ??= () => {};
+elementProto.hasPointerCapture ??= () => false;
+elementProto.releasePointerCapture ??= () => {};
 const globals = {
 	window,
 	document: window.document,
 	navigator: window.navigator,
 	HTMLElement: window.HTMLElement,
 	HTMLInputElement: window.HTMLInputElement,
+	HTMLTextAreaElement: window.HTMLTextAreaElement,
+	HTMLSelectElement: window.HTMLSelectElement,
 	HTMLButtonElement: window.HTMLButtonElement,
+	IntersectionObserver: InertObserver,
+	DOMRect: window.DOMRect,
 	Element: window.Element,
 	Node: window.Node,
 	Text: window.Text,
@@ -154,11 +176,15 @@ async function click(button: HTMLButtonElement) {
 	await act(async () => button.click());
 }
 
-async function type(input: HTMLInputElement, value: string) {
-	const setter = Object.getOwnPropertyDescriptor(
-		window.HTMLInputElement.prototype,
-		"value",
-	)?.set;
+async function type(
+	input: HTMLInputElement | HTMLTextAreaElement,
+	value: string,
+) {
+	const prototype =
+		input.tagName === "TEXTAREA"
+			? window.HTMLTextAreaElement.prototype
+			: window.HTMLInputElement.prototype;
+	const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
 	await act(async () => {
 		setter?.call(input, value);
 		input.dispatchEvent(
@@ -166,6 +192,39 @@ async function type(input: HTMLInputElement, value: string) {
 		);
 	});
 }
+
+/** The control a `<label>` with exactly this text points at. */
+function labelled<T = HTMLInputElement>(text: string): T {
+	const label = Array.from(window.document.body.querySelectorAll("label")).find(
+		(element) => element.textContent?.trim() === text,
+	);
+	const control = label?.getAttribute("for")
+		? window.document.getElementById(label.getAttribute("for") ?? "")
+		: null;
+	if (!control) throw new Error(`no control labelled "${text}"`);
+	return control as unknown as T;
+}
+
+function option(label: string) {
+	const match = Array.from(
+		window.document.body.querySelectorAll('[role="option"]'),
+	).find((element) => element.textContent?.trim() === label);
+	if (!match) throw new Error(`no option "${label}"`);
+	return match as unknown as HTMLButtonElement;
+}
+
+const salary = {
+	name: "salary",
+	kind: "number",
+	nullable: true,
+	columnMetadata: {
+		display_name: "Annual salary",
+		description: "Gross, in EUR",
+		classification: "confidential",
+		pii: true,
+		read_attributes: ["hr"],
+	},
+} satisfies LanceSchema["fields"][number];
 
 test("dropping a column waits for confirmation", async () => {
 	const dropped: string[][] = [];
@@ -359,7 +418,110 @@ test("without write callbacks the dialog is read-only", async () => {
 		"Allow NULL",
 		"Set as key",
 		"Drop index",
+		"Save",
 	]) {
 		expect(() => buttonNamed(label)).toThrow();
 	}
+});
+
+test("column details are edited and saved as one replacing write", async () => {
+	const saved: [string, IColumnMetadata][] = [];
+	const dialog = await openDialog({
+		onSetColumnMetadata: async (column, metadata) => {
+			saved.push([column, metadata]);
+		},
+		canManageColumnAccess: true,
+		knownAttributes: ["finance", "hr"],
+	});
+	await click(railItem("label"));
+	expect(buttonNamed("Save").disabled).toBe(true);
+
+	await type(labelled("Display name"), " Label text ");
+	await type(
+		labelled<HTMLTextAreaElement>("Description"),
+		"Free text shown on cards",
+	);
+	await click(labelled<HTMLButtonElement>("Classification"));
+	await click(option("Confidential"));
+	await click(labelled<HTMLButtonElement>("Contains personal data"));
+	await click(buttonNamed("hr"));
+	expect(dialog.textContent).toContain("Unsaved changes");
+	await click(buttonNamed("Save"));
+
+	expect(saved).toEqual([
+		[
+			"label",
+			{
+				display_name: "Label text",
+				description: "Free text shown on cards",
+				classification: "confidential",
+				pii: true,
+				read_attributes: ["hr"],
+			},
+		],
+	]);
+	expect(buttonNamed("Save").disabled).toBe(true);
+	expect(dialog.textContent).not.toContain("Unsaved changes");
+});
+
+test("a failed save keeps the edited details", async () => {
+	const dialog = await openDialog({
+		onSetColumnMetadata: async () => {
+			throw new Error("Column 'label' has 200 characters");
+		},
+	});
+	await click(railItem("label"));
+	await type(labelled("Display name"), "Label text");
+	await click(buttonNamed("Save"));
+	expect(labelled("Display name").value).toBe("Label text");
+	expect(buttonNamed("Save").disabled).toBe(false);
+	expect(dialog.textContent).toContain("Unsaved changes");
+});
+
+test("without the metadata callback column details are read-only", async () => {
+	const dialog = await openDialog({
+		schema: { ...schema, fields: [...schema.fields, salary] },
+	});
+	const rail = railItem("salary");
+	expect(rail.textContent).toContain("Annual salary");
+	expect(rail.querySelector('[aria-label="Read-restricted"]')).not.toBeNull();
+	expect(
+		rail.querySelector('[aria-label="Contains personal data"]'),
+	).not.toBeNull();
+
+	await click(rail);
+	for (const text of ["Annual salary", "Gross, in EUR", "Confidential", "PII"])
+		expect(dialog.textContent).toContain(text);
+	expect(dialog.querySelector("textarea")).toBeNull();
+	expect(dialog.querySelector('[role="switch"]')).toBeNull();
+	expect(() => labelled("Display name")).toThrow();
+	expect(() => buttonNamed("Save")).toThrow();
+});
+
+test("only admins can change who may read a column", async () => {
+	const saved: [string, IColumnMetadata][] = [];
+	const dialog = await openDialog({
+		schema: { ...schema, fields: [...schema.fields, salary] },
+		onSetColumnMetadata: async (column, metadata) => {
+			saved.push([column, metadata]);
+		},
+		knownAttributes: ["finance", "hr"],
+	});
+	await click(railItem("salary"));
+	expect(labelled("Allowed to read").disabled).toBe(true);
+	expect(buttonNamed("Remove hr").disabled).toBe(true);
+	expect(() => buttonNamed("finance")).toThrow();
+	expect(dialog.textContent).toContain(
+		"Only admins and owners can change who may read a column.",
+	);
+
+	await type(labelled("Display name"), "Salary");
+	await click(buttonNamed("Save"));
+	expect(saved[0]?.[1]).toEqual({
+		display_name: "Salary",
+		description: "Gross, in EUR",
+		classification: "confidential",
+		pii: true,
+		read_attributes: ["hr"],
+	});
 });

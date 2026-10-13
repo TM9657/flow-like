@@ -3,6 +3,7 @@ import {
 	ExternalLinkIcon,
 	FolderIcon,
 	FolderOpenIcon,
+	PencilIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -45,10 +46,12 @@ export function FileOrFolder({
 	loadFile,
 	shareFile,
 	deleteFile,
+	renameFile,
 	downloadFile,
 	revealInExplorer,
 	openWithApp,
 	listAppsForFile,
+	previewable,
 }: Readonly<{
 	appId: string;
 	file: IStorageItem;
@@ -57,11 +60,14 @@ export function FileOrFolder({
 	loadFile?: (file: string) => void;
 	shareFile?: (file: string, e: any) => void;
 	deleteFile?: (file: string) => void;
+	renameFile?: (file: IStorageItem) => void;
 	downloadFile?: (file: string) => void;
 	revealInExplorer?: (location: string) => void;
 	openWithApp?: (location: string, appPath?: string) => void;
 	listAppsForFile?: (location: string) => Promise<AppEntry[]>;
+	previewable?: boolean;
 }>) {
+	const previewSupported = previewable ?? canPreview(file.location);
 	// Both storage scopes report `location` differently — cloud sends an absolute object
 	// key, desktop a relative path — so the root-relative path is recovered by stripping
 	// whichever layout prefix is present, and that also tells us which scope this is.
@@ -167,6 +173,12 @@ export function FileOrFolder({
 							>
 								Copy Path
 							</DropdownMenuItem>
+							{renameFile && (
+								<DropdownMenuItem onSelect={() => renameFile(file)}>
+									<PencilIcon className="h-4 w-4 mr-2" />
+									Rename
+								</DropdownMenuItem>
+							)}
 							{typeof deleteFile !== "undefined" && (
 								<>
 									<DropdownMenuSeparator />
@@ -194,7 +206,7 @@ export function FileOrFolder({
 			className={`group relative rounded-lg border border-border/50 p-3 w-full transition-all duration-200 bg-linear-to-r from-background to-muted/10 ${
 				highlight ? "border-primary bg-primary/5 shadow-sm" : ""
 			} ${
-				canPreview(file.location)
+				previewSupported
 					? "hover:border-primary/50 hover:shadow-md cursor-pointer"
 					: "cursor-not-allowed opacity-75"
 			}`}
@@ -204,19 +216,19 @@ export function FileOrFolder({
 					type="button"
 					className="flex flex-row items-center gap-3 flex-1 min-w-0"
 					onClick={() => {
-						if (canPreview(file.location)) loadFile?.(file.location);
+						if (previewSupported) loadFile?.(file.location);
 					}}
 				>
 					<div
 						className={`p-2 rounded-md transition-colors ${
-							canPreview(file.location)
+							previewSupported
 								? "bg-primary/10 group-hover:bg-primary/20"
 								: "bg-muted/50"
 						}`}
 					>
 						<FileTypeIcon
 							name={file.location}
-							className={`w-5 h-5 ${canPreview(file.location) ? "text-primary" : "text-muted-foreground"}`}
+							className={`w-5 h-5 ${previewSupported ? "text-primary" : "text-muted-foreground"}`}
 						/>
 					</div>
 					<div className="flex flex-col items-start flex-1 min-w-0">
@@ -284,6 +296,12 @@ export function FileOrFolder({
 						>
 							Copy Path
 						</DropdownMenuItem>
+						{renameFile && (
+							<DropdownMenuItem onSelect={() => renameFile(file)}>
+								<PencilIcon className="h-4 w-4 mr-2" />
+								Rename
+							</DropdownMenuItem>
+						)}
 						{typeof downloadFile !== "undefined" && (
 							<DropdownMenuItem
 								onClick={(e) => {

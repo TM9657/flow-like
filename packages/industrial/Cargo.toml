@@ -5,8 +5,10 @@ edition = "2024"
 
 [features]
 default = []
-execute = ["opcua", "dep:tokio-modbus", "dep:tokio-serial", "dep:async-nats", "dep:redis", "dep:lapin", "dep:rdkafka", "dep:ads", "dep:rust-ethernet-ip", "dep:zenoh", "dep:iroh", "dep:hart-link", "dep:profirust", "dep:ethercrab", "dep:libloading", "dep:reqwest"]
-opcua = ["dep:opcua"]
+execute = ["opcua", "opcua-pubsub", "dds", "dep:tokio-modbus", "dep:tokio-serial", "dep:async-nats", "dep:redis", "dep:lapin", "dep:rdkafka", "dep:ads", "dep:rust-ethernet-ip", "dep:zenoh", "dep:iroh", "dep:hart-link", "dep:profirust", "dep:ethercrab", "dep:libloading", "dep:reqwest"]
+opcua = ["dep:opcua", "dep:openssl", "dep:tempfile", "dep:windows-sys"]
+opcua-pubsub = ["dep:socket2", "dep:aes", "dep:ctr", "dep:hmac", "dep:sha2", "dep:getrandom", "dep:fs2", "dep:zeroize", "dep:libc"]
+dds = ["dep:dust_dds", "dep:libloading", "dep:roxmltree"]
 genicam = ["dep:telegenic"]
 genicam-emulator = ["genicam", "telegenic/emulator"]
 
@@ -41,6 +43,22 @@ hart-link = { version = "0.3", features = ["serial", "hart-ip"], optional = true
 profirust = { version = "0.6", default-features = false, features = ["std"], optional = true }
 libloading = { version = "0.8", optional = true }
 reqwest = { workspace = true, optional = true }
+socket2 = { version = "0.6", features = ["all"], optional = true }
+dust_dds = { version = "0.16", optional = true }
+aes = { version = "0.8", optional = true }
+ctr = { version = "0.9", optional = true }
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+getrandom = { version = "0.3", optional = true }
+fs2 = { version = "0.4", optional = true }
+zeroize = { version = "1", features = ["derive"], optional = true }
+libc = { version = "0.2", optional = true }
+openssl = { version = "0.10", features = ["vendored"], optional = true }
+tempfile = { version = "3", optional = true }
+roxmltree = { version = "0.21", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Memory"], optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 ethercrab = { version = "0.7.1", default-features = false, features = ["std"], optional = true }

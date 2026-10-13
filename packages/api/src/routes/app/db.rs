@@ -2,12 +2,19 @@ use axum::{
     Router,
     routing::{delete, get, post, put},
 };
-use flow_like_storage::databases::table_summary::{TableSummary, summarize_tables};
-use flow_like_storage::databases::vector::schema::{PrimaryKeyRejected, TableInputRejected};
+use flow_like_storage::contracts::column_metadata::ColumnReader;
+use flow_like_storage::databases::table_summary::{TableSummary, summarize_tables_for};
+use flow_like_storage::databases::vector::schema::{
+    ColumnAccessRejected, PrimaryKeyRejected, TableInputRejected,
+};
 use flow_like_storage::lancedb::Connection;
 
 use crate::{
-    credentials::CredentialsAccess, error::ApiError, middleware::jwt::AppUser, state::AppState,
+    credentials::CredentialsAccess,
+    error::ApiError,
+    middleware::jwt::{AppPermissionResponse, AppUser},
+    permission::role_permission::RolePermissions,
+    state::AppState,
 };
 
 pub mod add_column;
@@ -31,6 +38,7 @@ pub mod optimize;
 pub mod presign_db_access;
 pub mod references;
 pub mod saved_queries;
+pub mod set_column_metadata;
 pub mod set_primary_key;
 pub mod table_view;
 
@@ -78,6 +86,7 @@ pub enum TableListResponse {
 pub async fn table_listing(
     connection: Connection,
     params: &TableListParams,
+    reader: &ColumnReader,
 ) -> Result<TableListResponse, ApiError> {
     let names: Vec<String> = connection
         .table_names()
@@ -92,7 +101,7 @@ pub async fn table_listing(
     }
 
     Ok(TableListResponse::Summaries(
-        summarize_tables(&connection, names).await,
+        summarize_tables_for(&connection, names, reader).await,
     ))
 }
 
@@ -158,12 +167,36 @@ pub fn table_rejection_message<'a>(
 }
 
 /// Rejected row values, column names and table key rules are the caller's to fix, wherever
-/// they sit in the error chain; any other failure stays internal.
+/// they sit in the error chain; a column access change the role may not make is forbidden;
+/// any other failure stays internal.
 pub fn table_input_error(error: flow_like_types::Error) -> ApiError {
+    if let Some(message) = error.chain().find_map(|cause| {
+        cause
+            .downcast_ref::<ColumnAccessRejected>()
+            .map(ToString::to_string)
+    }) {
+        return ApiError::forbidden(message);
+    }
     match table_rejection_message(error.chain()) {
         Some(message) => ApiError::bad_request(message),
         None => ApiError::from(error),
     }
+}
+
+/// Whose column read restrictions apply to a request. Admins and owners read every column,
+/// and so does everyone in their own user-scoped database; any other role sees a
+/// restricted column only through one of its attributes.
+pub fn column_reader(permission: &AppPermissionResponse, scope: &ScopeParams) -> ColumnReader {
+    if scope.is_user_scoped() || permission.has_permission(RolePermissions::Admin) {
+        return ColumnReader::Unrestricted;
+    }
+    ColumnReader::with_attributes(
+        permission
+            .role
+            .attributes
+            .iter()
+            .flat_map(|list| list.iter()),
+    )
 }
 
 pub fn table_key_error(error: flow_like_types::Error) -> ApiError {
@@ -282,6 +315,10 @@ pub fn routes() -> Router<AppState> {
             post(add_column::add_column)
                 .put(alter_column::alter_column)
                 .delete(drop_columns::drop_columns),
+        )
+        .route(
+            "/{table}/columns/{column}/metadata",
+            put(set_column_metadata::set_column_metadata),
         )
         .route(
             "/{table}/primary-key",

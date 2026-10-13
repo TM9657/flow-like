@@ -1,0 +1,30 @@
+---
+title: "DDS Node Catalog"
+description: "Industrial/DDS Flow-Like node category with 6 generated node references."
+sidebar:
+  order: 0
+  label: "DDS"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "DDS nodes, Industrial/DDS, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "Industrial/DDS"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"DDS Node Catalog\",\"description\":\"Industrial/DDS Flow-Like node category with 6 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/industrial/dds/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"Industrial/DDS\",\"keywords\":\"DDS nodes, Industrial/DDS, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"Industrial/DDS"}
+	label="DDS"
+	nodes={nodesByCategory["Industrial/DDS"] ?? []}
+	client:load
+/>

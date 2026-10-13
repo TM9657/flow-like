@@ -517,6 +517,9 @@ fn align(input: AlignRequest) -> Result<TensorData> {
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PatchTensorRequest {
     pub feature_map: TensorData,
+    /// Extractor reported with the feature map; it is passed through unchanged.
+    #[serde(default)]
+    pub extractor: Option<super::lifecycle::FeatureExtractorRef>,
 }
 fn patches(input: PatchTensorRequest) -> Result<TensorData> {
     input.feature_map.validate(LIMIT)?;
@@ -546,17 +549,52 @@ fn patches(input: PatchTensorRequest) -> Result<TensorData> {
 #[crate::register_node]
 #[derive(Default)]
 pub struct FeatureMapToPatchesNode;
-operation!(
-    FeatureMapToPatchesNode,
-    "ml_feature_map_to_patches",
-    "Feature Map to Patches",
-    "Convert a channel-first spatial feature map to position-major PatchCore or PaDiM embeddings",
-    "patches",
-    "AI/ML/Anomaly",
-    PatchTensorRequest,
-    TensorData,
-    patches
-);
+#[flow_like_types::async_trait]
+impl flow_like::flow::node::NodeLogic for FeatureMapToPatchesNode {
+    fn get_node(&self) -> flow_like::flow::node::Node {
+        let mut node = super::operation_node::<PatchTensorRequest, TensorData>(
+            "ml_feature_map_to_patches",
+            "Feature Map to Patches",
+            "Convert a channel-first spatial feature map to position-major PatchCore or PaDiM embeddings and pass its feature extractor on",
+            "patches",
+            "AI/ML/Anomaly",
+        );
+        node.add_output_pin(
+            "extractor",
+            "Feature Extractor",
+            "The request's feature extractor, or null when it has none",
+            flow_like::flow::variable::VariableType::Struct,
+        )
+        .set_schema::<super::lifecycle::FeatureExtractorRef>();
+        node.set_version(2);
+        node
+    }
+    async fn run(
+        &self,
+        context: &mut flow_like::flow::execution::context::ExecutionContext,
+    ) -> Result<()> {
+        #[cfg(feature = "execute")]
+        {
+            context.deactivate_exec_pin("exec_out").await?;
+            let input: PatchTensorRequest = context.evaluate_pin("request").await?;
+            let extractor = input.extractor.clone();
+            let output = tokio::task::spawn_blocking(move || patches(input)).await??;
+            context
+                .set_pin_value("result", flow_like_types::json::json!(output))
+                .await?;
+            context
+                .set_pin_value("extractor", flow_like_types::json::json!(extractor))
+                .await?;
+            context.activate_exec_pin("exec_out").await?;
+            Ok(())
+        }
+        #[cfg(not(feature = "execute"))]
+        {
+            let _ = context;
+            Err(anyhow!("ML execution requires the execute feature"))
+        }
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ExportDatasetRequest {
@@ -680,7 +718,7 @@ operation!(
     GroupTimeSplitNode,
     "ml_group_time_split",
     "Group/Time Split",
-    "Keep related samples together and purge temporal boundary overlap",
+    "Keep related samples together and purge temporal boundary overlap. A time split purges samples until their label (review or outcome) is available, so a train or validation sample's window, horizon and label all end by that partition's cutoff",
     "split",
     "AI/ML/Dataset",
     SplitRequest,
@@ -849,5 +887,30 @@ mod tests {
         })
         .unwrap();
         assert_eq!(fused.values, vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn patch_conversion_keeps_its_feature_extractor_output() {
+        use super::super::lifecycle::FeatureExtractorRef;
+        use flow_like::flow::{node::NodeLogic, pin::Pin};
+        use flow_like_types::json::{from_value, json};
+        let node = FeatureMapToPatchesNode.get_node();
+        assert_eq!(node.version, Some(2));
+        let pin = node.get_pin_by_name("extractor").unwrap();
+        assert_eq!(pin.schema, Pin::schema_string_for::<FeatureExtractorRef>());
+        let legacy: PatchTensorRequest =
+            from_value(json!({"feature_map":{"shape":[2,1,2],"values":[1.0,2.0,3.0,4.0]}}))
+                .unwrap();
+        assert!(legacy.extractor.is_none());
+        let patched = patches(legacy).unwrap();
+        assert_eq!(patched.shape, vec![2, 2]);
+        assert_eq!(patched.values, vec![1.0, 3.0, 2.0, 4.0]);
+        let extractor = json!({"source_id":"dino","blob_sha256":"c".repeat(64),"image_steps":[]});
+        let carried: PatchTensorRequest = from_value(json!({
+            "feature_map": {"shape":[1,1,1],"values":[1.0]},
+            "extractor": extractor
+        }))
+        .unwrap();
+        assert_eq!(json!(carried.extractor), extractor);
     }
 }

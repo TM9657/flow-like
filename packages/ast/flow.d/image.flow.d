@@ -80,11 +80,11 @@ declare namespace image {
      * Read image from path
      * @node read_image @alias readImage
      * @param path — FlowPath
-     * @param applyExif (optional) — Apply Exif Orientation
+     * @param applyExifOrientation (optional) — Rotate and flip the image upright as its EXIF orientation tag says
      * @returns imageOut — Image object
      * @impure has side effects / drives control flow
      */
-    function read({ path: Struct, applyExif?: bool }): Struct;
+    function read({ path: Struct, applyExifOrientation?: bool }): Struct;
 
     /**
      * Read/Decode QR Codes and Barcodes
@@ -100,11 +100,11 @@ declare namespace image {
      * Read image from path
      * @node read_image_url @alias readImageUrl
      * @param signedUrl — Signed Url
-     * @param applyExif (optional) — Apply Exif Orientation
+     * @param applyExifOrientation (optional) — Rotate and flip the image upright as its EXIF orientation tag says
      * @returns imageOut — Image object
      * @impure has side effects / drives control flow
      */
-    function readUrl({ signedUrl: string, applyExif?: bool }): Struct;
+    function readUrl({ signedUrl: string, applyExifOrientation?: bool }): Struct;
 
     /**
      * Write image to path

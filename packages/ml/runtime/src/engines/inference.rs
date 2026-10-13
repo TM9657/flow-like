@@ -17,6 +17,8 @@ enum LoadedModel {
     #[cfg(feature = "burn")]
     Burn {
         predictor: Box<flow_like_ml_burn::Predictor>,
+        /// Samples per forward pass that keep attention workspaces within the budget.
+        batch_limit: usize,
         // Keep extracted files alive for weight records backed by file mappings.
         _directory: tempfile::TempDir,
     },
@@ -27,14 +29,14 @@ enum LoadedModel {
     },
 }
 
-impl LoadedArtifactPredictor {
-    pub fn load(
-        repository: &TrainingRepository,
-        artifact_id: &str,
-        compute: &ComputeConfig,
-    ) -> Result<Self> {
-        compute.validate().map_err(engine_error)?;
-        let artifact = repository.get_artifact(artifact_id)?;
+/// Manifest facts both loaders check before any blob byte is read.
+struct ArtifactContract {
+    engine: String,
+    expected: Vec<usize>,
+}
+
+impl ArtifactContract {
+    fn of(artifact: &ModelArtifact) -> Result<Self> {
         let engine = artifact.manifest["engine"]
             .as_str()
             .ok_or_else(|| invalid("model artifact has no engine"))?;
@@ -61,16 +63,65 @@ impl LoadedArtifactPredictor {
                 .unwrap_or_else(|| serde_json::json!([])),
         )?;
         flow_like_ml_core::validate_labels(&labels).map_err(engine_error)?;
-        // The envelope, decoded parameters and load-time copies share the budget.
-        let file_limit = (compute.memory_limit_bytes / 4).min(512 * 1024 * 1024);
-        let bytes = repository.read_blob_limited(&artifact.blob, file_limit)?;
+        Ok(Self {
+            engine: engine.to_owned(),
+            expected,
+        })
+    }
+}
+
+/// The envelope, decoded parameters and load-time copies share the budget.
+fn artifact_file_limit(compute: &ComputeConfig) -> u64 {
+    (compute.memory_limit_bytes / 4).min(512 * 1024 * 1024)
+}
+
+impl LoadedArtifactPredictor {
+    pub fn load(
+        repository: &TrainingRepository,
+        artifact_id: &str,
+        compute: &ComputeConfig,
+    ) -> Result<Self> {
+        compute.validate().map_err(engine_error)?;
+        let artifact = repository.get_artifact(artifact_id)?;
+        let contract = ArtifactContract::of(&artifact)?;
+        let bytes = repository.read_blob_limited(&artifact.blob, artifact_file_limit(compute))?;
+        Self::decode(artifact, contract, &bytes, compute)
+    }
+
+    /// Loads an artifact whose blob bytes come from outside a ledger, such as a
+    /// published model folder. It never checks a project id. The bytes pass the
+    /// repository blob rules within `load`'s file limit before anything decodes them.
+    pub fn from_parts(
+        artifact: ModelArtifact,
+        bytes: &[u8],
+        compute: &ComputeConfig,
+    ) -> Result<Self> {
+        compute.validate().map_err(engine_error)?;
+        let contract = ArtifactContract::of(&artifact)?;
+        verify_artifact_bytes(&artifact.blob, bytes, artifact_file_limit(compute))?;
+        Self::decode(artifact, contract, bytes, compute)
+    }
+
+    /// `bytes` are the artifact's verified blob.
+    fn decode(
+        artifact: ModelArtifact,
+        contract: ArtifactContract,
+        bytes: &[u8],
+        compute: &ComputeConfig,
+    ) -> Result<Self> {
+        let ArtifactContract { engine, expected } = contract;
+        let engine = engine.as_str();
         let reserved = artifact
             .blob
             .bytes
             .checked_mul(4)
             .ok_or_else(|| invalid("artifact memory estimate overflows"))?;
-        let input_limit =
-            ((compute.memory_limit_bytes - reserved) / 64).min(64 * 1024 * 1024) as usize;
+        let available = compute.memory_limit_bytes.saturating_sub(reserved);
+        let input_limit = match engine {
+            #[cfg(feature = "burn")]
+            "efficient_ad" => efficient_ad_input_limit(&expected, available)?,
+            _ => (available / 64).min(64 * 1024 * 1024) as usize,
+        };
         if input_limit == 0 || expected.iter().product::<usize>() > input_limit {
             return Err(invalid(
                 "memory budget has no room for a trained input tensor and inference workspace",
@@ -83,27 +134,35 @@ impl LoadedArtifactPredictor {
                 {
                     let directory = tempfile::tempdir()?;
                     burn_adapter::unpack_named(
-                        &bytes,
+                        bytes,
                         directory.path(),
                         flow_like_ml_burn::MANIFEST_FILE,
-                        file_limit,
+                        artifact_file_limit(compute),
                     )?;
                     let state: Value = serde_json::from_slice(&std::fs::read(
                         directory.path().join(flow_like_ml_burn::MANIFEST_FILE),
                     )?)?;
                     if state["input_shape"] != artifact.manifest["input_shape"]
-                        || state["config"] != artifact.manifest["config"]
+                        || !burn_adapter::same_training_config(
+                            &state["config"],
+                            &artifact.manifest["config"],
+                        )
                     {
                         return Err(invalid(
                             "Burn artifact manifest differs from packed model state",
                         ));
                     }
+                    let config: flow_like_ml_burn::TrainingConfig =
+                        serde_json::from_value(state["config"].clone())?;
+                    let batch_limit =
+                        burn_adapter::inference_batch_limit(&config.recipe, &expected, available)?;
                     let choice = burn_adapter::backend(compute)?;
                     effective_compute = burn_adapter::concrete_compute(compute, &choice)?;
                     let predictor = flow_like_ml_burn::Predictor::load(directory.path(), choice)
                         .map_err(engine_error)?;
                     LoadedModel::Burn {
                         predictor: Box::new(predictor),
+                        batch_limit,
                         _directory: directory,
                     }
                 }
@@ -117,7 +176,12 @@ impl LoadedArtifactPredictor {
                 {
                     let directory = tempfile::tempdir()?;
                     let manifest = "efficient-ad-state.json";
-                    burn_adapter::unpack_named(&bytes, directory.path(), manifest, file_limit)?;
+                    burn_adapter::unpack_named(
+                        bytes,
+                        directory.path(),
+                        manifest,
+                        artifact_file_limit(compute),
+                    )?;
                     let state: Value =
                         serde_json::from_slice(&std::fs::read(directory.path().join(manifest))?)?;
                     if state["architecture"] != artifact.manifest["architecture"]
@@ -154,7 +218,7 @@ impl LoadedArtifactPredictor {
                         allow_cpu_fallback: false,
                         memory_limit_bytes: compute.memory_limit_bytes,
                     };
-                    let model: NativeModel = serde_json::from_slice(&bytes)?;
+                    let model: NativeModel = serde_json::from_slice(bytes)?;
                     let actual = match &model {
                         NativeModel::IsolationForest(_) => "isolation_forest",
                         NativeModel::HistogramGradientBoosting(_) => "histogram_gradient_boosting",
@@ -258,24 +322,36 @@ impl LoadedArtifactPredictor {
                         "model produced non-finite anomaly or regression scores",
                     ));
                 }
-                Ok(
-                    serde_json::json!({"engine":self.artifact.manifest["engine"],"scores":scores,"patch_scores":patch_scores,"labels":self.artifact.manifest["labels"]}),
-                )
+                let mut result = serde_json::json!({"engine":self.artifact.manifest["engine"],"scores":scores,"patch_scores":patch_scores,"labels":self.artifact.manifest["labels"]});
+                // Boosting fitted on one-element value targets answers in the dense shape.
+                if matches!(model, NativeModel::HistogramGradientBoosting(_))
+                    && self.artifact.manifest["output_shape"] == serde_json::json!([1])
+                {
+                    result["output"] =
+                        serde_json::json!({"shape":[scores.len(), 1],"values":scores});
+                }
+                Ok(result)
             }
             #[cfg(feature = "burn")]
-            LoadedModel::Burn { predictor, .. } => {
+            LoadedModel::Burn {
+                predictor,
+                batch_limit,
+                ..
+            } => {
                 if !batch_shape {
                     return Err(invalid(
                         "Burn inference tensor needs a batch dimension matching training",
                     ));
                 }
-                let result = predictor
-                    .predict(&flow_like_ml_burn::TensorData {
-                        shape: input.shape.clone(),
-                        values: input.values.clone(),
-                    })
-                    .map_err(engine_error)?;
-                Ok(serde_json::to_value(result)?)
+                let mut results = batch_chunks(input, *batch_limit)
+                    .map(|chunk| predictor.predict(&chunk).map_err(engine_error));
+                let mut merged = results
+                    .next()
+                    .ok_or_else(|| invalid("inference batch is empty"))??;
+                for result in results {
+                    merge_predictions(&mut merged, result?)?;
+                }
+                Ok(serde_json::to_value(merged)?)
             }
             #[cfg(feature = "burn")]
             LoadedModel::EfficientAd { predictor, .. } => {
@@ -301,15 +377,22 @@ impl LoadedArtifactPredictor {
         if input.shape.len() != self.expected.len() + 1 || input.shape[1..] != self.expected {
             return Err(invalid("feature tensor shape differs from training"));
         }
-        let LoadedModel::Burn { predictor, .. } = &self.model else {
+        let LoadedModel::Burn {
+            predictor,
+            batch_limit,
+            ..
+        } = &self.model
+        else {
             return Err(invalid("spatial features require a Burn image classifier"));
         };
-        let output = predictor
-            .features(&flow_like_ml_burn::TensorData {
-                shape: input.shape.clone(),
-                values: input.values.clone(),
-            })
-            .map_err(engine_error)?;
+        let mut outputs = batch_chunks(input, *batch_limit)
+            .map(|chunk| predictor.features(&chunk).map_err(engine_error));
+        let mut output = outputs
+            .next()
+            .ok_or_else(|| invalid("feature batch is empty"))??;
+        for chunk in outputs {
+            concatenate_batch(&mut output, chunk?)?;
+        }
         let tensor = TensorData {
             shape: output.shape,
             values: output.values,
@@ -317,6 +400,139 @@ impl LoadedArtifactPredictor {
         tensor.validate(self.input_limit).map_err(engine_error)?;
         Ok(tensor)
     }
+
+    /// Identity of this model as the extractor of the features it computes.
+    pub fn feature_extractor(&self) -> Result<FeatureExtractor> {
+        FeatureExtractor::from_artifact(&self.artifact)
+    }
+
+    /// Score embeddings after checking they come from the extractor and image steps the
+    /// model was fitted on. Models fitted without a recorded extractor cannot be checked.
+    pub fn predict_with_extractor(
+        &self,
+        input: &TensorData,
+        extractor: &FeatureExtractor,
+    ) -> Result<Value> {
+        if let Some(recorded) = self
+            .artifact
+            .manifest
+            .get("feature_extractor")
+            .filter(|value| !value.is_null())
+        {
+            let recorded: FeatureExtractor = serde_json::from_value(recorded.clone())?;
+            if recorded != *extractor {
+                return Err(invalid(format!(
+                    "embeddings from extractor {} ({}) differ from the extractor {} ({}) or image steps this model was fitted on; recompute them with the recorded extractor",
+                    extractor.source_id,
+                    extractor.blob_sha256,
+                    recorded.source_id,
+                    recorded.blob_sha256
+                )));
+            }
+        }
+        self.predict(input)
+    }
+}
+
+/// Applies the repository blob rules (`read_blob_limited`) to bytes read from
+/// anywhere else: reference shape, size bounds, exact length and sha256.
+pub fn verify_artifact_bytes(blob: &BlobRef, bytes: &[u8], maximum_bytes: u64) -> Result<()> {
+    crate::repository::validate_blob_reference(blob, maximum_bytes)?;
+    crate::repository::verify_blob_content(blob, bytes)
+}
+
+/// Memory one EfficientAD image adds beyond the workspace: its f32 input and the three
+/// 256x256 output maps, both as f32 and as the JSON numbers they are returned in.
+#[cfg(feature = "burn")]
+fn efficient_ad_image_bytes(image_elements: u64) -> u64 {
+    let map_value = (size_of::<f32>() + size_of::<Value>()) as u64;
+    image_elements * size_of::<f32>() as u64 + 3 * 256 * 256 * map_value
+}
+
+/// Input elements an EfficientAD request may carry within `available_bytes`.
+#[cfg(feature = "burn")]
+fn efficient_ad_input_limit(expected: &[usize], available_bytes: u64) -> Result<usize> {
+    let workspace = flow_like_ml_burn::EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES;
+    let image_elements = expected.iter().product::<usize>() as u64;
+    let per_image = efficient_ad_image_bytes(image_elements);
+    let images = available_bytes.saturating_sub(workspace) / per_image;
+    if images == 0 {
+        return Err(invalid(format!(
+            "EfficientAD inference needs an estimated {} bytes for one image, but only {available_bytes} bytes remain after loading the model",
+            workspace + per_image
+        )));
+    }
+    Ok(images.saturating_mul(image_elements).min(64 * 1024 * 1024) as usize)
+}
+
+/// Split a batch along its first dimension into forward passes of at most `limit` samples.
+#[cfg(feature = "burn")]
+fn batch_chunks(
+    input: &TensorData,
+    limit: usize,
+) -> impl Iterator<Item = flow_like_ml_burn::TensorData> {
+    let width = input.values.len() / input.shape[0];
+    let shape = input.shape.clone();
+    input
+        .values
+        .chunks(width * limit.clamp(1, input.shape[0]))
+        .map(move |values| {
+            let mut shape = shape.clone();
+            shape[0] = values.len() / width;
+            flow_like_ml_burn::TensorData {
+                shape,
+                values: values.to_vec(),
+            }
+        })
+}
+
+#[cfg(feature = "burn")]
+fn concatenate_batch(
+    merged: &mut flow_like_ml_burn::TensorData,
+    chunk: flow_like_ml_burn::TensorData,
+) -> Result<()> {
+    if merged.shape.is_empty() || merged.shape.get(1..) != chunk.shape.get(1..) {
+        return Err(engine_error(
+            "model returned differently shaped outputs for one batch",
+        ));
+    }
+    merged.shape[0] += chunk.shape[0];
+    merged.values.extend(chunk.values);
+    Ok(())
+}
+
+#[cfg(feature = "burn")]
+fn extend_batch<T>(merged: &mut Option<Vec<T>>, chunk: Option<Vec<T>>) -> Result<()> {
+    match (merged.as_mut(), chunk) {
+        (Some(merged), Some(chunk)) => merged.extend(chunk),
+        (None, None) => {}
+        _ => {
+            return Err(engine_error(
+                "model returned inconsistent outputs for one batch",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Every prediction field is batch-major, so chunks concatenate in input order.
+#[cfg(feature = "burn")]
+fn merge_predictions(
+    merged: &mut flow_like_ml_burn::PredictionBatch,
+    chunk: flow_like_ml_burn::PredictionBatch,
+) -> Result<()> {
+    let flow_like_ml_burn::PredictionBatch {
+        output,
+        classes,
+        reconstruction_error,
+        detections,
+        instances,
+    } = chunk;
+    concatenate_batch(&mut merged.output, output)?;
+    extend_batch(&mut merged.classes, classes)?;
+    extend_batch(&mut merged.reconstruction_error, reconstruction_error)?;
+    extend_batch(&mut merged.detections, detections)?;
+    extend_batch(&mut merged.instances, instances)
 }
 
 #[cfg(test)]
@@ -637,6 +853,130 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "burn")]
+    fn burn_predictions_split_batches_and_load_manifests_with_widened_f32_configs() {
+        use flow_like_ml_burn as burn;
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let model_dir = tempfile::tempdir().unwrap();
+        let config = burn::TrainingConfig {
+            recipe: burn::Recipe::Mlp {
+                input_features: 1,
+                hidden: 4,
+                outputs: 1,
+                objective: burn::Objective::Regression,
+            },
+            backend: burn::BackendChoice::Cpu,
+            epochs: 2,
+            batch_size: 3,
+            learning_rate: 0.01,
+            seed: 42,
+            gradient_clip: 0.1,
+        };
+        let dataset = burn::TensorDataset {
+            inputs: burn::TensorData {
+                shape: vec![5, 1],
+                values: vec![-1.0, -0.5, 0.0, 0.5, 1.0],
+            },
+            targets: burn::Targets::Dense {
+                tensor: burn::TensorData {
+                    shape: vec![5, 1],
+                    values: vec![-2.0, -1.0, 0.0, 1.0, 2.0],
+                },
+            },
+        };
+        burn::train(
+            &config,
+            &dataset,
+            None,
+            model_dir.path(),
+            &burn::CancellationToken::new(),
+            |_| {},
+        )
+        .unwrap();
+        let bytes = burn_adapter::pack_named(
+            model_dir.path(),
+            burn::MANIFEST_FILE,
+            false,
+            32 * 1024 * 1024,
+        )
+        .unwrap();
+        // Artifacts published before the fix carry a json!-widened config.
+        let artifact = publish(
+            &repository,
+            0,
+            &bytes,
+            serde_json::json!({"engine":"burn","format_version":1,"config":config,"input_shape":[1],"labels":[]}),
+        );
+        let mut loaded =
+            LoadedArtifactPredictor::load(&repository, &artifact.id, &ComputeConfig::default())
+                .unwrap();
+        let input = TensorData {
+            shape: dataset.inputs.shape,
+            values: dataset.inputs.values,
+        };
+        let whole = loaded.predict(&input).unwrap();
+        let LoadedModel::Burn { batch_limit, .. } = &mut loaded.model else {
+            panic!("expected a Burn predictor");
+        };
+        *batch_limit = 2;
+        let chunked = loaded.predict(&input).unwrap();
+        assert_eq!(chunked["output"]["shape"], serde_json::json!([5, 1]));
+        let values = |prediction: &Value| -> Vec<f64> {
+            serde_json::from_value(prediction["output"]["values"].clone()).unwrap()
+        };
+        for (left, right) in values(&whole).iter().zip(values(&chunked)) {
+            assert!((left - right).abs() < 1e-6, "{left} != {right}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "burn")]
+    fn prediction_chunks_concatenate_batch_major_fields_and_reject_mismatches() {
+        use flow_like_ml_burn as burn;
+        let batch = |rows: usize, classes: Option<Vec<i64>>| burn::PredictionBatch {
+            output: burn::TensorData {
+                shape: vec![rows, 2],
+                values: vec![rows as f32; rows * 2],
+            },
+            classes,
+            reconstruction_error: None,
+            detections: None,
+            instances: None,
+        };
+        let mut merged = batch(2, Some(vec![0, 1]));
+        merge_predictions(&mut merged, batch(1, Some(vec![1]))).unwrap();
+        assert_eq!(merged.output.shape, vec![3, 2]);
+        assert_eq!(merged.output.values.len(), 6);
+        assert_eq!(merged.classes, Some(vec![0, 1, 1]));
+        assert!(merge_predictions(&mut merged, batch(1, None)).is_err());
+        let mut reshaped = batch(1, Some(vec![0]));
+        reshaped.output.shape = vec![1, 1, 2];
+        assert!(merge_predictions(&mut merged, reshaped).is_err());
+        let input = TensorData {
+            shape: vec![5, 2],
+            values: (0..10).map(|value| value as f32).collect(),
+        };
+        let chunks: Vec<_> = batch_chunks(&input, 2).collect();
+        assert_eq!(
+            chunks
+                .iter()
+                .map(|chunk| chunk.shape.clone())
+                .collect::<Vec<_>>(),
+            vec![vec![2, 2], vec![2, 2], vec![1, 2]]
+        );
+        assert_eq!(
+            chunks
+                .into_iter()
+                .flat_map(|chunk| chunk.values)
+                .collect::<Vec<_>>(),
+            input.values
+        );
+        assert_eq!(batch_chunks(&input, usize::MAX).count(), 1);
+    }
+
+    #[test]
     fn bounded_blob_reads_reject_actual_size_changes_and_digest_corruption() {
         let directory = tempfile::tempdir().unwrap();
         let repository =
@@ -655,13 +995,13 @@ mod tests {
         assert!(repository.read_blob_limited(&artifact.blob, 100).is_err());
     }
 
-    #[test]
+    /// Publishes the smallest EfficientAD model, trained on one image, and returns its packed
+    /// bytes and a one-image request.
     #[cfg(feature = "burn")]
-    fn efficient_ad_cached_predictions_preserve_calibration_and_maps() {
+    fn trained_efficient_ad(
+        repository: &TrainingRepository,
+    ) -> (ModelArtifact, Vec<u8>, TensorData) {
         use flow_like_ml_burn as burn;
-        let directory = tempfile::tempdir().unwrap();
-        let repository =
-            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
         let model_dir = tempfile::tempdir().unwrap();
         let shapes = [[1, 1, 4, 4], [2, 1, 4, 4], [2, 2, 3, 3], [1, 2, 4, 4]];
         let teacher = burn::PdnTeacherWeights {
@@ -722,7 +1062,7 @@ mod tests {
         let bytes =
             burn_adapter::pack_named(model_dir.path(), name, false, 32 * 1024 * 1024).unwrap();
         let artifact = publish(
-            &repository,
+            repository,
             0,
             &bytes,
             serde_json::json!({"engine":"efficient_ad","format_version":1,"architecture":state["architecture"],"input_shape":[1,256,256],"labels":[]}),
@@ -731,6 +1071,16 @@ mod tests {
             shape: validation.shape,
             values: validation.values,
         };
+        (artifact, bytes, input)
+    }
+
+    #[test]
+    #[cfg(feature = "burn")]
+    fn efficient_ad_cached_predictions_preserve_calibration_and_maps() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let (artifact, bytes, input) = trained_efficient_ad(&repository);
         let loaded =
             LoadedArtifactPredictor::load(&repository, &artifact.id, &ComputeConfig::default())
                 .unwrap();
@@ -745,5 +1095,50 @@ mod tests {
         )
         .unwrap();
         assert_eq!(loaded.predict(&input).unwrap(), expected);
+    }
+
+    /// PDN activations run in a fixed workspace, while each image's input and returned maps
+    /// stay resident, so the budget admits whole images beyond that workspace.
+    #[test]
+    #[cfg(feature = "burn")]
+    fn efficient_ad_admission_charges_a_fixed_workspace_and_per_image_maps() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let (artifact, _, image) = trained_efficient_ad(&repository);
+        let per_image = efficient_ad_image_bytes(image.values.len() as u64);
+        let fixed =
+            artifact.blob.bytes * 4 + flow_like_ml_burn::EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES;
+        let limited = |memory_limit_bytes| ComputeConfig {
+            memory_limit_bytes,
+            ..ComputeConfig::default()
+        };
+        let Err(error) = LoadedArtifactPredictor::load(
+            &repository,
+            &artifact.id,
+            &limited(fixed + per_image - 1),
+        ) else {
+            panic!("a budget without room for one image beyond the workspace must not load");
+        };
+        assert!(
+            error.to_string().contains("EfficientAD inference needs"),
+            "{error}"
+        );
+        let predictor = LoadedArtifactPredictor::load(
+            &repository,
+            &artifact.id,
+            &limited(fixed + per_image * 3 / 2),
+        )
+        .unwrap();
+        let pair = TensorData {
+            shape: vec![2, 1, 256, 256],
+            values: [image.values.clone(), image.values.clone()].concat(),
+        };
+        assert!(predictor.predict(&pair).is_err());
+        let prediction = predictor.predict(&image).unwrap();
+        assert_eq!(
+            prediction["anomaly_maps"]["shape"],
+            serde_json::json!([1, 1, 256, 256])
+        );
     }
 }

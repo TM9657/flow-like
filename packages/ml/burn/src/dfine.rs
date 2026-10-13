@@ -58,6 +58,8 @@ impl CrossAttention {
         }
     }
 
+    // Burn slices take one range per dimension, so a one-element range array is intended.
+    #[allow(clippy::single_range_in_vec_init)]
     fn forward(
         &self,
         query: Tensor<3>,
@@ -295,12 +297,17 @@ impl DfineNano {
                 .collect(),
             1,
         );
+        Ok(self.decode(memory, &shapes))
+    }
+
+    /// Like upstream, only query selection sees the valid-anchor mask; decoder layers sample the
+    /// unmasked memory.
+    fn decode(&self, memory: Tensor<3>, shapes: &[[usize; 2]]) -> DetrOutput {
         let [batch, _, _] = memory.dims();
-        let (anchors, valid) = anchors(&shapes, &memory.device());
-        let memory = memory * valid;
+        let (anchors, valid) = anchors(shapes, &memory.device());
         let projected = self
             .encoder_norm
-            .forward(self.encoder_projection.forward(memory.clone()));
+            .forward(self.encoder_projection.forward(memory.clone() * valid));
         let logits = self.encoder_score.forward(projected.clone());
         let indices = logits
             .clone()
@@ -341,7 +348,7 @@ impl DfineNano {
                 position,
                 references.clone(),
                 memory.clone(),
-                &shapes,
+                shapes,
             );
             if index == 0 {
                 let boxes =
@@ -372,10 +379,10 @@ impl DfineNano {
             previous_output = target.clone().detach();
             predictions.push(DetrPrediction { logits, boxes });
         }
-        Ok(DetrOutput {
+        DetrOutput {
             prediction: predictions.pop().unwrap(),
             auxiliary: predictions,
-        })
+        }
     }
 
     pub(crate) fn reset_classifier(mut self, classes: usize, device: &Device) -> Self {
@@ -589,6 +596,53 @@ mod tests {
         assert_eq!(
             model.forward(input).unwrap().prediction.logits.dims(),
             [1, 4, 3]
+        );
+    }
+
+    #[test]
+    fn decoder_samples_unmasked_memory_while_query_selection_ignores_invalid_anchors() {
+        let _guard = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let device = crate::backend::device(&crate::BackendChoice::Cpu, false).unwrap();
+        // An 800 px wide input gives a 50-column stride-16 map whose outer columns are invalid.
+        let shapes = [[2, 50], [1, 25]];
+        let tokens = 125;
+        let model = DfineNano::new(
+            &DfineConfig {
+                classes: 2,
+                queries: tokens,
+            },
+            &device,
+        )
+        .unwrap();
+        let base = (0..tokens * CHANNELS)
+            .map(|index| ((index % 17) as f32 - 8.0) / 8.0)
+            .collect::<Vec<_>>();
+        let mut changed = base.clone();
+        for token in [0, 49, 50, 99] {
+            let values = &mut changed[token * CHANNELS..(token + 1) * CHANNELS];
+            for (channel, value) in values.iter_mut().enumerate() {
+                *value += 1.0 + (channel % 7) as f32 / 4.0;
+            }
+        }
+        let decode = |values: Vec<f32>| {
+            let memory = Tensor::from_data(TensorData::new(values, [1, tokens, CHANNELS]), &device);
+            model.decode(memory, &shapes)
+        };
+        let data = |tensor: Tensor<3>| tensor.to_data().iter::<f32>().collect::<Vec<_>>();
+        let (first, second) = (decode(base), decode(changed));
+        assert_eq!(
+            data(first.auxiliary[0].logits.clone()),
+            data(second.auxiliary[0].logits.clone()),
+            "Query selection must ignore invalid-anchor tokens"
+        );
+        let logits = data(first.prediction.logits);
+        assert!(logits.iter().all(|value| value.is_finite()));
+        assert_ne!(
+            logits,
+            data(second.prediction.logits),
+            "Decoder cross-attention must sample the unmasked memory"
         );
     }
 

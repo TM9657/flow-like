@@ -1,0 +1,30 @@
+---
+title: "HART Node Catalog"
+description: "Industrial/HART Flow-Like node category with 4 generated node references."
+sidebar:
+  order: 0
+  label: "HART"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "HART nodes, Industrial/HART, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "Industrial/HART"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"HART Node Catalog\",\"description\":\"Industrial/HART Flow-Like node category with 4 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/industrial/hart/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"Industrial/HART\",\"keywords\":\"HART nodes, Industrial/HART, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"Industrial/HART"}
+	label="HART"
+	nodes={nodesByCategory["Industrial/HART"] ?? []}
+	client:load
+/>

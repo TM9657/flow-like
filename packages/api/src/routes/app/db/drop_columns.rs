@@ -3,7 +3,7 @@ use crate::{
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
-    routes::app::db::{ScopeParams, resolve_write_connection, validate_table_name},
+    routes::app::db::{ScopeParams, column_reader, resolve_write_connection, validate_table_name},
     state::AppState,
 };
 use axum::{
@@ -53,7 +53,7 @@ pub async fn drop_columns(
     Query(selector): Query<DatabaseSelector>,
     Json(payload): Json<DropColumnsPayload>,
 ) -> Result<Json<()>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -64,7 +64,9 @@ pub async fn drop_columns(
     super::validate_writable_selector(&selector)?;
 
     let connection = resolve_write_connection(&state, &user, &app_id, &scope).await?;
-    let db = LanceDBVectorStore::from_connection_with_selector(connection, table, selector).await?;
+    let db = LanceDBVectorStore::from_connection_with_selector(connection, table, selector)
+        .await?
+        .with_column_reader(column_reader(&permission, &scope));
 
     let column_refs: Vec<&str> = payload.columns.iter().map(|s| s.as_str()).collect();
     db.drop_columns(&column_refs)

@@ -1,4 +1,4 @@
-use crate::repository::{evaluation_truth_digest, validate_prediction_truth};
+use crate::repository::{current_prediction_truth, evaluation_truth_digest};
 use crate::*;
 use flow_like_ml_core::{Annotation, BoundingBox, LabelProvenance, Sample};
 use flow_like_ml_native::evaluation as metrics;
@@ -27,18 +27,29 @@ impl TrainingRepository {
         if task == EvaluationTask::Classification {
             return self.evaluate_classification_cohort(artifact_id, cohort, at_ms);
         }
+        if let EvaluationTask::Detection { classes, .. }
+        | EvaluationTask::Segmentation { classes }
+        | EvaluationTask::InstanceSegmentation { classes, .. } = &task
+            && !(1..=4096).contains(classes)
+        {
+            return Err(invalid(format!(
+                "detection and segmentation evaluation require 1..=4096 classes, got {classes}"
+            )));
+        }
         let mut connection = self.connection()?;
-        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let artifact: ModelArtifact = serde_json::from_str(&tx.query_row(
+        // Artifacts, snapshots and their lineage are immutable: read them before the write lock.
+        let artifact: ModelArtifact = serde_json::from_str(&connection.query_row(
             "SELECT body FROM artifacts WHERE id=?",
             [artifact_id],
             |r| r.get::<_, String>(0),
         )?)?;
-        let snapshot: DatasetSnapshot = serde_json::from_str(&tx.query_row(
+        let snapshot: DatasetSnapshot = serde_json::from_str(&connection.query_row(
             "SELECT body FROM snapshots WHERE id=?",
             [&artifact.snapshot_id],
             |r| r.get::<_, String>(0),
         )?)?;
+        let consumed = crate::engines::ConsumedGroups::load(&connection, &artifact, &snapshot)?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut query =
             tx.prepare("SELECT body FROM predictions WHERE artifact_id=? ORDER BY sample_id")?;
         let mut predictions: Vec<PredictionRecord> = query
@@ -62,12 +73,6 @@ impl TrainingRepository {
                 "prediction evidence was not available at evaluation time",
             ));
         }
-        let consumed_groups: std::collections::HashSet<_> = snapshot
-            .train
-            .iter()
-            .chain(&snapshot.validation)
-            .map(|sample| sample.group_id.as_str())
-            .collect();
         let classes = match task {
             EvaluationTask::Detection { classes, .. }
             | EvaluationTask::Segmentation { classes }
@@ -75,7 +80,7 @@ impl TrainingRepository {
             EvaluationTask::Events { .. } | EvaluationTask::Anomaly { .. } => 2,
             _ => 0,
         };
-        let mut audited = Vec::new();
+        let mut truths = Vec::new();
         for prediction in &predictions {
             if !matches!(
                 prediction.actual_source,
@@ -83,10 +88,16 @@ impl TrainingRepository {
             ) {
                 continue;
             }
-            let recorded = validate_prediction_truth(&tx, &artifact.stream, prediction)?;
-            if consumed_groups.contains(recorded.group_id.as_str()) {
-                return Err(invalid("audited sample shares a training/validation group"));
-            }
+            // A withdrawn annotation no longer provides audited truth.
+            let Some(recorded) = current_prediction_truth(&tx, &artifact.stream, prediction)?
+            else {
+                continue;
+            };
+            truths.push((prediction, recorded));
+        }
+        consumed.ensure_independent(truths.iter().map(|(_, recorded)| recorded))?;
+        let mut audited = Vec::new();
+        for (prediction, recorded) in truths {
             if recorded.label_available_at_ms > at_ms {
                 return Err(invalid("recorded outcome was not yet available"));
             }
@@ -431,6 +442,7 @@ impl TrainingRepository {
                             ));
                         }
                     }
+                    // An empty predicted mask overlaps no truth, so it scores as a false positive.
                     let mut elements = 0usize;
                     for instance in found {
                         elements = elements
@@ -443,10 +455,9 @@ impl TrainingRepository {
                             || instance.class_id as usize >= *classes
                             || !instance.confidence.is_finite()
                             || !(0.0..=1.0).contains(&instance.confidence)
-                            || !instance.foreground.iter().any(|value| *value)
                         {
                             return Err(invalid(
-                                "predicted instance masks require valid classes, probabilities and nonempty full-image grids",
+                                "predicted instance masks require valid classes, probabilities and full-image grids",
                             ));
                         }
                     }

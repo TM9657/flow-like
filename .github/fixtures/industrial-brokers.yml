@@ -37,6 +37,16 @@ services:
     build:
       context: ../..
       dockerfile: .github/fixtures/industrial/modbus-rtu/Dockerfile
+  opcua-pubsub:
+    profiles: [e2e]
+    build:
+      context: ../..
+      dockerfile: .github/fixtures/industrial/opcua-pubsub/Dockerfile
+  dds:
+    profiles: [e2e]
+    build:
+      context: ../..
+      dockerfile: .github/fixtures/industrial/dds/Dockerfile
   zenoh:
     image: eclipse/zenoh:1.6.2@sha256:e82138674f7f653ecdd3cc4b0095eea98fcfcd50a88f915f0cad8bf5a73fe19c
     command: ["-c", "/etc/zenoh.json5"]

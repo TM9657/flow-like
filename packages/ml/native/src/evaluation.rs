@@ -124,6 +124,8 @@ pub struct ClassificationMetrics {
     pub per_class: Vec<ClassMetrics>,
 }
 
+/// Classes with neither support nor predictions have no F1 and are left out of the
+/// macro average, as they are for balanced accuracy and mean Dice.
 pub fn classification_metrics(
     actual: &[u32],
     predicted: &[u32],
@@ -172,12 +174,13 @@ pub fn classification_metrics(
         });
     }
     let count = actual.len() as u64;
+    let defined_f1: Vec<_> = per_class.iter().filter_map(|c| c.f1).collect();
     Ok(ClassificationMetrics {
         samples: count,
         confusion,
         accuracy: correct as f64 / count as f64,
         accuracy_interval_95: wilson_interval(correct, count, 1.959963984540054)?.unwrap(),
-        macro_f1: per_class.iter().map(|c| c.f1.unwrap_or(0.0)).sum::<f64>() / classes as f64,
+        macro_f1: defined_f1.iter().sum::<f64>() / defined_f1.len() as f64,
         weighted_f1: per_class
             .iter()
             .map(|c| c.f1.unwrap_or(0.0) * c.support as f64)
@@ -350,11 +353,11 @@ pub fn detection_metrics(
     require(
         !actual.is_empty()
             && actual.len() == predicted.len()
-            && classes > 0
+            && (1..=4096).contains(&classes)
             && iou_threshold.is_finite()
             && iou_threshold > 0.0
             && iou_threshold <= 1.0,
-        "Detection needs aligned images, classes and IoU in (0,1]",
+        "Detection needs aligned images, 1..4096 classes and IoU in (0,1]",
     )?;
     for bounds in actual.iter().flatten() {
         bounds.validate(classes)?;
@@ -366,8 +369,9 @@ pub fn detection_metrics(
             "Detection confidence must be in [0,1]",
         )?;
     }
-    let mut per_class = vec![];
-    for class in 0..classes as u32 {
+    let mut per_class = Vec::with_capacity(classes);
+    for class_index in 0..classes {
+        let class = class_index as u32;
         let count = actual
             .iter()
             .flatten()
@@ -566,6 +570,18 @@ mod tests {
         assert!(m.accuracy_interval_95.lower < 0.75 && m.accuracy_interval_95.upper > 0.75);
     }
     #[test]
+    fn macro_f1_skips_classes_without_support_or_predictions() {
+        let observed = [0, 1, 2, 3, 4, 5];
+        let perfect = classification_metrics(&observed, &observed, 10).unwrap();
+        assert_eq!(perfect.accuracy, 1.0);
+        assert_eq!(perfect.balanced_accuracy, 1.0);
+        assert_eq!(perfect.macro_f1, 1.0);
+        assert_eq!(perfect.per_class[9].f1, None);
+        let spurious = classification_metrics(&[0, 1], &[0, 2], 4).unwrap();
+        assert_eq!(spurious.per_class[2].f1, Some(0.0));
+        assert!((spurious.macro_f1 - 1.0 / 3.0).abs() < 1e-12);
+    }
+    #[test]
     fn roc_ties_and_pr_average_precision_match_known_values() {
         let m = binary_curve(&[false, false, true, true], &[0.1, 0.4, 0.35, 0.8]).unwrap();
         assert!((m.roc_auc.unwrap() - 0.75).abs() < 1e-12);
@@ -605,6 +621,29 @@ mod tests {
         assert_eq!(m.mean_average_precision, Some(1.0));
         let segmentation = segmentation_metrics(&[0, 0, 1, 1], &[0, 1, 1, 1], 2).unwrap();
         assert_eq!(segmentation.per_class_iou, vec![Some(0.5), Some(2.0 / 3.0)]);
+    }
+    #[test]
+    fn detection_bounds_the_class_count_without_truncation() {
+        let bbox = BoundingBox {
+            class_id: 4095,
+            x_min: 0.0,
+            y_min: 0.0,
+            x_max: 1.0,
+            y_max: 1.0,
+        };
+        let actual = [vec![bbox.clone()]];
+        let predicted = [vec![ScoredBox {
+            bounds: bbox,
+            confidence: 0.9,
+        }]];
+        let m = detection_metrics(&actual, &predicted, 4096, 0.5).unwrap();
+        assert_eq!(m.per_class.len(), 4096);
+        assert_eq!(m.per_class[4095].class_id, 4095);
+        assert_eq!(m.per_class[4095].matched, 1);
+        assert_eq!(m.mean_average_precision, Some(1.0));
+        assert!(detection_metrics(&actual, &predicted, 4097, 0.5).is_err());
+        assert!(detection_metrics(&actual, &predicted, usize::MAX, 0.5).is_err());
+        assert!(detection_metrics(&actual, &predicted, 0, 0.5).is_err());
     }
     #[test]
     fn event_metrics_count_duplicate_alarms_and_lead_time() {

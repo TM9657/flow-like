@@ -6,6 +6,7 @@ import {
 	AlertTriangle,
 	ChevronLeft,
 	Database,
+	Fingerprint,
 	History,
 	KeyRound,
 	Loader2,
@@ -19,6 +20,16 @@ import {
 import type * as React from "react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "../../lib";
+import {
+	type IColumnMetadata,
+	MAX_COLUMN_ATTRIBUTE_CHARS,
+	MAX_COLUMN_DESCRIPTION_CHARS,
+	MAX_COLUMN_DISPLAY_NAME_CHARS,
+	isColumnReadRestricted,
+	normalizeColumnMetadata,
+	sameColumnMetadata,
+} from "../../lib/column-metadata";
+import type { DataClassification } from "../../lib/data-classification";
 import { asArray } from "../../lib/response-shape";
 import {
 	type IAddColumnPayload,
@@ -26,8 +37,16 @@ import {
 	IIndexType,
 	parseIndexType,
 } from "../../state/backend-state/db-state";
+import { AttributeTagsInput } from "./attribute-tags-input";
 import { Badge } from "./badge";
 import { Button } from "./button";
+import {
+	DataClassificationBadge,
+	DataClassificationDot,
+	DataSensitivityFields,
+	PiiBadge,
+	useDataClassificationCopy,
+} from "./data-classification";
 import {
 	Dialog,
 	DialogContent,
@@ -56,6 +75,7 @@ import {
 	validateColumnDefault,
 	validateColumnName,
 } from "./table-schema";
+import { Textarea } from "./textarea";
 
 export interface TableSchemaDialogProps {
 	schema: LanceSchema | null;
@@ -65,6 +85,15 @@ export interface TableSchemaDialogProps {
 	onAddColumn?: (column: IAddColumnPayload) => Promise<void>;
 	onAlterColumn?: (column: string, nullable: boolean) => Promise<void>;
 	onSetPrimaryKey?: (column: string) => Promise<void>;
+	/** Replaces a column's metadata. Without it the column details are read-only. */
+	onSetColumnMetadata?: (
+		column: string,
+		metadata: IColumnMetadata,
+	) => Promise<unknown>;
+	/** Unlocks the read-attribute editor; only admins and owners may change it. */
+	canManageColumnAccess?: boolean;
+	/** Role attributes offered as read attributes. Unknown when omitted. */
+	knownAttributes?: readonly string[];
 	onBuildIndex?: (column: string, indexType: string) => Promise<void>;
 	onGetIndices?: () => Promise<IIndexConfig[]>;
 	onDropIndex?: (indexName: string) => Promise<void>;
@@ -117,7 +146,7 @@ const indexLabel = (index: IIndexConfig) =>
 	indexOption(index)?.label ?? index.index_type;
 
 /** Hosts toast their own failures and rethrow; the dialog only needs the outcome. */
-async function attempt(task: () => Promise<void>): Promise<boolean> {
+async function attempt(task: () => Promise<unknown>): Promise<boolean> {
 	try {
 		await task();
 		return true;
@@ -192,14 +221,15 @@ function SchemaWorkspace({
 	const [detailOnPhone, setDetailOnPhone] = useState(false);
 	const selected =
 		fields.find((field) => field.name === columnName) ?? fields[0];
-	const editable = Boolean(
-		props.onDropColumns ||
-			onAddColumn ||
-			props.onAlterColumn ||
-			props.onSetPrimaryKey ||
-			props.onBuildIndex ||
-			props.onDropIndex,
-	);
+	const editable = [
+		props.onDropColumns,
+		onAddColumn,
+		props.onAlterColumn,
+		props.onSetPrimaryKey,
+		props.onSetColumnMetadata,
+		props.onBuildIndex,
+		props.onDropIndex,
+	].some(Boolean);
 
 	const openPane = (next: SchemaPane) => {
 		setPane(next);
@@ -289,6 +319,14 @@ function SchemaWorkspace({
 				onDropColumns={props.onDropColumns}
 				onIndicesChanged={reload}
 				onDropped={handleDropped}
+				details={
+					<ColumnDetails
+						field={selected}
+						onSetColumnMetadata={props.onSetColumnMetadata}
+						canManageColumnAccess={props.canManageColumnAccess ?? false}
+						knownAttributes={props.knownAttributes}
+					/>
+				}
 			/>
 		);
 	};
@@ -389,9 +427,11 @@ function SchemaRail({
 	const { t } = useTranslation("common");
 	const [query, setQuery] = useState("");
 	const needle = query.trim().toLowerCase();
-	const visible = needle
-		? fields.filter((field) => field.name.toLowerCase().includes(needle))
-		: fields;
+	const matches = (field: LanceField) =>
+		[field.name, field.columnMetadata?.display_name ?? ""].some((text) =>
+			text.toLowerCase().includes(needle),
+		);
+	const visible = needle ? fields.filter(matches) : fields;
 
 	return (
 		<nav
@@ -442,12 +482,15 @@ function SchemaRail({
 									{field.name}
 								</span>
 								<span className="block truncate text-[11px] text-muted-foreground">
+									{field.columnMetadata?.display_name &&
+										`${field.columnMetadata.display_name} · `}
 									{fieldTypeLabel(field)} ·{" "}
 									{(field.nullable ?? true)
 										? t("nullable", "Nullable")
 										: t("required", "Required")}
 								</span>
 							</span>
+							<ColumnMarkers metadata={field.columnMetadata} />
 							{field.name === primaryKey && (
 								<KeyRound
 									role="img"
@@ -510,6 +553,42 @@ function RailButton({
 	);
 }
 
+function ColumnMarkers({
+	metadata,
+}: Readonly<{ metadata: IColumnMetadata | undefined }>) {
+	const { t } = useTranslation("common");
+	const levels = useDataClassificationCopy();
+	const level = metadata?.classification;
+	return (
+		<>
+			{level && (
+				<span
+					role="img"
+					aria-label={levels[level].label}
+					title={levels[level].label}
+					className="inline-flex shrink-0"
+				>
+					<DataClassificationDot classification={level} />
+				</span>
+			)}
+			{metadata?.pii && (
+				<Fingerprint
+					role="img"
+					aria-label={t("piiLabel", "Contains personal data")}
+					className="size-3.5 shrink-0 text-muted-foreground"
+				/>
+			)}
+			{isColumnReadRestricted(metadata) && (
+				<Lock
+					role="img"
+					aria-label={t("schemaReadRestricted", "Read-restricted")}
+					className="size-3.5 shrink-0 text-muted-foreground"
+				/>
+			)}
+		</>
+	);
+}
+
 function ColumnPane({
 	field,
 	isLastColumn,
@@ -524,6 +603,7 @@ function ColumnPane({
 	onDropColumns,
 	onIndicesChanged,
 	onDropped,
+	details,
 }: Readonly<{
 	field: LanceField;
 	isLastColumn: boolean;
@@ -538,6 +618,8 @@ function ColumnPane({
 	onDropColumns?: (columns: string[]) => Promise<void>;
 	onIndicesChanged: () => Promise<void>;
 	onDropped: (name: string) => void;
+	/** Rendered between the column's properties and its drop control. */
+	details?: React.ReactNode;
 }>) {
 	const { t } = useTranslation("common");
 	const titleId = useId();
@@ -819,6 +901,8 @@ function ColumnPane({
 				)}
 			</div>
 
+			{details}
+
 			{onDropColumns && (isKey || isLastColumn) && (
 				<div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
 					<div className="min-w-0 flex-1 space-y-1">
@@ -901,6 +985,371 @@ function dropDescription(
 				"schemaDropColumnBody",
 				"Deletes the column and its values. Flows that read it will fail. To undo, restore the previous version from History.",
 			);
+}
+
+interface ColumnDetailsDraft {
+	display_name: string;
+	description: string;
+	classification?: DataClassification;
+	pii: boolean;
+	read_attributes: string[];
+}
+
+function draftOf(metadata: IColumnMetadata): ColumnDetailsDraft {
+	return {
+		display_name: metadata.display_name ?? "",
+		description: metadata.description ?? "",
+		classification: metadata.classification,
+		pii: metadata.pii === true,
+		read_attributes: metadata.read_attributes ?? [],
+	};
+}
+
+function ColumnDetails({
+	field,
+	onSetColumnMetadata,
+	canManageColumnAccess,
+	knownAttributes,
+}: Readonly<{
+	field: LanceField;
+	onSetColumnMetadata?: (
+		column: string,
+		metadata: IColumnMetadata,
+	) => Promise<unknown>;
+	canManageColumnAccess: boolean;
+	knownAttributes?: readonly string[];
+}>) {
+	const stored = normalizeColumnMetadata(field.columnMetadata);
+	if (!onSetColumnMetadata) return <ColumnDetailsView metadata={stored} />;
+	return (
+		<ColumnDetailsForm
+			// A stored change, from this form or another editor, restarts the draft from it.
+			key={JSON.stringify(stored)}
+			column={field.name}
+			stored={stored}
+			onSave={onSetColumnMetadata}
+			canManageColumnAccess={canManageColumnAccess}
+			knownAttributes={knownAttributes}
+		/>
+	);
+}
+
+function DetailsSection({
+	status,
+	children,
+}: Readonly<{ status?: React.ReactNode; children: React.ReactNode }>) {
+	const { t } = useTranslation("common");
+	const titleId = useId();
+	return (
+		<section aria-labelledby={titleId} className="rounded-lg border bg-card/40">
+			<div className="flex flex-wrap items-start gap-x-3 gap-y-1 border-b px-4 py-3.5">
+				<div className="min-w-0 flex-1 space-y-0.5">
+					<h4 id={titleId} className="text-sm font-medium">
+						{t("details", "Details")}
+					</h4>
+					<p className="text-xs text-muted-foreground">
+						{t(
+							"schemaColumnDetailsHint",
+							"What the column means, how sensitive it is and who can read it.",
+						)}
+					</p>
+				</div>
+				{status}
+			</div>
+			{children}
+		</section>
+	);
+}
+
+function AttributeChips({
+	attributes,
+}: Readonly<{ attributes: readonly string[] }>) {
+	return (
+		<span className="flex flex-wrap gap-1.5">
+			{attributes.map((attribute) => (
+				<span
+					key={attribute}
+					className="inline-flex items-center rounded-md border bg-muted/50 px-2 py-0.5 font-mono text-xs"
+				>
+					{attribute}
+				</span>
+			))}
+		</span>
+	);
+}
+
+function DetailRow({
+	label,
+	children,
+}: Readonly<{ label: string; children: React.ReactNode }>) {
+	return (
+		<div className="grid gap-x-5 gap-y-1 px-4 py-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-baseline">
+			<dt className="text-sm font-medium">{label}</dt>
+			<dd className="min-w-0 wrap-break-word text-sm">{children}</dd>
+		</div>
+	);
+}
+
+function MutedValue({ children }: Readonly<{ children: React.ReactNode }>) {
+	return <span className="text-muted-foreground">{children}</span>;
+}
+
+function ColumnDetailsView({
+	metadata,
+}: Readonly<{ metadata: IColumnMetadata }>) {
+	const { t } = useTranslation("common");
+	const levels = useDataClassificationCopy();
+	const notSet = <MutedValue>{t("schemaNotSet", "Not set")}</MutedValue>;
+	const readers = metadata.read_attributes ?? [];
+	return (
+		<DetailsSection>
+			<dl className="divide-y">
+				<DetailRow label={t("schemaDisplayName", "Display name")}>
+					{metadata.display_name ?? notSet}
+				</DetailRow>
+				<DetailRow label={t("description", "Description")}>
+					{metadata.description ? (
+						<span className="whitespace-pre-line">{metadata.description}</span>
+					) : (
+						notSet
+					)}
+				</DetailRow>
+				<DetailRow label={t("classification", "Classification")}>
+					{metadata.classification ? (
+						<DataClassificationBadge classification={metadata.classification} />
+					) : (
+						<MutedValue>{levels.unset.label}</MutedValue>
+					)}
+				</DetailRow>
+				<DetailRow label={t("piiLabel", "Contains personal data")}>
+					{metadata.pii ? (
+						<PiiBadge />
+					) : (
+						<MutedValue>{t("no", "No")}</MutedValue>
+					)}
+				</DetailRow>
+				<DetailRow label={t("schemaAllowedToRead", "Allowed to read")}>
+					{readers.length > 0 ? (
+						<AttributeChips attributes={readers} />
+					) : (
+						<MutedValue>
+							{t(
+								"schemaAllowedToReadEveryone",
+								"Everyone who can read the table",
+							)}
+						</MutedValue>
+					)}
+				</DetailRow>
+			</dl>
+		</DetailsSection>
+	);
+}
+
+function ColumnDetailsForm({
+	column,
+	stored,
+	onSave,
+	canManageColumnAccess,
+	knownAttributes,
+}: Readonly<{
+	column: string;
+	stored: IColumnMetadata;
+	onSave: (column: string, metadata: IColumnMetadata) => Promise<unknown>;
+	canManageColumnAccess: boolean;
+	knownAttributes?: readonly string[];
+}>) {
+	const { t } = useTranslation("common");
+	const ids = useId();
+	const [baseline, setBaseline] = useState(stored);
+	const [draft, setDraft] = useState(() => draftOf(stored));
+	const [busy, setBusy] = useState(false);
+	const next = normalizeColumnMetadata(draft);
+	const dirty = !sameColumnMetadata(next, baseline);
+	const update = (patch: Partial<ColumnDetailsDraft>) =>
+		setDraft((current) => ({ ...current, ...patch }));
+
+	const save = async (event: React.FormEvent) => {
+		event.preventDefault();
+		if (!dirty || busy) return;
+		setBusy(true);
+		const ok = await attempt(() => onSave(column, next));
+		setBusy(false);
+		if (ok) setBaseline(next);
+	};
+
+	return (
+		<DetailsSection
+			status={
+				dirty && (
+					<span className="text-xs text-muted-foreground">
+						{t("unsavedChanges", "Unsaved changes")}
+					</span>
+				)
+			}
+		>
+			<form noValidate onSubmit={(event) => void save(event)}>
+				<div className="flex flex-col gap-5 p-4">
+					<LabelledField
+						id={`${ids}-display-name`}
+						label={t("schemaDisplayName", "Display name")}
+						hint={t(
+							"schemaDisplayNameHint",
+							"Shown in table headers instead of the column name.",
+						)}
+					>
+						<Input
+							id={`${ids}-display-name`}
+							className="max-w-sm"
+							placeholder={column}
+							maxLength={MAX_COLUMN_DISPLAY_NAME_CHARS}
+							value={draft.display_name}
+							disabled={busy}
+							aria-describedby={`${ids}-display-name-hint`}
+							onChange={(event) => update({ display_name: event.target.value })}
+						/>
+					</LabelledField>
+					<LabelledField
+						id={`${ids}-description`}
+						label={t("description", "Description")}
+					>
+						<Textarea
+							id={`${ids}-description`}
+							rows={3}
+							maxLength={MAX_COLUMN_DESCRIPTION_CHARS}
+							placeholder={t(
+								"schemaColumnDescriptionPlaceholder",
+								"What it holds, its unit or format, where it comes from…",
+							)}
+							value={draft.description}
+							disabled={busy}
+							onChange={(event) => update({ description: event.target.value })}
+						/>
+					</LabelledField>
+					<DataSensitivityFields
+						value={draft}
+						disabled={busy}
+						onChange={({ classification, pii }) =>
+							update({ classification, pii: pii === true })
+						}
+					/>
+					<ReadAttributesField
+						id={`${ids}-readers`}
+						value={draft.read_attributes}
+						onChange={(read_attributes) => update({ read_attributes })}
+						knownAttributes={knownAttributes}
+						canManage={canManageColumnAccess}
+						disabled={busy}
+					/>
+				</div>
+				<div className="flex justify-end gap-2 border-t px-4 py-3">
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						disabled={!dirty || busy}
+						onClick={() => setDraft(draftOf(baseline))}
+					>
+						{t("cancel", "Cancel")}
+					</Button>
+					<Button type="submit" size="sm" disabled={!dirty || busy}>
+						{busy && <Loader2 className="animate-spin" />}
+						{t("save", "Save")}
+					</Button>
+				</div>
+			</form>
+		</DetailsSection>
+	);
+}
+
+function LabelledField({
+	id,
+	label,
+	hint,
+	children,
+}: Readonly<{
+	id: string;
+	label: string;
+	hint?: string;
+	children: React.ReactNode;
+}>) {
+	return (
+		<div className="flex min-w-0 flex-col gap-1.5">
+			<Label htmlFor={id}>{label}</Label>
+			{children}
+			{hint && (
+				<p id={`${id}-hint`} className="text-xs text-muted-foreground">
+					{hint}
+				</p>
+			)}
+		</div>
+	);
+}
+
+function ReadAttributesField({
+	id,
+	value,
+	onChange,
+	knownAttributes,
+	canManage,
+	disabled,
+}: Readonly<{
+	id: string;
+	value: string[];
+	onChange: (next: string[]) => void;
+	knownAttributes?: readonly string[];
+	canManage: boolean;
+	disabled: boolean;
+}>) {
+	const { t } = useTranslation("common");
+	const unheld = knownAttributes
+		? value.filter((attribute) => !knownAttributes.includes(attribute))
+		: [];
+	return (
+		<div className="flex min-w-0 flex-col gap-1.5">
+			<Label htmlFor={id}>
+				<Lock className="size-3.5 text-muted-foreground" />
+				{t("schemaAllowedToRead", "Allowed to read")}
+			</Label>
+			<p id={`${id}-hint`} className="text-xs text-muted-foreground">
+				{t(
+					"schemaAllowedToReadHint",
+					"Leave empty and everyone who can read the table sees this column. With role attributes, only admins and roles holding at least one of them see it.",
+				)}
+			</p>
+			<AttributeTagsInput
+				id={id}
+				aria-describedby={`${id}-hint`}
+				value={value}
+				onChange={onChange}
+				suggestions={knownAttributes}
+				suggestionsLabel={t("schemaRoleAttributes", "Role attributes:")}
+				placeholder={t("schemaReadAttributePlaceholder", "e.g. hr")}
+				maxLength={MAX_COLUMN_ATTRIBUTE_CHARS}
+				disabled={disabled || !canManage}
+			/>
+			{!canManage && (
+				<p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+					<Lock className="size-3.5 shrink-0" />
+					{t(
+						"schemaAllowedToReadAdminOnly",
+						"Only admins and owners can change who may read a column.",
+					)}
+				</p>
+			)}
+			{unheld.length > 0 && (
+				<p className="flex items-start gap-1.5 text-xs text-warning">
+					<AlertTriangle className="mt-px size-3.5 shrink-0" />
+					{t(
+						"schemaUnheldReadAttributes",
+						"No role holds {{attributes}} yet.",
+						{
+							attributes: unheld.join(", "),
+						},
+					)}
+				</p>
+			)}
+		</div>
+	);
 }
 
 function PropertyRow({
@@ -1498,16 +1947,16 @@ function IndicesPane({
 					<Table className="my-0">
 						<TableHeader className="bg-muted/30">
 							<TableRow className="hover:bg-transparent">
-								<TableHead className="border-0 bg-transparentpx-4">
+								<TableHead className="border-0 bg-transparent px-4">
 									{t("column", "Column")}
 								</TableHead>
-								<TableHead className="border-0 bg-transparentpx-4">
+								<TableHead className="border-0 bg-transparent px-4">
 									{t("schemaTypeLabel", "Type")}
 								</TableHead>
-								<TableHead className="border-0 bg-transparentpx-4">
+								<TableHead className="border-0 bg-transparent px-4">
 									{t("schemaIndexLabel", "Index")}
 								</TableHead>
-								<TableHead className="border-0 bg-transparentpx-4">
+								<TableHead className="border-0 bg-transparent px-4">
 									<span className="sr-only">{t("actions", "Actions")}</span>
 								</TableHead>
 							</TableRow>
@@ -1517,7 +1966,7 @@ function IndicesPane({
 								const index = columnIndex(indices, field.name);
 								return (
 									<TableRow key={field.name}>
-										<TableCell className="border-0 bg-transparentpx-4">
+										<TableCell className="border-0 bg-transparent px-4">
 											<button
 												type="button"
 												className="rounded-sm font-mono text-[13px] underline decoration-muted-foreground/40 underline-offset-4 outline-none hover:decoration-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -1526,13 +1975,13 @@ function IndicesPane({
 												{field.name}
 											</button>
 										</TableCell>
-										<TableCell className="border-0 bg-transparentpx-4">
+										<TableCell className="border-0 bg-transparent px-4">
 											<TypeChip>{fieldTypeLabel(field)}</TypeChip>
 										</TableCell>
-										<TableCell className="border-0 bg-transparentmax-w-64 px-4">
+										<TableCell className="border-0 bg-transparent max-w-64 px-4">
 											{indexCell(index)}
 										</TableCell>
-										<TableCell className="border-0 bg-transparentpx-4 text-right">
+										<TableCell className="border-0 bg-transparent px-4 text-right">
 											{actionCell(field.name, index)}
 										</TableCell>
 									</TableRow>
@@ -1540,14 +1989,14 @@ function IndicesPane({
 							})}
 							{nested.map((index) => (
 								<TableRow key={index.name}>
-									<TableCell className="border-0 bg-transparentpx-4 font-mono text-[13px]">
+									<TableCell className="border-0 bg-transparent px-4 font-mono text-[13px]">
 										{index.columns.join(", ")}
 									</TableCell>
-									<TableCell className="border-0 bg-transparentpx-4" />
-									<TableCell className="border-0 bg-transparentmax-w-64 px-4">
+									<TableCell className="border-0 bg-transparent px-4" />
+									<TableCell className="border-0 bg-transparent max-w-64 px-4">
 										{indexCell(index)}
 									</TableCell>
-									<TableCell className="border-0 bg-transparentpx-4 text-right">
+									<TableCell className="border-0 bg-transparent px-4 text-right">
 										{actionCell(index.columns[0] ?? "", index)}
 									</TableCell>
 								</TableRow>

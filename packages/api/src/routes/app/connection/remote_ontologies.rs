@@ -11,15 +11,19 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
+use flow_like_storage::contracts::column_metadata::ColumnReader;
 use flow_like_storage::databases::graph::lancegraph;
 use sea_orm::sea_query::ExprTrait;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+/// Checks the active connection's role in the target app and returns whose column read
+/// restrictions apply to the target's tables: admin roles read every column, others only
+/// those their attributes allow.
 pub(crate) async fn ensure_remote_ontology_access(
     state: &AppState,
     app_id: &str,
     target_app_id: &str,
-) -> Result<(), ApiError> {
+) -> Result<ColumnReader, ApiError> {
     let connection = app_connection::Entity::find()
         .filter(
             app_connection::Column::SourceAppId
@@ -45,7 +49,12 @@ pub(crate) async fn ensure_remote_ontology_access(
             "The connection role does not allow reading ontology contracts",
         ));
     }
-    Ok(())
+    if has_role_permission(&permissions, RolePermissions::Admin) {
+        return Ok(ColumnReader::Unrestricted);
+    }
+    Ok(ColumnReader::with_attributes(
+        role_model.attributes.iter().flat_map(|list| list.iter()),
+    ))
 }
 
 pub(crate) fn sanitize_remote_contract(
@@ -111,18 +120,22 @@ pub async fn get_remote_ontologies(
     Path((app_id, target_app_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<flow_like_catalog_core::GraphOverlay>>, ApiError> {
     ensure_permission!(user, &app_id, &state, RolePermissions::ReadBoards);
-    ensure_remote_ontology_access(&state, &app_id, &target_app_id).await?;
+    let reader = ensure_remote_ontology_access(&state, &app_id, &target_app_id).await?;
 
     let credentials = state.master_credentials().await?;
     let builder = credentials.to_db(&target_app_id).await?;
     let database = builder.execute().await?;
-    let ontologies = lancegraph::list_overlays(&database)
-        .await?
-        .into_iter()
-        .filter(|ontology| ontology.exposed)
-        .map(sanitize_remote_contract)
-        .map(crate::routes::app::graph::list_overlays::def_to_overlay)
-        .collect();
+    let mut ontologies = Vec::new();
+    for ontology in lancegraph::list_overlays(&database).await? {
+        if !ontology.exposed {
+            continue;
+        }
+        let contract = sanitize_remote_contract(ontology);
+        let contract = lancegraph::restrict_overlay(&database, contract, &reader).await?;
+        ontologies.push(crate::routes::app::graph::list_overlays::def_to_overlay(
+            contract,
+        ));
+    }
 
     Ok(Json(ontologies))
 }
@@ -165,7 +178,7 @@ pub async fn install_remote_ontology(
         RolePermissions::WriteFiles,
         RolePermissions::WriteDatabase
     );
-    ensure_remote_ontology_access(&state, &app_id, &target_app_id).await?;
+    let reader = ensure_remote_ontology_access(&state, &app_id, &target_app_id).await?;
 
     let credentials = state.master_credentials().await?;
     let target_builder = credentials.to_db(&target_app_id).await?;
@@ -176,6 +189,7 @@ pub async fn install_remote_ontology(
     }
     let mut contract = sanitize_remote_contract(contract);
     lancegraph::freeze_remote_contract_projection(&target_database, &mut contract).await?;
+    let contract = lancegraph::restrict_overlay(&target_database, contract, &reader).await?;
 
     let local_builder = credentials.to_db(&app_id).await?;
     let local_database = local_builder.execute().await?;

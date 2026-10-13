@@ -81,6 +81,13 @@ const failedProjectInstalls = new Map<
 	string,
 	{ at: number; token: string; retryMs: number }
 >();
+/** One fetch of a page's widget bundle per `{appId}:{packageId}@{bundleHash}`, however many widgets ask. */
+const bundleFetches = new Map<string, Promise<void>>();
+/** The last failed bundle fetch per key, with the session token it failed with, its error and how long it is not tried again. */
+const failedBundleFetches = new Map<
+	string,
+	{ at: number; token: string | undefined; retryMs: number; error: unknown }
+>();
 
 interface HubPin {
 	readonly token: string;
@@ -186,13 +193,14 @@ function isBundleNotInstalledError(error: unknown): boolean {
 }
 
 /**
- * Rust: `Failed to download package: 403 Forbidden: …`, the registry's 4xx
- * answer to an install, which the same session gets again. A transport error,
- * a timeout, a 5xx, a failing CDN or a registry that is throttling (429) or
- * timed out (408) is no ruling on the package, as for `isHubUnavailable`.
+ * Rust: `Failed to download package: 403 Forbidden: …` or `Failed to fetch
+ * widget bundle: 404 Not Found: …`, the registry's 4xx answer, which the same
+ * session gets again. A transport error, a timeout, a 5xx, a failing CDN or a
+ * registry that is throttling (429) or timed out (408) is no ruling on the
+ * package, as for `isHubUnavailable`.
  */
 function isRegistryRefusal(error: unknown): boolean {
-	return /^(Failed to download package: )?4(?!08\b|29\b)\d\d\b/.test(
+	return /^(Failed to (download package|fetch widget bundle): )?4(?!08\b|29\b)\d\d\b/.test(
 		getErrorMessage(error, ""),
 	);
 }
@@ -753,12 +761,13 @@ export class RegistryState implements IRegistryState {
 	}
 
 	/**
-	 * A widget of the version the online project pins, whose bundle this device
-	 * lacks, is described once more after installing that version through the
-	 * project. Any other version keeps the original error: installing it would
-	 * replace the pinned one device-wide, and Reload in the builder moves a stale
-	 * placement to the pin. So does a placement that names no version: nothing
-	 * says which one it needs.
+	 * A widget of an online project whose bundle this device lacks is described
+	 * once more after the bundle arrived. It is fetched by its hash from the
+	 * profile's hub, which hands it out as it serves the web sandbox (members
+	 * get the pinned version and older ones), and no version gets installed. A
+	 * hub without that route still gets the pinned version installed through
+	 * the project. A placement that names no version keeps the original error:
+	 * nothing says which one it needs.
 	 */
 	private async describeInstalledWidget(
 		request: WidgetPolicyRequest,
@@ -783,7 +792,7 @@ export class RegistryState implements IRegistryState {
 				throw error;
 			}
 			// The backend is published before profile/auth bootstrap completes. Only
-			// a missing project bundle needs that session to decide whether to install.
+			// a missing project bundle needs that session to fetch it from the hub.
 			try {
 				await this.backend.waitForPackageSession?.();
 			} catch (profileError) {
@@ -791,25 +800,107 @@ export class RegistryState implements IRegistryState {
 					`Could not load the profile for widget package ${request.packageId}: ${getErrorMessage(profileError, "Profile unavailable")}`,
 				);
 			}
-			if (
-				!(await this.canInstallThroughProject(appId)) ||
-				!(await this.isProjectPin(appId, request.packageId, version))
-			) {
-				throw error;
-			}
-			try {
-				await this.installThroughProject(request.packageId, appId, version);
-			} catch (installError) {
-				console.warn(
-					`[Registry] Could not install ${request.packageId}@${version} through project ${appId}:`,
-					installError,
-				);
-				throw new WidgetBundleUnavailableError(
-					`Could not install ${request.packageId}@${version}: ${getErrorMessage(installError, "Package installation failed")}`,
-				);
-			}
+			if (!(await this.canInstallThroughProject(appId))) throw error;
+			await this.bringProjectWidgetBundle(
+				request.packageId,
+				appId,
+				version,
+				bundleHash,
+				error,
+			);
 			return describe();
 		}
+	}
+
+	private async bringProjectWidgetBundle(
+		packageId: string,
+		appId: string,
+		version: string,
+		bundleHash: string,
+		missing: unknown,
+	): Promise<void> {
+		try {
+			await this.cacheWidgetBundle(packageId, version, bundleHash, appId);
+			return;
+		} catch (fetchError) {
+			console.warn(
+				`[Registry] Could not load widget bundle ${bundleHash} of ${packageId}@${version} from the hub:`,
+				fetchError,
+			);
+			if (!(await this.isProjectPin(appId, packageId, version))) {
+				throw new WidgetBundleUnavailableError(
+					`${getErrorMessage(missing, "Widget bundle is not installed")}, and loading it from the hub failed: ${getErrorMessage(fetchError, "unknown error")}`,
+				);
+			}
+		}
+		try {
+			await this.installThroughProject(packageId, appId, version);
+		} catch (installError) {
+			console.warn(
+				`[Registry] Could not install ${packageId}@${version} through project ${appId}:`,
+				installError,
+			);
+			throw new WidgetBundleUnavailableError(
+				`Could not install ${packageId}@${version}: ${getErrorMessage(installError, "Package installation failed")}`,
+			);
+		}
+	}
+
+	/**
+	 * A fetch that failed with the session token it would use again is
+	 * answered with its error for `PROJECT_INSTALL_RETRY_MS` after a registry
+	 * refusal, `HUB_PIN_RETRY_MS` otherwise, so a page full of one widget asks
+	 * once. A sign-in or a renewed token tries at once.
+	 */
+	private cacheWidgetBundle(
+		packageId: string,
+		version: string,
+		bundleHash: string,
+		appId: string,
+	): Promise<void> {
+		const key = `${appId}:${packageId}@${bundleHash}`;
+		const pending = bundleFetches.get(key);
+		if (pending) return pending;
+		const token = this.sessionToken;
+		const failed = failedBundleFetches.get(key);
+		if (
+			failed &&
+			failed.token === token &&
+			Date.now() - failed.at < failed.retryMs
+		) {
+			return Promise.reject(failed.error);
+		}
+		const fetch = this.ensureInit()
+			.then(() =>
+				invoke<void>("registry_cache_widget_bundle", {
+					packageId,
+					version,
+					bundleHash,
+					token,
+					appId,
+				}),
+			)
+			.then(
+				() => {
+					failedBundleFetches.delete(key);
+				},
+				(error: unknown) => {
+					failedBundleFetches.set(key, {
+						at: Date.now(),
+						token,
+						retryMs: isRegistryRefusal(error)
+							? PROJECT_INSTALL_RETRY_MS
+							: HUB_PIN_RETRY_MS,
+						error,
+					});
+					throw error;
+				},
+			)
+			.finally(() => {
+				bundleFetches.delete(key);
+			});
+		bundleFetches.set(key, fetch);
+		return fetch;
 	}
 
 	async mintWidgetGrant(

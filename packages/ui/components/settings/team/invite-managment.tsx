@@ -56,12 +56,12 @@ import {
 	Separator,
 	Textarea,
 	useBackend,
-	useHub,
 	useInvalidateInfiniteInvoke,
 	useInvoke,
 } from "../../../";
 import { useProjectUserSearch } from "../../../hooks/use-project-user-search";
 import { apiErrorMessage } from "../../../lib/api-error";
+import { getInviteDeepLink, getInviteLink } from "../../../lib/invite-link";
 import { asArray } from "../../../lib/response-shape";
 import { UserInviteSearchResults } from "../../ui/user-invite-search-results";
 import { SectionLockedPanel } from "../permission";
@@ -212,13 +212,9 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 	const [newLinkName, setNewLinkName] = useState("");
 	const [newLinkMaxUses, setNewLinkMaxUses] = useState<string>("");
 	const [newLinkExpiry, setNewLinkExpiry] = useState<string>("168");
-	const { hub } = useHub();
-
-	const host = hub?.app ?? "app.flow-like.com";
-
 	const webLink = useCallback(
-		(token: string) => `https://${host}/join?appId=${appId}&token=${token}`,
-		[host, appId],
+		(token: string) => getInviteLink(appId, token, backend.profile),
+		[appId, backend.profile],
 	);
 
 	const copyInviteLink = (token: string) => {
@@ -572,7 +568,7 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 													<DropdownMenuItem
 														onClick={() =>
 															copyInviteLink(
-																`flow-like://join?appId=${appId}&token=${link.token}`,
+																getInviteDeepLink(appId, link.token),
 															)
 														}
 													>

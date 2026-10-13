@@ -79,11 +79,42 @@ impl TableResolver for MountedLanceResolver {
             .ok_or_else(missing)?;
         let query = query
             .ok_or_else(|| DataFusionError::Plan("fts() requires a full-text query".into()))?;
-        super::vector::lancedb::full_text_table_provider(&provider, query).ok_or_else(|| {
-            DataFusionError::Plan(format!(
-                "fts(): table '{name}' must be a mounted Lance table"
-            ))
-        })
+        let (provider, hidden) = match super::column_access::restricted_parts(&provider) {
+            Some((inner, hidden)) => {
+                ensure_searches_visible_columns(name, &query, hidden)?;
+                (inner.clone(), hidden.to_vec())
+            }
+            None => (provider, Vec::new()),
+        };
+        let searched = super::vector::lancedb::full_text_table_provider(&provider, query)
+            .ok_or_else(|| {
+                DataFusionError::Plan(format!(
+                    "fts(): table '{name}' must be a mounted Lance table"
+                ))
+            })?;
+        Ok(super::column_access::restrict_provider(searched, &hidden))
+    }
+}
+
+/// A leaf without a column searches every indexed column, hidden ones included.
+fn ensure_searches_visible_columns(
+    name: &str,
+    query: &FullTextSearchQuery,
+    hidden: &[String],
+) -> DataFusionResult<()> {
+    let columns = super::column_access::full_text_query_columns(&query.query).ok_or_else(|| {
+        DataFusionError::Plan(format!(
+            "fts(): name the column to search in table '{name}'"
+        ))
+    })?;
+    match columns
+        .iter()
+        .find(|column| super::column_access::is_hidden(hidden, column))
+    {
+        Some(column) => Err(DataFusionError::Plan(format!(
+            "fts(): table '{name}' has no column '{column}'"
+        ))),
+        None => Ok(()),
     }
 }
 

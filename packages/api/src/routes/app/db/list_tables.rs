@@ -3,7 +3,9 @@ use crate::{
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
-    routes::app::db::{TableListParams, TableListResponse, table_listing},
+    routes::app::db::{
+        ScopeParams, TableListParams, TableListResponse, column_reader, table_listing,
+    },
     state::AppState,
 };
 use axum::{
@@ -38,7 +40,7 @@ pub async fn list_tables(
     Path(app_id): Path<String>,
     Query(params): Query<TableListParams>,
 ) -> Result<Json<TableListResponse>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -50,5 +52,6 @@ pub async fn list_tables(
     let builder = credentials.to_db(&app_id).await?;
     let connection = builder.execute().await?;
 
-    Ok(Json(table_listing(connection, &params).await?))
+    let reader = column_reader(&permission, &ScopeParams::default());
+    Ok(Json(table_listing(connection, &params, &reader).await?))
 }

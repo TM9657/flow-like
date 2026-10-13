@@ -17,7 +17,7 @@ pub struct LegacyRecipe {
     pub labels: Vec<String>,
 }
 
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 mod execution {
     use super::*;
     use crate::ml::{MLModel, ModelWithMeta};
@@ -428,6 +428,45 @@ mod execution {
         }
     }
 
+    /// The labels and feature width a classical artifact's manifest declares, checked before
+    /// its weights are read.
+    fn classical_contract(
+        artifact: &runtime::ModelArtifact,
+        compute: &ComputeConfig,
+    ) -> runtime::Result<(Vec<String>, usize)> {
+        if artifact.manifest["engine"] != "legacy_classical" {
+            return Err(error("Expected a classical model artifact"));
+        }
+        validate_compute(compute)?;
+        if artifact.manifest["format_version"] != 1
+            || artifact.manifest["serialization"] != "mlmodel_json"
+        {
+            return Err(error("Unsupported classical artifact format"));
+        }
+        let labels: Vec<String> = json::from_value(artifact.manifest["labels"].clone())?;
+        let algorithm: LegacyAlgorithm = json::from_value(artifact.manifest["algorithm"].clone())?;
+        LegacyRecipe {
+            algorithm,
+            labels: labels.clone(),
+        }
+        .validate()?;
+        let shape: Vec<usize> = json::from_value(artifact.manifest["input_shape"].clone())?;
+        let [width] = shape.as_slice() else {
+            return Err(error("Classical artifact input shape is invalid"));
+        };
+        if *width == 0 || *width > 4096 {
+            return Err(error(
+                "Classical artifact feature width is outside capacity",
+            ));
+        }
+        Ok((labels, *width))
+    }
+
+    /// Classical weights larger than this are refused before they are decoded.
+    fn weights_limit(compute: &ComputeConfig) -> u64 {
+        (compute.memory_limit_bytes / 4).min(256 * 1024 * 1024)
+    }
+
     impl LegacyPredictor {
         pub fn load(
             repository: &TrainingRepository,
@@ -435,37 +474,33 @@ mod execution {
             compute: &ComputeConfig,
         ) -> runtime::Result<Self> {
             let artifact = repository.get_artifact(artifact_id)?;
-            if artifact.manifest["engine"] != "legacy_classical" {
-                return Err(error("Expected a classical model artifact"));
-            }
-            validate_compute(compute)?;
-            if artifact.manifest["format_version"] != 1
-                || artifact.manifest["serialization"] != "mlmodel_json"
-            {
-                return Err(error("Unsupported classical artifact format"));
-            }
-            let labels: Vec<String> = json::from_value(artifact.manifest["labels"].clone())?;
-            let algorithm: LegacyAlgorithm =
-                json::from_value(artifact.manifest["algorithm"].clone())?;
-            LegacyRecipe {
-                algorithm,
-                labels: labels.clone(),
-            }
-            .validate()?;
-            let shape: Vec<usize> = json::from_value(artifact.manifest["input_shape"].clone())?;
-            let [width] = shape.as_slice() else {
-                return Err(error("Classical artifact input shape is invalid"));
-            };
-            if *width == 0 || *width > 4096 {
-                return Err(error(
-                    "Classical artifact feature width is outside capacity",
-                ));
-            }
-            let bytes = repository.read_blob_limited(
-                &artifact.blob,
-                (compute.memory_limit_bytes / 4).min(256 * 1024 * 1024),
-            )?;
-            let model = decode_model(&bytes)?;
+            let (labels, width) = classical_contract(&artifact, compute)?;
+            let bytes = repository.read_blob_limited(&artifact.blob, weights_limit(compute))?;
+            Self::decoded(&artifact, &bytes, compute, labels, width)
+        }
+
+        /// Loads a classical artifact whose blob bytes come from outside a ledger, such as
+        /// a published model folder. It never checks a project id.
+        pub fn from_parts(
+            artifact: &runtime::ModelArtifact,
+            bytes: &[u8],
+            compute: &ComputeConfig,
+        ) -> runtime::Result<Self> {
+            let (labels, width) = classical_contract(artifact, compute)?;
+            let limit = weights_limit(compute);
+            runtime::engines::verify_artifact_bytes(&artifact.blob, bytes, limit)?;
+            Self::decoded(artifact, bytes, compute, labels, width)
+        }
+
+        /// Decodes verified weights and checks them against the manifest contract.
+        fn decoded(
+            artifact: &runtime::ModelArtifact,
+            bytes: &[u8],
+            compute: &ComputeConfig,
+            labels: Vec<String>,
+            width: usize,
+        ) -> runtime::Result<Self> {
+            let model = decode_model(bytes)?;
             let reserved = artifact
                 .blob
                 .bytes
@@ -476,7 +511,7 @@ mod execution {
                 .checked_sub(reserved)
                 .ok_or_else(|| error("Classical artifact exceeds the inference memory budget"))?
                 / 32;
-            if maximum_elements < (*width + labels.len()) as u64 {
+            if maximum_elements < (width + labels.len()) as u64 {
                 return Err(error(
                     "Inference memory budget has no room for one prediction",
                 ));
@@ -494,7 +529,7 @@ mod execution {
                 || artifact.manifest["model_kind"] != model.kind()
                 || model
                     .expected_features()
-                    .is_some_and(|found| found != *width)
+                    .is_some_and(|found| found != width)
                 || model.classes().is_none_or(|found| {
                     found.len() != labels.len()
                         || labels
@@ -507,7 +542,7 @@ mod execution {
             }
             Ok(LegacyPredictor {
                 model,
-                width: *width,
+                width,
                 labels,
                 maximum_elements: maximum_elements.min(32 * 1024 * 1024) as usize,
             })
@@ -624,6 +659,75 @@ mod execution {
                 assert!(row[class] > 0.9);
                 assert!((row.iter().sum::<f64>() - 1.).abs() < 1e-6);
             }
+        }
+
+        /// A classical artifact record for `model`, as a ledger or a published folder holds it.
+        fn classical_artifact(model: &MLModel, recipe: &LegacyRecipe) -> runtime::ModelArtifact {
+            let bytes = model.to_json_vec().unwrap();
+            let sha256 = flow_like_ml_core::content_digest(&bytes);
+            json::from_value(json!({
+                "id": "classical", "job_id": "job", "snapshot_id": "snapshot",
+                "stream": {"project_id": "app:board", "stream_id": "camera", "inspection_version": "1"},
+                "dataset_digest": sha256,
+                "blob": {"sha256": sha256, "bytes": bytes.len(), "path": format!("{sha256}.blob")},
+                "manifest": {"engine": "legacy_classical", "format_version": 1,
+                    "serialization": "mlmodel_json", "model_kind": model.kind(),
+                    "input_shape": [1], "labels": recipe.labels, "algorithm": recipe.algorithm},
+                "created_at_ms": 0
+            }))
+            .unwrap()
+        }
+
+        #[test]
+        fn published_classical_weights_load_only_with_their_digest_and_budget() {
+            let recipe = LegacyRecipe {
+                algorithm: LegacyAlgorithm::Logistic {
+                    alpha: 0.01,
+                    max_iterations: 200,
+                },
+                labels: vec!["low".into(), "high".into()],
+            };
+            let inputs: Vec<f64> = (0..40).map(|i| (i as f64 - 19.5) / 10.).collect();
+            let targets = (0..40).map(|i| usize::from(i >= 20)).collect();
+            let model = fit_model(&recipe, inputs, targets, 1).unwrap();
+            let artifact = classical_artifact(&model, &recipe);
+            let bytes = model.to_json_vec().unwrap();
+            let batch = TensorData {
+                shape: vec![2, 1],
+                values: vec![-1.5, 1.5],
+            };
+            let compute = ComputeConfig::default();
+            let mut published = LegacyPredictor::from_parts(&artifact, &bytes, &compute).unwrap();
+            let mut fitted = LegacyPredictor {
+                model,
+                width: 1,
+                labels: recipe.labels.clone(),
+                maximum_elements: 100,
+            };
+            assert_eq!(
+                published.predict(&batch).unwrap(),
+                fitted.predict(&batch).unwrap()
+            );
+            let mut tampered = bytes.clone();
+            tampered[0] ^= 1;
+            assert!(LegacyPredictor::from_parts(&artifact, &tampered, &compute).is_err());
+            assert!(LegacyPredictor::from_parts(&artifact, &bytes[1..], &compute).is_err());
+            let small = ComputeConfig {
+                memory_limit_bytes: (bytes.len() as u64 * 4).saturating_sub(4),
+                ..ComputeConfig::default()
+            };
+            assert!(LegacyPredictor::from_parts(&artifact, &bytes, &small).is_err());
+            let mut renamed = artifact.clone();
+            renamed.blob.path = "elsewhere.blob".into();
+            assert!(LegacyPredictor::from_parts(&renamed, &bytes, &compute).is_err());
+            let cached = crate::inspection::lifecycle::CatalogLoadedPredictor::from_parts(
+                artifact, &bytes, &compute,
+            )
+            .unwrap();
+            assert_eq!(
+                cached.predict(&batch).unwrap(),
+                fitted.predict(&batch).unwrap()
+            );
         }
 
         #[test]
@@ -774,7 +878,7 @@ mod execution {
     }
 }
 
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 pub use execution::{
     CatalogSearchPredictorFactory, LegacyPredictor, LegacyTrainingEngine, register_legacy_engine,
 };

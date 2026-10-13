@@ -4,7 +4,9 @@ import { useTranslation } from "@flow-like/locales";
 import { Check, Copy, Link2, Monitor, Share2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import { getInviteDeepLink, getInviteLink } from "../../lib/invite-link";
 import { cn } from "../../lib/utils";
+import { useBackend } from "../../state/backend-state";
 import { Button } from "./button";
 import {
 	DropdownMenu,
@@ -37,18 +39,6 @@ function generateDeepLink(appId: string): string {
 	return `flow-like://store?id=${appId}`;
 }
 
-function generateInviteWebUrl(
-	baseUrl: string,
-	appId: string,
-	token: string,
-): string {
-	return `${baseUrl}/join?appId=${appId}&token=${token}`;
-}
-
-function generateInviteDeepLink(appId: string, token: string): string {
-	return `flow-like://join?appId=${appId}&token=${token}`;
-}
-
 export function ShareButton({
 	appId,
 	appName,
@@ -59,6 +49,7 @@ export function ShareButton({
 	inviteToken,
 }: ShareButtonProps) {
 	const { t } = useTranslation("common");
+	const backend = useBackend();
 	const [copied, setCopied] = useState<string | null>(null);
 
 	const copyToClipboard = useCallback(async (text: string, type: string) => {
@@ -73,7 +64,9 @@ export function ShareButton({
 	}, []);
 
 	const handleShare = useCallback(async () => {
-		const webUrl = generateWebUrl(webBaseUrl, appId);
+		const webUrl = inviteToken
+			? getInviteLink(appId, inviteToken, backend.profile)
+			: generateWebUrl(webBaseUrl, appId);
 		const shareData = {
 			title: appName || t("flowLikeApp", "Flow Like App"),
 			text: t("checkOutValOnFlowLike", "Check out {{val}} on Flow Like!", {
@@ -91,14 +84,24 @@ export function ShareButton({
 			}
 		}
 		await copyToClipboard(webUrl, "web");
-	}, [appId, appName, webBaseUrl, copyToClipboard]);
+	}, [
+		appId,
+		appName,
+		webBaseUrl,
+		inviteToken,
+		backend.profile,
+		copyToClipboard,
+		t,
+	]);
 
 	const isDesktop = isTauri();
 
 	const openInDesktopApp = useCallback(() => {
-		const deepLink = generateDeepLink(appId);
+		const deepLink = inviteToken
+			? getInviteDeepLink(appId, inviteToken)
+			: generateDeepLink(appId);
 		window.location.href = deepLink;
-	}, [appId]);
+	}, [appId, inviteToken]);
 
 	if (variant === "icon") {
 		return (
@@ -177,7 +180,7 @@ export function ShareButton({
 						<DropdownMenuItem
 							onClick={() =>
 								copyToClipboard(
-									generateInviteWebUrl(webBaseUrl, appId, inviteToken),
+									getInviteLink(appId, inviteToken, backend.profile),
 									"invite-web",
 								)
 							}
@@ -192,7 +195,7 @@ export function ShareButton({
 						<DropdownMenuItem
 							onClick={() =>
 								copyToClipboard(
-									generateInviteDeepLink(appId, inviteToken),
+									getInviteDeepLink(appId, inviteToken),
 									"invite-deep",
 								)
 							}

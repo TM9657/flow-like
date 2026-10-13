@@ -99,6 +99,16 @@ declare namespace onnx {
     function imageClassification({ model: Struct, imageIn: Struct, mean?: float[], std?: float[], cropPct?: float, softmax?: bool }): Struct[];
 
     /**
+     * Run named numeric or boolean tensors through an ONNX model
+     * @node onnx_tensor_inference @alias onnxTensorInference
+     * @param model — Loaded ONNX session
+     * @param inputs — Named inputs with shape, type and values
+     * @returns outputs — Named output tensors
+     * @impure has side effects / drives control flow
+     */
+    function inferTensors({ model: Struct, inputs: Struct[] }): Struct[];
+
+    /**
      * Get information about a loaded ONNX session
      * @node onnx_session_info @receiver model @alias onnxSessionInfo
      * @param model — ONNX Model Session (receiver: `this` in `x.info(...)`)
@@ -139,10 +149,11 @@ declare namespace onnx {
      * @param conf (optional) — Confidence Threshold
      * @param iou (optional) — Intersection Over Union Threshold for NMS
      * @param max (optional) — Maximum Number of Detections
+     * @param classLabels (optional) — Optional class names indexed by the model class ID; empty uses the model adapter's labels
      * @returns bboxes — Bounding Box Predictions
      * @impure has side effects / drives control flow
      */
-    function objectDetection({ model: Struct, imageIn: Struct, conf?: float, iou?: float, max?: int }): Struct[];
+    function objectDetection({ model: Struct, imageIn: Struct, conf?: float, iou?: float, max?: int, classLabels?: string[] }): Struct[];
 
     /**
      * Detect human poses and keypoints using ONNX models. Download models from: YOLOv8-Pose (https://docs.ultralytics.com/models/yolov8/), MoveNet (https://tfhub.dev/google/movenet/), HRNet (https://github.com/OAID/TengineKit)
@@ -343,6 +354,42 @@ declare namespace onnx {
      * @impure has side effects / drives control flow
      */
     function faceIdUnloadAnalyzer({ analyzer: Struct }): bool;
+
+    // === AI/ML/ONNX/Inspection ===
+
+    /**
+     * Detect the configured classes with a compatible text-conditioned ONNX model
+     * @node onnx_grounding_dino_detection @alias onnxGroundingDinoDetection
+     * @param model — Loaded compatible ONNX model
+     * @param inputs — Image and token tensors prepared for the supplied model
+     * @param config — Label-to-token mapping, output names and thresholds
+     * @returns result — Normalized boxes with caller-supplied class IDs
+     * @impure has side effects / drives control flow
+     */
+    function groundingDino({ model: Struct, inputs: Struct[], config: Struct }): Struct;
+
+    /**
+     * Encode a preprocessed image using a compatible SAM ONNX encoder
+     * @node onnx_sam_image_encoder @alias onnxSamImageEncoder
+     * @param model — Loaded compatible ONNX model
+     * @param image — Normalized and padded float32 NCHW image expected by the supplied encoder
+     * @param outputName (optional) — Name of the encoder embedding output
+     * @returns embeddings — Image embeddings for SAM prompt decoding
+     * @impure has side effects / drives control flow
+     */
+    function samEncode({ model: Struct, image: Struct, outputName?: string }): Struct;
+
+    /**
+     * Decode point, box and previous-mask prompts with a compatible SAM ONNX decoder
+     * @node onnx_sam_prompt_segmentation @alias onnxSamPromptSegmentation
+     * @param model — Loaded compatible ONNX model
+     * @param embeddings — Float32 image encoder embeddings
+     * @param prompt — Points and boxes in original-image pixel coordinates
+     * @param config (optional) — SAM encoder geometry and decoder output names
+     * @returns mask — Highest predicted-IoU mask with optional reusable logits
+     * @impure has side effects / drives control flow
+     */
+    function samSegment({ model: Struct, embeddings: Struct, prompt: Struct, config?: Struct }): Struct;
 
     // === AI/ML/ONNX/NLP ===
 

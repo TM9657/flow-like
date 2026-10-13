@@ -2,7 +2,7 @@ use crate::Rng;
 use flow_like_ml_core::{Annotation, Error, LabelProvenance, Result, Sample, require};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct DatasetSplit {
@@ -86,8 +86,9 @@ pub fn split_grouped(
         "At least three independent groups are required",
     )?;
     let mut groups: Vec<_> = by_group.into_values().collect();
-    Rng::new(seed).shuffle(&mut groups);
-    // Place large groups first; shuffled ties preserve seeded randomization.
+    let mut rng = Rng::new(seed);
+    rng.shuffle(&mut groups);
+    // Large groups first keeps partitions near their ratios; the seeded draw picks membership.
     groups.sort_by_key(|g| std::cmp::Reverse(g.len()));
     let targets = [
         train_ratio,
@@ -103,11 +104,8 @@ pub fn split_grouped(
         let chosen = if n_groups - index == empty.len() {
             empty[0]
         } else {
-            (0..3)
-                .max_by(|a, b| {
-                    (targets[*a] - counts[*a] as f64).total_cmp(&(targets[*b] - counts[*b] as f64))
-                })
-                .unwrap()
+            let deficits = std::array::from_fn(|p| targets[p] - counts[p] as f64);
+            seeded_partition(&mut rng, deficits, group.len())
         };
         counts[chosen] += group.len();
         result.partition_mut(chosen).extend(group);
@@ -119,6 +117,35 @@ pub fn split_grouped(
     Ok(result)
 }
 
+/// Draws among the partitions that can absorb the whole group, weighted by their remaining
+/// deficit, so group size does not decide membership; falls back to the largest deficit.
+fn seeded_partition(rng: &mut Rng, deficits: [f64; 3], size: usize) -> usize {
+    let weights = deficits.map(|deficit| if deficit >= size as f64 { deficit } else { 0.0 });
+    let total = weights.iter().sum::<f64>();
+    if total > 0.0 {
+        let mut draw = rng.uniform() * total;
+        for (partition, weight) in weights.iter().enumerate() {
+            if *weight > 0.0 {
+                if draw < *weight {
+                    return partition;
+                }
+                draw -= *weight;
+            }
+        }
+        if let Some(last) = weights.iter().rposition(|weight| *weight > 0.0) {
+            return last;
+        }
+    }
+    (0..3)
+        .max_by(|a, b| deficits[*a].total_cmp(&deficits[*b]))
+        .unwrap_or(0)
+}
+
+/// A sample ends when its window plus label horizon, its outcome and its label availability
+/// (outcome or review) have all passed. As in the runtime snapshot check, each cutoff instant
+/// belongs to the partition before it: train ends at or before `train_end_ms`, validation starts
+/// after `train_end_ms + embargo` and ends at or before `validation_end_ms`, and test starts after
+/// `validation_end_ms + embargo`.
 pub fn split_temporal(
     samples: &[Sample],
     train_end_ms: i64,
@@ -158,11 +185,14 @@ pub fn split_temporal(
         if let Some(outcome) = &sample.outcome {
             end = end.max(outcome.target_end_ms).max(outcome.available_at_ms);
         }
-        let partition = if end < train_end_ms {
+        if let LabelProvenance::Reviewed { reviewed_at_ms, .. } = sample.provenance {
+            end = end.max(reviewed_at_ms);
+        }
+        let partition = if end <= train_end_ms {
             Some(0)
-        } else if sample.window_start_ms >= validation_start && end < validation_end_ms {
+        } else if sample.window_start_ms > validation_start && end <= validation_end_ms {
             Some(1)
-        } else if sample.window_start_ms >= test_start {
+        } else if sample.window_start_ms > test_start {
             Some(2)
         } else {
             None
@@ -226,16 +256,18 @@ pub fn training_readiness(
         ) {
             result.reviewed += 1;
         }
-        match &sample.annotation {
-            Annotation::Class { class_id } => {
-                *result.per_class.entry(*class_id).or_default() += 1;
-            }
-            Annotation::Boxes { boxes } => {
-                for class in boxes.iter().map(|b| b.class_id).collect::<HashSet<_>>() {
-                    *result.per_class.entry(class).or_default() += 1;
-                }
-            }
-            _ => {}
+        let present: BTreeSet<u32> = match &sample.annotation {
+            Annotation::Class { class_id } => BTreeSet::from([*class_id]),
+            Annotation::Boxes { boxes } => boxes.iter().map(|b| b.class_id).collect(),
+            Annotation::Mask { classes, .. } => classes.iter().copied().collect(),
+            Annotation::InstanceMasks { instances } => instances
+                .iter()
+                .map(|instance| instance.bounds.class_id)
+                .collect(),
+            _ => BTreeSet::new(),
+        };
+        for class in present {
+            *result.per_class.entry(class).or_default() += 1;
         }
     }
     if result.eligible < minimum_new {
@@ -313,7 +345,7 @@ impl StandardScaler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flow_like_ml_core::{Outcome, TensorData};
+    use flow_like_ml_core::{BoundingBox, InstanceMask, Outcome, TensorData};
     fn sample(index: usize, group: usize, start: i64, end: i64) -> Sample {
         Sample {
             id: index.to_string(),
@@ -370,6 +402,139 @@ mod tests {
         assert_eq!(split.purged, vec![1, 4, 5]);
         let horizon = split_temporal(&samples, 100, 200, 10, 100).unwrap();
         assert!(horizon.train.is_empty());
+    }
+    #[test]
+    fn grouped_split_seed_decides_membership_of_distinct_sized_groups() {
+        let samples: Vec<_> = (10..70)
+            .enumerate()
+            .flat_map(|(group, size)| std::iter::repeat_n(group, size))
+            .enumerate()
+            .map(|(index, group)| sample(index, group, index as i64, index as i64))
+            .collect();
+        let largest = samples
+            .iter()
+            .position(|sample| sample.group_id == "59")
+            .unwrap();
+        let splits: Vec<_> = (0..20)
+            .map(|seed| split_grouped(&samples, 0.7, 0.15, seed).unwrap())
+            .collect();
+        assert_eq!(splits[1], split_grouped(&samples, 0.7, 0.15, 1).unwrap());
+        assert_ne!(splits[1], split_grouped(&samples, 0.7, 0.15, 999).unwrap());
+        assert!(splits.iter().any(|split| !split.train.contains(&largest)));
+        for split in &splits {
+            for (indices, ratio) in [
+                (&split.train, 0.7),
+                (&split.validation, 0.15),
+                (&split.test, 0.15),
+            ] {
+                assert!((indices.len() as f64 - ratio * samples.len() as f64).abs() <= 69.0);
+            }
+        }
+    }
+    #[test]
+    fn temporal_split_assigns_cutoff_instants_like_the_runtime_snapshot_check() {
+        let samples = vec![
+            sample(0, 0, 90, 100),
+            sample(1, 1, 105, 110),
+            sample(2, 2, 110, 120),
+            sample(3, 3, 111, 200),
+            sample(4, 4, 210, 215),
+            sample(5, 5, 211, 220),
+            sample(6, 6, 150, 201),
+        ];
+        let split = split_temporal(&samples, 100, 200, 10, 0).unwrap();
+        assert_eq!(split.train, vec![0]);
+        assert_eq!(split.validation, vec![3]);
+        assert_eq!(split.test, vec![5]);
+        assert_eq!(split.purged, vec![1, 2, 4, 6]);
+        let runtime_accepts = |partition: usize, sample: &Sample| match partition {
+            0 => sample.window_end_ms <= 100,
+            1 => sample.window_start_ms > 110 && sample.window_end_ms <= 200,
+            _ => sample.window_start_ms > 210,
+        };
+        for (partition, indices) in [&split.train, &split.validation, &split.test]
+            .into_iter()
+            .enumerate()
+        {
+            assert!(
+                indices
+                    .iter()
+                    .all(|index| runtime_accepts(partition, &samples[*index]))
+            );
+        }
+    }
+    #[test]
+    fn temporal_split_waits_for_reviewed_labels() {
+        let reviewed = |mut sample: Sample, reviewed_at_ms: i64| {
+            sample.provenance = LabelProvenance::Reviewed {
+                reviewer: "inspector".into(),
+                reviewed_at_ms,
+            };
+            sample
+        };
+        let samples = vec![
+            reviewed(sample(0, 0, 0, 10), 90),
+            reviewed(sample(1, 1, 0, 10), 250),
+            reviewed(sample(2, 2, 120, 130), 200),
+            reviewed(sample(3, 3, 120, 130), 201),
+            reviewed(sample(4, 4, 220, 230), 500),
+        ];
+        let split = split_temporal(&samples, 100, 200, 10, 0).unwrap();
+        assert_eq!(split.train, vec![0]);
+        assert_eq!(split.validation, vec![2]);
+        assert_eq!(split.test, vec![4]);
+        assert_eq!(split.purged, vec![1, 3]);
+    }
+    #[test]
+    fn readiness_counts_mask_and_instance_classes_once_per_sample() {
+        let labelled = |index: usize, annotation: Annotation| Sample {
+            annotation,
+            ..sample(index, index, 0, 0)
+        };
+        let mask = |classes: Vec<u32>| Annotation::Mask {
+            width: 2,
+            height: 2,
+            classes,
+        };
+        let instance = |id: &str, class_id: u32| InstanceMask {
+            instance_id: id.into(),
+            bounds: BoundingBox {
+                class_id,
+                x_min: 0.0,
+                y_min: 0.0,
+                x_max: 0.5,
+                y_max: 0.5,
+            },
+            width: 2,
+            height: 2,
+            foreground: vec![true, false, false, false],
+        };
+        let masks = vec![
+            labelled(0, mask(vec![0, 0, 1, 1])),
+            labelled(1, mask(vec![0, 1, 1, 1])),
+            labelled(2, mask(vec![0, 0, 0, 0])),
+        ];
+        let readiness = training_readiness(&masks, 3, 2, 2, &HashSet::new());
+        assert_eq!(readiness.per_class, BTreeMap::from([(0, 3), (1, 2)]));
+        assert!(readiness.ready, "{:?}", readiness.reasons);
+        assert!(!training_readiness(&masks, 3, 3, 2, &HashSet::new()).ready);
+        let instances = vec![
+            labelled(
+                0,
+                Annotation::InstanceMasks {
+                    instances: vec![instance("a", 1), instance("b", 1)],
+                },
+            ),
+            labelled(
+                1,
+                Annotation::InstanceMasks {
+                    instances: vec![instance("c", 0), instance("d", 1)],
+                },
+            ),
+        ];
+        let readiness = training_readiness(&instances, 2, 1, 2, &HashSet::new());
+        assert_eq!(readiness.per_class, BTreeMap::from([(0, 1), (1, 2)]));
+        assert!(readiness.ready, "{:?}", readiness.reasons);
     }
     #[test]
     fn scaler_reuses_training_statistics() {

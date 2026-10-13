@@ -6,7 +6,10 @@ use flow_like::{
     app::{App, AppVisibility},
     flow_like_storage::{
         Path,
-        files::store::{FlowLikeStore, StorageItem},
+        files::{
+            rename::{rename_destination, rename_storage_item},
+            store::{FlowLikeStore, StorageItem},
+        },
     },
     utils::storage::{construct_storage, construct_user_storage},
 };
@@ -18,6 +21,8 @@ use crate::{
     functions::TauriFunctionError,
     state::{TauriFlowLikeState, TauriRegistryState},
 };
+
+mod native_rename;
 
 pub(crate) async fn current_user_sub(app_handle: &AppHandle) -> Result<String, TauriFunctionError> {
     if let Ok(state) = TauriRegistryState::construct(app_handle).await {
@@ -136,10 +141,84 @@ pub async fn storage_rename(
     app_handle: AppHandle,
     app_id: String,
     prefix: String,
+    new_name: String,
+    is_dir: bool,
 ) -> Result<(), TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     ensure_device_files(&state, &app_id).await?;
-    let (_store, _path) = construct_storage(&state, &app_id, &prefix).await?;
+    let (store, base) = construct_storage(&state, &app_id, "").await?;
+    let (_, path) = construct_storage(&state, &app_id, &prefix).await?;
+
+    rename_item(store, base, path, new_name, is_dir).await
+}
+
+#[tauri::command(async)]
+pub async fn storage_user_rename(
+    app_handle: AppHandle,
+    app_id: String,
+    prefix: String,
+    new_name: String,
+    is_dir: bool,
+) -> Result<(), TauriFunctionError> {
+    let state = TauriFlowLikeState::construct(&app_handle).await?;
+    ensure_device_files(&state, &app_id).await?;
+    let sub = current_user_sub(&app_handle).await?;
+    let (store, base) = construct_user_storage(&state, &sub, &app_id, "").await?;
+    let (_, path) = construct_user_storage(&state, &sub, &app_id, &prefix).await?;
+
+    rename_item(store, base, path, new_name, is_dir).await
+}
+
+async fn rename_item(
+    store: FlowLikeStore,
+    base: Path,
+    source: Path,
+    new_name: String,
+    is_dir: bool,
+) -> Result<(), TauriFunctionError> {
+    if let FlowLikeStore::Local(local) = &store {
+        let destination = rename_destination(&base, &source, &new_name)
+            .map_err(|error| TauriFunctionError::new(&error.to_string()))?;
+        let base = local
+            .directory_to_filesystem(&base)
+            .map_err(|error| anyhow!("Failed to resolve storage: {}", error))?;
+        let (source, destination) = if is_dir {
+            (
+                local.directory_to_filesystem(&source),
+                local.directory_to_filesystem(&destination),
+            )
+        } else {
+            (
+                local.path_to_filesystem(&source),
+                local.path_to_filesystem(&destination),
+            )
+        };
+        let source = source.map_err(|error| anyhow!("Failed to resolve source: {}", error))?;
+        let destination =
+            destination.map_err(|error| anyhow!("Failed to resolve destination: {}", error))?;
+        flow_like_types::tokio::task::spawn_blocking(move || {
+            native_rename::rename_local_item(&base, &source, &destination, is_dir)
+        })
+        .await
+        .map_err(|error| anyhow!("Failed to rename item: {}", error))?
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                TauriFunctionError::new("A file or folder with that name already exists")
+            } else {
+                TauriFunctionError::new(&format!("Failed to rename item: {error}"))
+            }
+        })?;
+    } else {
+        rename_storage_item(
+            store.as_generic().as_ref(),
+            &base,
+            &source,
+            &new_name,
+            is_dir,
+        )
+        .await
+        .map_err(|error| TauriFunctionError::new(&error.to_string()))?;
+    }
 
     Ok(())
 }

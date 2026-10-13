@@ -23,6 +23,7 @@ import type {
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
+import { DataSensitivityBadges } from "../../ui/data-classification";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -412,6 +413,10 @@ const SourceCard: React.FC<SourceCardProps> = ({
 									{t("shared", "Shared")}
 								</Badge>
 							)}
+							<DataSensitivityBadges
+								value={summary?.sensitivity}
+								badgeClassName="text-[10.5px]"
+							/>
 						</span>
 					</span>
 				</div>

@@ -8,6 +8,7 @@ pub fn operation_node<I: JsonSchema + serde::Serialize, O: JsonSchema>(
     namespace: &str,
     function: &str,
     category: &str,
+    sensitive_input: bool,
 ) -> Node {
     let mut node = Node::new(id, name, description, category);
     node.set_flowscript_name(namespace, function);
@@ -18,6 +19,11 @@ pub fn operation_node<I: JsonSchema + serde::Serialize, O: JsonSchema>(
         "Run this operation",
         VariableType::Execution,
     );
+    let mut request_options = PinOptions::new();
+    request_options.set_enforce_schema(true);
+    if sensitive_input {
+        request_options.set_sensitive(true);
+    }
     node.add_input_pin(
         "request",
         "Configuration",
@@ -25,7 +31,7 @@ pub fn operation_node<I: JsonSchema + serde::Serialize, O: JsonSchema>(
         VariableType::Struct,
     )
     .set_schema::<I>()
-    .set_options(PinOptions::new().set_enforce_schema(true).build());
+    .set_options(request_options.build());
     node.add_output_pin(
         "exec_out",
         "Done",
@@ -70,13 +76,16 @@ pub fn operation_node<I: JsonSchema + serde::Serialize, O: JsonSchema>(
 #[macro_export]
 macro_rules! operation {
     ($node:ident, $id:literal, $name:literal, $desc:literal, $namespace:literal, $function:literal, $category:literal, $input:ty, $output:ty, $handler:path) => {
-        $crate::operation!(@impl $node, $id, $name, $desc, $namespace, $function, $category, $input, $output, $handler, false);
+        $crate::operation!(@impl $node, $id, $name, $desc, $namespace, $function, $category, $input, $output, $handler, false, false);
     };
-    (@impl $node:ident, $id:literal, $name:literal, $desc:literal, $namespace:literal, $function:literal, $category:literal, $input:ty, $output:ty, $handler:path, $listener:expr) => {
+    ($node:ident, $id:literal, $name:literal, $desc:literal, $namespace:literal, $function:literal, $category:literal, $input:ty, $output:ty, $handler:path, sensitive) => {
+        $crate::operation!(@impl $node, $id, $name, $desc, $namespace, $function, $category, $input, $output, $handler, false, true);
+    };
+    (@impl $node:ident, $id:literal, $name:literal, $desc:literal, $namespace:literal, $function:literal, $category:literal, $input:ty, $output:ty, $handler:path, $listener:expr, $sensitive:expr) => {
         #[flow_like_types::async_trait]
         impl flow_like::flow::node::NodeLogic for $node {
             fn get_node(&self) -> flow_like::flow::node::Node {
-                let mut node = $crate::node::operation_node::<$input, $output>($id, $name, $desc, $namespace, $function, $category);
+                let mut node = $crate::node::operation_node::<$input, $output>($id, $name, $desc, $namespace, $function, $category, $sensitive);
                 if $listener { node.set_long_running(true); node.set_can_reference_fns(true); }
                 node
             }
@@ -100,6 +109,6 @@ macro_rules! operation {
 #[macro_export]
 macro_rules! listener {
     ($node:ident, $id:literal, $name:literal, $desc:literal, $namespace:literal, $function:literal, $category:literal, $input:ty, $output:ty, $handler:path) => {
-        $crate::operation!(@impl $node, $id, $name, $desc, $namespace, $function, $category, $input, $output, $handler, true);
+        $crate::operation!(@impl $node, $id, $name, $desc, $namespace, $function, $category, $input, $output, $handler, true, false);
     };
 }

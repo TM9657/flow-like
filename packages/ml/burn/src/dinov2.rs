@@ -881,6 +881,8 @@ mod tests {
 
     #[test]
     #[ignore = "requires the official facebook/dinov2-base checkpoint and normalized COCO reference image"]
+    // 1.1284 below is a published reference activation, not 2/sqrt(pi).
+    #[allow(clippy::approx_constant)]
     fn public_base_checkpoint_matches_upstream_reference() {
         let _lock = crate::tests::TEST_LOCK
             .lock()

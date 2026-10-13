@@ -13,6 +13,7 @@ import {
 	discoverBoardTests,
 	gradeBoardRun,
 } from "../lib/board-tests";
+import { parseColumnMetadataInput } from "../lib/column-metadata";
 import {
 	getPendingDatabaseSchemas,
 	isExplicitSchemaCreateUnavailable,
@@ -435,6 +436,40 @@ export async function dropTableRuntime(
 		saved_queries_referencing: savedQueries,
 		warnings,
 		message,
+	};
+}
+
+/**
+ * `database_tool` `set_column_metadata`: replaces a column's display name, description,
+ * classification, PII flag and read attributes. The arguments are validated here so a
+ * misspelt field fails the call instead of being cleared by the replacing write.
+ */
+export async function setColumnMetadataRuntime(
+	dbState: Pick<IDatabaseState, "setColumnMetadata">,
+	options: {
+		appId: string;
+		tableName?: string;
+		column?: string;
+		metadata: unknown;
+		userScoped: boolean;
+	},
+) {
+	const { appId, tableName, column, userScoped } = options;
+	if (!tableName) throw new Error("set_column_metadata requires table_name.");
+	if (!column) throw new Error("set_column_metadata requires column.");
+	const metadata = parseColumnMetadataInput(options.metadata);
+	const saved = await dbState.setColumnMetadata(
+		appId,
+		tableName,
+		column,
+		metadata,
+		userScoped,
+	);
+	return {
+		status: "ok" as const,
+		table_name: tableName,
+		column,
+		column_metadata: saved,
 	};
 }
 
@@ -2003,6 +2038,14 @@ export function useFrontendRuntimeToolExecutor(
 							);
 							return { status: "ok", table_name: tableName, column };
 						}
+						case "set_column_metadata":
+							return await setColumnMetadataRuntime(backend.dbState, {
+								appId: toolAppId,
+								tableName,
+								column: getArgString(args, "column"),
+								metadata: args.column_metadata ?? args.columnMetadata,
+								userScoped,
+							});
 						default:
 							throw new Error(
 								`Unsupported database_tool operation '${operation}'.`,

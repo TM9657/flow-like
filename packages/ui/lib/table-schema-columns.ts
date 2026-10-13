@@ -1,3 +1,8 @@
+import {
+	type IColumnMetadata,
+	columnMetadataFromField,
+	isEmptyColumnMetadata,
+} from "./column-metadata";
 import { isGeometryMetadata } from "./geometry-columns";
 
 export interface TableColumnSummary {
@@ -7,6 +12,8 @@ export interface TableColumnSummary {
 	nullable: boolean;
 	primary_key?: true;
 	vector_size?: number;
+	/** Display name, description, sensitivity and read restriction, when any is set. */
+	column_metadata?: IColumnMetadata;
 }
 
 const PRIMARY_KEY_POSITION = "lance-schema:unenforced-primary-key:position";
@@ -93,12 +100,16 @@ export function summarizeTableColumns(schema: unknown): TableColumnSummary[] {
 		const field = record(entry);
 		if (typeof field?.name !== "string") return [];
 		const metadata = record(field.metadata);
+		const columnMetadata = columnMetadataFromField(metadata);
 		return [
 			{
 				name: field.name,
 				...columnType(field.data_type, metadata),
 				nullable: field.nullable !== false,
 				...(isPrimaryKey(metadata) ? { primary_key: true as const } : {}),
+				...(isEmptyColumnMetadata(columnMetadata)
+					? {}
+					: { column_metadata: columnMetadata }),
 			},
 		];
 	});

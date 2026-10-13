@@ -1,7 +1,7 @@
 "use client";
 import { useTranslation } from "@flow-like/locales";
 import { useCallback, useEffect, useState } from "react";
-import { cn } from "../../lib";
+import { cn } from "../../lib/utils";
 import { AudioPreview } from "./audio-preview";
 import { MonacoFileEditor } from "./monaco-file-editor";
 import { TextEditor } from "./text-editor";
@@ -28,17 +28,17 @@ export function isPdf(file: string, filename?: string) {
 }
 
 export function isImage(file: string, filename?: string) {
-	return /\.(png|jpg|jpeg|gif|bmp|webp|svg)$/i.test(
+	return /\.(png|apng|jpg|jpeg|jpe|jfif|gif|bmp|webp|svg)$/i.test(
 		rawFileName(file, filename),
 	);
 }
 
 export function isVideo(file: string, filename?: string) {
-	return /\.(mp4|mkv|webm|ogv|avi|mov)$/i.test(rawFileName(file, filename));
+	return /\.(mp4|m4v|mkv|webm|ogv|avi|mov)$/i.test(rawFileName(file, filename));
 }
 
 export function isAudio(file: string, filename?: string) {
-	return /\.(mp3|wav|ogg|oga|opus|flac|aac|m4a|aif|aiff)$/i.test(
+	return /\.(mp3|wav|wave|ogg|oga|opus|flac|aac|m4a|aif|aiff)$/i.test(
 		rawFileName(file, filename),
 	);
 }
@@ -85,20 +85,18 @@ export function pdfViewerFragment(page?: number) {
 	return `#${params.join("&")}`;
 }
 
-type PdfSource = { src: string; state: "loading" | "blob" | "direct" };
+type PreviewSource = { src: string; state: "loading" | "blob" | "direct" };
 
 /**
- * Re-types PDF bytes locally before handing them to the viewer.
+ * Re-types bytes locally before handing them to the browser's native viewer.
  *
- * Nothing stamps a content type on upload, so signed storage URLs answer with
- * `binary/octet-stream`, and every browser hands anything that is not
- * `application/pdf` — or that carries `Content-Disposition: attachment` — to the
- * download manager instead of rendering it in the frame. A failed fetch (CORS,
- * custom asset protocols) falls back to the raw URL, so sources that render
- * today keep rendering.
+ * Storage URLs can return `binary/octet-stream` instead of the file's MIME type.
+ * PDFs can download instead of rendering, and SVGs fail
+ * to display as images. A failed fetch (CORS, custom asset protocols) falls back
+ * to the raw URL, so sources that render today keep rendering.
  */
-export function usePdfSource(url: string): PdfSource {
-	const [source, setSource] = useState<PdfSource>({
+function useTypedPreviewSource(url: string, mimeType: string): PreviewSource {
+	const [source, setSource] = useState<PreviewSource>({
 		src: "",
 		state: "loading",
 	});
@@ -110,22 +108,20 @@ export function usePdfSource(url: string): PdfSource {
 
 		const load = async () => {
 			try {
-				const response = await fetch(url);
+				const response = await fetch(url, { cache: "no-store" });
 				if (!response.ok) {
-					throw new Error(`Failed to fetch PDF (${response.status})`);
+					throw new Error(`Failed to fetch preview (${response.status})`);
 				}
 				const blob = await response.blob();
 				if (cancelled) return;
 
-				const pdfBlob =
-					blob.type === "application/pdf"
-						? blob
-						: new Blob([blob], { type: "application/pdf" });
-				objectUrl = URL.createObjectURL(pdfBlob);
+				const typedBlob =
+					blob.type === mimeType ? blob : new Blob([blob], { type: mimeType });
+				objectUrl = URL.createObjectURL(typedBlob);
 				setSource({ src: objectUrl, state: "blob" });
 			} catch (error) {
 				if (cancelled) return;
-				console.warn("PDF preview fell back to the direct URL:", error);
+				console.warn("File preview fell back to the direct URL:", error);
 				setSource({ src: url, state: "direct" });
 			}
 		};
@@ -136,9 +132,32 @@ export function usePdfSource(url: string): PdfSource {
 			cancelled = true;
 			if (objectUrl) URL.revokeObjectURL(objectUrl);
 		};
-	}, [url]);
+	}, [url, mimeType]);
 
 	return source;
+}
+
+export function usePdfSource(url: string): PreviewSource {
+	return useTypedPreviewSource(url, "application/pdf");
+}
+
+function SvgPreview({ url, filename }: { url: string; filename?: string }) {
+	const { t } = useTranslation("common");
+	const { src, state } = useTypedPreviewSource(url, "image/svg+xml");
+	if (state === "loading") {
+		return (
+			<div className="flex h-full w-full items-center justify-center p-4 text-sm text-muted-foreground">
+				{t("loadingImagePreview", "Loading image preview...")}
+			</div>
+		);
+	}
+	return (
+		<img
+			src={src}
+			alt={rawFileName(url, filename)}
+			className="w-full h-full object-contain"
+		/>
+	);
 }
 
 export function PdfFrame({
@@ -240,6 +259,9 @@ export function FilePreviewer({
 	}
 
 	if (isImage(url, filename)) {
+		if (/\.svg$/i.test(rawFileName(url, filename))) {
+			return <SvgPreview url={url} filename={filename} />;
+		}
 		return (
 			<img
 				src={url}

@@ -28,7 +28,10 @@ impl TrainingEngine for EfficientAdEngine {
             .estimated_training_bytes()
             .map_err(engine_error)?;
         let dataset = serialized_size(&work.snapshot)?;
-        Ok(model.saturating_add(dataset.saturating_mul(12)))
+        Ok(model.saturating_add(dataset.saturating_mul(SNAPSHOT_MEMORY_FACTOR)))
+    }
+    fn snapshot_byte_limit(&self, budget: u64) -> u64 {
+        budget / SNAPSHOT_MEMORY_FACTOR
     }
     fn train(&self, work: &TrainingWork, control: &WorkerControl) -> Result<EngineOutput> {
         let mut recipe: EfficientAdEngineRecipe =
@@ -58,14 +61,11 @@ impl TrainingEngine for EfficientAdEngine {
             let update = (|| -> Result<()> {
                 control.progress(serde_json::to_value(&progress)?)?;
                 if progress.validation_loss.is_some() {
-                    let bytes = burn_adapter::pack_named(
+                    burn_adapter::publish_checkpoint(
+                        work,
+                        control,
                         directory.path(),
                         MANIFEST,
-                        true,
-                        control.limits().maximum_checkpoint_bytes,
-                    )?;
-                    control.checkpoint(
-                        &bytes,
                         progress.steps as u64,
                         serde_json::json!({"engine":"efficient_ad","steps":progress.steps}),
                     )?;
@@ -97,23 +97,14 @@ impl TrainingEngine for EfficientAdEngine {
             )
         };
         let cancellation_reason = cancellation_monitor.finish();
-        if trained.is_err() && directory.path().join(MANIFEST).exists() {
-            let state: Value = serde_json::from_slice(&fs::read(directory.path().join(MANIFEST))?)?;
-            let step = state
-                .pointer("/report/steps")
-                .and_then(Value::as_u64)
-                .unwrap_or(0);
-            let bytes = burn_adapter::pack_named(
+        if trained.is_err() {
+            let _ = burn_adapter::publish_stop_checkpoint(
+                work,
+                control,
                 directory.path(),
                 MANIFEST,
-                true,
-                control.limits().maximum_checkpoint_bytes,
-            )?;
-            control.checkpoint_after_stop(
-                &bytes,
-                step,
-                serde_json::json!({"engine":"efficient_ad","steps":step}),
-            )?;
+                serde_json::json!({"engine":"efficient_ad"}),
+            );
         }
         if let Some(error) = error.or(cancellation_reason) {
             return Err(error);
@@ -126,14 +117,11 @@ impl TrainingEngine for EfficientAdEngine {
             }
         })?;
         control.check_cancel()?;
-        let checkpoint = burn_adapter::pack_named(
+        burn_adapter::publish_checkpoint(
+            work,
+            control,
             directory.path(),
             MANIFEST,
-            true,
-            control.limits().maximum_checkpoint_bytes,
-        )?;
-        control.checkpoint(
-            &checkpoint,
             report.steps as u64,
             serde_json::json!({"engine":"efficient_ad","steps":report.steps}),
         )?;

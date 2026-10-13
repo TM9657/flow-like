@@ -143,6 +143,23 @@ impl SharedCredentials {
         }
     }
 
+    /// Content store that bypasses host decoration such as the desktop
+    /// offline-writes overlay: writes reach the cloud or fail, never queue.
+    pub async fn to_content_store_undecorated(&self) -> Result<FlowLikeStore> {
+        let mut credentials = self;
+        while let SharedCredentials::Mixed(mixed) = credentials {
+            credentials = &mixed.content;
+        }
+        match credentials {
+            SharedCredentials::Renewable(credentials) => {
+                credentials
+                    .to_store_type_undecorated(StoreType::Content)
+                    .await
+            }
+            credentials => credentials.to_store_type(StoreType::Content).await,
+        }
+    }
+
     #[cfg(feature = "flow-runtime")]
     pub async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         match self {
@@ -388,6 +405,27 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[tokio::test]
+    async fn undecorated_content_store_unwraps_mixed_credentials() {
+        let mixed = SharedCredentials::Mixed(MixedSharedCredentials {
+            meta: Box::new(SharedCredentials::Azure(sample_azure())),
+            content: Box::new(SharedCredentials::Mixed(MixedSharedCredentials {
+                meta: Box::new(SharedCredentials::Azure(sample_azure())),
+                content: Box::new(SharedCredentials::Aws(sample_aws())),
+                logs: Box::new(SharedCredentials::Azure(sample_azure())),
+            })),
+            logs: Box::new(SharedCredentials::Azure(sample_azure())),
+        });
+        let FlowLikeStore::AWS(store) = mixed
+            .to_content_store_undecorated()
+            .await
+            .expect("content store builds without network access")
+        else {
+            panic!("mixed credentials must resolve to their AWS content store");
+        };
+        assert_eq!(store.to_string(), "AmazonS3(aws-content)");
     }
 
     #[test]

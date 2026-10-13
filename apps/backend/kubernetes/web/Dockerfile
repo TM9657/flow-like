@@ -3,28 +3,35 @@
 FROM node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS node
 
 # ============================================================
-# Stage 1: Device cryptography WebAssembly bundle
+# Stage 1: Browser WebAssembly bundles
 # ============================================================
-# The browser loads every device-management primitive from /device-crypto.
-# The output is generated (and gitignored), so the image builds it the same way
-# the published web build does, with the toolchain pinned in rust-toolchain.toml.
+# Build the generated device cryptography and document editor assets with the
+# same pinned toolchain used by the published web build.
 FROM rust:1.97.1-bookworm AS device-crypto
 COPY rust-toolchain.toml /rust-toolchain.toml
 RUN rustup toolchain install
 
 # ring compiles C for wasm32, which needs clang with a WebAssembly backend.
-RUN apt-get update && apt-get install -y --no-install-recommends clang llvm && \
+RUN apt-get update && apt-get install -y --no-install-recommends clang llvm git && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 
 WORKDIR /app
 COPY . .
-RUN rm -rf apps/web/public/device-crypto apps/desktop/public/device-crypto
+RUN rm -rf apps/web/public/device-crypto apps/desktop/public/device-crypto \
+    apps/web/public/wordcraft apps/desktop/public/wordcraft \
+    apps/web/public/craft apps/desktop/public/craft
 RUN --mount=type=cache,target=/cargo-home,id=cargo-home-rust-beta-2026-09-27,sharing=shared \
     --mount=type=cache,target=/app/target,id=cargo-target-device-crypto-web-rust-beta-2026-09-27,sharing=locked \
     CARGO_HOME=/cargo-home node packages/device-crypto/build-web.mjs && \
+    CARGO_HOME=/cargo-home node packages/craft-viewers/build-web.mjs && \
     test -s apps/web/public/device-crypto/flow_like_device_crypto_bg.wasm && \
-    test -s apps/web/public/device-crypto/flow_like_device_crypto.js
+    test -s apps/web/public/device-crypto/flow_like_device_crypto.js && \
+    test -s apps/web/public/wordcraft/runtime.json && \
+    test -s apps/web/public/wordcraft/host.js && \
+    for runtime in packages/craft-viewers/*/upstream.json; do \
+      name=$(basename "$(dirname "$runtime")"); test -s "apps/web/public/craft/$name/runtime.json" || exit 1; \
+    done
 
 # ============================================================
 # Stage 2: Builder
@@ -43,7 +50,7 @@ WORKDIR /app
 
 # Include the complete frozen workspace dependency graph.
 COPY . .
-RUN rm -rf apps/web/public/device-crypto
+RUN rm -rf apps/web/public/device-crypto apps/web/public/wordcraft apps/web/public/craft
 RUN bun install --frozen-lockfile
 
 # Deployment URLs are public runtime settings, never image build arguments.
@@ -54,6 +61,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app/apps/web
 RUN bun ../../scripts/sync-node-icons.ts
 COPY --from=device-crypto /app/apps/web/public/device-crypto /app/apps/web/public/device-crypto
+COPY --from=device-crypto /app/apps/web/public/wordcraft /app/apps/web/public/wordcraft
+COPY --from=device-crypto /app/apps/web/public/craft /app/apps/web/public/craft
 ARG TARGETARCH
 # TypeScript needs more than 4 GiB for the shared UI workspace. Keep the
 # limit configurable and reserve additional builder memory for native tooling.
@@ -63,7 +72,12 @@ ENV NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}"
 # /app/apps/web/out directory is outside the mount and remains in the image layer.
 RUN --mount=type=cache,id=flow-like-next-node24-next16-${TARGETARCH},target=/app/apps/web/.next,sharing=locked \
     /opt/node/bin/node /app/node_modules/next/dist/bin/next build --turbopack && \
-    test -s out/device-crypto/flow_like_device_crypto_bg.wasm
+    test -s out/device-crypto/flow_like_device_crypto_bg.wasm && \
+    test -s out/wordcraft/runtime.json && \
+    test -s out/wordcraft/host.js && \
+    for runtime in ../../packages/craft-viewers/*/upstream.json; do \
+      name=$(basename "$(dirname "$runtime")"); test -s "out/craft/$name/runtime.json" || exit 1; \
+    done
 
 # ============================================================
 # Stage 3: Runtime (nginx to serve static files)

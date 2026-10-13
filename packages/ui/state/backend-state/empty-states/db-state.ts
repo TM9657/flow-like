@@ -1,3 +1,4 @@
+import type { IColumnMetadata } from "../../../lib/column-metadata";
 import type {
 	IAddColumnPayload,
 	ICreateTableResult,
@@ -150,6 +151,14 @@ export class EmptyDatabaseState implements IDatabaseState {
 		column: string,
 	): Promise<void> {
 		throw new Error("Method not implemented.");
+	}
+	setColumnMetadata(
+		appId: string,
+		tableName: string,
+		column: string,
+		metadata: IColumnMetadata,
+	): Promise<IColumnMetadata> {
+		throw new Error("Column metadata is not available on this backend.");
 	}
 	dropTable(appId: string, tableName: string): Promise<IDropTableResult> {
 		throw new Error("Method not implemented.");

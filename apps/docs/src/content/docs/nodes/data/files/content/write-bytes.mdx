@@ -22,3 +22,9 @@ import { NodeReference } from "../../../../../../components/node-docs/NodeRefere
 import { nodesBySlug } from "../../../../../../generated/catalog-nodes";
 
 <NodeReference node={nodesBySlug["nodes/data/files/content/write-bytes"]} />
+
+Upload sizing is automatic. Files larger than 8 MiB use multipart uploads when the
+storage provider supports them. The node splits content into bounded buffers
+before passing it to storage, including for smaller files that use a single PUT
+request. No extra pins or workflow steps are required. The Content input still
+holds the complete file in memory.

@@ -445,13 +445,14 @@ impl RfDetrOutput {
             ));
         }
         let scores = sigmoid(self.logits.clone())
-            .into_data()
+            .try_into_data()
+            .map_err(crate::execution::device_error)?
             .try_to_vec::<f32>()
             .map_err(|e| Error::Invalid(e.to_string()))?;
         let boxes = self
             .boxes
-            .clone()
-            .into_data()
+            .try_to_data()
+            .map_err(crate::execution::device_error)?
             .try_to_vec::<f32>()
             .map_err(|e| Error::Invalid(e.to_string()))?;
         if scores.iter().chain(&boxes).any(|value| !value.is_finite()) {
@@ -678,6 +679,44 @@ mod tests {
                 .val()
                 .grad(&grads)
                 .is_some()
+        );
+    }
+
+    #[test]
+    fn evaluation_loss_scores_only_the_inference_group() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let device = crate::backend::device(&crate::BackendChoice::Cpu, true).unwrap();
+        let model = crate::model::Model::RfDetr(RfDetr::with_dimensions(3, small(), &device));
+        let crate::model::Model::RfDetr(detector) = &model else {
+            unreachable!("the model is built as RF-DETR");
+        };
+        let dataset = crate::TensorDataset {
+            inputs: crate::TensorData {
+                shape: vec![2, 3, 8, 12],
+                values: data(input(&device)),
+            },
+            targets: crate::Targets::Boxes { values: targets() },
+        };
+        let inference = detector.forward(input(&device), false).unwrap();
+        let grouped = detector.forward(input(&device), true).unwrap();
+        assert_eq!((inference.groups, grouped.groups), (1, 2));
+        let expected_evaluation = data(inference.loss(&targets()).unwrap())[0];
+        let expected_training = data(grouped.loss(&targets()).unwrap())[0];
+        let evaluation = data(model.loss(&dataset, &device, false).unwrap())[0];
+        let training = data(model.loss(&dataset, &device, true).unwrap())[0];
+        assert!(
+            (evaluation - expected_evaluation).abs() < 1e-4,
+            "{evaluation} != {expected_evaluation}"
+        );
+        assert!(
+            (training - expected_training).abs() < 1e-4,
+            "{training} != {expected_training}"
+        );
+        assert!(
+            (evaluation - training).abs() > 1e-6,
+            "The training loss must also score the extra query groups"
         );
     }
 

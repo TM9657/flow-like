@@ -1,4 +1,7 @@
-use super::{SharedCredentials, StoreType, aws_credentials::s3_storage_options};
+use super::{
+    SharedCredentials, StoreType,
+    aws_credentials::{s3_copy_if_not_exists, s3_storage_options},
+};
 use async_trait::async_trait;
 #[cfg(feature = "flow-runtime")]
 use flow_like_storage::databases::vector::lancedb::connect_lance;
@@ -439,7 +442,8 @@ impl RenewableSharedCredentials {
                 };
                 let mut builder = object_store::aws::AmazonS3Builder::new()
                     .with_bucket_name(bucket)
-                    .with_region(&value.region);
+                    .with_region(&value.region)
+                    .with_copy_if_not_exists(s3_copy_if_not_exists(config));
                 for (key, value) in s3_storage_options(config) {
                     builder = builder.with_config(key.parse()?, value);
                 }

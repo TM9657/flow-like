@@ -1,6 +1,10 @@
 use crate::{
-    ensure_any_permission, error::ApiError, middleware::jwt::AppUser,
-    permission::role_permission::RolePermissions, routes::app::db::ScopeParams, state::AppState,
+    ensure_any_permission,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    routes::app::db::{ScopeParams, column_reader},
+    state::AppState,
 };
 use axum::{
     Extension, Json,
@@ -50,7 +54,7 @@ pub async fn children(
     Query(scope): Query<ScopeParams>,
     Json(payload): Json<ChildrenPayload>,
 ) -> Result<Json<SubgraphResult>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -60,7 +64,13 @@ pub async fn children(
 
     let (connection, overlay) =
         super::load_scoped_overlay(&state, &user, &app_id, &overlay_id, &scope).await?;
-    let store = lancegraph::LanceGraphStore::new(connection, overlay, None).await?;
+    let store = lancegraph::LanceGraphStore::new_for(
+        connection,
+        overlay,
+        None,
+        column_reader(&permission, &scope),
+    )
+    .await?;
 
     let result = store
         .overlay_children(&payload.label, payload.node_id, payload.limit)

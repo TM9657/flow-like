@@ -1,7 +1,14 @@
-use flow_like_ml_core::{Result, require};
+use flow_like_ml_core::{Error, Result, require};
 use rustfft::{FftPlanner, num_complex::Complex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+/// Largest `power` matrix (frames x frequency bins) that `stft` returns.
+pub const MAX_SPECTROGRAM_ELEMENTS: usize = 16_777_216;
+
+/// Relative spread (standard deviation over peak magnitude) at or below which a window counts
+/// as flat, so rounding noise yields no shape moments or spectral features.
+const FLAT_WINDOW_TOLERANCE: f64 = 1e-12;
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SpectrumBin {
@@ -10,15 +17,27 @@ pub struct SpectrumBin {
     pub power: f64,
 }
 
+fn one_sided_factor(bin: usize, len: usize) -> f64 {
+    if bin == 0 || len.is_multiple_of(2) && bin == len / 2 {
+        1.0
+    } else {
+        2.0
+    }
+}
+
+fn validate_sample_rate(sample_rate_hz: f64) -> Result<()> {
+    require(
+        sample_rate_hz.is_finite() && sample_rate_hz > 0.0,
+        "Sample rate must be finite and positive",
+    )
+}
+
 pub fn real_spectrum(values: &[f64], sample_rate_hz: f64) -> Result<Vec<SpectrumBin>> {
     require(
         values.len() >= 2 && values.iter().all(|v| v.is_finite()),
         "FFT needs at least two finite samples",
     )?;
-    require(
-        sample_rate_hz.is_finite() && sample_rate_hz > 0.0,
-        "Sample rate must be finite and positive",
-    )?;
+    validate_sample_rate(sample_rate_hz)?;
     let n = values.len();
     let mut buffer: Vec<_> = values.iter().map(|v| Complex::new(*v, 0.0)).collect();
     FftPlanner::new().plan_fft_forward(n).process(&mut buffer);
@@ -26,11 +45,7 @@ pub fn real_spectrum(values: &[f64], sample_rate_hz: f64) -> Result<Vec<Spectrum
         .iter()
         .enumerate()
         .map(|(k, v)| {
-            let factor = if k == 0 || n.is_multiple_of(2) && k == n / 2 {
-                1.0
-            } else {
-                2.0
-            };
+            let factor = one_sided_factor(k, n);
             SpectrumBin {
                 frequency_hz: k as f64 * sample_rate_hz / n as f64,
                 amplitude: v.norm() * factor / n as f64,
@@ -72,33 +87,26 @@ impl WindowFeatures {
 pub fn window_features(values: &[f64], sample_rate_hz: f64) -> Result<WindowFeatures> {
     let spectrum = real_spectrum(values, sample_rate_hz)?;
     let count = values.len() as f64;
-    let mean = values.iter().sum::<f64>() / count;
-    let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / count;
-    let std = variance.sqrt();
-    let rms = (values.iter().map(|v| v * v).sum::<f64>() / count).sqrt();
     let min = values.iter().copied().fold(f64::INFINITY, f64::min);
     let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let peak = min.abs().max(max.abs());
-    let skewness = if std > 0.0 {
+    // The rounded mean can leave [min, max]; clamping keeps constant windows exact.
+    let mean = (values.iter().sum::<f64>() / count).clamp(min, max);
+    let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / count;
+    let std = variance.sqrt();
+    let rms = (values.iter().map(|v| v * v).sum::<f64>() / count).sqrt();
+    let varying = std > FLAT_WINDOW_TOLERANCE * peak;
+    let moment = |order: i32| {
         values
             .iter()
-            .map(|v| ((v - mean) / std).powi(3))
+            .map(|v| ((v - mean) / std).powi(order))
             .sum::<f64>()
             / count
-    } else {
-        0.0
     };
-    let kurtosis = if std > 0.0 {
-        values
-            .iter()
-            .map(|v| ((v - mean) / std).powi(4))
-            .sum::<f64>()
-            / count
-            - 3.0
-    } else {
-        0.0
-    };
+    let skewness = if varying { moment(3) } else { 0.0 };
+    let kurtosis = if varying { moment(4) - 3.0 } else { 0.0 };
     let total_power = spectrum.iter().skip(1).map(|v| v.power).sum::<f64>();
+    let spectral = varying && total_power > 0.0;
     let dominant = spectrum
         .iter()
         .skip(1)
@@ -112,12 +120,8 @@ pub fn window_features(values: &[f64], sample_rate_hz: f64) -> Result<WindowFeat
         crest_factor: if rms > 0.0 { peak / rms } else { 0.0 },
         skewness,
         excess_kurtosis: kurtosis,
-        dominant_frequency_hz: if total_power > f64::EPSILON {
-            dominant.frequency_hz
-        } else {
-            0.0
-        },
-        spectral_centroid_hz: if total_power > 0.0 {
+        dominant_frequency_hz: if spectral { dominant.frequency_hz } else { 0.0 },
+        spectral_centroid_hz: if spectral {
             spectrum
                 .iter()
                 .skip(1)
@@ -220,6 +224,19 @@ pub fn stft(
         window_samples >= 2 && hop_samples > 0 && values.len() >= window_samples,
         "STFT requires a complete window of at least two samples and a positive hop",
     )?;
+    validate_sample_rate(sample_rate_hz)?;
+    let frames = (values.len() - window_samples) / hop_samples + 1;
+    let bins = window_samples / 2 + 1;
+    if frames
+        .checked_mul(bins)
+        .is_none_or(|elements| elements > MAX_SPECTROGRAM_ELEMENTS)
+    {
+        return Err(Error::Invalid(format!(
+            "STFT output of {frames} frames x {bins} bins exceeds the \
+             {MAX_SPECTROGRAM_ELEMENTS} element budget; increase hop_samples \
+             ({hop_samples}) or reduce window_samples ({window_samples})"
+        )));
+    }
     require(
         values.iter().all(|v| v.is_finite()),
         "STFT samples must be finite",
@@ -239,20 +256,32 @@ pub fn stft(
         mean_square > 0.0,
         "Window has no energy; increase the STFT window size",
     )?;
-    let mut power = Vec::new();
-    let mut time_seconds = Vec::new();
-    let mut frequency_hz = Vec::new();
+    let fft = FftPlanner::<f64>::new().plan_fft_forward(window_samples);
+    let mut buffer = vec![Complex::new(0.0, 0.0); window_samples];
+    let mut scratch = vec![Complex::new(0.0, 0.0); fft.get_inplace_scratch_len()];
+    let squared_length = (window_samples as f64).powi(2);
+    let mut power = Vec::with_capacity(frames);
+    let mut time_seconds = Vec::with_capacity(frames);
     for (index, frame) in values
         .windows(window_samples)
         .step_by(hop_samples)
         .enumerate()
     {
-        let weighted: Vec<_> = frame.iter().zip(&weights).map(|(v, w)| v * w).collect();
-        let bins = real_spectrum(&weighted, sample_rate_hz)?;
-        if frequency_hz.is_empty() {
-            frequency_hz = bins.iter().map(|b| b.frequency_hz).collect();
+        for ((slot, value), weight) in buffer.iter_mut().zip(frame).zip(&weights) {
+            *slot = Complex::new(value * weight, 0.0);
         }
-        power.push(bins.iter().map(|b| b.power / mean_square).collect());
+        fft.process_with_scratch(&mut buffer, &mut scratch);
+        power.push(
+            buffer[..bins]
+                .iter()
+                .enumerate()
+                .map(|(k, v)| {
+                    v.norm_sqr() * one_sided_factor(k, window_samples)
+                        / squared_length
+                        / mean_square
+                })
+                .collect(),
+        );
         time_seconds.push(
             (index * hop_samples) as f64 / sample_rate_hz
                 + (window_samples - 1) as f64 / (2.0 * sample_rate_hz),
@@ -263,7 +292,9 @@ pub fn stft(
         window_samples,
         hop_samples,
         time_seconds,
-        frequency_hz,
+        frequency_hz: (0..bins)
+            .map(|k| k as f64 * sample_rate_hz / window_samples as f64)
+            .collect(),
         power,
     })
 }
@@ -342,5 +373,80 @@ mod tests {
         for frame in &spectrum.power {
             assert!((frame.iter().sum::<f64>() - 2.5).abs() < 1e-4);
         }
+    }
+
+    #[test]
+    fn stft_frames_match_single_window_spectra() {
+        let mut rng = crate::Rng::new(3);
+        let values: Vec<_> = (0..1000).map(|_| rng.uniform() - 0.5).collect();
+        let (window, hop) = (300, 77);
+        let spectrogram = stft(&values, 250.0, window, hop, WindowFunction::Hamming).unwrap();
+        assert_eq!(spectrogram.power.len(), 10);
+        assert_eq!(spectrogram.time_seconds.len(), 10);
+        let weights: Vec<_> = (0..window)
+            .map(|i| 0.54 - 0.46 * (2.0 * std::f64::consts::PI * i as f64 / 299.0).cos())
+            .collect();
+        let mean_square = weights.iter().map(|w| w * w).sum::<f64>() / window as f64;
+        for (index, frame) in spectrogram.power.iter().enumerate() {
+            let start = index * hop;
+            let weighted: Vec<_> = values[start..start + window]
+                .iter()
+                .zip(&weights)
+                .map(|(v, w)| v * w)
+                .collect();
+            let expected = real_spectrum(&weighted, 250.0).unwrap();
+            assert_eq!(frame.len(), expected.len());
+            for (power, bin) in frame.iter().zip(&expected) {
+                assert!((power - bin.power / mean_square).abs() <= 1e-12);
+            }
+        }
+        let frequencies: Vec<_> = real_spectrum(&values[..window], 250.0)
+            .unwrap()
+            .iter()
+            .map(|bin| bin.frequency_hz)
+            .collect();
+        assert_eq!(spectrogram.frequency_hz, frequencies);
+    }
+
+    #[test]
+    fn stft_rejects_output_over_the_element_budget_before_computing() {
+        let values = vec![0.0; 1_000_000];
+        let error = stft(&values, 1000.0, 4096, 1, WindowFunction::Hann)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("window_samples (4096)"), "{error}");
+        assert!(error.contains("hop_samples (1)"), "{error}");
+        let accepted = stft(&values[..20_000], 1000.0, 4096, 1024, WindowFunction::Hann).unwrap();
+        assert_eq!(accepted.power.len(), (20_000 - 4096) / 1024 + 1);
+        assert!(accepted.power.iter().all(|frame| frame.len() == 2049));
+    }
+
+    #[test]
+    fn flat_windows_have_no_shape_or_spectral_features_at_any_level() {
+        for (level, len) in [(0.1, 3), (0.1, 3000), (5.0, 3000), (-1e-9, 1000), (0.0, 64)] {
+            let features = window_features(&vec![level; len], 100.0).unwrap();
+            assert_eq!(features.mean, level);
+            assert_eq!(features.standard_deviation, 0.0);
+            assert_eq!(
+                [
+                    features.skewness,
+                    features.excess_kurtosis,
+                    features.dominant_frequency_hz,
+                    features.spectral_centroid_hz,
+                ],
+                [0.0; 4],
+                "level {level} x {len}"
+            );
+        }
+        let pulses: Vec<_> = (0..64)
+            .map(|i| if i % 4 == 0 { 3e-15 } else { 1e-15 })
+            .collect();
+        let scaled: Vec<_> = pulses.iter().map(|v| v * 1e15).collect();
+        let small = window_features(&pulses, 64.0).unwrap();
+        let unit = window_features(&scaled, 64.0).unwrap();
+        assert_eq!(unit.dominant_frequency_hz, 16.0);
+        assert_eq!(small.dominant_frequency_hz, 16.0);
+        assert!((small.skewness - unit.skewness).abs() < 1e-9);
+        assert!((small.spectral_centroid_hz - unit.spectral_centroid_hz).abs() < 1e-9);
     }
 }

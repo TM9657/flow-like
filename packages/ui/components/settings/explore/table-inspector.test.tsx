@@ -28,36 +28,40 @@ if (documentDescriptor)
 	Object.defineProperty(globalThis, "document", documentDescriptor);
 else Reflect.deleteProperty(globalThis, "document");
 
-const calls: { name: string; args: unknown[] }[] = [];
+const calls: { name: string; args: unknown[]; enabled?: boolean }[] = [];
 let explorer: LanceDBExplorerProps | undefined;
 let failures: Record<string, Error> = {};
-const dbState = Object.fromEntries(
-	[
-		"getSchema",
-		"countItems",
-		"listItems",
-		"databaseHistory",
-		"optimize",
-		"updateItem",
-		"dropColumns",
-		"addColumn",
-		"alterColumn",
-		"setPrimaryKey",
-		"getIndices",
-		"dropIndex",
-		"buildIndex",
-	].map((name) => [
-		name,
-		Object.defineProperty(
-			async (...args: unknown[]) => {
-				calls.push({ name, args });
-				return [];
-			},
-			"name",
-			{ value: name },
-		),
-	]),
-);
+const recorded = (names: string[]) =>
+	Object.fromEntries(
+		names.map((name) => [
+			name,
+			Object.defineProperty(
+				async (...args: unknown[]) => {
+					calls.push({ name, args });
+					return [];
+				},
+				"name",
+				{ value: name },
+			),
+		]),
+	);
+const dbState = recorded([
+	"getSchema",
+	"countItems",
+	"listItems",
+	"databaseHistory",
+	"optimize",
+	"updateItem",
+	"dropColumns",
+	"addColumn",
+	"alterColumn",
+	"setPrimaryKey",
+	"setColumnMetadata",
+	"getIndices",
+	"dropIndex",
+	"buildIndex",
+]);
+const roleState = recorded(["getRoles"]);
 mock.module("@flow-like/locales", () => ({
 	...actual.locales,
 	useTranslation: () => ({ t: (_: string, fallback: string) => fallback }),
@@ -68,8 +72,13 @@ mock.module("../../../hooks/use-app-permissions", () => ({
 }));
 mock.module("../../../hooks/use-invoke", () => ({
 	...actual.invoke,
-	useInvoke: (fn: { name: string }, _: unknown, args: unknown[]) => {
-		calls.push({ name: fn.name, args });
+	useInvoke: (
+		fn: { name: string },
+		_: unknown,
+		args: unknown[],
+		enabled = true,
+	) => {
+		calls.push({ name: fn.name, args, enabled });
 		return {
 			error: failures[fn.name],
 			data:
@@ -87,7 +96,16 @@ mock.module("../../../hooks/use-invoke", () => ({
 						? { fields: [] }
 						: fn.name === "countItems"
 							? 0
-							: [],
+							: fn.name === "getRoles"
+								? [
+										"member",
+										[
+											{ attributes: ["hr", "region:eu"] },
+											{ attributes: ["finance", "hr"] },
+											{},
+										],
+									]
+								: [],
 			refetch: () => Promise.resolve(),
 			isLoading: false,
 		};
@@ -96,7 +114,7 @@ mock.module("../../../hooks/use-invoke", () => ({
 }));
 mock.module("../../../state/backend-state", () => ({
 	...actual.backendState,
-	useBackend: () => ({ dbState }),
+	useBackend: () => ({ dbState, roleState }),
 }));
 mock.module("../../../lib", () => ({
 	...actual.lib,
@@ -222,6 +240,16 @@ describe("reference-aware table inspector", () => {
 			true,
 			selector,
 		]);
+		const metadata = {
+			display_name: "Annual salary",
+			classification: "confidential" as const,
+			pii: true,
+			read_attributes: ["hr"],
+		};
+		await explorer?.onSetColumnMetadata?.("salary", metadata);
+		expect(
+			calls.find((call) => call.name === "setColumnMetadata")?.args,
+		).toEqual(["app", "samples", "salary", metadata, true, selector]);
 		await explorer?.onDropColumns?.(["embedding"]);
 		expect(calls.find((call) => call.name === "dropColumns")?.args).toEqual([
 			"app",
@@ -256,12 +284,22 @@ describe("reference-aware table inspector", () => {
 				"onAddColumn",
 				"onAlterColumn",
 				"onSetPrimaryKey",
+				"onSetColumnMetadata",
 				"onDropIndex",
 				"onBuildIndex",
 			] as const)
 				expect(explorer?.[name]).toBeUndefined();
 			expect(explorer?.onGetIndices).toBeFunction();
+			const roles = calls.find((call) => call.name === "getRoles");
+			expect(roles?.enabled).toBe(false);
 		}
+	});
+	test("admins restrict column reads with the attributes the app's roles hold", () => {
+		renderToStaticMarkup(<TableInspector appId="app" table="samples" />);
+		expect(explorer?.canManageColumnAccess).toBe(true);
+		expect(explorer?.knownAttributes).toEqual(["finance", "hr", "region:eu"]);
+		const roles = calls.find((call) => call.name === "getRoles");
+		expect(roles).toMatchObject({ args: ["app"], enabled: true });
 	});
 	test("changing the selected reference changes every table read identity", () => {
 		renderToStaticMarkup(

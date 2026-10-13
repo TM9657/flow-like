@@ -3,6 +3,7 @@ import type { DatabaseOptions, DatabaseAction, JsonObject } from "./types.js";
 import type { LanceConnection } from "./integrations.js";
 import type { HttpClient } from "./client.js";
 import type {
+	ColumnMetadata,
 	CountResult,
 	LanceConnectionInfo,
 	PresignDbAccessResponse,
@@ -294,6 +295,19 @@ export function createDatabaseMethods(http: HttpClient) {
 				"PUT",
 				`${appPath(appId)}/db/${segment(table)}/primary-key`,
 				{ body: { column }, query: { ...options } },
+			);
+		},
+		setTableColumnMetadata(
+			appId: string,
+			table: string,
+			column: string,
+			metadata: ColumnMetadata,
+			options: DatabaseOptions = {},
+		): Promise<ColumnMetadata> {
+			return http.request(
+				"PUT",
+				`${appPath(appId)}/db/${segment(table)}/columns/${segment(column)}/metadata`,
+				{ body: metadata, query: { ...options } },
 			);
 		},
 		async buildTableIndex(

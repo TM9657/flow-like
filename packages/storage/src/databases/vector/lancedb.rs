@@ -45,14 +45,19 @@ use crate::arrow_utils::{
     ValueBatchReader, value_to_batch_reader_with_fields,
     value_to_batch_reader_with_utc_timestamp_inference,
 };
+use crate::databases::column_access::{is_hidden, restrict_provider, without_hidden_columns};
 use crate::databases::df_provider::{lance_table_provider, with_lance_order_pushdown};
 use crate::databases::lance_filter_params::orient_spatial_relations;
 
 use super::VectorStore;
 use super::schema::{
     PrimaryKeyRejected, TableInputRejected, primary_key_columns, primary_key_ineligibility,
-    primary_key_marker_update, without_primary_key_marker,
+    primary_key_marker_update, without_managed_field_metadata,
 };
+pub use flow_like_storage_contracts::column_metadata::{ColumnMetadata, ColumnReader};
+
+#[path = "lancedb_columns.rs"]
+mod columns;
 
 #[cfg(test)]
 #[path = "reference_tests.rs"]
@@ -263,6 +268,8 @@ pub struct LanceDBVectorStore {
     /// ID columns upserts ruled out as the table key, with the column's type and
     /// nullability at that time; a changed column is checked again.
     unmarkable_keys: HashMap<String, Option<(DataType, bool)>>,
+    /// Whose column read restrictions apply to reads through this store.
+    column_reader: ColumnReader,
 }
 
 impl Cacheable for LanceDBVectorStore {
@@ -390,6 +397,7 @@ impl LanceDBVectorStore {
             mutation_adapter: None,
             last_write_receipt: Default::default(),
             unmarkable_keys: Default::default(),
+            column_reader: ColumnReader::default(),
         })
     }
 
@@ -413,6 +421,7 @@ impl LanceDBVectorStore {
             mutation_adapter: None,
             last_write_receipt: Default::default(),
             unmarkable_keys: Default::default(),
+            column_reader: ColumnReader::default(),
         }
     }
 
@@ -434,6 +443,7 @@ impl LanceDBVectorStore {
             mutation_adapter: None,
             last_write_receipt: Default::default(),
             unmarkable_keys: Default::default(),
+            column_reader: ColumnReader::default(),
         })
     }
 
@@ -479,6 +489,7 @@ impl LanceDBVectorStore {
             mutation_adapter: None,
             last_write_receipt: Default::default(),
             unmarkable_keys: Default::default(),
+            column_reader: ColumnReader::default(),
         })
     }
 
@@ -510,6 +521,7 @@ impl LanceDBVectorStore {
         )
         .await?;
         store.write_options = self.write_options.clone();
+        store.column_reader = self.column_reader.clone();
         Ok(store)
     }
 
@@ -527,6 +539,7 @@ impl LanceDBVectorStore {
             .await?
         };
         store.write_options = self.write_options.clone();
+        store.column_reader = self.column_reader.clone();
         Ok(store)
     }
 
@@ -635,6 +648,7 @@ impl LanceDBVectorStore {
             mutation_adapter: None,
             last_write_receipt: Default::default(),
             unmarkable_keys: Default::default(),
+            column_reader: self.column_reader.clone(),
         })
     }
 
@@ -697,13 +711,21 @@ impl LanceDBVectorStore {
                 "Select a historical version or tag before restoring"
             ));
         }
+        let latest = self
+            .connection
+            .open_table(&self.table_name)
+            .branch(&self.selector.branch)
+            .execute()
+            .await?
+            .schema()
+            .await?;
         let mut restored = self.checkout(self.selector()).await?;
-        restored
+        let table = restored
             .table
             .as_ref()
-            .ok_or_else(|| anyhow!("Table not initialized"))?
-            .restore()
-            .await?;
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+        table.restore().await?;
+        columns::carry_column_metadata_forward(&latest, table).await?;
         restored.selector.version = None;
         restored.selector.tag = None;
         restored.reference().await
@@ -789,6 +811,7 @@ impl LanceDBVectorStore {
             mutation_adapter: None,
             last_write_receipt: Default::default(),
             unmarkable_keys: Default::default(),
+            column_reader: self.column_reader.clone(),
         })
     }
 
@@ -981,7 +1004,13 @@ impl LanceDBVectorStore {
         validate_new_columns(&transform)?;
         if let NewColumnTransform::SqlExpressions(expressions) = &transform {
             let schema = table.schema().await?;
+            let hidden = self.hidden_columns_in(&schema).await?;
             for (_, expression) in expressions {
+                crate::databases::column_access::reject_hidden_references(
+                    expression,
+                    &hidden,
+                    &self.table_name,
+                )?;
                 use datafusion::sql::sqlparser::{
                     dialect::GenericDialect,
                     tokenizer::{Token, Tokenizer},
@@ -1020,6 +1049,17 @@ impl LanceDBVectorStore {
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
         table.checkout_latest().await?;
+        let hidden = self
+            .hidden_columns_in(table.schema().await?.as_ref())
+            .await?;
+        if let Some(name) = column_names
+            .iter()
+            .find(|name| is_hidden(&hidden, column_root(name)))
+        {
+            return Err(
+                crate::databases::column_access::no_such_column(&self.table_name, name).into(),
+            );
+        }
         let keys = table_primary_key(&table).await?;
         if let Some(key) = column_names
             .iter()
@@ -1049,9 +1089,17 @@ impl LanceDBVectorStore {
         // A change built on a stale schema would commit over, and drop, a newer key.
         table.checkout_latest().await?;
         let schema = table.schema().await?;
+        let hidden = self.hidden_columns_in(&schema).await?;
         let keys = primary_key_columns(&schema);
         for change in alteration {
-            let root = change.path.split('.').next().unwrap_or(&change.path);
+            let root = column_root(&change.path);
+            if is_hidden(&hidden, root) {
+                return Err(crate::databases::column_access::no_such_column(
+                    &self.table_name,
+                    &change.path,
+                )
+                .into());
+            }
             if change.data_type.is_some()
                 && schema.fields().iter().any(|field| {
                     field.name() == root && crate::geometry::contains_geometry_field(field)
@@ -1090,8 +1138,16 @@ impl LanceDBVectorStore {
         let mut retried = false;
         loop {
             let read: Result<Vec<IndexConfigDto>> = async {
-                let indices = self.require_readable_table().await?;
-                list_table_indices(&indices).await
+                let table = self.require_readable_table().await?;
+                let scope = self.read_scope(&table).await?;
+                let mut indices = list_table_indices(&table).await?;
+                indices.retain(|index| {
+                    !index
+                        .columns
+                        .iter()
+                        .any(|column| is_hidden(scope.hidden(), column))
+                });
+                Ok(indices)
             }
             .await;
             if let Some(result) = self.recover_read(read, &mut retried).await {
@@ -1117,10 +1173,12 @@ impl LanceDBVectorStore {
         updates: std::collections::HashMap<String, Value>,
     ) -> Result<()> {
         self.ensure_writable()?;
+        let table = self.require_readable_table().await?;
+        let scope = self.read_scope(&table).await?;
+        scope.check_expression(filter)?;
         let filter = orient_spatial_relations(filter)?;
         let filter = filter.as_str();
-        let table = self.require_readable_table().await?;
-        let schema = table.schema().await?;
+        let schema = without_hidden_columns(table.schema().await?.as_ref(), scope.hidden());
         let mut unknown: Vec<&str> = updates
             .keys()
             .map(String::as_str)
@@ -1229,6 +1287,10 @@ impl LanceDBVectorStore {
             )
         })?;
         table.checkout_latest().await?;
+        let hidden = self
+            .hidden_columns_in(table.schema().await?.as_ref())
+            .await?;
+        columns::reject_hidden_key(&hidden, column, &self.table_name)?;
         let keys = table_primary_key(&table).await?;
         if !keys.is_empty() {
             return self.expect_primary_key(&keys, column);
@@ -1377,15 +1439,20 @@ impl LanceDBVectorStore {
     /// [`crate::databases::lance_dml`]) UPDATE/DELETE with a WHERE clause.
     /// Read-only surfaces registering it must validate their SQL first
     /// ([`crate::databases::sql_guard::validate_readonly_sql`]).
+    /// A reader with hidden columns gets a read-only provider without them.
     pub async fn to_datafusion(&self) -> Result<Arc<dyn TableProvider>> {
         let table = self.require_readable_table().await?;
-        if self.selector.is_read_only() || self.is_durably_managed() {
-            return Ok(Arc::new(ReadOnlyDatabaseProvider {
-                inner: lance_table_provider(table, false).await?,
-                mutation_adapter: self.mutation_adapter.clone(),
-            }));
-        }
-        Ok(lance_table_provider(table, true).await?)
+        let hidden = self.read_scope(&table).await?.hidden().to_vec();
+        let provider: Arc<dyn TableProvider> =
+            if self.selector.is_read_only() || self.is_durably_managed() {
+                Arc::new(ReadOnlyDatabaseProvider {
+                    inner: lance_table_provider(table, false).await?,
+                    mutation_adapter: self.mutation_adapter.clone(),
+                })
+            } else {
+                lance_table_provider(table, true).await?
+            };
+        Ok(restrict_provider(provider, &hidden))
     }
 
     pub async fn raw(&self) -> Result<Table> {
@@ -1561,6 +1628,11 @@ impl TableProvider for ReadOnlyDatabaseProvider {
     }
 }
 
+/// The top-level column a dotted column path starts at.
+fn column_root(path: &str) -> &str {
+    path.split('.').next().unwrap_or(path)
+}
+
 async fn table_primary_key(table: &Table) -> Result<Vec<String>> {
     let schema = table.schema().await?;
     Ok(primary_key_columns(&schema))
@@ -1704,7 +1776,8 @@ fn hex_sql_literal(bytes: &[u8]) -> String {
 /// schema remains authoritative; writes to that legacy shape are normalized at
 /// the serialization boundary.
 /// Upserts key a table after it is created, so an existing key the request does not
-/// declare is compatible; a declared key must match the existing one.
+/// declare is compatible; a declared key must match the existing one. Column metadata is
+/// written after creation too and never makes schemas incompatible.
 fn schemas_compatible_for_creation(existing: &Schema, requested: &Schema) -> bool {
     if existing == requested {
         return true;
@@ -1723,8 +1796,8 @@ fn schemas_compatible_for_creation(existing: &Schema, requested: &Schema) -> boo
             .all(|(existing, requested)| {
                 existing.name() == requested.name()
                     && existing.is_nullable() == requested.is_nullable()
-                    && without_primary_key_marker(existing.metadata())
-                        == without_primary_key_marker(requested.metadata())
+                    && without_managed_field_metadata(existing.metadata())
+                        == without_managed_field_metadata(requested.metadata())
                     && (existing.data_type() == requested.data_type()
                         || matches!(
                             (existing.data_type(), requested.data_type()),
@@ -2071,6 +2144,8 @@ impl VectorStore for LanceDBVectorStore {
         loop {
             let read: Result<Vec<Value>> = async {
                 let table = self.require_readable_table().await?;
+                let scope = self.read_scope(&table).await?;
+                scope.check_vector_column(None)?;
 
                 let mut query = table
                     .query()
@@ -2080,10 +2155,11 @@ impl VectorStore for LanceDBVectorStore {
                     .offset(offset);
 
                 if let Some(filter) = filter {
+                    scope.check_expression(filter)?;
                     query = query.only_if(orient_spatial_relations(filter)?);
                 }
 
-                if let Some(select) = select.clone() {
+                if let Some(select) = scope.select(select.clone())? {
                     query = query.select(lancedb::query::Select::Columns(select));
                 }
 
@@ -2111,6 +2187,8 @@ impl VectorStore for LanceDBVectorStore {
         loop {
             let read: Result<Vec<Value>> = async {
                 let table = self.require_readable_table().await?;
+                let scope = self.read_scope(&table).await?;
+                let fields = scope.search_fields(&table, fields.clone()).await?;
 
                 let mut fts_query = FullTextSearchQuery::new(text.to_string());
                 if let Some(fields) = &fields {
@@ -2128,10 +2206,11 @@ impl VectorStore for LanceDBVectorStore {
                     .offset(offset);
 
                 if let Some(filter) = filter {
+                    scope.check_expression(filter)?;
                     query = query.only_if(orient_spatial_relations(filter)?);
                 }
 
-                if let Some(select) = select.clone() {
+                if let Some(select) = scope.select(select.clone())? {
                     query = query.select(lancedb::query::Select::Columns(select));
                 }
 
@@ -2162,7 +2241,10 @@ impl VectorStore for LanceDBVectorStore {
             let read: Result<Vec<Value>> = async {
                 let table = self.require_readable_table().await?;
                 let schema = table.schema().await?;
+                let scope = self.read_scope(&table).await?;
                 let (vector_column, fields) = split_hybrid_fields(&schema, fields.clone());
+                scope.check_vector_column(vector_column.as_deref())?;
+                let fields = scope.search_fields(&table, fields).await?;
 
                 let mut fts_query = FullTextSearchQuery::new(text.to_string());
                 if let Some(ref fields) = fields {
@@ -2191,10 +2273,11 @@ impl VectorStore for LanceDBVectorStore {
                 }
 
                 if let Some(filter) = filter {
+                    scope.check_expression(filter)?;
                     query = query.only_if(orient_spatial_relations(filter)?);
                 }
 
-                if let Some(select) = select.clone() {
+                if let Some(select) = scope.select(select.clone())? {
                     query = query.select(lancedb::query::Select::Columns(select));
                 }
 
@@ -2222,6 +2305,8 @@ impl VectorStore for LanceDBVectorStore {
         loop {
             let read: Result<Vec<Value>> = async {
                 let table = self.require_readable_table().await?;
+                let scope = self.read_scope(&table).await?;
+                scope.check_expression(filter)?;
 
                 let mut query = table
                     .query()
@@ -2229,7 +2314,7 @@ impl VectorStore for LanceDBVectorStore {
                     .only_if(orient_spatial_relations(filter)?)
                     .offset(offset);
 
-                if let Some(select) = select.clone() {
+                if let Some(select) = scope.select(select.clone())? {
                     query = query.select(lancedb::query::Select::Columns(select));
                 }
 
@@ -2353,6 +2438,7 @@ impl VectorStore for LanceDBVectorStore {
     }
 
     async fn delete(&self, filter: &str) -> Result<()> {
+        self.check_filter(filter).await?;
         let filter = orient_spatial_relations(filter)?;
         let filter = filter.as_str();
         if self.is_durably_managed() {
@@ -2383,10 +2469,11 @@ impl VectorStore for LanceDBVectorStore {
         loop {
             let read: Result<Vec<Value>> = async {
                 let table = self.require_readable_table().await?;
+                let scope = self.read_scope(&table).await?;
 
                 let mut query = table.query().limit(limit).offset(offset);
 
-                if let Some(select) = select.clone() {
+                if let Some(select) = scope.select(select.clone())? {
                     query = query.select(lancedb::query::Select::Columns(select));
                 }
 
@@ -2461,6 +2548,9 @@ impl VectorStore for LanceDBVectorStore {
         loop {
             let read: Result<usize> = async {
                 let table = self.require_readable_table().await?;
+                if let Some(filter) = filter.as_deref() {
+                    self.read_scope(&table).await?.check_expression(filter)?;
+                }
                 let filter = filter
                     .as_deref()
                     .map(orient_spatial_relations)
@@ -2480,7 +2570,8 @@ impl VectorStore for LanceDBVectorStore {
             let read: Result<arrow_schema::Schema> = async {
                 let table = self.require_readable_table().await?;
                 let schema = table.schema().await?;
-                Ok(schema.as_ref().clone())
+                let hidden = self.hidden_columns_in(&schema).await?;
+                Ok(without_hidden_columns(&schema, &hidden))
             }
             .await;
             if let Some(result) = self.recover_read(read, &mut retried).await {

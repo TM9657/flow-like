@@ -1,6 +1,9 @@
 use sea_orm::sea_query::ExprTrait;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+use flow_like_storage::contracts::column_metadata::ColumnReader;
+use flow_like_storage::databases::column_access::first_table_with_hidden_columns;
+
 use crate::{
     entity::{app, membership, role, sea_orm_active_enums::Visibility},
     error::ApiError,
@@ -97,6 +100,12 @@ pub enum ForkPermissionError {
         "this app allows forking, but its default role does not grant the read permissions a fork of it requires"
     )]
     DefaultRoleInsufficient,
+    /// The fork would copy the project database, and one of its tables has columns the
+    /// caller's role may not read.
+    #[error(
+        "table '{0}' has columns your role cannot read, so this app cannot be forked with its data"
+    )]
+    HiddenColumns(String),
     /// Anything else (DB lookup failures, etc.)
     #[error(transparent)]
     Other(#[from] ApiError),
@@ -122,6 +131,9 @@ impl From<ForkPermissionError> for ApiError {
             ForkPermissionError::DefaultRoleInsufficient => ApiError::forbidden(
                 "this app allows forking, but its default role does not grant the read permissions a fork requires",
             ),
+            ForkPermissionError::HiddenColumns(table) => ApiError::forbidden(format!(
+                "table '{table}' has columns your role cannot read, so this app cannot be forked with its data"
+            )),
             ForkPermissionError::Other(e) => e,
         }
     }
@@ -186,6 +198,18 @@ pub async fn check_can_fork(
             if !permission.has_permission(required) {
                 return Err(ForkPermissionError::InsufficientPermissions);
             }
+            let reader = if permission.has_permission(RolePermissions::Admin) {
+                ColumnReader::Unrestricted
+            } else {
+                ColumnReader::with_attributes(
+                    permission
+                        .role
+                        .attributes
+                        .iter()
+                        .flat_map(|list| list.iter()),
+                )
+            };
+            ensure_fork_data_readable(state, &app_row, &reader).await?;
         }
         Err(err) => {
             // `app_permission` denies with FORBIDDEN when the caller has no
@@ -219,10 +243,36 @@ async fn check_unjoined_fork(
     if !is_public_free_candidate(app_row) {
         return Err(ForkPermissionError::NotAMember);
     }
-    if !default_role_grants_fork(state, app_row, required).await? {
-        return Err(ForkPermissionError::DefaultRoleInsufficient);
-    }
+    let reader = default_role_fork_reader(state, app_row, required)
+        .await?
+        .ok_or(ForkPermissionError::DefaultRoleInsufficient)?;
+    ensure_fork_data_readable(state, app_row, &reader).await?;
     Ok(app_row.clone())
+}
+
+/// A fork with data copies every column, so its caller must be able to read all of them.
+async fn ensure_fork_data_readable(
+    state: &AppState,
+    app_row: &app::Model,
+    reader: &ColumnReader,
+) -> Result<(), ForkPermissionError> {
+    if reader.is_unrestricted()
+        || ForkPolicy::from_app_row(app_row).databases != ForkDatabaseMode::WithData
+    {
+        return Ok(());
+    }
+    let connection = async {
+        let credentials = state.master_credentials().await?;
+        Ok::<_, ApiError>(credentials.to_db(&app_row.id).await?.execute().await?)
+    }
+    .await?;
+    match first_table_with_hidden_columns(&connection, reader)
+        .await
+        .map_err(ApiError::from)?
+    {
+        Some(table) => Err(ForkPermissionError::HiddenColumns(table)),
+        None => Ok(()),
+    }
 }
 
 /// Apps a caller could join unilaterally: `request_join` auto-approves `Public`
@@ -249,20 +299,20 @@ async fn membership_exists(
     Ok(existing.is_some())
 }
 
-/// Whether the app's default member role carries the fork read set its
-/// policy requires.
+/// The column reader of the app's default member role when that role carries the fork
+/// read set its policy requires, `None` when it does not.
 ///
 /// This is the substitute for a caller's own role when they have none. A fork
 /// reads every category the owner ships, so the role that would be handed to
 /// them on joining has to permit reading all of it — otherwise the fork would
 /// deliver content they are not entitled to see.
-async fn default_role_grants_fork(
+async fn default_role_fork_reader(
     state: &AppState,
     app_row: &app::Model,
     required: RolePermissions,
-) -> Result<bool, ForkPermissionError> {
+) -> Result<Option<ColumnReader>, ForkPermissionError> {
     let Some(default_role_id) = app_row.default_role_id.clone() else {
-        return Ok(false);
+        return Ok(None);
     };
 
     let default_role = role::Entity::find_by_id(default_role_id.as_str())
@@ -271,18 +321,21 @@ async fn default_role_grants_fork(
         .map_err(|e| ForkPermissionError::Other(ApiError::from(e)))?;
 
     let Some(default_role) = default_role else {
-        return Ok(false);
+        return Ok(None);
     };
 
     if default_role.app_id.as_deref() != Some(app_row.id.as_str()) {
-        return Ok(false);
+        return Ok(None);
     }
 
     // Raw `contains`, not `has_role_permission`: an Admin/Owner wildcard is
     // meaningful for a person, but a *default* role carrying it would mean every
-    // joiner is an admin. Such a role should not silently satisfy the fork gate.
+    // joiner is an admin. Such a role should not silently satisfy the fork gate,
+    // nor read restricted columns.
     let perms = RolePermissions::from_bits_truncate(default_role.permissions);
-    Ok(perms.contains(required))
+    Ok(perms.contains(required).then(|| {
+        ColumnReader::with_attributes(default_role.attributes.iter().flat_map(|list| list.iter()))
+    }))
 }
 
 async fn check_anonymous_fork(
@@ -307,11 +360,12 @@ async fn check_anonymous_fork(
         return Err(ForkPermissionError::AnonymousIneligible);
     }
 
-    if !default_role_grants_fork(state, app_row, required).await? {
-        // Distinct from AnonymousIneligible: the app *is* an eligible candidate,
-        // its default role is just too narrow. That is the owner's to fix.
-        return Err(ForkPermissionError::DefaultRoleInsufficient);
-    }
+    // Distinct from AnonymousIneligible: the app *is* an eligible candidate,
+    // its default role is just too narrow. That is the owner's to fix.
+    let reader = default_role_fork_reader(state, app_row, required)
+        .await?
+        .ok_or(ForkPermissionError::DefaultRoleInsufficient)?;
+    ensure_fork_data_readable(state, app_row, &reader).await?;
 
     Ok(app_row.clone())
 }
@@ -411,7 +465,7 @@ mod tests {
     #[test]
     fn an_admin_default_role_does_not_wildcard_its_way_past_the_fork_gate() {
         // `has_role_permission` treats Admin/Owner as wildcards, which is right
-        // for a person's role. `default_role_grants_fork` uses raw `contains`
+        // for a person's role. `default_role_fork_reader` uses raw `contains`
         // instead, so an app that made every joiner an admin does not thereby
         // become forkable by strangers without the read bits being explicit.
         let admin = RolePermissions::Admin;

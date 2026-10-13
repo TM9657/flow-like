@@ -1865,11 +1865,11 @@ impl Board {
         Self::validate_proto_types(&proto)?;
         let snapshot = Self::from_proto(proto);
         // Compare what persistence keeps, not what the draft holds in memory. Protobuf stores
-        // several `Option<bool>` / `Option<f64>` fields as bare proto3 scalars, so an explicit
-        // `Some(false)` or `Some(0.0)` (a2ui element pins carry `enforce_schema: Some(false)`)
-        // is indistinguishable from unset and reads back as `None`. Hashing the live draft
-        // directly would report every such board as different from the snapshot just written
-        // from it, and the publisher would never recognize its own output.
+        // some `Option<bool>` fields as bare proto3 scalars (node `start`, `long_running`,
+        // `event_callback`), so an explicit `Some(false)` is indistinguishable from unset and
+        // reads back as `None`. Hashing the live draft directly would report every such board
+        // as different from the snapshot just written from it, and the publisher would never
+        // recognize its own output.
         let mut current = Self::from_proto(self.to_proto());
         current.version = version;
         if snapshot.content_hash() != current.content_hash() {
@@ -5529,13 +5529,13 @@ mod tests {
         );
     }
 
-    /// A board carrying pin options that protobuf cannot distinguish from unset.
+    /// A board carrying node flags that protobuf cannot distinguish from unset.
     ///
-    /// `enforce_schema: Some(false)` is what the ~100 a2ui element nodes declare, and proto3
-    /// writes it as the field default, so it reads back as `None`. Any publication check that
-    /// hashes the live draft rather than its persisted projection reports such a board as
-    /// different from the snapshot just written from it.
-    fn board_with_protobuf_flattened_pin_options(
+    /// Node `start`, `long_running` and `event_callback` are bare proto3 scalars, so an explicit
+    /// `Some(false)` reads back as `None`. Any publication check that hashes the live draft
+    /// rather than its persisted projection reports such a board as different from the snapshot
+    /// just written from it. Its pin options are presence-tracked and survive as written.
+    fn board_with_protobuf_flattened_fields(
         state: Arc<crate::state::FlowLikeState>,
         base_dir: Path,
     ) -> super::Board {
@@ -5543,6 +5543,8 @@ mod tests {
 
         let mut board = super::Board::new(None, base_dir, state);
         let mut node = Node::new("a2ui_set_element_text", "Set Element Text", "", "test");
+        node.start = Some(false);
+        node.long_running = Some(false);
         node.add_input_pin("value_in", "Value", "", VariableType::Struct)
             .set_options(
                 PinOptions::new()
@@ -5560,7 +5562,7 @@ mod tests {
     async fn a_draft_recognizes_the_snapshot_written_from_it() {
         let state = flow_state().await;
         let base_dir = Path::from("boards");
-        let board = board_with_protobuf_flattened_pin_options(state, base_dir);
+        let board = board_with_protobuf_flattened_fields(state, base_dir);
         board.save(None).await.unwrap();
         let version = board.version;
 
@@ -5688,7 +5690,7 @@ mod tests {
     async fn repeated_patch_publication_advances_one_slot_at_a_time() {
         let state = flow_state().await;
         let base_dir = Path::from("boards");
-        let mut board = board_with_protobuf_flattened_pin_options(state, base_dir);
+        let mut board = board_with_protobuf_flattened_fields(state, base_dir);
         board.save(None).await.unwrap();
         let first_published = board.version;
 
@@ -5720,7 +5722,7 @@ mod tests {
     async fn publish_if_changed_publishes_once_until_the_draft_is_edited() {
         let state = flow_state().await;
         let base_dir = Path::from("boards");
-        let mut board = board_with_protobuf_flattened_pin_options(state, base_dir);
+        let mut board = board_with_protobuf_flattened_fields(state, base_dir);
         board.save(None).await.unwrap();
         let first = board.version;
 
@@ -5813,7 +5815,7 @@ mod tests {
     async fn publish_if_changed_recovers_from_an_orphan_of_an_unsaved_draft() {
         let state = flow_state().await;
         let base_dir = Path::from("boards");
-        let mut board = board_with_protobuf_flattened_pin_options(state, base_dir);
+        let mut board = board_with_protobuf_flattened_fields(state, base_dir);
         board.cleanup();
         board.mark_changed();
         board.save(None).await.unwrap();
@@ -5857,7 +5859,7 @@ mod tests {
     async fn publish_if_changed_leaves_an_unedited_flow_loaded_cold_alone() {
         let state = flow_state().await;
         let base_dir = Path::from("boards");
-        let mut board = board_with_protobuf_flattened_pin_options(state.clone(), base_dir.clone());
+        let mut board = board_with_protobuf_flattened_fields(state.clone(), base_dir.clone());
         board.save(None).await.unwrap();
         let (published, created) = board.publish_if_changed(None).await.unwrap();
         assert!(created);
@@ -5901,7 +5903,7 @@ mod tests {
 
         let state = flow_state().await;
         let base_dir = Path::from("boards");
-        let mut board = board_with_protobuf_flattened_pin_options(state, base_dir);
+        let mut board = board_with_protobuf_flattened_fields(state, base_dir);
         let mut page = Page::new("page-1", "Start", "/");
         board.save_page(&page, None).await.unwrap();
         board.save(None).await.unwrap();
@@ -5941,7 +5943,7 @@ mod tests {
     async fn published_version_of_draft_reads_the_stored_flow_not_the_board_in_memory() {
         let state = flow_state().await;
         let base_dir = Path::from("boards");
-        let mut board = board_with_protobuf_flattened_pin_options(state, base_dir);
+        let mut board = board_with_protobuf_flattened_fields(state, base_dir);
         board.save(None).await.unwrap();
         let (published, _) = board.publish_if_changed(None).await.unwrap();
 
@@ -5971,7 +5973,7 @@ mod tests {
         };
         assert_eq!(by_id("never-stored".to_string()).await, None);
 
-        let mut board = board_with_protobuf_flattened_pin_options(state, base_dir.clone());
+        let mut board = board_with_protobuf_flattened_fields(state, base_dir.clone());
         board.save(None).await.unwrap();
         assert_eq!(by_id(board.id.clone()).await, None);
         let (published, _) = board.publish_if_changed(None).await.unwrap();
@@ -6021,7 +6023,7 @@ mod tests {
     async fn get_versions_returns_newest_first_across_the_ten_boundary() {
         let state = flow_state().await;
         let base_dir = Path::from("boards");
-        let mut board = board_with_protobuf_flattened_pin_options(state, base_dir);
+        let mut board = board_with_protobuf_flattened_fields(state, base_dir);
         board.save(None).await.unwrap();
 
         for _ in 0..11 {

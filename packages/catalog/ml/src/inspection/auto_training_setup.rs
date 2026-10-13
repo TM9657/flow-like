@@ -193,6 +193,7 @@ fn build_request(
         feature_plan: None,
         feature_sources: Vec::new(),
         learning_cycle_id: None,
+        feature_extractor: None,
     })
 }
 
@@ -201,13 +202,14 @@ pub async fn build_tabular_auto_train_request(
     context: &mut flow_like::flow::execution::context::ExecutionContext,
     setup: TabularAutoTrainSetup,
 ) -> Result<AutoTrainRequest> {
-    use super::auto_training_tables::{TableBudget, pin_table_source, read_rows};
+    use super::auto_training_tables::{TableBudget, pin_table_source, read_columns};
 
     validate_setup(&setup)?;
     let source = pin_table_source(context, &setup.database).await?;
     let labels = match setup.task {
         TabularAutoTrainTask::Classification => {
-            let rows = read_rows(context, &source, &TableBudget::default(), 512).await?;
+            let target = std::slice::from_ref(&setup.target_column);
+            let rows = read_columns(context, &source, &TableBudget::default(), target).await?;
             // This establishes class identity only. Preprocessing is fitted after the split.
             infer_class_labels(&rows, &setup.target_column)?
         }
@@ -252,6 +254,7 @@ mod tests {
                 pinned: true,
             },
             locator: None,
+            temporal_units: Default::default(),
         }
     }
 

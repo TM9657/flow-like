@@ -4,7 +4,8 @@ use crate::{
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
     routes::app::db::{
-        ScopeParams, resolve_write_connection, table_input_error, validate_table_name,
+        ScopeParams, column_reader, resolve_write_connection, table_input_error,
+        validate_table_name,
     },
     state::AppState,
 };
@@ -56,7 +57,7 @@ pub async fn update_table(
     Query(selector): Query<DatabaseSelector>,
     Json(payload): Json<UpdatePayload>,
 ) -> Result<Json<()>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -68,7 +69,8 @@ pub async fn update_table(
 
     let connection = resolve_write_connection(&state, &user, &app_id, &scope).await?;
     let db = LanceDBVectorStore::from_connection_with_selector(connection, table.clone(), selector)
-        .await?;
+        .await?
+        .with_column_reader(column_reader(&permission, &scope));
 
     let column_count = payload.updates.len();
     db.update(&payload.filter, payload.updates)

@@ -12,7 +12,9 @@ Industrial nodes connect a workflow to a device or broker, keep the connection f
 | Protocol | Available operations | Deployment requirements |
 |---|---|---|
 | Modbus TCP / RTU | Persistent client, read coils and registers, write coils and holding registers, poll | TCP endpoint or local serial adapter; configure unit ID and register layout |
-| OPC UA | Client sessions, browse, scalar read/write, native monitored-item subscriptions | Server endpoint, security policy, trusted certificates, and local app storage for the PKI store |
+| OPC UA | Client sessions, browse, scalar read/write, native monitored-item subscriptions | Server endpoint, security policy, and trusted certificates from the app store or the Configuration input |
+| OPC UA PubSub | Publish and receive typed UADP key frames over UDP, optionally signed and encrypted | Local executor, IPv4 unicast or multicast, matching publisher/writer IDs, and configured field metadata; protected traffic also needs shared group keys and persistent executor state |
+| DDS | Publish and receive typed topics with runtime schemas and bounded history | Local executor, reachable discovery network, matching domain/topic/type, and compatible QoS; certificate-based encryption requires Cyclone DDS 11 security libraries and OpenSSL 3 |
 | MQTT | Client publish/subscribe and embedded broker | TCP or TLS; binary payloads and Last Will supported; embedded broker accepts clean sessions and QoS 0/1 |
 | Sparkplug B | Protobuf codec, birth/data/death state, shared sequence tracking, host STATE, rebirth detection | MQTT transport and persisted birth/death sequence |
 | NATS / JetStream | Core publish/subscribe; persistent JetStream publishing and durable pull consumers | Existing NATS server; JetStream streams must already exist |
@@ -35,7 +37,7 @@ The embedded MQTT broker keeps retained messages in memory for its current run. 
 
 Iroh Send waits for the receiving peer to read and acknowledge the complete frame. The acknowledgement precedes workflow handler completion. Protocol version 2 uses bidirectional streams for this exchange and cannot connect to version 1 peers; update both ends together.
 
-IO-Link electrical master control requires a hardware-specific stack and is not implemented by the REST adapter. OPC UA PubSub and DDS remain outside the current catalog. These distinctions matter when selecting hardware: a protocol name alone does not identify the controller role or supported transport.
+IO-Link electrical master control requires a hardware-specific stack and is not implemented by the REST adapter. These distinctions matter when selecting hardware: a protocol name alone does not identify the controller role or supported transport.
 
 ADS reads and writes are limited to 1 MiB. Incoming packets, including aggregated notifications, are limited to 16 MiB; an oversized packet closes the connection.
 
@@ -69,6 +71,93 @@ Use its result as `session` in **Read Modbus**:
 ```
 
 Register addresses are zero-based. Use **Decode Sensor Registers** when the device encodes a number across multiple registers; byte order and word order must match its register map.
+
+## Supply OPC UA client certificates
+
+**Connect OPC UA** accepts a `certificates` object through its Configuration input. Supply the client application certificate, its matching private key, and the server certificates or certificate authorities you trust. The `application_uri` must match a URI in the client certificate's subject alternative names. Select `sign_and_encrypt` for encryption:
+
+```json
+{
+  "endpoint": "opc.tcp://192.0.2.20:4840",
+  "security_policy": "Basic256Sha256",
+  "security_mode": "sign_and_encrypt",
+  "timeout_ms": 10000,
+  "certificates": {
+    "application_uri": "urn:example:flow-like-client",
+    "certificate_pem": "<client certificate PEM>",
+    "private_key_pem": "<matching unencrypted RSA private key PEM>",
+    "trusted_certificates_pem": ["<trusted server certificate or CA PEM>"],
+    "issuer_certificates_pem": ["<intermediate CA PEM, if needed>"]
+  }
+}
+```
+
+Feed private keys from secret variables. The connection Configuration inputs for OPC UA, OPC UA PubSub, and DDS are marked sensitive. OPC UA validates the certificate/key pair and application URI before connecting, then checks the server's trust chain, hostname, and certificate validity. Supply intermediate CA certificates through `issuer_certificates_pem`; the current SDK expects the server's leaf certificate in its CreateSession response. Custom material uses a restricted temporary certificate store for that session and does not replace the app's store. Omitting `certificates` keeps the existing app-store behavior. The legacy **Read OPC UA Sensor** node accepts the same certificate object.
+
+## Configure OPC UA PubSub peers
+
+OPC UA PubSub sends DataSet messages independently of an OPC UA client session. Configure the same publisher ID type and value, writer-group ID, DataSet writer ID, field order, and field types on both peers. Field names are local labels; UADP key frames carry values in the configured order. When a configuration version is supplied, the subscriber requires both version numbers to match.
+
+The adapter supports IPv4 unicast and multicast with the binary UADP message format. Publications contain one Variant-encoded key frame. Supported values include Boolean, integer, finite floating-point, String, DateTime, ByteString, and StatusCode fields. Arrays, structured values, RawData, delta frames, metadata discovery, and the MQTT/JSON transport are outside this implementation. Unsupported encodings in matching messages produce an error. Use OPC UA client nodes when the device requires client/server subscriptions.
+
+For example, connect a publisher to a peer listening on `192.0.2.20:4840`:
+
+```json
+{
+  "address": "opc.udp://192.0.2.20:4840",
+  "interface": "0.0.0.0",
+  "mode": "publisher",
+  "writer": {
+    "publisher_id": { "type": "uint32", "value": 100 },
+    "writer_group_id": 10,
+    "data_set_writer_id": 1
+  },
+  "fields": [{ "name": "temperature", "data_type": "double" }],
+  "timeout_ms": 3000,
+  "max_datagram_bytes": 1400
+}
+```
+
+Publish with the returned session and `values: [{ "type": "double", "value": 23.5 }]`. On the receiving executor, use `mode: "subscriber"` with the same address, writer, and fields. For multicast, supply the group address and select the local network interface; multicast traffic has a TTL of one. Receive returns one matching message; Subscribe invokes the referenced handler for each message and exits with a timeout error if no new matching message arrives within `timeout_ms`. UDP provides no delivery acknowledgement or replay, and packets larger than the network MTU may fragment.
+
+To protect messages, add a `security` object to the Configuration input. Its `mode` is `sign` or `sign_and_encrypt`; `security_token_id` is a nonzero integer. Supply `signing_key` and `encrypting_key` as distinct 32-byte arrays, and `key_nonce` as a four-byte array. Both peers must use matching values. This uses the standard PubSub-Aes256-CTR policy with HMAC-SHA256 signatures. PubSub uses symmetric group keys; X.509 certificates alone do not encrypt its UDP messages. Keys are provisioned through the input; automatic Security Key Service retrieval is not implemented.
+
+Protected sessions reject plaintext, tampered messages, and replayed messages. The executor persists nonce and replay counters in app storage. Publishers share counters across an app; each subscriber Connect node keeps its own replay history. A second active connection from the same subscriber node is rejected. Copying that node starts a separate replay history. The Rust adapter requires an explicit persistent directory, with a separate directory per logical subscriber; the catalog supplies these paths automatically.
+
+Keep that state across restarts. Provision different encryption keys and key nonces for independent app or executor stores. Rotate both whenever state is deleted, restored, or cloned; local storage cannot detect a rollback from an old backup. Changing only the token ID does not reset the nonce counter.
+
+## Configure DDS topics
+
+Data Distribution Service (DDS) discovers readers and writers in a domain and matches their topic, type, and quality-of-service (QoS) settings. Each connection creates one publisher or subscriber endpoint. Supply the peer's exact type name, field names, declaration order, primitive types, and key annotations. The adapter builds the DDS type from this schema at runtime.
+
+For a peer using `@final struct Telemetry { double value; };`, connect with:
+
+```json
+{
+  "domain_id": 0,
+  "topic": "Telemetry",
+  "data_type": {
+    "name": "Telemetry",
+    "fields": [{ "name": "value", "data_type": "float64" }]
+  },
+  "role": "publisher",
+  "reliability": "reliable",
+  "history_depth": 32,
+  "timeout_ms": 10000
+}
+```
+
+The matching subscriber uses `role: "subscriber"`. Publish a JSON object whose fields match the configured schema, such as `{"value": 23.5}`. Publication waits for a matching reader. Reliable publication also waits for transport acknowledgement; this does not confirm that its workflow handler succeeded. Best-effort delivery can lose samples. Discovery requires reachable UDP peers on a local executor.
+
+Supported types are final structs with sequential member IDs, primitive fields, strings, and unbounded IDL sequences of those types. Set `sequence: true` for a sequence field and `key: true` for a scalar integer, Boolean, or string key. Subscribers require matching DDS XTypes identifiers; type coercion and peers without type information are rejected. Nested structs, unions, enums, fixed arrays, optional members, and arbitrary IDL import are not supported. The wire representation is XCDR1. Reliability is configurable; durability is volatile, so a late subscriber receives future publications rather than retained history.
+
+History holds up to `history_depth` samples in total, with a maximum of 256. Published and returned samples are limited to 1 MiB of JSON and each sequence to 65,536 elements. Incoming limits are checked after SDK decoding; they do not bound the SDK's network-buffer allocations. Plain DDS type descriptors are cached for the executor process lifetime; the adapter reuses identical schemas and rejects a 129th distinct schema. Restarting the executor clears that cache. Receive reports instance lifecycle notifications with `valid_data: false` and no data object.
+
+For certificate-based encryption, add `security` with `identity_ca_pem`, `identity_certificate_pem`, `private_key_pem`, `permissions_ca_pem`, `governance_signed`, and `permissions_signed`. Supply an optional `private_key_password` for an encrypted private key. The two signed documents are S/MIME DDS Security governance and permissions documents, signed by your permissions CA. Permissions must authorize the certificate's subject for the requested domain, topic, and publisher/subscriber role. Governance must require authentication and encryption; permissive policies are rejected.
+
+This secure mode supports domain IDs 0 through 230 and requires a 64-bit executor, Cyclone DDS 11 and its authentication, access-control, and cryptographic plugins, with OpenSSL 3. Install those native runtime libraries on the executor before connecting. The application loads them at runtime, so metadata builds do not require them. Missing libraries, invalid certificates, or rejected policies produce an error; the connection never falls back to plain DDS. Omitting `security` uses the existing Rust DDS backend.
+
+Secure sessions sharing a domain in one executor must supply identical identity CA, permissions CA, and signed governance documents. The adapter owns that Cyclone domain and disables diagnostic tracing, because native discovery traces can include credentials. It ignores `CYCLONEDDS_URI`, including its network settings, and rejects a domain already owned by another Cyclone user in the same process. Regular native error messages remain available.
 
 ## Run a listener from a daemon event
 
@@ -109,11 +198,15 @@ With Docker running and the repository's Rust build dependencies installed, run:
 bash tools/test-industrial-e2e.sh --all
 ```
 
-The runner builds dedicated fixtures, checks their readiness, runs the ignored integration tests, and removes its containers and volumes on exit. It binds test services to local ports; stop an earlier test run before starting another. Use `--adapters` for network adapter tests, `--mqtt` for MQTT node tests, or `--devices` for the Linux camera, Iroh peer, EtherCAT slave, and Modbus RTU harnesses. The EtherCAT container uses `NET_ADMIN` and `NET_RAW` capabilities to create its own virtual Ethernet pair; it does not use a host network interface.
+The runner builds dedicated fixtures, checks their readiness, runs the ignored integration tests, and removes its containers and volumes on exit. It binds test services to local ports; stop an earlier test run before starting another. Use `--adapters` for network adapter tests, `--mqtt` for MQTT node tests, or `--devices` for the Linux camera, Iroh peer, EtherCAT slave, Modbus RTU, OPC UA PubSub, and DDS harnesses.
+
+Use `--pubsub` to run only the OPC UA PubSub and DDS tests, including their security cases. Use `--security` to run those suites together with OPC UA client certificate tests. PubSub and DDS adapters and independent peers share a container network so UDP traffic does not depend on Docker Desktop port forwarding. The EtherCAT container uses `NET_ADMIN` and `NET_RAW` capabilities to create its own virtual Ethernet pair; it does not use a host network interface.
 
 | Coverage | Reference peer or contract |
 |---|---|
 | Modbus TCP / RTU, OPC UA | PyModbus TCP and serial servers, plus asyncua; RTU uses a private virtual serial pair |
+| OPC UA PubSub | open62541 UADP publisher and subscriber |
+| DDS | Cyclone DDS publisher and subscriber with an independently compiled IDL type |
 | MQTT, NATS, Redis Streams, AMQP, Kafka | Mosquitto, NATS, Redis, RabbitMQ, and Redpanda |
 | Explicit Logix CIP, ADS | libplctag's `ab_server` and Beckhoff's ADS router/server samples |
 | Sparkplug B | Eclipse Tahu Python codec and helpers over Mosquitto, in both directions |

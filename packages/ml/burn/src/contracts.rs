@@ -84,8 +84,28 @@ pub fn validate_inspection_config(spec: &InspectionSpec, config: &TrainingConfig
     Ok(())
 }
 
+const PLANNED_EPOCHS: usize = 100;
+const PLANNED_BATCH_SIZE: usize = 128;
+
 impl TrainingConfig {
-    /// Tighter limits for an LLM-generated initial plan. Explicit user configurations use validate().
+    /// Limits for planning a fine-tune of an imported pretrained source. The source fixes the
+    /// architecture, so only epochs and batch size are capped; the caller validates the source.
+    pub fn validate_fine_tune_planning_budget(&self) -> Result<()> {
+        self.validate()?;
+        if !self.within_planned_schedule() {
+            return Err(Error::Invalid(format!(
+                "Fine-tuning plan exceeds {PLANNED_EPOCHS} epochs or batch size {PLANNED_BATCH_SIZE}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn within_planned_schedule(&self) -> bool {
+        self.epochs <= PLANNED_EPOCHS && self.batch_size <= PLANNED_BATCH_SIZE
+    }
+
+    /// Tighter limits for an LLM-generated initial plan from scratch. Explicit user
+    /// configurations use validate(); fine-tunes use validate_fine_tune_planning_budget().
     pub fn validate_planning_budget(&self) -> Result<()> {
         self.validate()?;
         let bounded = match &self.recipe {
@@ -129,7 +149,7 @@ impl TrainingConfig {
             } => *width_multiplier <= 1.0 && *depth_multiplier <= 1.0,
             Recipe::MaskRcnn { config } => config.base_channels <= 128,
         };
-        if self.epochs > 100 || self.batch_size > 128 || !bounded {
+        if !self.within_planned_schedule() || !bounded {
             return Err(Error::Invalid(
                 "Generated plan exceeds epoch, batch or model-width limits".into(),
             ));
@@ -184,9 +204,14 @@ impl crate::EfficientAdConfig {
         }
         parameters += 6 * conv(width, width, 4) + conv(width, width, 3) + conv(width, features, 3);
         let pdn_width = self.teacher.base_channels as u128;
-        let pdn = (253 * 253 + 126 * 126) * pdn_width
-            + (123 * 123 + 61 * 61 + 59 * 59) * pdn_width * 2
+        // Values one PDN pass keeps for backward: every ReLU, pooling and convolution keeps its
+        // input, and the student output holds both feature heads.
+        let pdn_pass = (253 * 253 * 2 + 126 * 126) * pdn_width
+            + (123 * 123 * 2 + 61 * 61 + 59 * 59 * 2) * pdn_width * 2
             + 56 * 56 * features * 2;
+        // Student passes over the images, augmentations and penalty images, both detached
+        // teacher passes (their graphs are freed only at backward) and the gradients.
+        let pdn_passes = 6;
         let ae = (128 * 128 + 64 * 64) * width / 2
             + (32 * 32 + 16 * 16 + 8 * 8 + 1) * width
             + [3u128, 4, 8, 9, 15, 16, 32, 33, 63, 64, 127, 128, 56, 56]
@@ -195,7 +220,8 @@ impl crate::EfficientAdConfig {
                 .sum::<u128>()
             + 56 * 56 * features;
         let total = parameters * 32
-            + (pdn * 3 + ae) * self.batch_size as u128 * 128
+            + pdn_pass * pdn_passes * self.batch_size as u128 * 4
+            + ae * self.batch_size as u128 * 128
             + input * 256 * 256 * self.batch_size as u128 * 16
             + 16 * 1024 * 1024;
         u64::try_from(total)
@@ -596,17 +622,26 @@ impl Recipe {
                     + 4 * conv(c * 2, c * 2, 3)
                     + conv(c * 2, c * 2, 2)
                     + conv(c * 2, classes, 1);
-                let rois = config.training_samples.max(config.proposals) as u128;
+                let mask_pixels = (config.mask_size * config.mask_size) as u128;
+                let roi_pixels = (config.roi_size * config.roi_size) as u128;
+                // A sampled training ROI keeps its ROIAlign features, mask convolutions and
+                // upsampled mask head (about 9c values per mask pixel) and backward adds about
+                // 4c; doubled for allocator and fused-kernel slack.
+                let sampled_roi =
+                    mask_pixels * (c * 13 + classes * 2) + roi_pixels * c * 2 + hidden * 4;
+                let training_rois = config.training_samples as u128 * sampled_roi * 2;
+                // Inference holds the two widest mask-head layers of every proposal, with the
+                // same slack.
+                let inference_rois = config.proposals as u128 * mask_pixels * (c * 8 + classes * 4);
+                // Each sampled positive ROI uploads its full-image target mask.
+                let target_masks = (config.training_samples / 4) as u128 * image_area;
                 (
                     p,
                     b * (image_area * config.input_channels as u128
                         + area_at(2) * c * 4
                         + area_at(4) * (c * 10 + a * 8))
                         * 128
-                        + b * rois
-                            * (config.mask_size * config.mask_size) as u128
-                            * (c * 16 + classes * 4)
-                            * 128,
+                        + b * (training_rois.max(inference_rois) + target_masks) * 4,
                 )
             }
         };
@@ -782,5 +817,96 @@ mod tests {
             .validate_planning_budget()
             .is_err()
         );
+    }
+
+    #[test]
+    fn fine_tune_plans_accept_larger_pretrained_architectures_and_cap_the_schedule() {
+        for recipe in [
+            Recipe::DinoV2 {
+                config: crate::DinoV2Config {
+                    variant: crate::DinoV2Variant::Base,
+                    classes: 3,
+                },
+            },
+            Recipe::RtdetrV2 {
+                config: crate::RtdetrV2Config {
+                    backbone: crate::RtdetrV2Backbone::ResNet50,
+                    classes: 2,
+                    queries: 300,
+                },
+            },
+            Recipe::RfDetr {
+                config: crate::RfDetrConfig {
+                    variant: crate::RfDetrVariant::Medium,
+                    classes: 2,
+                },
+            },
+        ] {
+            let mut plan = config(recipe);
+            assert!(plan.validate_planning_budget().is_err());
+            plan.validate_fine_tune_planning_budget().unwrap();
+            plan.epochs = 101;
+            assert!(plan.validate_fine_tune_planning_budget().is_err());
+            plan.epochs = 10;
+            plan.batch_size = 129;
+            assert!(plan.validate_fine_tune_planning_budget().is_err());
+        }
+    }
+
+    const DEFAULT_BUDGET: u64 = 2 * 1024 * 1024 * 1024;
+
+    #[test]
+    fn default_mask_rcnn_fits_the_default_budget_and_charges_each_sampled_roi() {
+        let estimate = |training_samples| {
+            Recipe::MaskRcnn {
+                config: crate::MaskRcnnConfig {
+                    training_samples,
+                    ..Default::default()
+                },
+            }
+            .estimated_training_bytes(&[3, 256, 256], 1)
+            .unwrap()
+        };
+        assert!(estimate(64) < DEFAULT_BUDGET);
+        // One sampled ROI keeps about 1.25 MB of mask-head activations and gradients.
+        assert!(estimate(128) - estimate(64) >= 64 * 1_250_000);
+    }
+
+    #[test]
+    fn efficient_ad_small_teacher_fits_the_default_budget_at_batch_one() {
+        let weights = |shape: [usize; 4]| crate::ConvWeights {
+            weight: crate::TensorData {
+                shape: shape.to_vec(),
+                values: vec![0.0; shape.iter().product()],
+            },
+            bias: crate::TensorData {
+                shape: vec![shape[0]],
+                values: vec![0.0; shape[0]],
+            },
+        };
+        let efficient_ad = crate::EfficientAdConfig {
+            teacher: crate::PdnTeacherWeights {
+                input_channels: 3,
+                base_channels: 128,
+                feature_channels: 384,
+                convolutions: vec![
+                    weights([128, 3, 4, 4]),
+                    weights([256, 128, 4, 4]),
+                    weights([256, 256, 3, 3]),
+                    weights([384, 256, 4, 4]),
+                ],
+            },
+            backend: Default::default(),
+            epochs: 1,
+            batch_size: 1,
+            learning_rate: 0.0001,
+            seed: 0,
+            autoencoder_channels: 64,
+            hard_quantile: 0.999,
+            gradient_clip: 1.0,
+        };
+        let estimate = efficient_ad.estimated_training_bytes().unwrap();
+        // Three student and two teacher passes, gradients and Adam state peak near 0.9 GB.
+        assert!((900_000_000..DEFAULT_BUDGET).contains(&estimate));
     }
 }
