@@ -3116,7 +3116,10 @@ mod lifecycle_tests {
             let stored = repo.get_job(&job.id).unwrap();
             assert_eq!(stored.request.compute, json!(compute));
         }
-        assert_eq!(*dispatched.borrow(), [cancelled.id.clone(), failed.id.clone()]);
+        assert_eq!(
+            *dispatched.borrow(),
+            [cancelled.id.clone(), failed.id.clone()]
+        );
     }
 
     #[test]
@@ -3241,7 +3244,10 @@ mod lifecycle_tests {
         let waiting = repo.get_job(&job.id).unwrap();
         assert_eq!(waiting.status, JobStatus::Queued);
         let error = waiting.error.unwrap_or_default();
-        assert!(error.contains("engine fixture is not registered"), "{error}");
+        assert!(
+            error.contains("engine fixture is not registered"),
+            "{error}"
+        );
         let dispatched = RefCell::new(Vec::new());
         let dispatch =
             |_: &TrainingRepository, job_id: &str, limits: &WorkerLimits| -> Result<()> {

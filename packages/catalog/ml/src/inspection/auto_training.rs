@@ -681,7 +681,10 @@ fn start_candidates(
     project_id: &str,
     spec: &flow_like_ml_core::InspectionSpec,
     request: &AutoTrainRequest,
-) -> Result<(Vec<flow_like_ml_runtime::TrainingRequest>, Vec<(usize, Value)>)> {
+) -> Result<(
+    Vec<flow_like_ml_runtime::TrainingRequest>,
+    Vec<(usize, Value)>,
+)> {
     let mut candidates = request.initial_candidates.clone();
     if let Some(pretrained) = &request.pretrained {
         candidates.insert(
@@ -3178,15 +3181,14 @@ mod background {
     /// while settling stops the worker, and the queue key is released however the item ends.
     pub(super) fn process(work: Work, drive: impl FnOnce(&TrainingRepository, &str) -> Driven) {
         let _queued = QueuedKey(work.key.clone());
-        let driven = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            drive(&work.repo, &work.id)
-        }))
-        .unwrap_or_else(|payload| {
-            Driven::Failed(format!(
-                "the background training worker panicked: {}",
-                panic_text(&*payload)
-            ))
-        });
+        let driven =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drive(&work.repo, &work.id)))
+                .unwrap_or_else(|payload| {
+                    Driven::Failed(format!(
+                        "the background training worker panicked: {}",
+                        panic_text(&*payload)
+                    ))
+                });
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| settle(work, driven)));
     }
 
@@ -3261,7 +3263,10 @@ mod background {
         let job = match repo.get_job(&trial.job_id) {
             Ok(job) => job,
             Err(read) => {
-                return Driven::Waiting(format!("trial {} job could not be read: {read}", trial.id));
+                return Driven::Waiting(format!(
+                    "trial {} job could not be read: {read}",
+                    trial.id
+                ));
             }
         };
         let leased = matches!(job.status, JobStatus::Running | JobStatus::CancelRequested)
@@ -4552,10 +4557,14 @@ mod tests {
                 checks.set(checks.get() + 1);
                 checks.get() > 1
             };
-            let error = record_and_create(&repo, &stream, snapshot, experiment, &cancelled, &|_| {})
-                .unwrap_err()
-                .to_string();
-            assert!(error.contains("before its experiment was created"), "{error}");
+            let error =
+                record_and_create(&repo, &stream, snapshot, experiment, &cancelled, &|_| {})
+                    .unwrap_err()
+                    .to_string();
+            assert!(
+                error.contains("before its experiment was created"),
+                "{error}"
+            );
             assert!(repo.list_experiments(&stream).unwrap().is_empty());
             assert_eq!(
                 repo.count_new_training_samples(&stream, now_ms()).unwrap(),
@@ -4844,10 +4853,13 @@ mod tests {
                 cache.insert(pinned, live);
             }
             for _ in 0..2 {
-                let result =
-                    lifecycle(&mut harness.context, &experiment.id, LifecycleAction::Status)
-                        .await
-                        .unwrap();
+                let result = lifecycle(
+                    &mut harness.context,
+                    &experiment.id,
+                    LifecycleAction::Status,
+                )
+                .await
+                .unwrap();
                 assert!(result.predictions_table.is_none());
             }
             let failures = repo
@@ -5078,7 +5090,8 @@ mod tests {
 
         #[test]
         fn a_model_that_recorded_its_extractor_refuses_unnamed_embeddings() {
-            let recorded = json!({"source_id":"dino","blob_sha256":"e".repeat(64),"image_steps":[]});
+            let recorded =
+                json!({"source_id":"dino","blob_sha256":"e".repeat(64),"image_steps":[]});
             let manifest = json!({"engine":"patchcore","feature_extractor":recorded});
             let error = ensure_extractor_named("artifact", &manifest, None)
                 .unwrap_err()

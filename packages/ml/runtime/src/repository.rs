@@ -2378,8 +2378,7 @@ fn verify_present_entry(
         metadata.is_file()
     };
     if real
-        && present(entry.canonicalize())?
-            .is_none_or(|canonical| canonical.parent() == Some(root))
+        && present(entry.canonicalize())?.is_none_or(|canonical| canonical.parent() == Some(root))
     {
         return Ok(());
     }

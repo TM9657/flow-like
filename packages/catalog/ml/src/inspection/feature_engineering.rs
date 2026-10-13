@@ -245,9 +245,11 @@ pub(crate) fn prepare_feature_rows_within(
         budget_ms: limits.maximum_duration_ms,
     };
     let converted_sides = side_rows_in_milliseconds(&plan.pipeline, &sources, side_rows)?;
-    let mut fitted =
-        plan.pipeline
-            .fit(converted_sides.as_ref().unwrap_or(side_rows), &policy, &limits)?;
+    let mut fitted = plan.pipeline.fit(
+        converted_sides.as_ref().unwrap_or(side_rows),
+        &policy,
+        &limits,
+    )?;
     let generated = plan.pipeline.generated_columns();
     let allowed: HashSet<_> = policy
         .allowed_input_columns
@@ -289,7 +291,7 @@ pub(crate) fn prepare_feature_rows_within(
         .max(table_state.min(MAXIMUM_WINDOW_HISTORY_ROWS));
     fitted.limits.maximum_duration_ms = deadline.remaining_ms()?;
     let transformed =
-        super::auto_training_tables::transform_feature_rows(&fitted, &rows, &temporal_units);
+        super::auto_training_tables::transform_feature_rows(&fitted, &rows, &temporal_units, true);
     fitted.limits = configured;
     let transformed = transformed?;
     if transformed.len() != rows.len() {

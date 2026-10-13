@@ -43,7 +43,7 @@ flow-like-device-protocol.workspace = true
 flow-like-model-protocol = { workspace = true, optional = true }
 flow-like-offline-writes.workspace = true
 flow-like-device-crypto = { workspace = true, features = ["sqlite"] }
-flow-like-types-contracts = { workspace = true, default-features = false }
+flow-like-types-contracts = { workspace = true, default-features = false, features = ["storage-paths"] }
 reqwest = { workspace = true, features = ["stream"] }
 url = "2"
 base64.workspace = true

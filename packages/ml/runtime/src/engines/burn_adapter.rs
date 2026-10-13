@@ -322,7 +322,9 @@ fn validate_pretrained_input_range(
     let largest = inputs
         .iter()
         .flat_map(|input| &input.values)
-        .fold(0.0, |largest: f64, value| largest.max(f64::from(value.abs())));
+        .fold(0.0, |largest: f64, value| {
+            largest.max(f64::from(value.abs()))
+        });
     if largest > bound * INPUT_SCALE_TOLERANCE {
         return Err(invalid(format!(
             "pretrained source {} expects images scaled to [0, 1] and normalized with mean [{}] and std [{}], which keeps values within ±{bound:.2}, but the training inputs reach {largest:.1}; they look unscaled, for example raw 0-255 pixels; prepare inputs with the source's recommended preprocessing",

@@ -1512,14 +1512,12 @@ impl AutoTrainingController {
             }
         });
         match outcome {
-            Err(error) if !retryable_after_freeze(&error) => {
-                self.repository.finalize_experiment(
-                    experiment_id,
-                    None,
-                    &format!("final_evaluation_failed: {error}"),
-                    self.now(),
-                )
-            }
+            Err(error) if !retryable_after_freeze(&error) => self.repository.finalize_experiment(
+                experiment_id,
+                None,
+                &format!("final_evaluation_failed: {error}"),
+                self.now(),
+            ),
             outcome => outcome,
         }
     }
@@ -1929,7 +1927,13 @@ impl AutoTrainingController {
         let model = if dataset_id == experiment.request.snapshot_id {
             serde_json::from_value::<Vec<usize>>(experiment.request.spec["input_shape"].clone())
                 .ok()
-                .and_then(|shape| recipe.config.recipe.estimated_training_bytes(&shape, 1).ok())
+                .and_then(|shape| {
+                    recipe
+                        .config
+                        .recipe
+                        .estimated_training_bytes(&shape, 1)
+                        .ok()
+                })
                 .unwrap_or(0)
         } else {
             0
@@ -2407,9 +2411,14 @@ enum Admission {
 }
 
 enum TrainingData {
-    Measured { bytes: u64, shape: Vec<usize> },
+    Measured {
+        bytes: u64,
+        shape: Vec<usize>,
+    },
     /// Stored size of a view beyond the worker's snapshot limit.
-    Exceeds { bytes: u64 },
+    Exceeds {
+        bytes: u64,
+    },
     Unknown,
 }
 

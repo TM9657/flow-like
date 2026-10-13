@@ -712,7 +712,10 @@ fn edited_feature_values_are_recorded_and_the_next_cycle_starts() {
     assert_eq!(attached.state, LearningCycleState::Attached);
     let connection = repo.connection().unwrap();
     for row in &rows[..2] {
-        assert_eq!(&accepted_truth(&connection, &project, &row.id).unwrap(), row);
+        assert_eq!(
+            &accepted_truth(&connection, &project, &row.id).unwrap(),
+            row
+        );
     }
     let mut relabelled = rows[0].clone();
     relabelled.payload["label"] = json!("bad");
@@ -1629,8 +1632,7 @@ fn forecast_reviews_need_an_outcome_after_the_feature_window_within_the_horizon(
     let project = repo.create_learning_project(request, 100).unwrap();
     let mut row = observation(0, "good", 0.9, 0.);
     row.sample = json!({"window_end_ms":1_000});
-    repo.record_learning_observation(&project.id, &row)
-        .unwrap();
+    repo.record_learning_observation(&project.id, &row).unwrap();
     let measured = |outcome: Option<Value>| LearningReview {
         sample_id: "sample-0".into(),
         annotation: json!({"kind":"scalar","value":1.5}),

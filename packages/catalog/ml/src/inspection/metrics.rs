@@ -241,32 +241,23 @@ fn threshold(input: ThresholdRequest) -> Result<Option<ThresholdSelection>> {
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DistributionDriftRequest {
-    /// Baseline window; PSI needs at least 5 x (bin_edges + 1) values.
+    /// Baseline window.
     pub reference: Vec<f64>,
-    /// Window to compare; PSI needs at least 5 x (bin_edges + 1) values.
+    /// Window to compare.
     pub current: Vec<f64>,
     pub alpha: f64,
-    /// Increasing interior PSI bin edges; at least one is required.
+    /// Increasing interior PSI bin edges; leave empty to compare with KS only.
     pub bin_edges: Vec<f64>,
     pub psi_threshold: f64,
 }
-#[derive(Clone, Serialize, Deserialize, JsonSchema)]
-pub struct DistributionDrift {
-    pub ks: KsResult,
-    pub population_stability_index: f64,
-    pub psi_drift: bool,
-}
 fn distribution_drift(input: DistributionDriftRequest) -> Result<DistributionDrift> {
-    flow_like_ml_core::require(
-        input.psi_threshold.is_finite() && input.psi_threshold > 0.0,
-        "PSI threshold must be positive",
-    )?;
-    let psi = population_stability_index(&input.reference, &input.current, &input.bin_edges)?;
-    Ok(DistributionDrift {
-        ks: ks_test(&input.reference, &input.current, input.alpha)?,
-        population_stability_index: psi,
-        psi_drift: psi > input.psi_threshold,
-    })
+    Ok(detect_distribution_drift(
+        &input.reference,
+        &input.current,
+        input.alpha,
+        &input.bin_edges,
+        input.psi_threshold,
+    )?)
 }
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct LossDriftRequest {
@@ -440,13 +431,13 @@ operation!(
     DistributionDriftNode,
     "ml_distribution_drift",
     "Distribution Drift",
-    "Compare reference and current distributions using KS and PSI. Fails when bin_edges is empty or either window has fewer than 5 x (bin_edges + 1) values",
+    "Compare reference and current distributions with KS and, when bin_edges are given, PSI. psi_drift is left empty when the windows are too small for PSI to separate drift from noise; psi_note says why",
     "distributionDrift",
     "AI/ML/Monitoring",
     DistributionDriftRequest,
     DistributionDrift,
     distribution_drift,
-    version = 1
+    version = 2
 );
 #[crate::register_node]
 #[derive(Default)]

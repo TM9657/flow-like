@@ -919,7 +919,7 @@ pub fn transform_table_rows(
         } => {
             let inputs = transform_table_rows(
                 preprocessing,
-                &transform_feature_rows(pipeline, rows, temporal_units)?,
+                &transform_feature_rows(pipeline, rows, temporal_units, false)?,
                 maximum_elements,
             )?;
             if let Some(projection) = projection {
@@ -1143,7 +1143,9 @@ pub(crate) fn row_in_milliseconds(
                 continue;
             };
             let milliseconds = unit.to_milliseconds(value).ok_or_else(|| {
-                anyhow!("Timestamp '{column}' value {value} in {unit:?} overflows epoch milliseconds")
+                anyhow!(
+                    "Timestamp '{column}' value {value} in {unit:?} overflows epoch milliseconds"
+                )
             })?;
             *cell = json!(milliseconds);
         }
@@ -1174,21 +1176,29 @@ fn converted_clock_error(
 
 /// Runs a fitted pipeline with the `units` columns in epoch milliseconds; the output keeps
 /// the source cells of those columns, so later steps and table writes see stored values.
+/// Training rows also fail when a join matched none of them, instead of training on null
+/// joined columns.
 pub(crate) fn transform_feature_rows(
     pipeline: &FittedFeaturePipeline,
     rows: &[Value],
     units: &BTreeMap<String, TemporalUnit>,
+    training: bool,
 ) -> Result<Vec<Value>> {
+    let transform = |rows: &[Value]| {
+        if training {
+            pipeline.transform_training_rows(rows)
+        } else {
+            pipeline.transform_rows(rows)
+        }
+    };
     if units.is_empty() {
-        return Ok(pipeline.transform_rows(rows)?);
+        return Ok(transform(rows)?);
     }
     let converted = rows
         .iter()
         .map(|row| row_in_milliseconds(row, units))
         .collect::<Result<Vec<_>>>()?;
-    let mut output = pipeline
-        .transform_rows(&converted)
-        .map_err(|error| converted_clock_error(error, units))?;
+    let mut output = transform(&converted).map_err(|error| converted_clock_error(error, units))?;
     for (transformed, row) in output.iter_mut().zip(rows) {
         restore_source_cells(transformed, row, units);
     }
@@ -1977,10 +1987,8 @@ mod table_io {
         }
         let batch = value_to_record_batch_for_schema(produced, &visible, table_name)?;
         let batch_schema = batch.schema();
-        let reader: Box<dyn RecordBatchReader + Send> = Box::new(RecordBatchIterator::new(
-            vec![Ok(batch)],
-            batch_schema,
-        ));
+        let reader: Box<dyn RecordBatchReader + Send> =
+            Box::new(RecordBatchIterator::new(vec![Ok(batch)], batch_schema));
         let mut merge = table.merge_insert(&["sample_id"]);
         merge.when_matched_update_all(None);
         if required.is_empty() {
@@ -2153,7 +2161,15 @@ mod table_io {
         }
         // Preparation reads only mapped columns. Metadata still yields to every source column,
         // so a write into an existing table never lands on an unread column of the same name.
-        let schema = pinned.database.load(context).await?.db.read().await.schema().await?;
+        let schema = pinned
+            .database
+            .load(context)
+            .await?
+            .db
+            .read()
+            .await
+            .schema()
+            .await?;
         let source_columns: HashSet<&str> = schema
             .fields()
             .iter()
@@ -2831,7 +2847,10 @@ mod tests {
         let budget = 256 * 1024 * 1024;
         assert_eq!(next_page_rows(1, 10, budget, page_bytes, 4096), 2);
         assert_eq!(next_page_rows(2048, 10, budget, page_bytes, 4096), 4096);
-        assert_eq!(next_page_rows(64, 1_000_000, 3_500_000, page_bytes, 4096), 3);
+        assert_eq!(
+            next_page_rows(64, 1_000_000, 3_500_000, page_bytes, 4096),
+            3
+        );
         assert_eq!(next_page_rows(64, 1_000_000, 500_000, page_bytes, 4096), 1);
         assert_eq!(next_page_rows(64, 0, 0, page_bytes, 4096), 1);
     }
@@ -2851,7 +2870,9 @@ mod tests {
 
     #[test]
     fn an_expired_preparation_deadline_stops_before_the_transform() {
-        use super::super::feature_engineering::{prepare_feature_rows, prepare_feature_rows_within};
+        use super::super::feature_engineering::{
+            prepare_feature_rows, prepare_feature_rows_within,
+        };
         let (source, request, mut rows) = fixture();
         for row in &mut rows {
             row["time"] = json!(0);
@@ -2944,10 +2965,16 @@ mod tests {
             ("offset".to_string(), TemporalUnit::Days),
         ]);
         let clocks = side_time_units(&as_of, "calibration", &side_units);
-        assert_eq!(clocks.keys().collect::<Vec<_>>(), ["published", "valid_from"]);
         assert_eq!(
-            row_in_milliseconds(&json!({"valid_from":2_500_999,"published":3,"offset":4}), &clocks)
-                .unwrap(),
+            clocks.keys().collect::<Vec<_>>(),
+            ["published", "valid_from"]
+        );
+        assert_eq!(
+            row_in_milliseconds(
+                &json!({"valid_from":2_500_999,"published":3,"offset":4}),
+                &clocks
+            )
+            .unwrap(),
             json!({"valid_from":2_500,"published":3_000,"offset":4})
         );
         let plan = window_plan(
@@ -3583,7 +3610,9 @@ mod tests {
         ]));
         let columns: Vec<ArrayRef> = vec![
             Arc::new(StringArray::from(
-                (0..29).map(|index: usize| index.to_string()).collect::<Vec<_>>(),
+                (0..29)
+                    .map(|index: usize| index.to_string())
+                    .collect::<Vec<_>>(),
             )),
             Arc::new(Float64Array::from(vec![None::<f64>; 29])),
             Arc::new(StringArray::from(vec![Some("stale"); 29])),
@@ -3708,7 +3737,11 @@ mod tests {
                 assert_eq!(row["x_squared"], json!((index * index) as f64));
                 let partition = row["partition"].as_str().unwrap();
                 assert!(["train", "validation", "test"].contains(&partition));
-                let comment = if index < 29 { kept_comment(index) } else { None };
+                let comment = if index < 29 {
+                    kept_comment(index)
+                } else {
+                    None
+                };
                 assert_eq!(row["comment"], json!(comment), "sample {index}");
             }
         };

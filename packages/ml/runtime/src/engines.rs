@@ -1033,7 +1033,11 @@ mod independence_tests {
         assert!(error.contains("late-mate"), "{error}");
     }
 
-    fn in_stream(stream_id: &str, inspection_version: &str, artifact: ModelArtifact) -> ModelArtifact {
+    fn in_stream(
+        stream_id: &str,
+        inspection_version: &str,
+        artifact: ModelArtifact,
+    ) -> ModelArtifact {
         ModelArtifact {
             stream: StreamKey {
                 inspection_version: inspection_version.into(),
@@ -1075,8 +1079,13 @@ mod independence_tests {
             .unwrap();
         // Lot names of another stream are unrelated without shared content.
         let elsewhere = in_stream("press", "v1", model);
-        ensure_independent_audit(&connection, &elsewhere, &target, &[&sample("s2", "lot-7", 3)])
-            .unwrap();
+        ensure_independent_audit(
+            &connection,
+            &elsewhere,
+            &target,
+            &[&sample("s2", "lot-7", 3)],
+        )
+        .unwrap();
     }
 
     #[test]

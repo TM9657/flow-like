@@ -1234,7 +1234,10 @@ mod tests {
         let images = Tensor::<4>::random([3, 1, 16, 16], Distribution::Uniform(0.0, 1.0), &device);
         let class_masks_per_roi = 5 * 4 * 4;
         assert_eq!(model.inference_rois_per_pass(2 * class_masks_per_roi), 2);
-        assert_eq!(model.inference_rois_per_pass(2 * class_masks_per_roi - 1), 1);
+        assert_eq!(
+            model.inference_rois_per_pass(2 * class_masks_per_roi - 1),
+            1
+        );
         let whole = model.forward(images.clone(), None).unwrap();
         let passes = model
             .forward_within(images.clone(), None, 2 * class_masks_per_roi)

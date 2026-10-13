@@ -193,6 +193,7 @@ fn build_request(
         feature_plan: None,
         feature_sources: Vec::new(),
         learning_cycle_id: None,
+        feature_extractor: None,
     })
 }
 

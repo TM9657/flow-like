@@ -870,7 +870,8 @@ impl<'a> ReplayBudget<'a> {
     }
 
     fn recorded(&mut self) {
-        self.first_recorded.get_or_insert_with(std::time::Instant::now);
+        self.first_recorded
+            .get_or_insert_with(std::time::Instant::now);
     }
 }
 

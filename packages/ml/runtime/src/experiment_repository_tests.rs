@@ -1950,7 +1950,9 @@ fn resume_that_cannot_fit_keeps_charging_the_retained_checkpoint() {
     repo.finish_training(&lease, b"weights", json!({}), 104)
         .unwrap();
     validate(&repo, &winner, 1., 105);
-    let lease = repo.claim_job(&stopped.job_id, "worker", 1000, 106).unwrap();
+    let lease = repo
+        .claim_job(&stopped.job_id, "worker", 1000, 106)
+        .unwrap();
     repo.publish_checkpoint(&lease, &[2; 15], 1, json!({}), false, 107)
         .unwrap();
     repo.cancel_experiment(&experiment.id, 108).unwrap();
