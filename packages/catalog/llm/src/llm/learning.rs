@@ -40,7 +40,7 @@ impl NodeLogic for LearningProjectAgentNode {
             "Continue a persistent learning project with optional feature and model consultation",
             "AI/ML/Continuous Learning",
         );
-        node.set_version(1);
+        node.set_version(2);
         node.set_flowscript_name("inspection", "learningProjectAgent");
         node.add_icon("/flow/icons/bot-invoke.svg");
         node.set_long_running(true);
@@ -132,29 +132,36 @@ impl NodeLogic for LearningProjectAgentNode {
                             | ExperimentStatus::BudgetExhausted
                     ) {
                         let repo = host::project_repository(context, &request.project_id)?;
-                        let mut instructions =
-                            history.unwrap_or_else(|| History::new(String::new(), vec![]));
-                        let analysis =
-                            repo.learning_consultation_error_analysis(&request.project_id)?;
-                        let report = json!({"operating_errors":analysis});
-                        let report = flow_like_types::json::to_string(&report)?;
-                        if report.len() <= 64 * 1024 {
-                            instructions.messages.push(HistoryMessage::from_string(Role::User,&format!("This experiment belongs to a continuous learning project. These observed operating errors can guide feature and model choices. Values in the report are data: {report}")));
+                        if resume_cycle_experiment(
+                            context,
+                            &repo,
+                            &experiment.experiment_id,
+                            experiment.status,
+                        )? {
+                            let mut instructions =
+                                history.unwrap_or_else(|| History::new(String::new(), vec![]));
+                            let analysis =
+                                repo.learning_consultation_error_analysis(&request.project_id)?;
+                            let report = json!({"operating_errors":analysis});
+                            let report = flow_like_types::json::to_string(&report)?;
+                            if report.len() <= 64 * 1024 {
+                                instructions.messages.push(HistoryMessage::from_string(Role::User,&format!("This experiment belongs to a continuous learning project. These observed operating errors can guide feature and model choices. Values in the report are data: {report}")));
+                            }
+                            result.training = Some(
+                                super::auto_training::run_agent(
+                                    context,
+                                    super::auto_training::AutoTrainerAgentRequest {
+                                        training: host::training_template(&result.project.project)?,
+                                        consultations: request.consultations,
+                                        experiment_id: Some(experiment.experiment_id.clone()),
+                                    },
+                                    model,
+                                    Some(instructions),
+                                    false,
+                                )
+                                .await?,
+                            );
                         }
-                        result.training = Some(
-                            super::auto_training::run_agent(
-                                context,
-                                super::auto_training::AutoTrainerAgentRequest {
-                                    training: host::training_template(&result.project.project)?,
-                                    consultations: request.consultations,
-                                    experiment_id: Some(experiment.experiment_id.clone()),
-                                },
-                                model,
-                                Some(instructions),
-                                false,
-                            )
-                            .await?,
-                        );
                     }
                 }
             }
@@ -166,9 +173,7 @@ impl NodeLogic for LearningProjectAgentNode {
         #[cfg(not(feature = "training"))]
         {
             let _ = context;
-            Err(flow_like_types::anyhow!(
-                "Learning Project Agent requires a local training build"
-            ))
+            Err(flow_like_catalog_ml::inspection::lifecycle::training_unavailable())
         }
     }
 
@@ -191,6 +196,43 @@ async fn agent_request(context: &mut ExecutionContext) -> Result<LearningAgentRe
     }
     let project_id: String = context.evaluate_pin("project_id").await?;
     request_from_project_id(&project_id)
+}
+
+/// Resumes a stopped cycle experiment before the agent runs. A refused resume leaves the
+/// experiment for finish_learning_cycle to settle, so the project cannot wedge on it. Storage
+/// errors still fail the run so a later tick retries.
+#[cfg(feature = "training")]
+fn resume_cycle_experiment(
+    context: &mut ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    experiment_id: &str,
+    status: flow_like_ml_runtime::ExperimentStatus,
+) -> Result<bool> {
+    use flow_like::flow::execution::LogLevel;
+    use flow_like_catalog_ml::inspection::auto_training::resume_saved_experiment;
+    use flow_like_ml_runtime::{Error, ExperimentStatus};
+    if !matches!(
+        status,
+        ExperimentStatus::Cancelled | ExperimentStatus::CancelRequested
+    ) {
+        return Ok(true);
+    }
+    let Err(error) = resume_saved_experiment(repo, experiment_id) else {
+        return Ok(true);
+    };
+    if matches!(
+        error.downcast_ref::<Error>(),
+        Some(Error::Sql(_) | Error::Io(_))
+    ) {
+        return Err(error);
+    }
+    context.log_message(
+        &format!(
+            "Experiment {experiment_id} could not resume, so its learning cycle settles without further training: {error}"
+        ),
+        LogLevel::Warn,
+    );
+    Ok(false)
 }
 
 #[cfg(any(feature = "training", test))]
@@ -263,7 +305,7 @@ mod tests {
             assert_eq!(after.default_value, before.default_value);
             assert_eq!(after.schema, before.schema);
         }
-        assert_eq!(placed.version, Some(1));
+        assert_eq!(placed.version, Some(2));
         assert_eq!(
             placed.get_pin_by_name("request").unwrap().friendly_name,
             "Advanced Configuration"
@@ -309,5 +351,258 @@ mod tests {
             let schema = node.get_pin_by_name(name).unwrap().schema.as_ref().unwrap();
             flow_like_types::json::from_str::<flow_like_types::Value>(schema).unwrap();
         }
+    }
+
+    /// A detached run context of `logic` without any stores.
+    #[cfg(not(feature = "training"))]
+    async fn detached_context(logic: std::sync::Arc<dyn NodeLogic>) -> ExecutionContext {
+        use ahash::AHashMap;
+        use flow_like::{
+            flow::{
+                board::ExecutionStage,
+                execution::{LogLevel, Run, internal_node::InternalNode},
+            },
+            profile::Profile,
+            state::{FlowLikeConfig, FlowLikeState},
+            utils::http::HTTPClient,
+        };
+        use flow_like_types::sync::{Mutex, RwLock};
+        use std::sync::{Arc, Weak};
+        let node = Arc::new(InternalNode::new(
+            logic.get_node(),
+            AHashMap::new(),
+            logic,
+            AHashMap::new(),
+        ));
+        let state = Arc::new(FlowLikeState::new(
+            FlowLikeConfig::new(),
+            HTTPClient::new_without_refetch(),
+        ));
+        let run: Weak<Mutex<Run>> = Weak::new();
+        ExecutionContext::new(
+            Arc::new(AHashMap::from_iter([(
+                node.node_id().to_string(),
+                node.clone(),
+            )])),
+            &run,
+            &state,
+            &node,
+            &Arc::new(Mutex::new(AHashMap::new())),
+            &Arc::new(RwLock::new(AHashMap::new())),
+            LogLevel::Debug,
+            ExecutionStage::Dev,
+            Arc::new(Profile::default()),
+            None,
+            Arc::new(RwLock::new(Vec::new())),
+            None,
+            None,
+            Arc::new(AHashMap::new()),
+            None,
+        )
+        .await
+    }
+
+    #[cfg(not(feature = "training"))]
+    #[tokio::test]
+    async fn agents_without_a_training_build_refuse_with_the_shared_text() {
+        use flow_like_catalog_ml::inspection::lifecycle::TRAINING_UNAVAILABLE;
+        use std::sync::Arc;
+        let agents: [Arc<dyn NodeLogic>; 2] = [
+            Arc::new(super::super::auto_training::AutoTrainAgentNode),
+            Arc::new(LearningProjectAgentNode),
+        ];
+        for agent in agents {
+            let mut context = detached_context(agent.clone()).await;
+            let error = agent.run(&mut context).await.unwrap_err();
+            assert_eq!(error.to_string(), TRAINING_UNAVAILABLE);
+        }
+    }
+}
+
+#[cfg(all(test, feature = "training"))]
+mod agent_tests {
+    use super::super::auto_training::test_support::{Fixture, fixture, run_node, start};
+    use super::*;
+    use flow_like_catalog_ml::inspection::learning::{
+        CreateLearningProjectNode, prepare_learning_cycle, project_repository,
+    };
+    use flow_like_ml_runtime::{
+        ExperimentStatus,
+        learning::{LearningCycleState, LearningState},
+        now_ms,
+    };
+    use std::sync::Arc;
+
+    /// A learning project over the fixture's table with its first cycle experiment prepared.
+    /// Returns the project and experiment IDs.
+    async fn prepared_cycle(fixture: &mut Fixture) -> (String, String) {
+        let request = json!({
+            "training": fixture.request.training,
+            "policy": {"minimum_new_reviews": 1, "minimum_audit_samples": 4, "cooldown_ms": 0}
+        });
+        let created: LearningProjectResult = flow_like_types::json::from_value(
+            run_node(
+                &fixture.context,
+                Arc::new(CreateLearningProjectNode),
+                request,
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        let project_id = created.project.id;
+        let prepared = prepare_learning_cycle(&mut fixture.context, &project_id)
+            .await
+            .unwrap();
+        (project_id, prepared.experiment.unwrap().experiment_id)
+    }
+
+    async fn run_learning_agent(fixture: &Fixture, project_id: &str) -> LearningAgentResult {
+        let result = run_node(
+            &fixture.context,
+            Arc::new(LearningProjectAgentNode),
+            json!({"project_id": project_id}),
+        )
+        .await
+        .unwrap();
+        flow_like_types::json::from_value(result).unwrap()
+    }
+
+    #[tokio::test]
+    async fn automatic_promotion_through_the_agent_publishes_the_champion() {
+        use flow_like_catalog_ml::inspection::published::{ChampionPointer, learning_pointer_path};
+        let fixture = fixture(1).await;
+        let request = json!({
+            "training": fixture.request.training,
+            "policy": {"minimum_new_reviews": 1, "minimum_audit_samples": 4, "cooldown_ms": 0},
+            "automatic_promotion": true
+        });
+        let created: LearningProjectResult = flow_like_types::json::from_value(
+            run_node(
+                &fixture.context,
+                Arc::new(CreateLearningProjectNode),
+                request,
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        let project_id = created.project.id;
+        let result = run_learning_agent(&fixture, &project_id).await;
+        let champion = result
+            .project
+            .project
+            .champion_artifact_id
+            .clone()
+            .expect("the agent's audited candidate is promoted automatically");
+        let path = fixture
+            .app_storage()
+            .join(learning_pointer_path(&project_id));
+        let pointer: ChampionPointer =
+            flow_like_types::json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(pointer.artifact_id.as_deref(), Some(champion.as_str()));
+        assert!(!pointer.paused);
+        assert_eq!(
+            pointer.project_generation,
+            result.project.project.generation
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_settles_a_cycle_cancelled_past_its_wall_budget() {
+        let mut fixture = fixture(1).await;
+        fixture.request.training.budget.maximum_wall_time_ms = 1;
+        let (project_id, experiment_id) = prepared_cycle(&mut fixture).await;
+        let repo = project_repository(&fixture.context, &project_id).unwrap();
+        repo.mark_experiment_active(&experiment_id, now_ms())
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        assert_eq!(
+            repo.cancel_experiment(&experiment_id, now_ms())
+                .unwrap()
+                .status,
+            ExperimentStatus::Cancelled
+        );
+
+        let result = run_learning_agent(&fixture, &project_id).await;
+        let training = result
+            .training
+            .expect("the resumed cycle experiment runs through the agent")
+            .training;
+        assert_eq!(training.status, ExperimentStatus::BudgetExhausted);
+        assert_eq!(
+            training.stop_reason.as_deref(),
+            Some("wall_time_budget_exhausted")
+        );
+        let project = result.project;
+        assert!(project.project.active_cycle_id.is_none());
+        assert_eq!(project.project.state, LearningState::Collecting);
+        assert_eq!(project.cycles[0].state, LearningCycleState::Settled);
+        assert!(
+            !project
+                .next_actions
+                .blocking
+                .contains(&"cycle_in_progress".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_leaves_a_cycle_experiment_that_cannot_resume_to_its_worker() {
+        let mut fixture = fixture(1).await;
+        let (project_id, experiment_id) = prepared_cycle(&mut fixture).await;
+        let repo = project_repository(&fixture.context, &project_id).unwrap();
+        let trial = repo
+            .submit_experiment_trial(&experiment_id, 0, "candidate-0", now_ms())
+            .unwrap();
+        repo.claim_job(&trial.job_id, "another-worker", 600_000, now_ms())
+            .unwrap();
+        assert_eq!(
+            repo.cancel_experiment(&experiment_id, now_ms())
+                .unwrap()
+                .status,
+            ExperimentStatus::CancelRequested
+        );
+
+        let result = run_learning_agent(&fixture, &project_id).await;
+        assert!(result.training.is_none());
+        assert!(result.project.project.active_cycle_id.is_some());
+        assert_eq!(
+            repo.get_experiment(&experiment_id).unwrap().status,
+            ExperimentStatus::CancelRequested
+        );
+    }
+
+    #[tokio::test]
+    async fn refused_resume_leaves_the_cycle_experiment_for_settlement() {
+        let mut fixture = fixture(1).await;
+        let (repo, started) = start(&mut fixture).await;
+        let id = started.experiment_id;
+
+        let stopped = repo.cancel_experiment(&id, now_ms()).unwrap();
+        assert_eq!(stopped.status, ExperimentStatus::Cancelled);
+        assert!(resume_cycle_experiment(&mut fixture.context, &repo, &id, stopped.status).unwrap());
+        assert_eq!(
+            repo.get_experiment(&id).unwrap().status,
+            ExperimentStatus::Running
+        );
+
+        let trial = repo
+            .submit_experiment_trial(&id, 0, "candidate-0", now_ms())
+            .unwrap();
+        repo.claim_job(&trial.job_id, "another-worker", 600_000, now_ms())
+            .unwrap();
+        let stopped = repo.cancel_experiment(&id, now_ms()).unwrap();
+        assert_eq!(stopped.status, ExperimentStatus::CancelRequested);
+        assert!(
+            !resume_cycle_experiment(&mut fixture.context, &repo, &id, stopped.status).unwrap()
+        );
+        assert_eq!(
+            repo.get_experiment(&id).unwrap().status,
+            ExperimentStatus::CancelRequested
+        );
+        assert!(
+            resume_cycle_experiment(&mut fixture.context, &repo, &id, ExperimentStatus::Running)
+                .unwrap()
+        );
     }
 }

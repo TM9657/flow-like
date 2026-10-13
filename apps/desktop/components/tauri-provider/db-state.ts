@@ -1,5 +1,6 @@
 import type {
 	IAddColumnPayload,
+	IColumnMetadata,
 	ICreateTableResult,
 	IDatabaseSchemaField,
 	IDatabaseState,
@@ -766,6 +767,46 @@ export class DatabaseState implements IDatabaseState {
 			appId,
 			tableName,
 			column,
+			userScoped: userScoped ?? false,
+			...(selector ? { selector } : {}),
+		});
+	}
+
+	async setColumnMetadata(
+		appId: string,
+		tableName: string,
+		column: string,
+		metadata: IColumnMetadata,
+		userScoped?: boolean,
+		selector?: IDatabaseSelector,
+	): Promise<IColumnMetadata> {
+		const target = await this.tableTarget(appId, tableName, userScoped);
+		if (target === "device") throw managedStructureError();
+
+		if (target === "hub") {
+			const profile = this.backend.profile;
+			if (!profile)
+				throw new Error("An active profile is required to change a column.");
+			return await fetcher<IColumnMetadata>(
+				profile,
+				appendScope(
+					`apps/${appId}/db/${parseTableName(tableName)}/columns/${encodeURIComponent(column)}/metadata`,
+					userScoped,
+					selector,
+				),
+				{
+					method: "PUT",
+					body: JSON.stringify(metadata),
+				},
+				this.backend.auth,
+			);
+		}
+
+		return await invoke<IColumnMetadata>("db_set_column_metadata", {
+			appId,
+			tableName,
+			column,
+			metadata,
 			userScoped: userScoped ?? false,
 			...(selector ? { selector } : {}),
 		});

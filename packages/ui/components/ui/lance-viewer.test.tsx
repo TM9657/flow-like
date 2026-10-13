@@ -36,6 +36,31 @@ describe("arrowToLanceSchema", () => {
 		expect(fields.map((field) => field.kind)).toEqual(["boolean", "string"]);
 	});
 
+	test("reads the column metadata of labelled top-level columns", () => {
+		const [salary, label] = arrowToLanceSchema({
+			fields: [
+				{
+					name: "salary",
+					data_type: "Float64",
+					metadata: {
+						"flow-like:display-name": "Annual salary",
+						"flow-like:classification": "confidential",
+						"flow-like:pii": "true",
+						"flow-like:read-attributes": "hr, finance",
+					},
+				},
+				{ name: "label", data_type: "Utf8", metadata: {} },
+			],
+		}).fields;
+		expect(salary.columnMetadata).toEqual({
+			display_name: "Annual salary",
+			classification: "confidential",
+			pii: true,
+			read_attributes: ["hr", "finance"],
+		});
+		expect(label.columnMetadata).toBeUndefined();
+	});
+
 	test("distinguishes supported GeoArrow points from interleaved points and embeddings", () => {
 		const [interleaved, point, embedding] = arrowToLanceSchema({
 			fields: [

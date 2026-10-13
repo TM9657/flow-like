@@ -1,4 +1,6 @@
 use crate::*;
+#[cfg(any(feature = "native", feature = "burn"))]
+use flow_like_ml_core::Outcome as ReviewOutcome;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::de::DeserializeOwned;
 use std::collections::{BTreeMap, BTreeSet};
@@ -9,10 +11,11 @@ mod tests;
 pub(crate) fn initialize_learning(connection: &Connection) -> Result<()> {
     connection.execute_batch("CREATE TABLE IF NOT EXISTS learning_projects(id TEXT PRIMARY KEY,scope TEXT NOT NULL UNIQUE,body TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS learning_observations(project_id TEXT NOT NULL,sample_id TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(project_id,sample_id));
+    CREATE INDEX IF NOT EXISTS learning_observations_captured ON learning_observations(project_id,json_extract(body,'$.captured_at_ms'));
     CREATE TABLE IF NOT EXISTS learning_reviews(sequence INTEGER PRIMARY KEY AUTOINCREMENT,project_id TEXT NOT NULL,sample_id TEXT NOT NULL,revision INTEGER NOT NULL,body TEXT NOT NULL,UNIQUE(project_id,sample_id,revision));
     CREATE TABLE IF NOT EXISTS learning_review_selections(project_id TEXT NOT NULL,key TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(project_id,key));
     CREATE TABLE IF NOT EXISTS learning_review_queue(project_id TEXT NOT NULL,sample_id TEXT NOT NULL,PRIMARY KEY(project_id,sample_id));
-    CREATE TABLE IF NOT EXISTS learning_consumed_reviews(project_id TEXT NOT NULL,sample_id TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(project_id,sample_id));
+    CREATE TABLE IF NOT EXISTS learning_consumed_reviews(project_id TEXT NOT NULL,sample_id TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,matched INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(project_id,sample_id));
     CREATE TABLE IF NOT EXISTS learning_cycles(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,key TEXT NOT NULL,experiment_id TEXT UNIQUE,body TEXT NOT NULL,UNIQUE(project_id,key));
     CREATE TABLE IF NOT EXISTS learning_exposure(project_id TEXT NOT NULL,sample_id TEXT NOT NULL,group_id TEXT NOT NULL,role TEXT NOT NULL,cycle_id TEXT NOT NULL,PRIMARY KEY(project_id,sample_id,role));
     CREATE INDEX IF NOT EXISTS learning_exposure_groups ON learning_exposure(project_id,group_id,role);
@@ -26,6 +29,19 @@ pub(crate) fn initialize_learning(connection: &Connection) -> Result<()> {
             [],
         )?;
     }
+    let has_matched:bool=connection.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('learning_consumed_reviews') WHERE name='matched')",[],|r|r.get(0))?;
+    if !has_matched {
+        connection.execute(
+            "ALTER TABLE learning_consumed_reviews ADD COLUMN matched INTEGER NOT NULL DEFAULT 1",
+            [],
+        )?;
+    }
+    // Projects saved before aborts were counted keep each aborted reservation in
+    // `cycles_started`; every aborted cycle row is one of them.
+    connection.execute(
+        "UPDATE learning_projects SET body=json_set(body,'$.usage.cycles_aborted',(SELECT count(*) FROM learning_cycles c WHERE c.project_id=learning_projects.id AND json_extract(c.body,'$.state')='aborted')) WHERE COALESCE(json_extract(body,'$.usage.cycles_aborted'),0)<(SELECT count(*) FROM learning_cycles c WHERE c.project_id=learning_projects.id AND json_extract(c.body,'$.state')='aborted')",
+        [],
+    )?;
     Ok(())
 }
 
@@ -60,6 +76,8 @@ impl TrainingRepository {
             review_watermark: 0,
             product_change_watermark: 0,
             last_cycle_at_ms: None,
+            consecutive_aborts: 0,
+            last_abort_at_ms: None,
             created_at_ms: at_ms,
             updated_at_ms: at_ms,
         };
@@ -147,10 +165,16 @@ impl TrainingRepository {
             value.paused_from = Some(value.state);
             value.state = LearningState::Paused;
         } else if !paused && value.state == LearningState::Paused {
-            value.state = value
+            let restored = value
                 .paused_from
                 .take()
                 .unwrap_or(LearningState::Collecting);
+            value.state = if value.active_cycle_id.is_some() {
+                LearningState::Training
+            } else {
+                restored
+            };
+            value.consecutive_aborts = 0;
         }
         touch(&mut value, at_ms);
         save_project(&tx, &value)?;
@@ -242,6 +266,7 @@ impl TrainingRepository {
             ));
         }
         bounded(review, 64 * 1024)?;
+        let outcome = review_outcome(review)?;
         let mut connection = self.connection()?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut value = project(&tx, project_id)?;
@@ -262,18 +287,20 @@ impl TrainingRepository {
             .get("window_end_ms")
             .and_then(Value::as_i64)
             .unwrap_or(observation.captured_at_ms);
-        let target_end = review
-            .outcome
-            .as_ref()
-            .or_else(|| payload.get("outcome"))
-            .and_then(|v| v.get("target_end_ms"))
-            .and_then(Value::as_i64)
-            .unwrap_or(feature_end);
+        let target_end = match &outcome {
+            Some(outcome) => outcome.target_end_ms,
+            None => payload
+                .get("outcome")
+                .and_then(|v| v.get("target_end_ms"))
+                .and_then(Value::as_i64)
+                .unwrap_or(feature_end),
+        };
         if review.available_at_ms < feature_end.max(target_end) {
             return Err(invalid(
                 "review outcome was unavailable before its feature or target window ended",
             ));
         }
+        validate_predictive_outcome(&value.request.spec, review, outcome.as_ref(), feature_end)?;
         validate_annotation(&value, &review.annotation)?;
         let latest:Option<String>=tx.query_row("SELECT body FROM learning_reviews WHERE project_id=? AND sample_id=? ORDER BY revision DESC LIMIT 1",params![project_id,review.sample_id],|r|r.get(0)).optional()?;
         if let Some(latest) = latest {
@@ -334,47 +361,54 @@ impl TrainingRepository {
         if key.is_empty() || key.len() > 256 {
             return Err(invalid("review selection needs a bounded idempotency key"));
         }
-        let mut connection = self.connection()?;
-        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let mut value = project(&tx, project_id)?;
-        let previous: Option<String> = tx
-            .query_row(
-                "SELECT body FROM learning_review_selections WHERE project_id=? AND key=?",
-                params![project_id, key],
-                |r| r.get(0),
-            )
-            .optional()?;
-        if let Some(previous) = previous {
-            return Ok(serde_json::from_str(&previous)?);
-        }
-        if at_ms < value.created_at_ms {
-            return Err(invalid("selection predates project"));
-        }
-        let mut statement=tx.prepare("SELECT o.body FROM learning_observations o WHERE o.project_id=? AND NOT EXISTS(SELECT 1 FROM learning_reviews r WHERE r.project_id=o.project_id AND r.sample_id=o.sample_id) AND NOT EXISTS(SELECT 1 FROM learning_review_queue q WHERE q.project_id=o.project_id AND q.sample_id=o.sample_id) ORDER BY o.rowid DESC LIMIT ?")?;
-        let pool: Vec<LearningObservation> = statement
-            .query_map(
-                params![project_id, value.request.policy.review_pool_size],
-                |r| r.get::<_, String>(0),
-            )?
-            .map(|row| Ok(serde_json::from_str(&row?)?))
-            .collect::<Result<_>>()?;
-        drop(statement);
-        let selected = select_diverse_reviews(pool, &value.request.policy);
-        let body = serde_json::to_string(&selected)?;
-        reserve_collection_bytes(&mut value, body.len() as u64)?;
-        save_project(&tx, &value)?;
-        for item in &selected {
+        for _attempt in 0..3 {
+            // Rank outside the write lock; the transaction only revalidates and records it.
+            let (policy, pool) = {
+                let connection = self.connection()?;
+                let value = project(&connection, project_id)?;
+                if let Some(previous) = review_selection(&connection, project_id, key)? {
+                    return Ok(previous);
+                }
+                if at_ms < value.created_at_ms {
+                    return Err(invalid("selection predates project"));
+                }
+                let pool = review_pool(
+                    &connection,
+                    project_id,
+                    value.request.policy.review_pool_size,
+                )?;
+                (value.request.policy, pool)
+            };
+            let selected = select_diverse_reviews(pool, &policy);
+            let mut connection = self.connection()?;
+            let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let mut value = project(&tx, project_id)?;
+            if let Some(previous) = review_selection(&tx, project_id, key)? {
+                return Ok(previous);
+            }
+            if !review_candidates_open(&tx, project_id, &selected)? {
+                continue;
+            }
+            let body = serde_json::to_string(&selected)?;
+            reserve_collection_bytes(&mut value, body.len() as u64)?;
+            save_project(&tx, &value)?;
+            for item in &selected {
+                tx.execute(
+                    "INSERT INTO learning_review_queue(project_id,sample_id) VALUES(?,?)",
+                    params![project_id, item.observation.sample_id],
+                )?;
+            }
             tx.execute(
-                "INSERT INTO learning_review_queue(project_id,sample_id) VALUES(?,?)",
-                params![project_id, item.observation.sample_id],
+                "INSERT INTO learning_review_selections(project_id,key,body) VALUES(?,?,?)",
+                params![project_id, key, body],
             )?;
+            tx.commit()?;
+            return Ok(selected);
         }
-        tx.execute(
-            "INSERT INTO learning_review_selections(project_id,key,body) VALUES(?,?,?)",
-            params![project_id, key, body],
-        )?;
-        tx.commit()?;
-        Ok(selected)
+        Err(Error::Conflict(
+            "concurrent review selections claimed the same observations; retry the selection"
+                .into(),
+        ))
     }
     pub fn record_learning_product_change(
         &self,
@@ -512,11 +546,15 @@ impl TrainingRepository {
         )?;
         let product_change_through = change_watermark(&tx, project_id)?;
         let reviewed_sample_ids = available_new_reviews(&tx, project_id, at_ms)?;
-        let reviewed_revisions = latest_reviews_at(&tx, project_id, at_ms)?
-            .into_iter()
-            .filter(|r| reviewed_sample_ids.contains(&r.sample_id))
-            .map(|r| (r.sample_id, r.revision))
-            .collect();
+        let reviewed_revisions = latest_reviews_of(
+            &tx,
+            project_id,
+            &serde_json::to_string(&reviewed_sample_ids)?,
+            at_ms,
+        )?
+        .into_iter()
+        .map(|r| (r.sample_id, r.revision))
+        .collect();
         let cycle = LearningCycle {
             id: id(),
             project_id: project_id.into(),
@@ -532,6 +570,7 @@ impl TrainingRepository {
             reviewed_through,
             observations_through,
             reviewed_sample_ids,
+            unmatched_review_ids: vec![],
             reviewed_revisions,
             product_change_through,
             created_at_ms: at_ms,
@@ -584,26 +623,21 @@ impl TrainingRepository {
                 .get("learning_cycle_id")
                 .and_then(Value::as_str)
                 != Some(cycle_id)
-            || task_identity(&experiment.request.spec) != task_identity(&value.request.spec)
-            || serde_json::to_value(&experiment.request.goals)?
-                != serde_json::to_value(&value.request.goals)?
-            || experiment.created_at_ms < cycle.created_at_ms
-            || experiment.usage.submitted_trials != 0
-            || experiment.status != ExperimentStatus::Running
         {
             return Err(invalid(
                 "experiment does not match the reserved learning task, stream, goals or unused state",
             ));
         }
-        budget_within(&experiment.request.budget, &cycle.budget)?;
-        let snapshot: DatasetSnapshot = read(
-            &tx,
-            "SELECT body FROM snapshots WHERE id=?",
-            &experiment.request.snapshot_id,
-        )?;
-        if snapshot.test.len() < value.request.policy.minimum_audit_samples {
-            return Err(invalid("learning cycle needs enough fresh audit samples"));
-        }
+        let snapshot = match attach_preconditions(&tx, &value, &cycle, &experiment) {
+            Ok(snapshot) => snapshot,
+            Err(error @ Error::Invalid(_)) => {
+                drop(tx);
+                // This reservation's experiment can never attach; release it instead of holding it.
+                self.abort_learning_cycle(cycle_id, &error.to_string(), at_ms)?;
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
         let source_ids: BTreeSet<_> = snapshot
             .train
             .iter()
@@ -611,12 +645,19 @@ impl TrainingRepository {
             .chain(&snapshot.test)
             .map(|s| s.id.as_str())
             .collect();
-        cycle
-            .reviewed_sample_ids
-            .retain(|id| source_ids.contains(id.as_str()));
-        cycle
-            .reviewed_revisions
-            .retain(|id, _| source_ids.contains(id.as_str()));
+        let (matched, unmatched): (Vec<String>, Vec<String>) =
+            std::mem::take(&mut cycle.reviewed_sample_ids)
+                .into_iter()
+                .partition(|id| source_ids.contains(id.as_str()));
+        cycle.reviewed_sample_ids = matched;
+        cycle.unmatched_review_ids = unmatched;
+        let known: BTreeSet<String> = cycle.reviewed_sample_ids.iter().cloned().collect();
+        for (sample_id, revision) in unmatched_consumed_reviews(&tx, &cycle.project_id)? {
+            if source_ids.contains(sample_id.as_str()) && !known.contains(&sample_id) {
+                cycle.reviewed_revisions.insert(sample_id.clone(), revision);
+                cycle.reviewed_sample_ids.push(sample_id);
+            }
+        }
         for (role, partition) in [
             (
                 "train",
@@ -629,17 +670,6 @@ impl TrainingRepository {
             ("audit", snapshot.test.iter().collect::<Vec<_>>()),
         ] {
             for sample in partition {
-                let forbidden:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM learning_exposure WHERE project_id=? AND (sample_id=? OR group_id=?) AND (role='audit' OR ?='audit') AND NOT (cycle_id=? AND role=?))",params![cycle.project_id,sample.id,sample.group_id,role,cycle_id,role],|r|r.get(0))?;
-                if forbidden {
-                    return Err(invalid(
-                        "learning split reused a sealed audit sample/group or audited previous training data",
-                    ));
-                }
-                if role == "audit" && (!sample.accepted || sample.source == LabelSource::Teacher) {
-                    return Err(invalid(
-                        "fresh learning audit requires reviewed or measured outcomes",
-                    ));
-                }
                 tx.execute("INSERT OR IGNORE INTO learning_exposure(project_id,sample_id,group_id,role,cycle_id) VALUES(?,?,?,?,?)",params![cycle.project_id,sample.id,sample.group_id,role,cycle_id])?;
             }
         }
@@ -709,6 +739,15 @@ impl TrainingRepository {
         at_ms: i64,
     ) -> Result<LearningCycle> {
         self.writable()?;
+        let current = self.get_learning_cycle(cycle_id)?;
+        // An experiment saved for a reservation can never dispatch once the cycle is released.
+        if current.state == LearningCycleState::Reserved
+            && current.experiment_id.is_none()
+            && let Some(orphan) = self.find_learning_cycle_experiment(cycle_id)?
+            && orphan.status == ExperimentStatus::Running
+        {
+            self.cancel_experiment(&orphan.id, at_ms)?;
+        }
         let mut connection = self.connection()?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut cycle = cycle(&tx, cycle_id)?;
@@ -724,11 +763,10 @@ impl TrainingRepository {
         cycle.error = Some(reason.chars().take(4096).collect());
         cycle.updated_at_ms = at_ms;
         value.active_cycle_id = None;
-        let state = if value.champion_artifact_id.is_some() {
-            LearningState::Active
-        } else {
-            LearningState::Collecting
-        };
+        value.usage.cycles_aborted = value.usage.cycles_aborted.saturating_add(1);
+        value.consecutive_aborts = value.consecutive_aborts.saturating_add(1);
+        value.last_abort_at_ms = Some(at_ms);
+        let state = idle_state(&tx, &value)?;
         set_phase(&mut value, state);
         touch(&mut value, at_ms);
         save_project(&tx, &value)?;
@@ -736,8 +774,33 @@ impl TrainingRepository {
         tx.commit()?;
         Ok(cycle)
     }
+    /// A stopped experiment can be stored as CancelRequested after its last worker ended, or
+    /// keep the reservation of a trial nobody settled. Cancelling again charges those trials.
+    fn release_stopped_learning_experiment(&self, cycle_id: &str, at_ms: i64) -> Result<()> {
+        let cycle = self.get_learning_cycle(cycle_id)?;
+        if cycle.state != LearningCycleState::Attached {
+            return Ok(());
+        }
+        let Some(experiment_id) = cycle.experiment_id else {
+            return Ok(());
+        };
+        let stored: Experiment = read(
+            &self.connection()?,
+            "SELECT body FROM experiments WHERE id=?",
+            &experiment_id,
+        )?;
+        let unsettled = stored.status == ExperimentStatus::CancelRequested
+            || (stored.status == ExperimentStatus::Cancelled
+                && (stored.usage.reserved_training_time_ms != 0
+                    || stored.usage.reserved_artifact_bytes != 0));
+        if unsettled && self.get_experiment(&experiment_id)?.status == ExperimentStatus::Cancelled {
+            self.cancel_experiment(&experiment_id, at_ms)?;
+        }
+        Ok(())
+    }
     pub fn settle_learning_cycle(&self, cycle_id: &str, at_ms: i64) -> Result<LearningCycle> {
         self.writable()?;
+        self.release_stopped_learning_experiment(cycle_id, at_ms)?;
         let mut connection = self.connection()?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut cycle = cycle(&tx, cycle_id)?;
@@ -776,10 +839,17 @@ impl TrainingRepository {
         value.review_watermark = cycle.reviewed_through;
         value.product_change_watermark = cycle.product_change_through;
         value.last_cycle_at_ms = Some(at_ms);
-        for sample_id in &cycle.reviewed_sample_ids {
+        value.consecutive_aborts = 0;
+        // Unmatched reviews stop counting as new evidence and are reported until revised.
+        for (sample_id, matched) in cycle
+            .reviewed_sample_ids
+            .iter()
+            .map(|id| (id, true))
+            .chain(cycle.unmatched_review_ids.iter().map(|id| (id, false)))
+        {
             tx.execute(
-                "INSERT INTO learning_consumed_reviews(project_id,sample_id,revision) VALUES(?,?,?) ON CONFLICT(project_id,sample_id) DO UPDATE SET revision=max(revision,excluded.revision)",
-                params![cycle.project_id, sample_id,cycle.reviewed_revisions.get(sample_id).copied().unwrap_or(0)],
+                "INSERT INTO learning_consumed_reviews(project_id,sample_id,revision,matched) VALUES(?,?,?,?) ON CONFLICT(project_id,sample_id) DO UPDATE SET matched=CASE WHEN excluded.revision>=revision THEN excluded.matched ELSE matched END,revision=max(revision,excluded.revision)",
+                params![cycle.project_id, sample_id,cycle.reviewed_revisions.get(sample_id).copied().unwrap_or(0),matched],
             )?;
         }
         if let Some(selected) = experiment
@@ -801,10 +871,8 @@ impl TrainingRepository {
         value.active_cycle_id = None;
         let next = if cycle.evaluation_id.is_some() {
             LearningState::Shadow
-        } else if value.champion_artifact_id.is_some() {
-            LearningState::Active
         } else {
-            LearningState::Collecting
+            idle_state(&tx, &value)?
         };
         set_phase(&mut value, next);
         touch(&mut value, at_ms);
@@ -861,7 +929,7 @@ impl TrainingRepository {
             return Ok(false);
         }
         let cohort = canary_cohort(&connection, &value, at_ms)?;
-        if cohort.len() < value.request.policy.minimum_audit_samples {
+        if cohort.len() < required_audit_samples(&value) {
             return Ok(false);
         }
         if stale_canary_review(&connection, &value, &cohort, at_ms)?.is_some() {
@@ -906,7 +974,7 @@ impl TrainingRepository {
             .ok_or_else(|| invalid("cycle has no candidate artifact"))?;
         let cohort: BTreeSet<_> = cycle.audit_sample_ids.iter().cloned().collect();
         if cohort.len() != cycle.audit_sample_ids.len()
-            || cohort.len() < initial.request.policy.minimum_audit_samples
+            || cohort.len() < required_audit_samples(&initial)
         {
             return Err(invalid("learning audit cohort is incomplete"));
         }
@@ -925,7 +993,7 @@ impl TrainingRepository {
             })
             .transpose()?;
         let reasons = comparison_failures(&initial, &candidate_report, champion_report.as_ref());
-        let comparison = LearningComparison {
+        let mut comparison = LearningComparison {
             cycle_id: cycle_id.into(),
             candidate_artifact_id: candidate.into(),
             champion_artifact_id: initial.champion_artifact_id.clone(),
@@ -944,19 +1012,27 @@ impl TrainingRepository {
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut value = project(&tx, &cycle.project_id)?;
         cas(&value, initial.generation, at_ms)?;
-        verify_cohort_seal(&tx, &candidate_report, &cohort, &value.request.stream)?;
-        if let Some(report) = &champion_report {
-            verify_cohort_seal(&tx, report, &cohort, &value.request.stream)?;
+        // Audit truth is sealed when the cycle prepares; a later review correction voids it.
+        if let Some(sample_id) = stale_audit_review(&tx, &value, &cycle.audit_sample_ids, at_ms)? {
+            comparison.eligible = false;
+            comparison.reasons.push("audit_review_changed".into());
+            let mut saved = crate::learning_repository::cycle(&tx, cycle_id)?;
+            saved.error = Some(format!(
+                "Audit review changed after the cycle sealed sample '{sample_id}'; candidate rejected"
+            ));
+            saved.updated_at_ms = at_ms;
+            save_cycle(&tx, &saved)?;
+        } else {
+            verify_cohort_seal(&tx, &candidate_report, &cohort, &value.request.stream)?;
+            if let Some(report) = &champion_report {
+                verify_cohort_seal(&tx, report, &cohort, &value.request.stream)?;
+            }
         }
         tx.execute("INSERT INTO learning_comparisons(cycle_id,body) VALUES(?,?) ON CONFLICT(cycle_id) DO UPDATE SET body=excluded.body",params![cycle_id,serde_json::to_string(&comparison)?])?;
         if !comparison.eligible && value.candidate_artifact_id.as_deref() == Some(candidate) {
             value.candidate_artifact_id = None;
             value.canary_started_at_ms = None;
-            let state = if value.champion_artifact_id.is_some() {
-                LearningState::Active
-            } else {
-                LearningState::Collecting
-            };
+            let state = idle_state(&tx, &value)?;
             set_phase(&mut value, state);
             touch(&mut value, at_ms);
             save_project(&tx, &value)?;
@@ -1005,7 +1081,7 @@ impl TrainingRepository {
         let mut canary_reports = None;
         if before.state == LearningState::Canary {
             let cohort = canary_cohort(&self.connection()?, &before, at_ms)?;
-            if cohort.len() < before.request.policy.minimum_audit_samples {
+            if cohort.len() < required_audit_samples(&before) {
                 return Err(Error::Conflict("canary needs fresh independently reviewed candidate traffic before full promotion".into()));
             }
             if cycle.canary_sample_ids.is_empty() {
@@ -1065,7 +1141,8 @@ impl TrainingRepository {
                 cas(&value, before.generation, at_ms)?;
                 value.candidate_artifact_id = None;
                 value.canary_started_at_ms = None;
-                value.state = LearningState::Active;
+                let state = idle_state(&tx, &value)?;
+                set_phase(&mut value, state);
                 touch(&mut value, at_ms);
                 save_project(&tx, &value)?;
                 let mut cycle = crate::learning_repository::cycle(&tx, cycle_id)?;
@@ -1161,11 +1238,7 @@ impl TrainingRepository {
             &report.id,
             None,
             Some(MetricPromotionPolicy {
-                minimum_audited_samples: value
-                    .request
-                    .goals
-                    .minimum_audited_samples
-                    .max(value.request.policy.minimum_audit_samples),
+                minimum_audited_samples: required_audit_samples(&value),
                 bounds: value.request.goals.bounds.clone(),
             }),
             at_ms,
@@ -1173,7 +1246,8 @@ impl TrainingRepository {
         value.champion_artifact_id = Some(candidate.into());
         value.candidate_artifact_id = None;
         value.canary_started_at_ms = None;
-        value.state = LearningState::Active;
+        let state = idle_state(&tx, &value)?;
+        set_phase(&mut value, state);
         touch(&mut value, at_ms);
         save_project(&tx, &value)?;
         tx.commit()?;
@@ -1189,8 +1263,62 @@ impl TrainingRepository {
         let mut connection = self.connection()?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut value = project(&tx, project_id)?;
-        let deployment = self.rollback_in_transaction(
+        let deployment = self.rollback_learning_champion(
             &tx,
+            &mut value,
+            expected_deployment_generation,
+            at_ms,
+        )?;
+        tx.commit()?;
+        Ok(deployment)
+    }
+    /// Retry-safe rollback away from the model the caller judged bad. When that model was
+    /// already rolled back, the current deployment is returned unchanged.
+    pub fn rollback_learning_project_from(
+        &self,
+        project_id: &str,
+        expected_active_artifact_id: &str,
+        at_ms: i64,
+    ) -> Result<Deployment> {
+        self.writable()?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut value = project(&tx, project_id)?;
+        let deployment: Deployment = read(
+            &tx,
+            "SELECT body FROM deployments WHERE id=?",
+            &value.request.deployment_id,
+        )?;
+        if deployment.stream != value.request.stream {
+            return Err(invalid(
+                "rollback deployment belongs to a different learning stream",
+            ));
+        }
+        if deployment.active_artifact_id != expected_active_artifact_id {
+            if deployment.previous_artifact_id.as_deref() == Some(expected_active_artifact_id)
+                && value.champion_artifact_id.as_deref()
+                    == Some(deployment.active_artifact_id.as_str())
+            {
+                return Ok(deployment);
+            }
+            return Err(Error::Conflict(format!(
+                "model '{expected_active_artifact_id}' is not the active learning model; nothing to roll back"
+            )));
+        }
+        let deployment =
+            self.rollback_learning_champion(&tx, &mut value, deployment.generation, at_ms)?;
+        tx.commit()?;
+        Ok(deployment)
+    }
+    fn rollback_learning_champion(
+        &self,
+        tx: &Connection,
+        value: &mut LearningProject,
+        expected_deployment_generation: i64,
+        at_ms: i64,
+    ) -> Result<Deployment> {
+        let deployment = self.rollback_in_transaction(
+            tx,
             &value.request.deployment_id,
             expected_deployment_generation,
             at_ms,
@@ -1203,11 +1331,61 @@ impl TrainingRepository {
         value.champion_artifact_id = Some(deployment.active_artifact_id.clone());
         value.candidate_artifact_id = None;
         value.canary_started_at_ms = None;
-        set_phase(&mut value, LearningState::Active);
+        let state = idle_state(tx, value)?;
+        set_phase(value, state);
+        touch(value, at_ms);
+        save_project(tx, value)?;
+        Ok(deployment)
+    }
+    /// Discard a Shadow or Canary candidate without promoting it. Canary traffic reviewed so
+    /// far is sealed as audit evidence, so later cycles cannot train on what judged it.
+    pub fn reject_learning_candidate(
+        &self,
+        project_id: &str,
+        expected_generation: Option<i64>,
+        at_ms: i64,
+    ) -> Result<LearningProject> {
+        self.writable()?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut value = project(&tx, project_id)?;
+        let Some(candidate) = value.candidate_artifact_id.clone() else {
+            return Ok(value);
+        };
+        if let Some(generation) = expected_generation {
+            cas(&value, generation, at_ms)?;
+        }
+        if let Some(mut cycle) = candidate_cycle(&tx, &value.id, &candidate)? {
+            let cohort = canary_cohort(&tx, &value, at_ms)?;
+            seal_canary_cohort(&tx, &value.id, &mut cycle, &cohort)?;
+            cycle.error = Some("Candidate rejected before promotion; champion retained".into());
+            cycle.updated_at_ms = at_ms;
+            save_cycle(&tx, &cycle)?;
+            let comparison: Option<String> = tx
+                .query_row(
+                    "SELECT body FROM learning_comparisons WHERE cycle_id=?",
+                    [&cycle.id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if let Some(comparison) = comparison {
+                let mut comparison: LearningComparison = serde_json::from_str(&comparison)?;
+                comparison.eligible = false;
+                comparison.reasons.push("candidate_rejected".into());
+                tx.execute(
+                    "UPDATE learning_comparisons SET body=? WHERE cycle_id=?",
+                    params![serde_json::to_string(&comparison)?, cycle.id],
+                )?;
+            }
+        }
+        value.candidate_artifact_id = None;
+        value.canary_started_at_ms = None;
+        let state = idle_state(&tx, &value)?;
+        set_phase(&mut value, state);
         touch(&mut value, at_ms);
         save_project(&tx, &value)?;
         tx.commit()?;
-        Ok(deployment)
+        Ok(value)
     }
     pub fn learning_route(&self, project_id: &str, sample_key: &str) -> Result<LearningRoute> {
         let value = self.get_learning_project(project_id)?;
@@ -1275,24 +1453,9 @@ fn reject_stale_canary_reviews(
         .candidate_artifact_id
         .as_deref()
         .ok_or_else(|| invalid("canary has no candidate"))?;
-    let mut cycle: LearningCycle = read_two(
-        connection,
-        "SELECT body FROM learning_cycles WHERE project_id=? AND json_extract(body,'$.artifact_id')=? ORDER BY rowid DESC LIMIT 1",
-        &value.id,
-        candidate,
-    )?;
-    if cycle.canary_sample_ids.is_empty() {
-        cycle.canary_sample_ids = cohort.iter().cloned().collect();
-    }
-    for sample_id in &cohort {
-        let observation: LearningObservation = read_two(
-            connection,
-            "SELECT body FROM learning_observations WHERE project_id=? AND sample_id=?",
-            &value.id,
-            sample_id,
-        )?;
-        connection.execute("INSERT OR IGNORE INTO learning_exposure(project_id,sample_id,group_id,role,cycle_id) VALUES(?,?,?,'audit',?)", params![value.id,sample_id,observation.group_id,cycle.id])?;
-    }
+    let mut cycle = candidate_cycle(connection, &value.id, candidate)?
+        .ok_or_else(|| Error::NotFound(candidate.into()))?;
+    seal_canary_cohort(connection, &value.id, &mut cycle, &cohort)?;
     cycle.error = Some(format!(
         "Canary review changed after prediction for sample '{sample_id}'; candidate rejected and champion retained"
     ));
@@ -1311,10 +1474,108 @@ fn reject_stale_canary_reviews(
     )?;
     value.candidate_artifact_id = None;
     value.canary_started_at_ms = None;
-    value.state = LearningState::Active;
+    let state = idle_state(connection, value)?;
+    set_phase(value, state);
     touch(value, at_ms);
     save_project(connection, value)?;
     Ok(true)
+}
+
+fn candidate_cycle(
+    connection: &Connection,
+    project_id: &str,
+    artifact_id: &str,
+) -> Result<Option<LearningCycle>> {
+    let body: Option<String> = connection.query_row("SELECT body FROM learning_cycles WHERE project_id=? AND json_extract(body,'$.artifact_id')=? ORDER BY rowid DESC LIMIT 1",params![project_id,artifact_id],|r|r.get(0)).optional()?;
+    body.map(|body| Ok(serde_json::from_str(&body)?))
+        .transpose()
+}
+
+/// Freeze the canary cohort on its cycle and seal it as audit evidence.
+fn seal_canary_cohort(
+    connection: &Connection,
+    project_id: &str,
+    cycle: &mut LearningCycle,
+    cohort: &BTreeSet<String>,
+) -> Result<()> {
+    if cycle.canary_sample_ids.is_empty() {
+        cycle.canary_sample_ids = cohort.iter().cloned().collect();
+    }
+    for sample_id in cohort {
+        let observation: LearningObservation = read_two(
+            connection,
+            "SELECT body FROM learning_observations WHERE project_id=? AND sample_id=?",
+            project_id,
+            sample_id,
+        )?;
+        connection.execute("INSERT OR IGNORE INTO learning_exposure(project_id,sample_id,group_id,role,cycle_id) VALUES(?,?,?,'audit',?)", params![project_id,sample_id,observation.group_id,cycle.id])?;
+    }
+    Ok(())
+}
+
+fn latest_review_at(
+    connection: &Connection,
+    project_id: &str,
+    sample_id: &str,
+    at_ms: i64,
+) -> Result<Option<LearningReview>> {
+    let body: Option<String> = connection.query_row(
+        "SELECT body FROM learning_reviews WHERE project_id=? AND sample_id=? AND json_extract(body,'$.available_at_ms')<=? ORDER BY revision DESC LIMIT 1",
+        params![project_id, sample_id, at_ms],
+        |row| row.get(0),
+    ).optional()?;
+    body.map(|body| Ok(serde_json::from_str(&body)?))
+        .transpose()
+}
+
+fn accepted_truth(
+    connection: &Connection,
+    value: &LearningProject,
+    sample_id: &str,
+) -> Result<TrainingSample> {
+    read_two(
+        connection,
+        "SELECT body FROM annotations WHERE scope=? AND sample_id=? ORDER BY revision DESC LIMIT 1",
+        &serde_json::to_string(&value.request.stream)?,
+        sample_id,
+    )
+}
+
+/// Whether accepted truth carries the review's annotation and outcome window.
+fn review_target_matches(accepted: &TrainingSample, review: &LearningReview) -> Result<bool> {
+    let payload = accepted.payload.get("sample").unwrap_or(&accepted.payload);
+    if !review_annotation_matches(payload.get("annotation"), &review.annotation)? {
+        return Ok(false);
+    }
+    Ok(outcome_window(payload.get("outcome")) == outcome_window(review.outcome.as_ref()))
+}
+
+/// Compare outcome windows by value; preparation re-serializes the reviewed outcome.
+fn outcome_window(value: Option<&Value>) -> Option<(i64, i64, i64)> {
+    let outcome: ReviewOutcome = serde_json::from_value(value?.clone()).ok()?;
+    Some((
+        outcome.available_at_ms,
+        outcome.target_start_ms,
+        outcome.target_end_ms,
+    ))
+}
+
+/// The first audit sample whose latest review contradicts the target the cycle audited.
+fn stale_audit_review(
+    connection: &Connection,
+    value: &LearningProject,
+    sample_ids: &[String],
+    at_ms: i64,
+) -> Result<Option<String>> {
+    for sample_id in sample_ids {
+        let Some(review) = latest_review_at(connection, &value.id, sample_id, at_ms)? else {
+            continue;
+        };
+        if !review_target_matches(&accepted_truth(connection, value, sample_id)?, &review)? {
+            return Ok(Some(sample_id.clone()));
+        }
+    }
+    Ok(None)
 }
 
 fn stale_canary_review(
@@ -1324,13 +1585,8 @@ fn stale_canary_review(
     at_ms: i64,
 ) -> Result<Option<String>> {
     for sample_id in cohort {
-        let body: Option<String> = connection.query_row(
-            "SELECT body FROM learning_reviews WHERE project_id=? AND sample_id=? AND json_extract(body,'$.available_at_ms')<=? ORDER BY revision DESC LIMIT 1",
-            params![value.id, sample_id, at_ms],
-            |row| row.get(0),
-        ).optional()?;
-        let review: LearningReview =
-            serde_json::from_str(&body.ok_or_else(|| invalid("canary review is unavailable"))?)?;
+        let review = latest_review_at(connection, &value.id, sample_id, at_ms)?
+            .ok_or_else(|| invalid("canary review is unavailable"))?;
         for artifact_id in [&value.candidate_artifact_id, &value.champion_artifact_id]
             .into_iter()
             .flatten()
@@ -1354,18 +1610,10 @@ fn stale_canary_review(
             if revision != review.revision {
                 return Ok(Some(sample_id.clone()));
             }
-            let accepted: TrainingSample = read_two(
-                connection,
-                "SELECT body FROM annotations WHERE scope=? AND sample_id=? ORDER BY revision DESC LIMIT 1",
-                &serde_json::to_string(&value.request.stream)?,
-                sample_id,
-            )?;
-            let payload = accepted.payload.get("sample").unwrap_or(&accepted.payload);
+            let accepted = accepted_truth(connection, value, sample_id)?;
             if !accepted.accepted
                 || accepted.source != review.source
-                || !review_annotation_matches(payload.get("annotation"), &review.annotation)?
-                || payload.get("outcome").filter(|v| !v.is_null())
-                    != review.outcome.as_ref().filter(|v| !v.is_null())
+                || !review_target_matches(&accepted, &review)?
                 || accepted.label_available_at_ms < review.available_at_ms
             {
                 return Ok(Some(sample_id.clone()));
@@ -1436,13 +1684,7 @@ fn comparison_failures(
     champion: Option<&EvaluationReport>,
 ) -> Vec<String> {
     let mut reasons = vec![];
-    if candidate.audited_samples
-        < value
-            .request
-            .policy
-            .minimum_audit_samples
-            .max(value.request.goals.minimum_audited_samples)
-    {
+    if candidate.audited_samples < required_audit_samples(value) {
         reasons.push("insufficient_independent_audit_samples".into());
     }
     for bound in &value.request.goals.bounds {
@@ -1514,11 +1756,12 @@ fn verify_cohort_seal(
             )
         })
         || digest(&serde_json::to_vec(&predictions)?) != report.evidence_digest
-        || report.truth_digest.as_deref()
-            != Some(
-                crate::repository::evaluation_truth_digest(connection, stream, &predictions)?
-                    .as_str(),
-            )
+        || !crate::repository::truth_digest_matches(
+            connection,
+            stream,
+            &predictions,
+            report.truth_digest.as_deref(),
+        )?
     {
         return Err(Error::Conflict(
             "learning audit predictions or accepted truth changed".into(),
@@ -1591,12 +1834,76 @@ fn cas(value: &LearningProject, generation: i64, at_ms: i64) -> Result<()> {
     }
     Ok(())
 }
+/// Dispatch and attach require Training while a cycle holds its reservation.
 fn set_phase(value: &mut LearningProject, state: LearningState) {
+    let state = if value.active_cycle_id.is_some() {
+        LearningState::Training
+    } else {
+        state
+    };
     if value.state == LearningState::Paused {
         value.paused_from = Some(state);
     } else {
         value.state = state;
     }
+}
+fn required_audit_samples(value: &LearningProject) -> usize {
+    value
+        .request
+        .policy
+        .minimum_audit_samples
+        .max(value.request.goals.minimum_audited_samples)
+}
+fn counted_cycles(value: &LearningProject) -> usize {
+    value
+        .usage
+        .cycles_started
+        .saturating_sub(value.usage.cycles_aborted)
+}
+const MINIMUM_ABORT_BACKOFF_MS: u64 = 60_000;
+/// Doubles per consecutive abort from max(cooldown, one minute), up to 256 times that.
+fn abort_backoff_ms(value: &LearningProject) -> u64 {
+    if value.consecutive_aborts == 0 {
+        return 0;
+    }
+    value
+        .request
+        .policy
+        .cooldown_ms
+        .max(MINIMUM_ABORT_BACKOFF_MS)
+        .saturating_mul(1u64 << (value.consecutive_aborts - 1).min(8))
+}
+/// Each cycle reserves the host's template budget, so the latest reservation predicts the next.
+fn latest_cycle_budget(
+    connection: &Connection,
+    project_id: &str,
+) -> Result<Option<ExperimentBudget>> {
+    let body: Option<String> = connection
+        .query_row(
+            "SELECT json_extract(body,'$.budget') FROM learning_cycles WHERE project_id=? ORDER BY rowid DESC LIMIT 1",
+            [project_id],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten();
+    body.map(|body| Ok(serde_json::from_str(&body)?))
+        .transpose()
+}
+fn no_further_cycle(connection: &Connection, value: &LearningProject) -> Result<bool> {
+    Ok(counted_cycles(value) >= value.request.budget.maximum_cycles
+        || value.usage.spent.training_time_ms >= value.request.budget.maximum_training_time_ms
+        || latest_cycle_budget(connection, &value.id)?
+            .is_some_and(|budget| validate_cycle_budget(value, &budget).is_err()))
+}
+/// The state of a project without a candidate once no cycle is active.
+fn idle_state(connection: &Connection, value: &LearningProject) -> Result<LearningState> {
+    Ok(if no_further_cycle(connection, value)? {
+        LearningState::BudgetExhausted
+    } else if value.champion_artifact_id.is_some() {
+        LearningState::Active
+    } else {
+        LearningState::Collecting
+    })
 }
 fn bounded<T: serde::Serialize>(value: &T, limit: u64) -> Result<()> {
     struct Sink(u64);
@@ -1748,6 +2055,72 @@ fn validate_annotation(project: &LearningProject, annotation: &Value) -> Result<
     }
     Ok(())
 }
+#[cfg(not(any(feature = "native", feature = "burn")))]
+#[derive(serde::Deserialize)]
+struct ReviewOutcome {
+    available_at_ms: i64,
+    target_start_ms: i64,
+    target_end_ms: i64,
+}
+/// Every cycle overlays the latest reviews, so a malformed outcome must fail when recorded.
+fn review_outcome(review: &LearningReview) -> Result<Option<ReviewOutcome>> {
+    let Some(value) = review.outcome.as_ref().filter(|value| !value.is_null()) else {
+        return Ok(None);
+    };
+    let outcome: ReviewOutcome = serde_json::from_value(value.clone()).map_err(|error| {
+        invalid(format!(
+            "review outcome for sample '{}' is not an outcome window: {error}",
+            review.sample_id
+        ))
+    })?;
+    if outcome.target_start_ms > outcome.target_end_ms
+        || outcome.target_end_ms > outcome.available_at_ms
+        || outcome.available_at_ms > review.available_at_ms
+    {
+        return Err(invalid(format!(
+            "review outcome for sample '{}' needs target_start_ms <= target_end_ms <= available_at_ms <= the review's available_at_ms",
+            review.sample_id
+        )));
+    }
+    Ok(Some(outcome))
+}
+/// Preparation replaces a row's outcome with its review's, even with none, and then validates
+/// the sample against the task. Predictive tasks need an outcome window that starts after the
+/// feature window and ends within the prediction horizon.
+fn validate_predictive_outcome(
+    spec: &Value,
+    review: &LearningReview,
+    outcome: Option<&ReviewOutcome>,
+    feature_end: i64,
+) -> Result<()> {
+    let horizon = spec.get("prediction_horizon_ms").and_then(Value::as_u64);
+    if spec.get("task").and_then(Value::as_str) != Some("sequence_forecast")
+        && horizon.is_none_or(|horizon| horizon == 0)
+    {
+        return Ok(());
+    }
+    let sample = &review.sample_id;
+    let outcome = outcome.ok_or_else(|| {
+        invalid(format!(
+            "review for sample '{sample}' needs an outcome window because its task predicts future targets"
+        ))
+    })?;
+    if outcome.target_start_ms <= feature_end {
+        return Err(invalid(format!(
+            "review outcome for sample '{sample}' starts at {} ms, inside its feature window ending at {feature_end} ms",
+            outcome.target_start_ms
+        )));
+    }
+    if let Some(horizon) = horizon
+        && i128::from(outcome.target_end_ms) > i128::from(feature_end) + i128::from(horizon)
+    {
+        return Err(invalid(format!(
+            "review outcome for sample '{sample}' ends at {} ms, beyond the {horizon} ms prediction horizon after {feature_end} ms",
+            outcome.target_end_ms
+        )));
+    }
+    Ok(())
+}
 fn reserve_collection_bytes(value: &mut LearningProject, bytes: u64) -> Result<()> {
     let total = value
         .usage
@@ -1794,22 +2167,46 @@ fn available_new_reviews(connection: &Connection, id: &str, at_ms: i64) -> Resul
         .query_map(params![id, at_ms], |r| r.get(0))?
         .collect::<std::result::Result<_, _>>()?)
 }
+/// Latest available reviews of the samples in `sample_ids`, a JSON array of IDs.
+fn latest_reviews_of(
+    connection: &Connection,
+    project_id: &str,
+    sample_ids: &str,
+    at_ms: i64,
+) -> Result<Vec<LearningReview>> {
+    let mut statement=connection.prepare("SELECT r.body FROM learning_reviews r WHERE r.project_id=? AND r.sample_id IN (SELECT value FROM json_each(?)) AND json_extract(r.body,'$.available_at_ms')<=? AND r.revision=(SELECT max(s.revision) FROM learning_reviews s WHERE s.project_id=r.project_id AND s.sample_id=r.sample_id AND json_extract(s.body,'$.available_at_ms')<=?) ORDER BY r.sequence")?;
+    let reviews = statement
+        .query_map(params![project_id, sample_ids, at_ms, at_ms], |r| {
+            r.get::<_, String>(0)
+        })?
+        .map(|row| Ok(serde_json::from_str(&row?)?))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(reviews)
+}
+fn unmatched_review_count(connection: &Connection, project_id: &str, at_ms: i64) -> Result<usize> {
+    Ok(connection.query_row(
+        "SELECT count(*) FROM learning_consumed_reviews c WHERE c.project_id=? AND c.matched=0 AND NOT EXISTS(SELECT 1 FROM learning_reviews r WHERE r.project_id=c.project_id AND r.sample_id=c.sample_id AND r.revision>c.revision AND json_extract(r.body,'$.available_at_ms')<=?)",
+        params![project_id, at_ms],
+        |r| r.get(0),
+    )?)
+}
 fn fresh_signal_ids(
     connection: &Connection,
     project_id: &str,
+    sample_ids: &str,
     at_ms: i64,
     reviews: bool,
 ) -> Result<BTreeSet<String>> {
     // Keep both sequence and availability boundaries so delayed observations and outcomes
     // inserted before a cycle become fresh evidence when their timestamps mature.
     let sql = if reviews {
-        "SELECT DISTINCT r.sample_id FROM learning_reviews r WHERE r.project_id=? AND json_extract(r.body,'$.available_at_ms')<=? AND NOT EXISTS(SELECT 1 FROM learning_cycles c WHERE c.project_id=r.project_id AND json_extract(c.body,'$.state')='settled' AND r.sequence<=json_extract(c.body,'$.reviewed_through') AND json_extract(r.body,'$.available_at_ms')<=json_extract(c.body,'$.created_at_ms'))"
+        "SELECT DISTINCT r.sample_id FROM learning_reviews r WHERE r.project_id=? AND r.sample_id IN (SELECT value FROM json_each(?)) AND json_extract(r.body,'$.available_at_ms')<=? AND NOT EXISTS(SELECT 1 FROM learning_cycles c WHERE c.project_id=r.project_id AND json_extract(c.body,'$.state')='settled' AND r.sequence<=json_extract(c.body,'$.reviewed_through') AND json_extract(r.body,'$.available_at_ms')<=json_extract(c.body,'$.created_at_ms'))"
     } else {
-        "SELECT r.sample_id FROM learning_observations r WHERE r.project_id=? AND json_extract(r.body,'$.captured_at_ms')<=? AND NOT EXISTS(SELECT 1 FROM learning_cycles c WHERE c.project_id=r.project_id AND json_extract(c.body,'$.state')='settled' AND r.rowid<=COALESCE(json_extract(c.body,'$.observations_through'),0) AND json_extract(r.body,'$.captured_at_ms')<=json_extract(c.body,'$.created_at_ms'))"
+        "SELECT r.sample_id FROM learning_observations r WHERE r.project_id=? AND r.sample_id IN (SELECT value FROM json_each(?)) AND json_extract(r.body,'$.captured_at_ms')<=? AND NOT EXISTS(SELECT 1 FROM learning_cycles c WHERE c.project_id=r.project_id AND json_extract(c.body,'$.state')='settled' AND r.rowid<=COALESCE(json_extract(c.body,'$.observations_through'),0) AND json_extract(r.body,'$.captured_at_ms')<=json_extract(c.body,'$.created_at_ms'))"
     };
     let mut statement = connection.prepare(sql)?;
     Ok(statement
-        .query_map(params![project_id, at_ms], |row| row.get(0))?
+        .query_map(params![project_id, sample_ids, at_ms], |row| row.get(0))?
         .collect::<std::result::Result<_, _>>()?)
 }
 fn budget_within(actual: &ExperimentBudget, reserved: &ExperimentBudget) -> Result<()> {
@@ -1829,7 +2226,7 @@ fn validate_cycle_budget(value: &LearningProject, budget: &ExperimentBudget) -> 
     let total = &value.request.budget;
     let spent = &value.usage.spent;
     let reserved = &value.usage.reserved;
-    if value.usage.cycles_started >= total.maximum_cycles
+    if counted_cycles(value) >= total.maximum_cycles
         || budget.maximum_training_time_ms == 0
         || budget.maximum_artifact_bytes == 0
         || [
@@ -1938,7 +2335,108 @@ pub(crate) fn validate_learning_experiment_create(
             "experiment does not match an active learning reservation".into(),
         ));
     }
-    budget_within(&request.budget, &cycle.budget)
+    budget_within(&request.budget, &cycle.budget)?;
+    // Refuse the experiment here: once saved, an attach failure leaves the reservation held.
+    let snapshot: SnapshotRows = read(
+        connection,
+        "SELECT body FROM snapshots WHERE id=?",
+        &request.snapshot_id,
+    )?;
+    check_learning_snapshot(connection, &value, cycle_id, &snapshot)
+}
+
+#[derive(serde::Deserialize)]
+struct SnapshotRow {
+    id: String,
+    group_id: String,
+    source: LabelSource,
+    accepted: bool,
+}
+#[derive(serde::Deserialize)]
+struct SnapshotRows {
+    train: Vec<SnapshotRow>,
+    validation: Vec<SnapshotRow>,
+    test: Vec<SnapshotRow>,
+}
+
+/// Deterministic attach checks for an experiment saved for this reservation.
+fn attach_preconditions(
+    connection: &Connection,
+    value: &LearningProject,
+    cycle: &LearningCycle,
+    experiment: &Experiment,
+) -> Result<SnapshotRows> {
+    if task_identity(&experiment.request.spec) != task_identity(&value.request.spec)
+        || serde_json::to_value(&experiment.request.goals)?
+            != serde_json::to_value(&value.request.goals)?
+        || experiment.created_at_ms < cycle.created_at_ms
+        || experiment.usage.submitted_trials != 0
+        || experiment.status != ExperimentStatus::Running
+    {
+        return Err(invalid(
+            "experiment does not match the reserved learning task, stream, goals or unused state",
+        ));
+    }
+    budget_within(&experiment.request.budget, &cycle.budget)?;
+    let snapshot: SnapshotRows = read(
+        connection,
+        "SELECT body FROM snapshots WHERE id=?",
+        &experiment.request.snapshot_id,
+    )?;
+    check_learning_snapshot(connection, value, &cycle.id, &snapshot)?;
+    Ok(snapshot)
+}
+
+/// Attach preconditions that depend only on the split and on earlier exposure.
+fn check_learning_snapshot(
+    connection: &Connection,
+    value: &LearningProject,
+    cycle_id: &str,
+    snapshot: &SnapshotRows,
+) -> Result<()> {
+    if snapshot.test.len() < required_audit_samples(value) {
+        return Err(invalid("learning cycle needs enough fresh audit samples"));
+    }
+    let trained: Vec<&SnapshotRow> = snapshot.train.iter().chain(&snapshot.validation).collect();
+    let trained_ids: BTreeSet<&str> = trained.iter().map(|s| s.id.as_str()).collect();
+    let trained_groups: BTreeSet<&str> = trained.iter().map(|s| s.group_id.as_str()).collect();
+    for (role, partition) in [
+        ("train", trained.clone()),
+        ("audit", snapshot.test.iter().collect()),
+    ] {
+        for sample in partition {
+            let forbidden:bool=connection.query_row("SELECT EXISTS(SELECT 1 FROM learning_exposure WHERE project_id=? AND (sample_id=? OR group_id=?) AND (role='audit' OR ?='audit') AND NOT (cycle_id=? AND role=?))",params![value.id,sample.id,sample.group_id,role,cycle_id,role],|r|r.get(0))?;
+            let overlaps_training = role == "audit"
+                && (trained_ids.contains(sample.id.as_str())
+                    || trained_groups.contains(sample.group_id.as_str()));
+            if forbidden || overlaps_training {
+                return Err(invalid(
+                    "learning split reused a sealed audit sample/group or audited previous training data",
+                ));
+            }
+            if role == "audit" && (!sample.accepted || sample.source == LabelSource::Teacher) {
+                return Err(invalid(
+                    "fresh learning audit requires reviewed or measured outcomes",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn unmatched_consumed_reviews(
+    connection: &Connection,
+    project_id: &str,
+) -> Result<Vec<(String, u64)>> {
+    let mut statement = connection.prepare(
+        "SELECT sample_id,revision FROM learning_consumed_reviews WHERE project_id=? AND matched=0",
+    )?;
+    let rows = statement
+        .query_map([project_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, u64>(1)?))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
 }
 
 pub(crate) fn validate_learning_dispatch(
@@ -1967,6 +2465,77 @@ pub(crate) fn validate_learning_dispatch(
     Ok(())
 }
 
+fn review_selection(
+    connection: &Connection,
+    project_id: &str,
+    key: &str,
+) -> Result<Option<Vec<LearningReviewItem>>> {
+    let body: Option<String> = connection
+        .query_row(
+            "SELECT body FROM learning_review_selections WHERE project_id=? AND key=?",
+            params![project_id, key],
+            |r| r.get(0),
+        )
+        .optional()?;
+    body.map(|body| Ok(serde_json::from_str(&body)?))
+        .transpose()
+}
+fn review_pool(
+    connection: &Connection,
+    project_id: &str,
+    size: usize,
+) -> Result<Vec<LearningObservation>> {
+    let mut statement=connection.prepare("SELECT o.body FROM learning_observations o WHERE o.project_id=? AND NOT EXISTS(SELECT 1 FROM learning_reviews r WHERE r.project_id=o.project_id AND r.sample_id=o.sample_id) AND NOT EXISTS(SELECT 1 FROM learning_review_queue q WHERE q.project_id=o.project_id AND q.sample_id=o.sample_id) ORDER BY o.rowid DESC LIMIT ?")?;
+    let pool = statement
+        .query_map(params![project_id, size], |r| r.get::<_, String>(0))?
+        .map(|row| Ok(serde_json::from_str(&row?)?))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(pool)
+}
+fn review_candidates_open(
+    connection: &Connection,
+    project_id: &str,
+    selected: &[LearningReviewItem],
+) -> Result<bool> {
+    for item in selected {
+        let claimed: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM learning_reviews WHERE project_id=?1 AND sample_id=?2) OR EXISTS(SELECT 1 FROM learning_review_queue WHERE project_id=?1 AND sample_id=?2)",
+            params![project_id, item.observation.sample_id],
+            |r| r.get(0),
+        )?;
+        if claimed {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+fn review_signals(observation: &LearningObservation) -> (f64, f64) {
+    let uncertainty = observation
+        .student
+        .as_ref()
+        .map_or(1., |prediction| 1. - prediction.confidence);
+    let disagreement = match (&observation.student, &observation.teacher) {
+        (Some(a), Some(b)) if a.label.is_some() && b.label.is_some() && a.label != b.label => 1.,
+        (Some(a), Some(b))
+            if !a.probabilities.is_empty() && a.probabilities.len() == b.probabilities.len() =>
+        {
+            let sa: f64 = a.probabilities.iter().sum();
+            let sb: f64 = b.probabilities.iter().sum();
+            if sa > 0. && sb > 0. {
+                0.5 * a
+                    .probabilities
+                    .iter()
+                    .zip(&b.probabilities)
+                    .map(|(a, b)| (a / sa - b / sb).abs())
+                    .sum::<f64>()
+            } else {
+                0.
+            }
+        }
+        _ => 0.,
+    };
+    (uncertainty, disagreement)
+}
 fn select_diverse_reviews(
     mut pool: Vec<LearningObservation>,
     policy: &LearningPolicy,
@@ -1978,50 +2547,22 @@ fn select_diverse_reviews(
             *support.entry(label.clone()).or_default() += 1;
         }
     }
-    let mut chosen = Vec::<LearningReviewItem>::new();
+    let signals: Vec<(f64, f64)> = pool.iter().map(review_signals).collect();
+    // Each candidate keeps its distance to the nearest chosen review, so a pick costs one pass.
+    let mut nearest = vec![None::<f64>; pool.len()];
+    let mut taken = vec![false; pool.len()];
+    let mut picks = Vec::<(usize, f64, Vec<String>)>::new();
     let mut selected_classes = BTreeMap::<String, usize>::new();
-    while !pool.is_empty() && chosen.len() < policy.review_batch_size {
-        let mut best = 0;
+    while picks.len() < policy.review_batch_size.min(pool.len()) {
+        let mut best = None;
         let mut best_score = f64::NEG_INFINITY;
         let mut best_quota_priority = 0.;
-        let mut best_reasons = vec![];
         for (index, observation) in pool.iter().enumerate() {
-            let uncertainty = observation
-                .student
-                .as_ref()
-                .map_or(1., |prediction| 1. - prediction.confidence);
-            let disagreement = match (&observation.student, &observation.teacher) {
-                (Some(a), Some(b))
-                    if a.label.is_some() && b.label.is_some() && a.label != b.label =>
-                {
-                    1.
-                }
-                (Some(a), Some(b))
-                    if !a.probabilities.is_empty()
-                        && a.probabilities.len() == b.probabilities.len() =>
-                {
-                    let sa: f64 = a.probabilities.iter().sum();
-                    let sb: f64 = b.probabilities.iter().sum();
-                    if sa > 0. && sb > 0. {
-                        0.5 * a
-                            .probabilities
-                            .iter()
-                            .zip(&b.probabilities)
-                            .map(|(a, b)| (a / sa - b / sb).abs())
-                            .sum::<f64>()
-                    } else {
-                        0.
-                    }
-                }
-                _ => 0.,
-            };
-            let distance = chosen
-                .iter()
-                .filter_map(|previous| {
-                    embedding_distance(&observation.embedding, &previous.observation.embedding)
-                })
-                .reduce(f64::min)
-                .map_or(0., |d| d / (1. + d));
+            if taken[index] {
+                continue;
+            }
+            let (uncertainty, disagreement) = signals[index];
+            let distance = nearest[index].map_or(0., |d| d / (1. + d));
             let label = observation.student.as_ref().and_then(|p| p.label.as_ref());
             let rare = label.is_some_and(|label| {
                 selected_classes.get(label).copied().unwrap_or(0) < policy.rare_class_quota
@@ -2039,35 +2580,54 @@ fn select_diverse_reviews(
                 + policy.disagreement_weight * disagreement
                 + policy.diversity_weight * distance
                 + class_bonus;
-            if class_bonus > best_quota_priority
+            if best.is_none()
+                || class_bonus > best_quota_priority
                 || (class_bonus == best_quota_priority && score > best_score)
             {
-                best = index;
+                best = Some((index, uncertainty, disagreement, distance, rare));
                 best_score = score;
                 best_quota_priority = class_bonus;
-                best_reasons = vec![format!("uncertainty={uncertainty:.4}")];
-                if disagreement > 0. {
-                    best_reasons.push("teacher_student_disagreement".into());
-                }
-                if distance > 0. {
-                    best_reasons.push("embedding_diversity".into());
-                }
-                if rare {
-                    best_reasons.push("class_quota".into());
-                }
             }
         }
-        let observation = pool.remove(best);
-        if let Some(label) = observation.student.as_ref().and_then(|p| p.label.as_ref()) {
+        let Some((index, uncertainty, disagreement, distance, rare)) = best else {
+            break;
+        };
+        let mut reasons = vec![format!("uncertainty={uncertainty:.4}")];
+        if disagreement > 0. {
+            reasons.push("teacher_student_disagreement".into());
+        }
+        if distance > 0. {
+            reasons.push("embedding_diversity".into());
+        }
+        if rare {
+            reasons.push("class_quota".into());
+        }
+        taken[index] = true;
+        if let Some(label) = pool[index].student.as_ref().and_then(|p| p.label.as_ref()) {
             *selected_classes.entry(label.clone()).or_default() += 1;
         }
-        chosen.push(LearningReviewItem {
-            observation,
-            score: best_score,
-            reasons: best_reasons,
-        });
+        let chosen = &pool[index].embedding;
+        for ((candidate, closest), done) in pool.iter().zip(nearest.iter_mut()).zip(&taken) {
+            if *done {
+                continue;
+            }
+            if let Some(d) = embedding_distance(&candidate.embedding, chosen) {
+                *closest = Some(closest.map_or(d, |current| current.min(d)));
+            }
+        }
+        picks.push((index, best_score, reasons));
     }
-    chosen
+    let mut pool: Vec<Option<LearningObservation>> = pool.into_iter().map(Some).collect();
+    picks
+        .into_iter()
+        .filter_map(|(index, score, reasons)| {
+            pool[index].take().map(|observation| LearningReviewItem {
+                observation,
+                score,
+                reasons,
+            })
+        })
+        .collect()
 }
 fn embedding_distance(a: &[f64], b: &[f64]) -> Option<f64> {
     if a.is_empty() || a.len() != b.len() {
@@ -2168,19 +2728,29 @@ fn next_actions(
     at_ms: i64,
 ) -> Result<LearningNextActions> {
     let new_reviews = available_new_reviews(connection, &value.id, at_ms)?.len();
-    let mut observations: Vec<LearningObservation> = query(
-        connection,
-        "SELECT body FROM learning_observations WHERE project_id=? ORDER BY rowid",
-        &value.id,
-    )?;
-    observations.retain(|o| o.captured_at_ms <= at_ms);
-    observations.sort_by_key(|o| o.captured_at_ms);
     let window = value.request.policy.drift_window;
+    let mut statement = connection.prepare(
+        "SELECT body FROM learning_observations WHERE project_id=? AND json_extract(body,'$.captured_at_ms')<=? ORDER BY json_extract(body,'$.captured_at_ms') DESC,rowid DESC LIMIT ?",
+    )?;
+    let mut observations = statement
+        .query_map(params![value.id, at_ms, window.saturating_mul(2)], |r| {
+            r.get::<_, String>(0)
+        })?
+        .map(|row| Ok(serde_json::from_str(&row?)?))
+        .collect::<Result<Vec<LearningObservation>>>()?;
+    drop(statement);
+    observations.reverse();
     let recent = &observations[observations.len().saturating_sub(window)..];
-    let reviews = latest_reviews_at(connection, &value.id, at_ms)?;
+    let recent_ids = serde_json::to_string(
+        &recent
+            .iter()
+            .map(|o| o.sample_id.as_str())
+            .collect::<Vec<_>>(),
+    )?;
+    let reviews = latest_reviews_of(connection, &value.id, &recent_ids, at_ms)?;
     let errors = error_analysis(value, recent, &reviews);
-    let fresh_observations = fresh_signal_ids(connection, &value.id, at_ms, false)?;
-    let fresh_reviews = fresh_signal_ids(connection, &value.id, at_ms, true)?;
+    let fresh_observations = fresh_signal_ids(connection, &value.id, &recent_ids, at_ms, false)?;
+    let fresh_reviews = fresh_signal_ids(connection, &value.id, &recent_ids, at_ms, true)?;
     let observed_error = errors.overall.accuracy.map(|accuracy| 1. - accuracy);
     let centroid = |items: &[LearningObservation]| -> Option<Vec<f64>> {
         let size = items.first()?.embedding.len();
@@ -2236,8 +2806,10 @@ fn next_actions(
     if matches!(value.state, LearningState::Shadow | LearningState::Canary) {
         blocking.push("candidate_requires_promotion_or_rejection".into());
     }
-    if value.usage.cycles_started >= value.request.budget.maximum_cycles
+    if value.state == LearningState::BudgetExhausted
+        || counted_cycles(value) >= value.request.budget.maximum_cycles
         || value.usage.spent.training_time_ms >= value.request.budget.maximum_training_time_ms
+        || (value.active_cycle_id.is_none() && no_further_cycle(connection, value)?)
     {
         blocking.push("aggregate_budget_exhausted".into());
     }
@@ -2248,11 +2820,23 @@ fn next_actions(
     {
         blocking.push("cooldown".into());
     }
+    let backoff = abort_backoff_ms(value);
+    if value.active_cycle_id.is_none()
+        && backoff > 0
+        && value
+            .last_abort_at_ms
+            .is_some_and(|last| (at_ms as i128 - last as i128) < backoff as i128)
+    {
+        blocking.push("abort_backoff".into());
+    }
     if reasons.is_empty() {
         blocking.push("no_retraining_trigger".into());
     }
     if value.usage.cycles_finished > 0 && new_reviews < value.request.policy.minimum_new_reviews {
         blocking.push("insufficient_new_reviews".into());
+        if unmatched_review_count(connection, &value.id, at_ms)? > 0 {
+            blocking.push("reviews_missing_from_source".into());
+        }
     }
     Ok(LearningNextActions {
         project_id: value.id.clone(),
@@ -2264,4 +2848,124 @@ fn next_actions(
         embedding_shift,
         observed_error,
     })
+}
+
+#[cfg(test)]
+mod seal_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn stream() -> StreamKey {
+        StreamKey {
+            project_id: "learning".into(),
+            stream_id: "line".into(),
+            inspection_version: "v1".into(),
+        }
+    }
+
+    /// Every sample carries a raw row, so full-body and immutable truth digests differ.
+    fn trained_model(repository: &TrainingRepository) -> ModelArtifact {
+        for index in 0..6 {
+            let sample = TrainingSample {
+                id: format!("sample-{index}"),
+                annotation_revision: 1,
+                group_id: format!("lot-{index}"),
+                captured_at_ms: 1,
+                label_available_at_ms: 1,
+                content_digest: format!("{index:064x}"),
+                source: LabelSource::Reviewed,
+                accepted: true,
+                payload: json!({"label":"good","feature_row":{"temperature":index}}),
+            };
+            repository.record_sample(&stream(), &sample).unwrap();
+        }
+        let request = TrainingRequest {
+            engine: "fixture".into(),
+            recipe: json!({}),
+            compute: json!({}),
+        };
+        let policy = SplitPolicy::Group {
+            train_fraction: 0.5,
+            validation_fraction: 0.25,
+            seed: 7,
+        };
+        let job = repository
+            .trigger_after_n(&stream(), 6, request, policy, 10)
+            .unwrap()
+            .unwrap();
+        let lease = repository.claim_job(&job.id, "worker", 60_000, 10).unwrap();
+        repository
+            .finish_training(&lease, b"model", json!({}), 11)
+            .unwrap()
+    }
+
+    fn reviewed(artifact: &ModelArtifact, sample_id: &str) -> PredictionRecord {
+        PredictionRecord {
+            sample_id: sample_id.into(),
+            artifact_id: artifact.id.clone(),
+            predicted_label: Some("good".into()),
+            teacher_label: None,
+            actual_label: Some("good".into()),
+            actual_source: Some(LabelSource::Reviewed),
+            latency_ms: 1.,
+            failed: false,
+            recorded_at_ms: 20,
+            details: json!({}),
+        }
+    }
+
+    fn sealed(
+        artifact: &ModelArtifact,
+        predictions: &[PredictionRecord],
+        truth_digest: String,
+    ) -> EvaluationReport {
+        EvaluationReport {
+            id: "audit".into(),
+            artifact_id: artifact.id.clone(),
+            dataset_digest: artifact.dataset_digest.clone(),
+            evidence_digest: digest(&serde_json::to_vec(predictions).unwrap()),
+            truth_digest: Some(truth_digest),
+            audited_samples: predictions.len(),
+            teacher_samples: 0,
+            metrics: BTreeMap::new(),
+            per_class_recall: BTreeMap::new(),
+            created_at_ms: 30,
+            task: EvaluationTask::Classification,
+        }
+    }
+
+    #[test]
+    fn audits_sealed_over_full_annotation_bodies_still_verify() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let artifact = trained_model(&repository);
+        let cohort: BTreeSet<String> = ["sample-0", "sample-1"].map(String::from).into();
+        for sample_id in &cohort {
+            repository
+                .record_prediction(&reviewed(&artifact, sample_id))
+                .unwrap();
+        }
+        let connection = repository.connection().unwrap();
+        let predictions = repository.predictions(&artifact.id).unwrap();
+        let truths = predictions
+            .iter()
+            .map(|prediction| {
+                crate::repository::current_prediction_truth(&connection, &stream(), prediction)
+            })
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        let legacy = digest(&serde_json::to_vec(&truths).unwrap());
+        let current =
+            crate::repository::evaluation_truth_digest(&connection, &stream(), &predictions)
+                .unwrap();
+        assert_ne!(legacy, current, "the full body includes the raw row");
+        let verify = |truth_digest: String| {
+            let report = sealed(&artifact, &predictions, truth_digest);
+            verify_cohort_seal(&connection, &report, &cohort, &stream())
+        };
+        verify(legacy).unwrap();
+        verify(current).unwrap();
+        assert!(matches!(verify("0".repeat(64)), Err(Error::Conflict(_))));
+    }
 }

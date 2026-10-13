@@ -19,7 +19,8 @@
 //!      to the desktop's local **content** store, translating any
 //!      `metadata/{widgets|templates|pages}/{src_id}/...` segment
 //!      via `id_map`. Paths under `content_exclude_prefixes` — the
-//!      owner's fork policy — are skipped in both stages.
+//!      owner's fork policy — are skipped in both stages. The legacy
+//!      training ledger is device-local and is never mirrored.
 //!   3. Recreates `db_table_schemas` as empty tables in the local
 //!      project database, for schema-only database forks.
 //!
@@ -43,13 +44,14 @@ use flow_like::flow_like_storage::{
     normalize_object_path,
     object_store::ObjectStore,
 };
-use flow_like::profile::ProfileApp;
 use flow_like_types::anyhow;
 use flow_like_types::base64::{self, Engine as _};
+use flow_like_types::storage_paths::is_legacy_training_ledger_path;
 use futures::TryStreamExt;
 use serde::Deserialize;
 use tauri::AppHandle;
 
+use super::sharing::add_app_to_profile;
 use crate::{
     functions::TauriFunctionError,
     state::{TauriFlowLikeState, TauriSettingsState},
@@ -150,9 +152,10 @@ pub struct UploadLocalAppContentResponse {
 /// Summarizes exactly what [`upload_local_app_content_bundle`] will
 /// push, so the server's cap check at `/fork/online/begin` and its
 /// re-measurement at finalize agree. Meta artifacts are excluded (they
-/// travel through the app-edit endpoints), each relative path is counted
-/// once even though the desktop's meta and content stores share a root,
-/// and project-database objects are left out of the object count.
+/// travel through the app-edit endpoints), as is the device-local training
+/// ledger; each relative path is counted once even though the desktop's
+/// meta and content stores share a root, and project-database objects are
+/// left out of the object count.
 #[tauri::command(async)]
 pub async fn summarize_local_app_bundle(
     app_handle: AppHandle,
@@ -175,7 +178,7 @@ pub async fn summarize_local_app_bundle(
             .await
             .map_err(|e| TauriFunctionError::new(&format!("summarize {label} store: {e}")))?;
         for (relative_path, size) in entries {
-            if !is_content_blob_path(&relative_path) {
+            if !is_uploaded_content_path(&relative_path) {
                 continue;
             }
             if !seen.insert(relative_path.clone()) {
@@ -247,7 +250,7 @@ pub async fn upload_local_app_content_bundle(
         // against the fork size cap and trip the server's
         // meta-in-content-store leak detector. Meta artifacts go up
         // through the app-edit endpoints instead.
-        if !is_content_blob_path(&relative_path) {
+        if !is_uploaded_content_path(&relative_path) {
             continue;
         }
 
@@ -293,6 +296,10 @@ pub async fn apply_fork_bundle(
         return Err(TauriFunctionError::new("source_content_prefix is empty"));
     }
 
+    let profile_id = TauriSettingsState::current_profile(&app_handle)
+        .await?
+        .hub_profile
+        .id;
     let dst_meta_store = TauriFlowLikeState::get_project_meta_store(&app_handle).await?;
     let dst_content_store = TauriFlowLikeState::get_project_storage_store(&app_handle).await?;
     let dst_app_prefix = Path::from("apps").join(args.app_id.clone());
@@ -380,7 +387,9 @@ pub async fn apply_fork_bundle(
         // Matched on the SOURCE-relative path: `translate_content_path`
         // rewrites `metadata/{widgets|templates|pages}/{id}` segments,
         // which the policy prefixes are stated against.
-        if is_excluded(&relative_path, &args.content_exclude_prefixes) {
+        if is_device_local_path(&relative_path)
+            || is_excluded(&relative_path, &args.content_exclude_prefixes)
+        {
             content_objects_skipped = content_objects_skipped.saturating_add(1);
             continue;
         }
@@ -426,7 +435,7 @@ pub async fn apply_fork_bundle(
     )
     .await;
 
-    register_profile_app(&app_handle, &args.app_id).await?;
+    add_app_to_profile(&app_handle, &profile_id, &args.app_id).await?;
 
     Ok(ApplyForkBundleResponse {
         app_id: args.app_id,
@@ -607,25 +616,6 @@ async fn summarize_store_prefix(
     Ok(entries)
 }
 
-async fn register_profile_app(
-    app_handle: &AppHandle,
-    app_id: &str,
-) -> Result<(), TauriFunctionError> {
-    let settings = TauriSettingsState::construct(app_handle).await?;
-    let mut settings = settings.lock().await;
-    let profile_id = settings.get_current_profile()?.hub_profile.id.clone();
-    let profile = settings
-        .profiles
-        .get_mut(&profile_id)
-        .ok_or_else(|| TauriFunctionError::new("Profile not found"))?;
-    let apps = profile.hub_profile.apps.get_or_insert_with(Vec::new);
-    if !apps.iter().any(|app| app.app_id == app_id) {
-        apps.push(ProfileApp::new(app_id.to_string()));
-    }
-    settings.serialize();
-    Ok(())
-}
-
 fn is_content_blob_path(relative_path: &str) -> bool {
     relative_path == "metadata"
         || relative_path.starts_with("metadata/")
@@ -635,6 +625,19 @@ fn is_content_blob_path(relative_path: &str) -> bool {
         || relative_path.starts_with("upload/")
         || relative_path == "storage"
         || relative_path.starts_with("storage/")
+}
+
+/// What an offline → online fork uploads. Shared by the summary and the
+/// upload so the server's cap check measures exactly what arrives.
+fn is_uploaded_content_path(relative_path: &str) -> bool {
+    is_content_blob_path(relative_path) && !is_device_local_path(relative_path)
+}
+
+/// The legacy training ledger under `storage/inspection/`. Training state
+/// never leaves this device implicitly, whatever exclude prefixes the
+/// server sends.
+fn is_device_local_path(relative_path: &str) -> bool {
+    is_legacy_training_ledger_path(relative_path)
 }
 
 /// The project LanceDB. Excluded from the fork's object count (never
@@ -674,4 +677,32 @@ fn relative_to_prefix(path: &str, prefix: &str) -> Option<String> {
         return None;
     }
     Some(suffix.trim_start_matches('/').to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_legacy_training_ledger_is_device_local() {
+        for path in [
+            "storage/inspection/jobs.sqlite",
+            "storage/inspection/jobs.sqlite-wal",
+            "storage/inspection/jobs.artifacts/x.blob",
+            "storage/inspection/.training-locks/a.lock",
+        ] {
+            assert!(is_device_local_path(path), "{path}");
+            assert!(!is_uploaded_content_path(path), "{path}");
+        }
+        for path in [
+            "storage/inspection/pki/cert.der",
+            "storage/models/artifacts/a/weights.bin",
+            "storage/db/t.lance/data/a.lance",
+            "upload/jobs.sqlite",
+        ] {
+            assert!(!is_device_local_path(path), "{path}");
+            assert!(is_uploaded_content_path(path), "{path}");
+        }
+        assert!(!is_uploaded_content_path("manifest.app"));
+    }
 }

@@ -1,0 +1,30 @@
+---
+title: "EtherNet IP Node Catalog"
+description: "Industrial/EtherNet IP Flow-Like node category with 5 generated node references."
+sidebar:
+  order: 0
+  label: "EtherNet IP"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "EtherNet IP nodes, Industrial/EtherNet IP, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "Industrial/EtherNet IP"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"EtherNet IP Node Catalog\",\"description\":\"Industrial/EtherNet IP Flow-Like node category with 5 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/industrial/ethernet-ip/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"Industrial/EtherNet IP\",\"keywords\":\"EtherNet IP nodes, Industrial/EtherNet IP, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"Industrial/EtherNet-IP"}
+	label="EtherNet IP"
+	nodes={nodesByCategory["Industrial/EtherNet-IP"] ?? []}
+	client:load
+/>

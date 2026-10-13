@@ -1,8 +1,10 @@
 use crate::inspection::{
     auto_training_legacy::CatalogSearchPredictorFactory,
     auto_training_tables::{
-        FeatureSource, TableMapping, TablePreprocessing, raw_input_digest, transform_table_rows,
+        FeatureSource, TableMapping, TablePreprocessing, TemporalUnit, epoch_milliseconds,
+        raw_input_digest, transform_table_rows,
     },
+    cancellation::CancelFlag,
 };
 use flow_like_ml_core::{Annotation, InspectionSpec, LabelProvenance, Sample, TensorData};
 use flow_like_ml_runtime::{
@@ -38,17 +40,41 @@ fn identifier(value: &Value) -> Result<String> {
         )),
     }
 }
-fn timestamp(row: &Value, column: &Option<String>, fallback: i64) -> Result<i64> {
+/// Temporal columns of a learning project's pinned source (its `request.source`) that store
+/// another unit than epoch milliseconds; projects pinned before units were recorded have none.
+pub(super) fn pinned_temporal_units(source: &Value) -> Result<BTreeMap<String, TemporalUnit>> {
+    source
+        .pointer("/pinned_source/temporal_units")
+        .filter(|units| !units.is_null())
+        .map(|units| {
+            flow_like_types::json::from_value::<BTreeMap<String, TemporalUnit>>(units.clone())
+        })
+        .transpose()
+        .map(Option::unwrap_or_default)
+        .map_err(|error| {
+            anyhow!("The learning project's pinned source has unreadable temporal units: {error}")
+        })
+}
+/// A mapped time cell in epoch milliseconds, converted from its pinned storage unit as
+/// training samples are.
+fn timestamp(
+    row: &Value,
+    column: &Option<String>,
+    fallback: i64,
+    units: &BTreeMap<String, TemporalUnit>,
+) -> Result<i64> {
     column.as_ref().map_or(Ok(fallback), |column| {
-        field(row, column)?
-            .as_i64()
-            .ok_or_else(|| anyhow!("Canary timestamp '{column}' must use integer milliseconds"))
+        let value = field(row, column)?.as_i64().ok_or_else(|| {
+            anyhow!("Canary timestamp '{column}' must be an integer in the source column's unit")
+        })?;
+        epoch_milliseconds(column, value, units)
     })
 }
 fn original_sample(
     observation: &LearningObservation,
     mapping: &TableMapping,
     stream: &str,
+    units: &BTreeMap<String, TemporalUnit>,
 ) -> Result<Sample> {
     let row = &observation.sample;
     if !row.is_object() || row.as_object().is_some_and(|row| row.is_empty()) {
@@ -76,9 +102,24 @@ fn original_sample(
                 .transpose()?
                 .unwrap_or_else(|| observation.sample_id.clone()),
             stream_id: stream.into(),
-            timestamp_ms: timestamp(row, &mapping.timestamp_ms, observation.captured_at_ms)?,
-            window_start_ms: timestamp(row, &mapping.window_start_ms, observation.captured_at_ms)?,
-            window_end_ms: timestamp(row, &mapping.window_end_ms, observation.captured_at_ms)?,
+            timestamp_ms: timestamp(
+                row,
+                &mapping.timestamp_ms,
+                observation.captured_at_ms,
+                units,
+            )?,
+            window_start_ms: timestamp(
+                row,
+                &mapping.window_start_ms,
+                observation.captured_at_ms,
+                units,
+            )?,
+            window_end_ms: timestamp(
+                row,
+                &mapping.window_end_ms,
+                observation.captured_at_ms,
+                units,
+            )?,
             input: match features {
                 FeatureSource::Tensor { column } => decode(field(row, column)?)?,
                 _ => TensorData {
@@ -102,6 +143,24 @@ fn original_sample(
     sample.stream_id = stream.into();
     Ok(sample)
 }
+/// Canary replay rebuilds each observation from its raw row, so unusable rows are rejected when
+/// they are observed rather than when an audit replays them.
+pub(super) fn validate_canary_sample(
+    observation: &LearningObservation,
+    mapping: &TableMapping,
+    stream: &str,
+    units: &BTreeMap<String, TemporalUnit>,
+) -> Result<()> {
+    original_sample(observation, mapping, stream, units)
+        .and_then(|sample| raw_input_digest(mapping, &observation.sample, &sample))
+        .map(|_| ())
+        .map_err(|error| {
+            anyhow!(
+                "Observation '{}' cannot be replayed for canary audits: {error}",
+                observation.sample_id
+            )
+        })
+}
 fn has_windows(preprocessing: &TablePreprocessing) -> bool {
     match preprocessing {
         TablePreprocessing::Engineered {
@@ -119,16 +178,22 @@ fn has_windows(preprocessing: &TablePreprocessing) -> bool {
         _ => false,
     }
 }
+/// The source row's mapping and the units of its pinned temporal columns.
+struct CanarySource<'a> {
+    mapping: &'a TableMapping,
+    units: &'a BTreeMap<String, TemporalUnit>,
+}
 fn reviewed_sample(
     observation: &LearningObservation,
     review: &LearningReview,
-    mapping: &TableMapping,
+    source: &CanarySource,
     stream: &str,
     input: TensorData,
     spec: &InspectionSpec,
     at_ms: i64,
 ) -> Result<TrainingSample> {
-    let mut sample = original_sample(observation, mapping, stream)?;
+    let mapping = source.mapping;
+    let mut sample = original_sample(observation, mapping, stream, source.units)?;
     let digest = raw_input_digest(mapping, &observation.sample, &sample)?;
     sample.input = input;
     sample.annotation = flow_like_types::json::from_value(review.annotation.clone())?;
@@ -186,7 +251,11 @@ fn reviewed_sample(
     })
 }
 
-pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject) -> Result<()> {
+pub(super) fn audit_canary(
+    repo: &TrainingRepository,
+    project: &LearningProject,
+    cancel: &CancelFlag,
+) -> Result<()> {
     if project.state != LearningState::Canary {
         return Ok(());
     }
@@ -201,16 +270,16 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
     let template = super::training_template(project)?;
     let budget = &template.dataset.budget;
     budget.validate()?;
-    let started = Instant::now();
-    let check_time = || -> Result<()> {
-        if started.elapsed().as_millis() > template.budget.worker_limits.maximum_duration_ms as u128
-        {
-            return Err(anyhow!(
-                "Canary replay reached its per-tick duration budget; saved predictions will resume next tick"
-            ));
-        }
-        Ok(())
+    let units = pinned_temporal_units(&project.request.source)?;
+    let source = CanarySource {
+        mapping: &template.dataset.mapping,
+        units: &units,
     };
+    let mut replay = super::ReplayBudget::new(
+        "Canary replay",
+        cancel,
+        template.budget.worker_limits.maximum_duration_ms,
+    );
     let observations = repo.learning_observations(&project.id)?;
     let reviews: BTreeMap<_, _> = repo
         .learning_training_reviews_at(&project.id, at_ms)?
@@ -251,7 +320,7 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
     .into_iter()
     .flatten()
     {
-        check_time()?;
+        replay.check()?;
         let artifact = repo.get_artifact(artifact_id)?;
         if artifact.stream != project.request.stream {
             return Err(anyhow!(
@@ -285,12 +354,18 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
         let mut bytes = 0usize;
         let mut rows = Vec::with_capacity(history.len());
         for observation in &history {
-            check_time()?;
-            original_sample(
+            replay.check()?;
+            validate_canary_sample(
                 observation,
-                &template.dataset.mapping,
+                source.mapping,
                 &project.request.stream.stream_id,
-            )?;
+                source.units,
+            )
+            .map_err(|error| {
+                anyhow!(
+                    "{error}. Observations are immutable; reject the candidate to end this canary"
+                )
+            })?;
             bytes = bytes
                 .checked_add(flow_like_types::json::to_vec(&observation.sample)?.len())
                 .ok_or_else(|| anyhow!("Canary byte count overflow"))?;
@@ -307,7 +382,7 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
             if !cohort.contains(&observation.sample_id) {
                 continue;
             }
-            check_time()?;
+            replay.check()?;
             let review = reviews.get(&observation.sample_id).ok_or_else(|| {
                 anyhow!(
                     "Canary sample '{}' needs an available independent review",
@@ -317,7 +392,7 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
             let row = reviewed_sample(
                 observation,
                 review,
-                &template.dataset.mapping,
+                &source,
                 &project.request.stream.stream_id,
                 input.clone(),
                 &spec,
@@ -349,6 +424,7 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
             )?;
             record.details["learning_review_revision"] = json!(review.revision);
             repo.record_prediction(&record)?;
+            replay.recorded();
         }
     }
     repo.reconcile_learning_canary_reviews(&project.id, at_ms)?;
@@ -358,14 +434,16 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn reviewed_canary_rows_preserve_raw_identity_and_use_the_reviewed_target() {
-        let mapping: TableMapping = flow_like_types::json::from_value(json!({
+    fn quality_mapping() -> TableMapping {
+        flow_like_types::json::from_value(json!({
             "row_id":"id","group_id":"group","timestamp_ms":"time",
             "features":{"kind":"tabular","options":{"numeric_columns":["x"],"categorical_columns":[]}},
             "target":{"kind":"column","column":"target"},"provenance":{"kind":"measured","source":"gauge"}
-        })).unwrap();
-        let observation = LearningObservation {
+        }))
+        .unwrap()
+    }
+    fn part_observation() -> LearningObservation {
+        LearningObservation {
             sample_id: "part".into(),
             group_id: "batch".into(),
             captured_at_ms: 10,
@@ -374,7 +452,74 @@ mod tests {
             embedding: vec![],
             slices: BTreeMap::new(),
             sample: json!({"id":"part","group":"batch","time":10,"x":12.,"target":"pass"}),
+        }
+    }
+    #[test]
+    fn canary_observations_must_rebuild_their_raw_identity_when_observed() {
+        let mapping = quality_mapping();
+        let observation = part_observation();
+        let units = BTreeMap::new();
+        validate_canary_sample(&observation, &mapping, "stream", &units).unwrap();
+        let mut missing = observation.clone();
+        missing.sample = json!({});
+        let error = validate_canary_sample(&missing, &mapping, "stream", &units)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("'part'"), "{error}");
+        let mut sensor_time = observation.clone();
+        sensor_time.captured_at_ms = 11;
+        assert!(validate_canary_sample(&sensor_time, &mapping, "stream", &units).is_err());
+        let mut regrouped = observation;
+        regrouped.group_id = "other".into();
+        assert!(validate_canary_sample(&regrouped, &mapping, "stream", &units).is_err());
+    }
+    #[test]
+    fn canary_timestamps_convert_from_the_pinned_storage_unit() {
+        let mapping = quality_mapping();
+        let units = BTreeMap::from([("time".to_owned(), TemporalUnit::Seconds)]);
+        let mut observation = part_observation();
+        observation.captured_at_ms = 10_000;
+        validate_canary_sample(&observation, &mapping, "stream", &units).unwrap();
+        let sample = original_sample(&observation, &mapping, "stream", &units).unwrap();
+        assert_eq!(
+            (
+                sample.timestamp_ms,
+                sample.window_start_ms,
+                sample.window_end_ms
+            ),
+            (10_000, 10_000, 10_000)
+        );
+        // Raw seconds read as milliseconds would claim another capture time.
+        assert!(
+            validate_canary_sample(&observation, &mapping, "stream", &BTreeMap::new()).is_err()
+        );
+        observation.sample["time"] = json!(i64::MAX);
+        let error = validate_canary_sample(&observation, &mapping, "stream", &units)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("overflows epoch milliseconds"), "{error}");
+    }
+    #[test]
+    fn projects_record_the_temporal_units_of_their_pinned_source() {
+        assert_eq!(
+            pinned_temporal_units(&json!({"pinned_source":{"temporal_units":{"time":"seconds"}}}))
+                .unwrap(),
+            BTreeMap::from([("time".to_owned(), TemporalUnit::Seconds)])
+        );
+        for legacy in [json!({"pinned_source":{}}), json!({})] {
+            assert!(pinned_temporal_units(&legacy).unwrap().is_empty());
+        }
+        let unreadable = json!({"pinned_source":{"temporal_units":{"time":"weeks"}}});
+        assert!(pinned_temporal_units(&unreadable).is_err());
+    }
+    #[test]
+    fn reviewed_canary_rows_preserve_raw_identity_and_use_the_reviewed_target() {
+        let (units, table_mapping) = (BTreeMap::new(), quality_mapping());
+        let mapping = CanarySource {
+            mapping: &table_mapping,
+            units: &units,
         };
+        let observation = part_observation();
         let review = LearningReview {
             sample_id: "part".into(),
             annotation: json!({"kind":"class","class_id":1}),

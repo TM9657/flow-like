@@ -99,6 +99,9 @@ pub struct LearningUsage {
     pub observation_bytes: u64,
     pub cycles_started: usize,
     pub cycles_finished: usize,
+    /// Reservations released before an experiment attached; excluded from `maximum_cycles`.
+    #[serde(default)]
+    pub cycles_aborted: usize,
     pub spent: ExperimentUsage,
     pub reserved: ExperimentUsage,
 }
@@ -118,6 +121,11 @@ pub struct LearningProject {
     pub review_watermark: i64,
     pub product_change_watermark: i64,
     pub last_cycle_at_ms: Option<i64>,
+    /// Aborted reservations since the last settled cycle or resume; drives the retry backoff.
+    #[serde(default)]
+    pub consecutive_aborts: u32,
+    #[serde(default)]
+    pub last_abort_at_ms: Option<i64>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
 }
@@ -212,6 +220,9 @@ pub struct LearningCycle {
     pub observations_through: i64,
     #[serde(default)]
     pub reviewed_sample_ids: Vec<String>,
+    /// New reviews at reservation whose samples were absent from the attached snapshot.
+    #[serde(default)]
+    pub unmatched_review_ids: Vec<String>,
     #[serde(default)]
     pub reviewed_revisions: BTreeMap<String, u64>,
     pub product_change_through: i64,

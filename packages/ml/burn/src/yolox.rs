@@ -1,6 +1,6 @@
 use crate::{BoundingBox, Detection, DetectionOptions, Result, TensorData};
 use burn::{
-    module::Module,
+    module::{Module, Param},
     nn::{
         BatchNorm, BatchNormConfig, PaddingConfig2d,
         conv::{Conv2d, Conv2dConfig},
@@ -130,8 +130,8 @@ impl Head {
             reg1: BaseConv::new(hidden, hidden, 3, 1, device),
             reg2: BaseConv::new(hidden, hidden, 3, 1, device),
             boxes: Conv2dConfig::new([hidden, 4], [1, 1]).init(device),
-            objectness: Conv2dConfig::new([hidden, 1], [1, 1]).init(device),
-            classes: Conv2dConfig::new([hidden, classes], [1, 1]).init(device),
+            objectness: prior_conv(hidden, 1, device),
+            classes: prior_conv(hidden, classes, device),
         }
     }
     fn forward(&self, x: Tensor<4>) -> Tensor<3> {
@@ -151,6 +151,17 @@ impl Head {
         .flatten(2, 3)
         .swap_dims(1, 2)
     }
+}
+/// Score biases start at the upstream 1% foreground prior so the dense negative objectness loss
+/// does not dominate early training.
+fn prior_conv(input: usize, output: usize, device: &Device) -> Conv2d {
+    let mut conv = Conv2dConfig::new([input, output], [1, 1]).init(device);
+    conv.bias = Some(Param::from_tensor(Tensor::full(
+        [output],
+        (0.01f32 / 0.99).ln(),
+        device,
+    )));
+    conv
 }
 
 /// CSPDarknet, path aggregation feature pyramid and decoupled YOLOX heads.
@@ -303,34 +314,20 @@ impl YoloOutput {
             * self.scale.clone();
         Tensor::cat(vec![xy - wh.clone() * 0.5, wh], 2)
     }
-    pub(crate) fn loss(self, targets: &[Vec<BoundingBox>]) -> Tensor<1> {
+    fn simota_inputs(&self, decoded: &Tensor<3>) -> Result<[Vec<f32>; 4]> {
+        Ok([
+            read(decoded.clone())?,
+            read(self.logits.clone())?,
+            read(self.grid.clone())?,
+            read(self.scale.clone())?,
+        ])
+    }
+    pub(crate) fn loss(self, targets: &[Vec<BoundingBox>]) -> Result<Tensor<1>> {
         let device = self.logits.device();
         let [batch, count, columns] = self.logits.dims();
         let classes = columns - 5;
         let decoded = self.decoded();
-        let boxes = decoded
-            .clone()
-            .into_data()
-            .iter::<f32>()
-            .collect::<Vec<_>>();
-        let raw = self
-            .logits
-            .clone()
-            .into_data()
-            .iter::<f32>()
-            .collect::<Vec<_>>();
-        let grid = self
-            .grid
-            .clone()
-            .into_data()
-            .iter::<f32>()
-            .collect::<Vec<_>>();
-        let scale = self
-            .scale
-            .clone()
-            .into_data()
-            .iter::<f32>()
-            .collect::<Vec<_>>();
+        let [boxes, raw, grid, scale] = self.simota_inputs(&decoded)?;
         let mut object_targets = vec![0.0f32; batch * count];
         let mut selected = Vec::new();
         let mut target_boxes = Vec::new();
@@ -372,7 +369,7 @@ impl YoloOutput {
         .sum()
             / denom;
         if positives == 0 {
-            return object_loss;
+            return Ok(object_loss);
         }
         let indices = Tensor::<1, Int>::from_data(BurnData::new(selected, [positives]), &device);
         let pred_boxes = decoded
@@ -393,7 +390,7 @@ impl YoloOutput {
         )
         .sum()
             / denom;
-        object_loss + box_loss * 5.0 + cls_loss
+        Ok(object_loss + box_loss * 5.0 + cls_loss)
     }
     pub(crate) fn prediction(
         self,
@@ -402,8 +399,8 @@ impl YoloOutput {
         let shape = self.logits.dims();
         let [batch, count, columns] = shape;
         let classes = columns - 5;
-        let boxes = self.decoded().into_data().iter::<f32>().collect::<Vec<_>>();
-        let values = self.logits.into_data().iter::<f32>().collect::<Vec<_>>();
+        let boxes = read(self.decoded())?;
+        let values = read(self.logits)?;
         let mut result = Vec::new();
         for b in 0..batch {
             let mut detections = Vec::new();
@@ -440,6 +437,13 @@ impl YoloOutput {
         output.validate()?;
         Ok((output, result))
     }
+}
+fn read<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
+    Ok(tensor
+        .try_into_data()
+        .map_err(crate::execution::device_error)?
+        .iter::<f32>()
+        .collect())
 }
 fn bce<const D: usize>(logits: Tensor<D>, targets: Tensor<D>) -> Tensor<D> {
     -log_sigmoid(logits.clone()) * targets.clone() - log_sigmoid(-logits) * (-targets + 1.0)
@@ -596,5 +600,105 @@ mod tests {
                 "gradient {actual} != {expected}"
             );
         }
+    }
+    #[test]
+    fn new_score_heads_start_at_the_upstream_foreground_prior() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let device = Device::flex();
+        let model = YoloX::new(1, 3, 0.0625, 0.33, &device);
+        let prior = (0.01f32 / 0.99).ln();
+        for head in &model.heads {
+            for (layer, channels) in [(&head.objectness, 1), (&head.classes, 3)] {
+                let bias = layer
+                    .bias
+                    .as_ref()
+                    .unwrap()
+                    .val()
+                    .into_data()
+                    .iter::<f32>()
+                    .collect::<Vec<_>>();
+                assert_eq!(bias.len(), channels);
+                assert!(bias.iter().all(|value| (value - prior).abs() < 1e-6));
+            }
+        }
+        // A blank image has zero head features, so every score logit is exactly the prior.
+        let logits = model
+            .forward(Tensor::zeros([1, 1, 32, 32], &device))
+            .logits
+            .into_data()
+            .iter::<f32>()
+            .collect::<Vec<_>>();
+        assert_eq!(logits.len(), 21 * 8);
+        for anchor in logits.as_chunks::<8>().0 {
+            assert!(anchor[4..].iter().all(|value| (value - prior).abs() < 1e-5));
+        }
+    }
+    #[test]
+    fn predictions_drop_boxes_clamped_to_zero_area() {
+        let device = Device::flex();
+        // Two confident anchors: the first box lies inside the image, the second right of it.
+        let output = YoloOutput {
+            logits: Tensor::from_data([[[0.5f32, 0.5, 0.0, 0.0, 5.0, 5.0]; 2]], &device),
+            grid: Tensor::from_data([[[0.0f32, 0.0], [3.0, 0.0]]], &device),
+            scale: Tensor::from_data([[[0.5f32, 0.5]; 2]], &device),
+        };
+        let (_, detections) = output
+            .prediction(&DetectionOptions {
+                confidence_threshold: 0.5,
+                iou_threshold: 0.45,
+                max_detections: 10,
+            })
+            .unwrap();
+        assert_eq!(detections.len(), 1);
+        assert_eq!(detections[0].len(), 1);
+        let kept = &detections[0][0];
+        for (actual, expected) in [kept.x_min, kept.y_min, kept.x_max, kept.y_max]
+            .into_iter()
+            .zip([0.0, 0.0, 0.5, 0.5])
+        {
+            assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
+        }
+    }
+    #[test]
+    fn loss_scores_objectness_everywhere_and_box_and_class_at_the_assigned_anchor() {
+        let device = Device::flex();
+        // Anchor 0 is centred in the target and decodes to its top half (IoU 0.5). Anchor 1 is
+        // centred outside the box but within the centre radius, so SimOTA assigns anchor 0 alone.
+        let logits = [
+            [0.5f32, 0.25, 0.0, -std::f32::consts::LN_2, 2.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, -1.0, 0.0],
+        ];
+        let assert_loss = |targets: Vec<BoundingBox>, expected: f32| {
+            let output = YoloOutput {
+                logits: Tensor::from_data([logits], &device),
+                grid: Tensor::from_data([[[0.0f32, 0.0], [1.0, 0.0]]], &device),
+                scale: Tensor::from_data([[[0.5f32, 0.5]; 2]], &device),
+            };
+            let values = output
+                .loss(&[targets])
+                .unwrap()
+                .into_data()
+                .iter::<f32>()
+                .collect::<Vec<_>>();
+            assert_eq!(values.len(), 1);
+            let actual = values[0];
+            assert!((actual - expected).abs() < 1e-4, "{actual} != {expected}");
+        };
+        let softplus = |x: f32| (1.0 + x.exp()).ln();
+        assert_loss(Vec::new(), softplus(2.0) + softplus(-1.0));
+        let target = BoundingBox {
+            class_id: 0,
+            x_min: 0.0,
+            y_min: 0.0,
+            x_max: 0.5,
+            y_max: 0.5,
+        };
+        // Box term 1 - 0.5^2 at weight 5; the class target 0.5 (the IoU) costs ln 2 at logit 0.
+        assert_loss(
+            vec![target],
+            softplus(-2.0) + softplus(-1.0) + 5.0 * 0.75 + std::f32::consts::LN_2,
+        );
     }
 }

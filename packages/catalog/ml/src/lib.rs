@@ -2,6 +2,8 @@
 //!
 //! This crate contains traditional ML nodes based on linfa (clustering, SVM, regression, etc.)
 //! Does NOT include ONNX inference - see flow-like-catalog-onnx for that.
+// Training node futures reach Lance and object-store readers, which need deeper Send trait evaluation.
+#![recursion_limit = "256"]
 
 extern crate flow_like_runtime as flow_like;
 

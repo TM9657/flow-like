@@ -1039,6 +1039,21 @@ declare namespace db {
     // === Data/Database/Meta ===
 
     /**
+     * Reads a column's metadata: display name, description, data classification, personal data flag and the role attributes allowed to read it through the API. Values nobody set come back empty.
+     * @node get_column_metadata_local_db @receiver database @alias getColumnMetadataLocalDb
+     * @param database — Database Connection Reference (receiver: `this` in `x.columnMetadata(...)`)
+     * @param columnName (optional) — Column whose metadata to read
+     * @returns displayName — Human-readable name shown instead of the column name; empty when unset
+     * @returns description — What the column holds and how to use it; empty when unset
+     * @returns classification — public, internal, confidential or restricted; empty when the column is unclassified
+     * @returns pii — Whether the column is marked as holding personal data
+     * @returns readAttributes — Role attributes allowed to read the column through the API; empty when everyone who can read the table may read it
+     * @returns metadata — All of the column's metadata as one struct
+     * @impure has side effects / drives control flow
+     */
+    function columnMetadata(this: NodeDBConnection, { database: Struct, columnName?: string }): { displayName: string, description: string, classification: string, pii: bool, readAttributes: string[], metadata: Struct };
+
+    /**
      * Count Items
      * @node count_local_db @receiver database @alias countLocalDb
      * @param database — Database Connection Reference (receiver: `this` in `x.count(...)`)
@@ -1130,15 +1145,17 @@ declare namespace db {
     // === Data/Database/Schema ===
 
     /**
-     * Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). Flow-Like requires an explicit type for NULL. Use CAST(NULL AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.
+     * Adds a column from a typed SQL expression or creates an empty vector column with a fixed dimension. Vector dimensions must match the embedding model's output length. Existing rows get NULL vectors until embeddings are written.
      * @node add_column_local_db @receiver database @alias addColumnLocalDb
      * @param database — Database Connection Reference (receiver: `this` in `x.addColumn(...)`)
      * @param columnName (optional) — Name of the column to add
      * @param sqlExpression (optional) — Typed SQL expression used to populate existing rows. Examples: 0, '', CAST(NULL AS STRING). Flow-Like requires an explicit type for NULL. Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.
+     * @param mode (optional) — SQL Expression computes values from SQL Expression. Vector creates a nullable Float32 vector column and ignores SQL Expression.
+     * @param vectorSize (optional) — Required in Vector mode: the positive number of values in each embedding. Set this to the embedding model's output length. Ignored in SQL Expression mode.
      * @returns schema — Updated database schema
      * @impure has side effects / drives control flow
      */
-    function addColumn(this: NodeDBConnection, { database: Struct, columnName?: string, sqlExpression?: string }): Struct;
+    function addColumn(this: NodeDBConnection, { database: Struct, columnName?: string, sqlExpression?: string, mode?: string, vectorSize?: int }): Struct;
 
     /**
      * Drops a column from the database table.
@@ -1160,6 +1177,22 @@ declare namespace db {
      * @impure has side effects / drives control flow
      */
     function makeColumnOptional(this: NodeDBConnection, { database: Struct, columnName?: string, optional?: bool }): Struct;
+
+    /**
+     * Replaces a column's metadata: display name, description, data classification, personal data flag and the role attributes allowed to read it through the API. Every value is written as given, so empty text, false and an empty list clear what was stored. The table key and other column settings stay. Flow runs always read every column.
+     * @node set_column_metadata_local_db @receiver database @alias setColumnMetadataLocalDb
+     * @param database — Database Connection Reference (receiver: `this` in `x.setColumnMetadata(...)`)
+     * @param columnName (optional) — Column whose metadata to replace
+     * @param displayName (optional) — Human-readable name shown instead of the column name, at most 128 characters. Empty clears it.
+     * @param description (optional) — What the column holds and how to use it, at most 4096 characters. Empty clears it.
+     * @param classification (optional) — How sensitive the column's data is, from least to most: public, internal, confidential or restricted. Empty clears the classification.
+     * @param pii (optional) — Whether the column holds personal data that identifies or relates to a person
+     * @param readAttributes (optional) — Role attributes allowed to read the column through the API, at most 64. Empty lets everyone who can read the table see it; otherwise only admins and roles holding at least one of these attributes see it.
+     * @returns metadata — The column's metadata as stored: values trimmed, blank ones dropped and read attributes de-duplicated
+     * @returns schema — Updated database schema
+     * @impure has side effects / drives control flow
+     */
+    function setColumnMetadata(this: NodeDBConnection, { database: Struct, columnName?: string, displayName?: string, description?: string, classification?: string, pii?: bool, readAttributes?: string[] }): { metadata: Struct, schema: Struct };
 
     /**
      * Marks a column as the table key so concurrent Upserts on it never create duplicate rows. The column must be required, hold unique values and be a string, 32/64-bit integer or binary column. The key cannot be changed or removed afterwards; setting the current key again succeeds.
@@ -2657,6 +2690,24 @@ declare namespace files {
      * @impure has side effects / drives control flow
      */
     function head(this: FlowPath, { path: Struct }): { eTag: string, lastModified: Date, size: int, version: string };
+
+    /**
+     * Checks whether a FlowPath is a file. Returns false if the path is missing.
+     * @node path_is_file @receiver path @alias pathIsFile
+     * @param path — FlowPath (receiver: `this` in `x.isFile(...)`)
+     * @returns isFile — True if the path is a file
+     * @impure has side effects / drives control flow
+     */
+    function isFile(this: FlowPath, { path: Struct }): bool;
+
+    /**
+     * Checks whether a FlowPath is a directory or a folder prefix reported by its storage provider. Returns false if the path is missing.
+     * @node path_is_folder @receiver path @alias pathIsFolder
+     * @param path — FlowPath (receiver: `this` in `x.isFolder(...)`)
+     * @returns isFolder — True if the path is a directory or a folder prefix reported by its storage provider
+     * @impure has side effects / drives control flow
+     */
+    function isFolder(this: FlowPath, { path: Struct }): bool;
 
     /**
      * Lists folders under a path

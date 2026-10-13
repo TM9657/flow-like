@@ -12,6 +12,7 @@
 //! - `archive_lookup` locates historical captures through a fixed Internet Archive endpoint.
 //! - `_memory_store` / `_memory_search` run against the core `AssistantMemory`.
 
+use flow_like_types::data_classification::DataClassification;
 use rig::completion::ToolDefinition;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -2193,6 +2194,7 @@ pub const READ_WRITE_DATABASE_OPERATIONS: &[&str] = &[
     "add_column",
     "drop_columns",
     "alter_column",
+    "set_column_metadata",
     "delete_table",
 ];
 
@@ -2315,6 +2317,26 @@ pub fn database_tool_schema(operations: &[&str]) -> Value {
                     "vector_size": { "type": "integer", "minimum": 1 }
                 },
                 "required": ["name"]
+            },
+            "column_metadata": {
+                "type": "object",
+                "description": "For set_column_metadata: the complete metadata of `column`. It replaces what is stored, so omitted fields are cleared.",
+                "additionalProperties": false,
+                "properties": {
+                    "display_name": { "type": "string", "description": "Human-readable name shown instead of the column name (at most 128 characters)." },
+                    "description": { "type": "string", "description": "What the column holds and how to use it (at most 4096 characters)." },
+                    "classification": {
+                        "type": "string",
+                        "enum": DataClassification::names(),
+                        "description": "How sensitive the column's data is, least to most sensitive."
+                    },
+                    "pii": { "type": "boolean", "description": "Whether the column holds personal data. Defaults to false." },
+                    "read_attributes": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Role attributes allowed to read the column; empty = everyone who can read the table; only admins may change it."
+                    }
+                }
             }
         },
         "required": ["operation"]
@@ -2396,6 +2418,7 @@ Operations:
   carries the error and first failed feature (indices are 0-based file positions). Rows before it
   stay stored, so never re-run the whole import into the same table; it would append duplicates.
 - build_index, drop_index, optimize, add_column, drop_columns, alter_column.
+- set_column_metadata: replaces `column`'s metadata with `column_metadata`; omitted fields are cleared.
 - delete_table: PERMANENTLY drop a whole table — every row AND the table schema are destroyed.
   This is IRREVERSIBLE: there is no undo, no restore, and no version history to roll back to.
   Requires `confirm_table_name` to repeat `table_name` exactly; a mismatch rejects the call.
@@ -2829,6 +2852,41 @@ mod tests {
             approval.description,
             "FlowPilot wants to import 'sites.geojson' into table 'sites'."
         );
+    }
+
+    /// The frontend executor reads exactly these argument names, so a rename here breaks it.
+    #[test]
+    fn column_metadata_is_an_approval_gated_data_studio_operation() {
+        let spec = data_studio_database_tool_spec();
+        let schema = (spec.schema)();
+        let metadata = &schema["properties"]["column_metadata"]["properties"];
+        assert_eq!(
+            metadata["classification"]["enum"],
+            json!(["public", "internal", "confidential", "restricted"])
+        );
+        assert_eq!(
+            metadata["read_attributes"]["items"]["type"],
+            json!("string")
+        );
+        for property in ["display_name", "description", "pii"] {
+            assert!(
+                metadata[property].is_object(),
+                "column_metadata is missing {property}"
+            );
+        }
+        assert!(spec.description.contains("- set_column_metadata:"));
+        assert!(!READ_ONLY_DATABASE_OPERATIONS.contains(&"set_column_metadata"));
+
+        let args = json!({
+            "operation": "set_column_metadata",
+            "table_name": "staff",
+            "column": "salary",
+            "column_metadata": { "classification": "confidential", "pii": true }
+        });
+        assert_eq!(resolve_tool_effect(&spec, &args), ToolEffect::Mutating);
+        let approval = resolve_tool_approval(&spec, &args);
+        assert_eq!(approval.kind, "mutating");
+        assert_eq!(approval.session_key, "database:set_column_metadata");
     }
 
     #[test]

@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use super::TauriFunctionError;
+use super::{TauriFunctionError, storage_management::remove_training_ledgers};
 use crate::state::{TauriFlowLikeState, TauriSettingsState};
 use flow_like::{
     app::App,
@@ -14,24 +14,28 @@ use flow_like::{
         board::{Board, ExecutionMode, ExecutionStage},
         execution::LogLevel,
     },
-    flow_like_storage::{Path, object_store::ObjectStore},
-    profile::ProfileApp,
+    flow_like_storage::{
+        Path,
+        object_store::{self, ObjectStore},
+    },
     state::FlowLikeState,
 };
+use flow_like_catalog::ml::inspection::lifecycle::drain_app_training;
 use flow_like_types::anyhow;
 use flow_like_types::create_id;
+use flow_like_types::storage_paths::is_legacy_training_ledger_path;
 use futures::{StreamExt, TryStreamExt};
 use image::ImageReader;
 use serde::Deserialize;
 use serde_json::Value;
 use tauri::AppHandle;
+pub mod device_export;
 pub mod duplicate;
 pub mod flowpilot_builds;
 pub mod fork;
 pub mod graph;
 pub mod saved_queries;
 pub mod sharing;
-pub mod device_export;
 pub mod tables;
 
 async fn presign_meta(
@@ -131,28 +135,24 @@ pub async fn create_app(
     id: Option<String>,
     metadata: Metadata,
     bits: Vec<String>,
+    add_to_profile: Option<bool>,
 ) -> Result<App, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
 
     let new_app = App::new(id, metadata, bits, flow_like_state).await?;
     new_app.save().await?;
 
-    let settings = TauriSettingsState::construct(&app_handle).await?;
-    let mut settings = settings.lock().await;
-    let profile_id = settings.get_current_profile()?.hub_profile.id;
-    let profile = settings
-        .profiles
-        .get_mut(&profile_id)
-        .ok_or_else(|| TauriFunctionError::new("Profile not found"))?;
-
-    let apps = profile.hub_profile.apps.get_or_insert_with(Vec::new);
-    if !apps.iter().any(|app| app.app_id == new_app.id) {
-        apps.push(ProfileApp::new(new_app.id.clone()));
-        profile.advance_revision(None);
-        settings.try_serialize()?;
+    // Caching a remote app locally passes `false`: membership is not profile
+    // placement, and the current profile need not be the one that holds the app.
+    if add_to_profile.unwrap_or(true) {
+        let profile_id = TauriSettingsState::current_profile(&app_handle)
+            .await?
+            .hub_profile
+            .id;
+        sharing::add_app_to_profile(&app_handle, &profile_id, &new_app.id).await?;
     }
 
-    Ok(new_app.clone())
+    Ok(new_app)
 }
 
 #[tauri::command(async)]
@@ -641,6 +641,44 @@ pub async fn get_app_size(
     Ok(size)
 }
 
+/// How long deleting an app waits for its background training to stop. Training that is
+/// still running afterwards keeps the app's training ledgers.
+pub(crate) const TRAINING_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Deletes every object under `prefix` except those `keep` names by their path below `prefix`,
+/// and returns how many were removed. An object that disappears between listing and deletion
+/// counts as already deleted.
+async fn delete_prefix(
+    store: &dyn ObjectStore,
+    prefix: &Path,
+    keep: impl Fn(&str) -> bool + Send + 'static,
+) -> object_store::Result<usize> {
+    let root = prefix.as_ref().to_owned();
+    let locations = store
+        .list(Some(prefix))
+        .try_filter(move |meta| {
+            let relative = meta
+                .location
+                .as_ref()
+                .strip_prefix(root.as_str())
+                .unwrap_or_default()
+                .trim_start_matches('/');
+            futures::future::ready(!keep(relative))
+        })
+        .map_ok(|meta| meta.location)
+        .boxed();
+    let mut results = store.delete_stream(locations);
+    let mut deleted = 0;
+    while let Some(result) = results.next().await {
+        match result {
+            Ok(_) => deleted += 1,
+            Err(object_store::Error::NotFound { .. }) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(deleted)
+}
+
 #[tauri::command(async)]
 pub async fn delete_app(app_handle: AppHandle, app_id: String) -> Result<(), TauriFunctionError> {
     if app_id.is_empty() {
@@ -657,15 +695,34 @@ pub async fn delete_app(app_handle: AppHandle, app_id: String) -> Result<(), Tau
         }
     }
     settings.serialize();
+    let project_dir = settings.project_dir.clone();
     drop(settings);
 
-    let path = Path::from("apps").join(app_id);
-    let locations = store.list(Some(&path)).map_ok(|m| m.location).boxed();
-    store
-        .delete_stream(locations)
-        .try_collect::<Vec<Path>>()
-        .await
-        .map_err(|_| TauriFunctionError::new("Failed to delete app"))?;
+    let drain = drain_app_training(&project_dir, &app_id, TRAINING_DRAIN_TIMEOUT).await;
+    let still_running = drain.report.still_running > 0;
+
+    // The legacy App ledger lives inside the app folder; running training keeps it.
+    delete_prefix(
+        store.as_ref(),
+        &Path::from("apps").join(app_id.as_str()),
+        move |relative| still_running && is_legacy_training_ledger_path(relative),
+    )
+    .await
+    .map_err(|error| TauriFunctionError::new(&format!("Failed to delete app {app_id}: {error}")))?;
+
+    let removal = flow_like_types::tokio::task::spawn_blocking({
+        let app_id = app_id.clone();
+        move || remove_training_ledgers(&project_dir, &app_id, still_running)
+    })
+    .await;
+    drop(drain);
+    if let Err(error) = removal {
+        tracing::warn!(
+            app_id = %app_id,
+            %error,
+            "Deleting the training ledgers of the deleted app stopped unexpectedly"
+        );
+    }
 
     Ok(())
 }
@@ -943,4 +1000,99 @@ pub async fn app_list_packages(
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
     let app = App::load(app_id, flow_like_state).await?;
     Ok(app.packages)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flow_like::flow_like_storage::files::store::local_store::LocalObjectStore;
+    use flow_like_types::storage_paths::training_ledger_app_dir;
+
+    #[tokio::test]
+    async fn deleting_an_app_removes_its_files_and_its_whole_ledger_tree_but_no_other_app() {
+        let root = std::env::temp_dir().join(format!(
+            "flow-like-delete-app-{}",
+            SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let on_disk = |path: &str| {
+            path.split('/')
+                .fold(root.clone(), |joined, part| joined.join(part))
+        };
+        let store = LocalObjectStore::new(root.clone()).unwrap();
+        let ledgers = training_ledger_app_dir("doomed");
+        let doomed = [
+            "apps/doomed/manifest.app".to_string(),
+            "apps/doomed/storage/models/artifacts/model/weights.bin".to_string(),
+            format!("{ledgers}/project/jobs.sqlite"),
+            format!("{ledgers}/project/jobs.artifacts/blob.blob"),
+            format!("{ledgers}/project/.training-locks/job.lock"),
+            format!("{ledgers}/users/user/jobs.sqlite"),
+        ];
+        let kept = [
+            "apps/doomed-sibling/manifest.app".to_string(),
+            "apps/kept/manifest.app".to_string(),
+            format!("{}/project/jobs.sqlite", training_ledger_app_dir("kept")),
+        ];
+        for path in doomed.iter().chain(&kept) {
+            let path = Path::from(path.as_str());
+            store.put(&path, "data".into()).await.unwrap();
+        }
+        let empty_blobs = format!("{ledgers}/users/user/jobs.artifacts");
+        std::fs::create_dir_all(on_disk(empty_blobs.as_str())).unwrap();
+
+        let app = Path::from("apps").join("doomed");
+        assert_eq!(delete_prefix(&store, &app, |_| false).await.unwrap(), 2);
+        assert_eq!(remove_training_ledgers(&root, "doomed", false), 0);
+        assert_eq!(remove_training_ledgers(&root, "doomed", false), 0);
+        assert!(!on_disk("apps/doomed").exists());
+        assert!(!on_disk(ledgers.as_str()).exists());
+        for path in &kept {
+            assert!(on_disk(path.as_str()).is_file(), "{path} must survive");
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn deleting_an_app_whose_training_still_runs_keeps_only_its_legacy_ledger() {
+        let root = std::env::temp_dir().join(format!(
+            "flow-like-delete-busy-app-{}",
+            SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = LocalObjectStore::new(root.clone()).unwrap();
+        let ledger = [
+            "apps/busy/storage/inspection/jobs.sqlite",
+            "apps/busy/storage/inspection/jobs.sqlite-wal",
+            "apps/busy/storage/inspection/jobs.artifacts/blob.blob",
+        ];
+        let app = [
+            "apps/busy/manifest.app",
+            "apps/busy/storage/inspection/pki/device.pem",
+        ];
+        for path in ledger.iter().chain(&app) {
+            store.put(&Path::from(*path), "data".into()).await.unwrap();
+        }
+
+        let deleted = delete_prefix(
+            &store,
+            &Path::from("apps/busy"),
+            is_legacy_training_ledger_path,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(deleted, app.len());
+        for path in ledger {
+            assert!(root.join(path).is_file(), "{path} must survive");
+        }
+        for path in app {
+            assert!(!root.join(path).exists(), "{path} must be deleted");
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

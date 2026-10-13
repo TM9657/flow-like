@@ -2,7 +2,9 @@ pub mod bounded;
 pub mod credentials;
 pub mod immutable_lance_cache;
 pub mod object_path;
+pub mod rename;
 pub mod store;
+pub mod upload;
 
 pub use blake3;
 pub use object_path::{

@@ -1,4 +1,4 @@
-import type { IDatabaseState } from "@flow-like/flow-like-ui";
+import type { IColumnMetadata, IDatabaseState } from "@flow-like/flow-like-ui";
 import {
 	type IDatabaseAction,
 	type IDatabaseActionResult,
@@ -391,6 +391,21 @@ export class WebDatabaseState implements IDatabaseState {
 		await apiPut(
 			`apps/${appId}/db/${encodeURIComponent(tableName)}/primary-key${this.scopeQuery(userScoped, selector)}`,
 			{ column },
+			this.backend.auth,
+		);
+	}
+
+	async setColumnMetadata(
+		appId: string,
+		tableName: string,
+		column: string,
+		metadata: IColumnMetadata,
+		userScoped?: boolean,
+		selector?: IDatabaseSelector,
+	): Promise<IColumnMetadata> {
+		return apiPut<IColumnMetadata>(
+			`apps/${appId}/db/${encodeURIComponent(tableName)}/columns/${encodeURIComponent(column)}/metadata${this.scopeQuery(userScoped, selector)}`,
+			metadata,
 			this.backend.auth,
 		);
 	}

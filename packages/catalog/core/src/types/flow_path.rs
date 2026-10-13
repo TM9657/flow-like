@@ -5,7 +5,10 @@ use flow_like::{
 use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     Path,
-    files::store::{FlowLikeStore, local_store::LocalObjectStore},
+    files::{
+        store::{FlowLikeStore, local_store::LocalObjectStore},
+        upload::put_payload,
+    },
     normalize_object_path,
     object_store::{self, GetResult, PutPayload},
 };
@@ -129,10 +132,12 @@ impl FlowPath {
             bypass_cache = true;
         }
 
-        let result = store
-            .as_generic()
-            .put(&self.object_path(), payload.clone())
-            .await?;
+        let result = put_payload(
+            store.as_generic().as_ref(),
+            &self.object_path(),
+            payload.clone(),
+        )
+        .await?;
 
         if bypass_cache {
             return Ok(());
@@ -240,10 +245,12 @@ impl FlowPath {
             None => return Err(anyhow!("No cache layer available for writing")),
         };
 
-        cache_layer
-            .as_generic()
-            .put(&self.object_path(), payload.clone())
-            .await?;
+        put_payload(
+            cache_layer.as_generic().as_ref(),
+            &self.object_path(),
+            payload.clone(),
+        )
+        .await?;
 
         if let Some(etag) = etag {
             let runtime = self.to_runtime(context).await?;

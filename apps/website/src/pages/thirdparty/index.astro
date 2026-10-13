@@ -7,10 +7,10 @@ import cargoLicenses from "../../../../../thirdparty/cargo-licenses.json";
 import npmLicenses from "../../../../../thirdparty/npm-licenses.json";
 
 const title = "Third Party Licenses";
-const description = "Software Bill of Materials (SBOM) - Complete list of open source libraries used in Flow-Like";
+const description = "Software Bill of Materials (SBOM) and third-party license information for Flow-Like";
 ---
 
-<LegalLayout title={title} description={description} lastUpdated="February 04, 2026">
+<LegalLayout title={title} description={description} lastUpdated="October 13, 2026">
 	<p class="text-lg mb-8">
 		Flow-Like is built with and depends on many amazing open source projects.
 		We're grateful to the developers and maintainers of these libraries that make our work possible.
@@ -22,6 +22,12 @@ const description = "Software Bill of Materials (SBOM) - Complete list of open s
 		<p class="text-sm text-muted-foreground">
 			This list is automatically generated from our project dependencies.
 			It includes all Rust crates from our Cargo workspace and npm packages from our web applications.
+		</p>
+		<p class="text-sm text-muted-foreground mt-2">
+			File editors are built separately. Each editor's About dialog contains its
+			version-specific dependency inventory, license and asset notices, and source
+			downloads for MPL-covered components. These files ship with the editor in both
+			the web and desktop applications.
 		</p>
 		<div class="flex flex-wrap gap-2 mt-3">
 			<a

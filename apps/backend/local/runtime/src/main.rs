@@ -1,3 +1,8 @@
+// lance's Linux-only io_uring reader caches file handles in a `moka::future::Cache`,
+// which pushes the auto-trait proof for the queue worker's job futures past rustc's
+// default 128-step budget.
+#![recursion_limit = "256"]
+
 #[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios")))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;

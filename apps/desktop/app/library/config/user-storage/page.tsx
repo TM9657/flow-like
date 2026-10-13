@@ -4,7 +4,9 @@ import {
 	type BulkUploadProgressCallback,
 	type IStorageListOptions,
 	type IStorageUploadOptions,
+	RolePermissions,
 	StorageSystem,
+	useAppPermissions,
 	useBackend,
 } from "@flow-like/flow-like-ui";
 import { useTranslation } from "@flow-like/locales";
@@ -18,6 +20,9 @@ export default function Page() {
 	const backend = useBackend();
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
+	const permissions = useAppPermissions(id);
+	const canWrite =
+		!permissions.isLoading && permissions.can(RolePermissions.WriteFiles);
 	const prefix = searchParams.get("prefix") ?? "";
 	const router = useRouter();
 
@@ -76,6 +81,18 @@ export default function Page() {
 				backend.storageState.listStorageItemsUser(appId, targetPrefix, options),
 			deleteStorageItems: (appId: string, prefixes: string[]) =>
 				backend.storageState.deleteStorageItemsUser(appId, prefixes),
+			renameStorageItem: (
+				appId: string,
+				targetPrefix: string,
+				newName: string,
+				isDir: boolean,
+			) =>
+				backend.storageState.renameStorageItemUser(
+					appId,
+					targetPrefix,
+					newName,
+					isDir,
+				),
 			downloadStorageItems: (appId: string, prefixes: string[]) =>
 				backend.storageState.downloadStorageItemsUser(appId, prefixes),
 			uploadStorageItems: (
@@ -107,6 +124,7 @@ export default function Page() {
 			title={t("userStorage", "User Storage")}
 			storageScopeKey="user"
 			operations={operations}
+			canWrite={canWrite}
 			revealInExplorer={handleRevealInExplorer}
 			openWithApp={handleOpenWithApp}
 			listAppsForFile={handleListAppsForFile}

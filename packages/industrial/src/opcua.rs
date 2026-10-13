@@ -12,10 +12,71 @@ pub enum OpcUaSecurityMode {
     SignAndEncrypt,
 }
 
+/// An application identity and explicit server trust for one OPC UA session.
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+pub struct OpcUaCertificates {
+    /// Must match a URI in the client certificate's subject alternative names.
+    pub application_uri: String,
+    /// One PEM-encoded RSA application certificate.
+    pub certificate_pem: String,
+    /// The matching unencrypted PEM-encoded RSA private key.
+    pub private_key_pem: String,
+    /// PEM-encoded trusted server certificates or CA certificates. No system roots are added.
+    pub trusted_certificates_pem: Vec<String>,
+    /// Untrusted intermediate certificates used to build the server's chain.
+    #[serde(default)]
+    pub issuer_certificates_pem: Vec<String>,
+}
+
+impl std::fmt::Debug for OpcUaCertificates {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpcUaCertificates")
+            .field("application_uri", &self.application_uri)
+            .field("certificate_pem", &"[provided]")
+            .field("private_key_pem", &"[redacted]")
+            .field("trusted_certificates", &self.trusted_certificates_pem.len())
+            .field("issuer_certificates", &self.issuer_certificates_pem.len())
+            .finish()
+    }
+}
+
+impl OpcUaCertificates {
+    fn validate(&self) -> Result<()> {
+        require(
+            !self.application_uri.is_empty()
+                && self.application_uri.len() <= 4096
+                && self.application_uri.contains(':')
+                && !self.application_uri.chars().any(char::is_whitespace),
+            "OPC UA application URI must be a bounded absolute URI",
+        )?;
+        require(
+            !self.certificate_pem.is_empty()
+                && self.certificate_pem.len() <= 65_536
+                && !self.private_key_pem.is_empty()
+                && self.private_key_pem.len() <= 65_536
+                && !self.private_key_pem.contains("ENCRYPTED"),
+            "OPC UA requires a bounded certificate and unencrypted private key in PEM format",
+        )?;
+        require(
+            !self.trusted_certificates_pem.is_empty()
+                && self.trusted_certificates_pem.len() <= 32
+                && self.issuer_certificates_pem.len() <= 32
+                && self
+                    .trusted_certificates_pem
+                    .iter()
+                    .chain(&self.issuer_certificates_pem)
+                    .all(|pem| !pem.is_empty() && pem.len() <= 65_536),
+            "OPC UA requires 1..32 trusted PEM certificates and at most 32 issuer certificates",
+        )
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct OpcUaReadConfig {
     pub endpoint: String,
     pub pki_dir: String,
+    #[serde(default)]
+    pub certificates: Option<OpcUaCertificates>,
     pub security_policy: String,
     pub security_mode: OpcUaSecurityMode,
     pub node_ids: Vec<String>,
@@ -25,6 +86,13 @@ pub struct OpcUaReadConfig {
 
 impl OpcUaReadConfig {
     pub fn validate(&self) -> Result<()> {
+        if let Some(certificates) = &self.certificates {
+            certificates.validate()?;
+            require(
+                self.security_mode != OpcUaSecurityMode::None,
+                "Custom OPC UA certificates require a signed or encrypted channel",
+            )?;
+        }
         require(
             self.endpoint.starts_with("opc.tcp://")
                 && self.endpoint.len() <= 4096
@@ -103,6 +171,8 @@ pub struct OpcUaReading {
 pub struct OpcUaConnectConfig {
     pub endpoint: String,
     pub pki_dir: String,
+    #[serde(default)]
+    pub certificates: Option<OpcUaCertificates>,
     pub security_policy: String,
     pub security_mode: OpcUaSecurityMode,
     pub timeout_ms: u64,
@@ -112,6 +182,7 @@ impl OpcUaConnectConfig {
         OpcUaReadConfig {
             endpoint: self.endpoint.clone(),
             pki_dir: self.pki_dir.clone(),
+            certificates: self.certificates.clone(),
             security_policy: self.security_policy.clone(),
             security_mode: self.security_mode,
             node_ids: vec!["i=84".into()],
@@ -176,6 +247,289 @@ pub struct OpcUaSubscribeRequest {
     pub node_ids: Vec<String>,
     pub interval_ms: u64,
     pub queue_capacity: usize,
+}
+
+#[cfg(feature = "opcua")]
+struct SessionPki {
+    directory: tempfile::TempDir,
+    trust: openssl::x509::store::X509Store,
+    issuers: Vec<openssl::x509::X509>,
+}
+
+#[cfg(feature = "opcua")]
+fn certificate_error(_: impl std::fmt::Debug) -> Error {
+    Error::Invalid("OPC UA certificate or private key could not be parsed or validated".into())
+}
+
+#[cfg(feature = "opcua")]
+fn private_file(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)?.write_all(bytes)?;
+    Ok(())
+}
+
+#[cfg(all(feature = "opcua", windows))]
+fn restrict_windows_directory(path: &std::path::Path) -> Result<()> {
+    use std::{os::windows::ffi::OsStrExt, ptr};
+    use windows_sys::Win32::{
+        Foundation::LocalFree,
+        Security::{
+            Authorization::{
+                ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+            },
+            SECURITY_ATTRIBUTES,
+        },
+        Storage::FileSystem::{CreateDirectoryW, GetVolumeInformationW, GetVolumePathNameW},
+    };
+    // Recreate the empty random directory with its ACL applied atomically, before writing secrets.
+    // Only its owner and SYSTEM receive access; child files inherit the protected directory ACL.
+    let sddl: Vec<u16> = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;OW)\0"
+        .encode_utf16()
+        .collect();
+    let path_wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut volume_path = vec![0u16; 32_768];
+    let mut filesystem_flags = 0;
+    // SAFETY: all pointers reference live buffers or initialized outputs of the declared size.
+    if unsafe {
+        GetVolumePathNameW(
+            path_wide.as_ptr(),
+            volume_path.as_mut_ptr(),
+            volume_path.len() as u32,
+        )
+    } == 0
+        || unsafe {
+            GetVolumeInformationW(
+                volume_path.as_ptr(),
+                ptr::null_mut(),
+                0,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut filesystem_flags,
+                ptr::null_mut(),
+                0,
+            )
+        } == 0
+    {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    const FILE_PERSISTENT_ACLS: u32 = 0x0000_0008;
+    if filesystem_flags & FILE_PERSISTENT_ACLS == 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "OPC UA private keys require a filesystem with persistent Windows ACLs",
+        )
+        .into());
+    }
+    let mut descriptor = ptr::null_mut();
+    // SAFETY: the terminated input and descriptor out-pointer remain valid throughout the call.
+    if unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.as_ptr(),
+            SDDL_REVISION_1,
+            &mut descriptor,
+            ptr::null_mut(),
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let result = (|| {
+        std::fs::remove_dir(path)?;
+        let attributes = SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: descriptor,
+            bInheritHandle: 0,
+        };
+        // SAFETY: both pointers refer to live initialized values; descriptor is freed below.
+        if unsafe { CreateDirectoryW(path_wide.as_ptr(), &attributes) } == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
+    })();
+    // SAFETY: Windows allocated the descriptor with LocalAlloc; it is no longer used.
+    unsafe { LocalFree(descriptor) };
+    result.map_err(Into::into)
+}
+
+#[cfg(feature = "opcua")]
+impl SessionPki {
+    fn new(certificates: &OpcUaCertificates) -> Result<Self> {
+        use openssl::{
+            asn1::Asn1Time,
+            pkey::PKey,
+            x509::{X509, X509PurposeId, store::X509StoreBuilder, verify::X509VerifyFlags},
+        };
+        certificates.validate()?;
+        let own = X509::stack_from_pem(certificates.certificate_pem.as_bytes())
+            .map_err(certificate_error)?;
+        require(
+            own.len() == 1,
+            "OPC UA identity requires exactly one application certificate",
+        )?;
+        let own = &own[0];
+        let key =
+            PKey::private_key_from_pem_passphrase(certificates.private_key_pem.as_bytes(), b"")
+                .map_err(certificate_error)?;
+        require(
+            own.public_key().map_err(certificate_error)?.public_eq(&key),
+            "OPC UA private key does not match the application certificate",
+        )?;
+        let rsa = key.rsa().map_err(certificate_error)?;
+        require(
+            (2048..=4096).contains(&rsa.size().saturating_mul(8)),
+            "OPC UA application identity requires a 2048..4096-bit RSA key",
+        )?;
+        let now = Asn1Time::days_from_now(0).map_err(certificate_error)?;
+        require(
+            own.not_before()
+                .compare(&now)
+                .map_err(certificate_error)?
+                .is_le()
+                && own
+                    .not_after()
+                    .compare(&now)
+                    .map_err(certificate_error)?
+                    .is_ge(),
+            "OPC UA application certificate is expired or not yet valid",
+        )?;
+        let own_der = own.to_der().map_err(certificate_error)?;
+        require(
+            own.subject_alt_names().is_some_and(|names| {
+                names
+                    .iter()
+                    .any(|name| name.uri() == Some(certificates.application_uri.as_str()))
+            }),
+            "OPC UA application URI does not match the certificate",
+        )?;
+
+        let parse_list = |list: &[String]| -> Result<Vec<X509>> {
+            let mut parsed = Vec::new();
+            for pem in list {
+                let certs = X509::stack_from_pem(pem.as_bytes()).map_err(certificate_error)?;
+                require(
+                    !certs.is_empty(),
+                    "OPC UA PEM trust entries must contain certificates",
+                )?;
+                parsed.extend(certs);
+                require(
+                    parsed.len() <= 32,
+                    "OPC UA certificate list exceeds 32 certificates",
+                )?;
+            }
+            Ok(parsed)
+        };
+        let mut trust = X509StoreBuilder::new().map_err(certificate_error)?;
+        // A caller may explicitly trust a server leaf or intermediate as well as a root CA.
+        trust
+            .set_flags(X509VerifyFlags::PARTIAL_CHAIN)
+            .map_err(certificate_error)?;
+        trust
+            .set_purpose(X509PurposeId::SSL_SERVER)
+            .map_err(certificate_error)?;
+        for certificate in parse_list(&certificates.trusted_certificates_pem)? {
+            trust.add_cert(certificate).map_err(certificate_error)?;
+        }
+        let issuers = parse_list(&certificates.issuer_certificates_pem)?;
+        let mut builder = tempfile::Builder::new();
+        builder.prefix("flow-like-opcua-");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            builder.permissions(std::fs::Permissions::from_mode(0o700));
+        }
+        let directory = builder.tempdir()?;
+        #[cfg(windows)]
+        restrict_windows_directory(directory.path())?;
+        for child in ["own", "private", "trusted", "rejected"] {
+            std::fs::create_dir(directory.path().join(child))?;
+        }
+        private_file(&directory.path().join("own/cert.der"), &own_der)?;
+        private_file(
+            &directory.path().join("private/private.pem"),
+            &key.private_key_to_pem_pkcs8().map_err(certificate_error)?,
+        )?;
+        Ok(Self {
+            directory,
+            trust: trust.build(),
+            issuers,
+        })
+    }
+
+    fn trust_endpoint(&self, endpoint: &mut ::opcua::types::EndpointDescription) -> Result<()> {
+        use openssl::{stack::Stack, x509::X509StoreContext};
+        let mut chain = decode_certificate_chain(endpoint.server_certificate.as_ref())?;
+        let leaf = chain.remove(0);
+        let mut issuers = Stack::new().map_err(certificate_error)?;
+        for issuer in chain.into_iter().chain(self.issuers.iter().cloned()) {
+            issuers.push(issuer).map_err(certificate_error)?;
+        }
+        let valid = X509StoreContext::new()
+            .map_err(certificate_error)?
+            .init(&self.trust, &leaf, &issuers, |context| {
+                context.verify_cert()
+            })
+            .map_err(certificate_error)?;
+        require(
+            valid,
+            "OPC UA server certificate chain is not trusted or valid",
+        )?;
+        let der = leaf.to_der().map_err(certificate_error)?;
+        let cert = ::opcua::crypto::X509::from_der(&der).map_err(certificate_error)?;
+        let filename = ::opcua::crypto::CertificateStore::cert_file_name(&cert);
+        require(
+            !filename.contains(['\\', ':'])
+                && std::path::Path::new(&filename).components().count() == 1,
+            "OPC UA server certificate has an unsupported subject name",
+        )?;
+        // The SDK checks this exact leaf again during the secure handshake, including hostname,
+        // application URI and validity. Discovery alone never establishes trust.
+        private_file(&self.directory.path().join("trusted").join(filename), &der)?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "opcua")]
+fn decode_certificate_chain(mut bytes: &[u8]) -> Result<Vec<openssl::x509::X509>> {
+    require(
+        !bytes.is_empty() && bytes.len() <= 1_048_576,
+        "OPC UA server certificate chain must contain bounded DER certificates",
+    )?;
+    let mut certificates = Vec::new();
+    while !bytes.is_empty() {
+        require(
+            certificates.len() < 32 && bytes.len() >= 2 && bytes[0] == 0x30,
+            "Invalid OPC UA DER certificate chain",
+        )?;
+        let (header, length) = if bytes[1] < 128 {
+            (2, usize::from(bytes[1]))
+        } else {
+            let count = usize::from(bytes[1] & 0x7f);
+            require(
+                (1..=4).contains(&count) && bytes.len() >= 2 + count && bytes[2] != 0,
+                "Invalid OPC UA DER certificate length",
+            )?;
+            let length = bytes[2..2 + count]
+                .iter()
+                .fold(0usize, |n, b| (n << 8) | usize::from(*b));
+            (2 + count, length)
+        };
+        require(
+            length > 0 && length <= 65_536 && header + length <= bytes.len(),
+            "Invalid OPC UA DER certificate length",
+        )?;
+        let cert =
+            openssl::x509::X509::from_der(&bytes[..header + length]).map_err(certificate_error)?;
+        certificates.push(cert);
+        bytes = &bytes[header + length..];
+    }
+    Ok(certificates)
 }
 
 #[cfg(feature = "opcua")]
@@ -247,11 +601,13 @@ pub struct OpcUaClient {
     event_loop: tokio::task::AbortHandle,
     timeout: std::time::Duration,
     closed: std::sync::atomic::AtomicBool,
+    pki: std::sync::Mutex<Option<SessionPki>>,
 }
 #[cfg(feature = "opcua")]
 impl Drop for OpcUaClient {
     fn drop(&mut self) {
         self.event_loop.abort();
+        self.pki.get_mut().unwrap_or_else(|e| e.into_inner()).take();
     }
 }
 #[cfg(feature = "opcua")]
@@ -285,7 +641,7 @@ impl OpcUaClient {
             "OPC UA requires 1..256 resolved addresses",
         )?;
         use ::opcua::{
-            client::{ClientBuilder, IdentityToken},
+            client::{Client, ClientBuilder, IdentityToken},
             types::{MessageSecurityMode, UserTokenPolicy, UserTokenType},
         };
         use std::{sync::atomic::AtomicBool, time::Duration};
@@ -296,8 +652,13 @@ impl OpcUaClient {
         )?;
         let duration = Duration::from_millis(config.timeout_ms);
         tokio::time::timeout(duration, async {
-            let client = ClientBuilder::new().application_name("Flow-Like Inspection").application_uri("urn:flow-like:inspection")
-                .pki_dir(&config.pki_dir).create_sample_keypair(false).trust_server_certs(false).verify_server_certs(true)
+            let pki = config.certificates.as_ref().map(SessionPki::new).transpose()?;
+            let pki_path = pki.as_ref().map(|pki| pki.directory.path())
+                .unwrap_or_else(|| std::path::Path::new(&config.pki_dir));
+            let application_uri = config.certificates.as_ref().map(|certs| certs.application_uri.as_str())
+                .unwrap_or("urn:flow-like:inspection");
+            let client = ClientBuilder::new().application_name("Flow-Like Inspection").application_uri(application_uri)
+                .pki_dir(pki_path).create_sample_keypair(false).trust_server_certs(false).verify_server_certs(true)
                 .session_retry_limit(0).request_timeout(duration).max_array_length(65_536).max_string_length(1_048_576)
                 .max_byte_string_length(1_048_576).max_incoming_chunk_size(4_194_304).client().map_err(|errors| Error::Invalid(errors.join("; ")))?;
             let (token, identity) = match credentials {
@@ -306,7 +667,14 @@ impl OpcUaClient {
             };
             let mode = match config.security_mode { OpcUaSecurityMode::None => MessageSecurityMode::None, OpcUaSecurityMode::Sign => MessageSecurityMode::Sign, OpcUaSecurityMode::SignAndEncrypt => MessageSecurityMode::SignAndEncrypt };
             let connector = PinnedConnector { endpoint: config.endpoint.clone(), addresses: addresses.to_vec() };
-            let endpoints = client.get_server_endpoints_from_url(connector.clone()).await.map_err(opc_error)?;
+            let mut endpoints = client.get_server_endpoints_from_url(connector.clone()).await.map_err(opc_error)?;
+            if let Some(pki) = &pki {
+                let policy = config.security_policy.parse().map_err(certificate_error)?;
+                let mut endpoint = Client::find_matching_endpoint(&endpoints, &config.endpoint, policy, mode)
+                    .ok_or_else(|| Error::Invalid("No OPC UA endpoint matches the requested security settings".into()))?;
+                pki.trust_endpoint(&mut endpoint)?;
+                endpoints = vec![endpoint];
+            }
             let (session, event_loop) = client.session_builder()
                 .with_endpoints(endpoints)
                 .connect_to_matching_endpoint((config.endpoint.as_str(), config.security_policy.as_str(), mode, token)).map_err(opc_error)?
@@ -314,7 +682,7 @@ impl OpcUaClient {
                 .with_connector(connector)
                 .build(client.certificate_store().clone()).map_err(opc_error)?;
             let mut task = event_loop.spawn();
-            let connected = Self { session, event_loop: task.abort_handle(), timeout: duration, closed: AtomicBool::new(false) };
+            let connected = Self { session, event_loop: task.abort_handle(), timeout: duration, closed: AtomicBool::new(false), pki: std::sync::Mutex::new(pki) };
             tokio::select! {
                 _ = &mut task => return Err(Error::Invalid("OPC UA session ended before connecting".into())),
                 ready = connected.session.wait_for_connection() => require(ready, "OPC UA session did not connect")?,
@@ -549,6 +917,14 @@ impl OpcUaClient {
         if self.closed.swap(true, std::sync::atomic::Ordering::AcqRel) {
             return Ok(());
         }
+        struct Cleanup<'a>(&'a OpcUaClient);
+        impl Drop for Cleanup<'_> {
+            fn drop(&mut self) {
+                self.0.event_loop.abort();
+                self.0.pki.lock().unwrap_or_else(|e| e.into_inner()).take();
+            }
+        }
+        let _cleanup = Cleanup(self);
         let result = tokio::time::timeout(self.timeout, self.session.disconnect())
             .await
             .map_err(|_| Error::Timeout)
@@ -703,6 +1079,7 @@ pub async fn read_opcua(
         &OpcUaConnectConfig {
             endpoint: config.endpoint.clone(),
             pki_dir: config.pki_dir.clone(),
+            certificates: config.certificates.clone(),
             security_policy: config.security_policy.clone(),
             security_mode: config.security_mode,
             timeout_ms: config.timeout_ms,
@@ -751,11 +1128,101 @@ fn convert_value(value: &::opcua::types::Variant) -> Result<OpcUaValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_certificates_are_bounded_redacted_and_require_security() {
+        let certificates = OpcUaCertificates {
+            application_uri: "urn:flow-like:test".into(),
+            certificate_pem: "certificate".into(),
+            private_key_pem: "private-secret".into(),
+            trusted_certificates_pem: vec!["trust".into()],
+            issuer_certificates_pem: Vec::new(),
+        };
+        assert!(!format!("{certificates:?}").contains("private-secret"));
+        let mut config = OpcUaConnectConfig {
+            endpoint: "opc.tcp://localhost:4840".into(),
+            pki_dir: "/unused".into(),
+            certificates: Some(certificates),
+            security_policy: "None".into(),
+            security_mode: OpcUaSecurityMode::None,
+            timeout_ms: 1000,
+        };
+        assert!(config.validate().is_err());
+        config.security_mode = OpcUaSecurityMode::SignAndEncrypt;
+        config.security_policy = "Basic256Sha256".into();
+        config.validate().unwrap();
+        config
+            .certificates
+            .as_mut()
+            .unwrap()
+            .trusted_certificates_pem
+            .clear();
+        assert!(config.validate().is_err());
+    }
+
+    #[cfg(feature = "opcua")]
+    #[test]
+    fn custom_pki_is_private_and_removed_when_its_owner_drops() {
+        use ::opcua::crypto::{X509, X509Data};
+        let (certificate, key) = X509::cert_and_pkey(&X509Data::sample_cert()).unwrap();
+        let der = certificate.to_der().unwrap();
+        let pem = String::from_utf8(
+            openssl::x509::X509::from_der(&der)
+                .unwrap()
+                .to_pem()
+                .unwrap(),
+        )
+        .unwrap();
+        let private =
+            openssl::pkey::PKey::private_key_from_der(key.to_der().unwrap().as_bytes()).unwrap();
+        let pki = SessionPki::new(&OpcUaCertificates {
+            application_uri: "urn:OPCUADemo".into(),
+            certificate_pem: pem.clone(),
+            private_key_pem: String::from_utf8(private.private_key_to_pem_pkcs8().unwrap())
+                .unwrap(),
+            trusted_certificates_pem: vec![pem],
+            issuer_certificates_pem: Vec::new(),
+        })
+        .unwrap();
+        let path = pki.directory.path().to_owned();
+        let private = path.join("private/private.pem");
+        assert!(private.is_file());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
+            assert_eq!(
+                std::fs::metadata(&private).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        assert_eq!(
+            decode_certificate_chain(&[der.clone(), der.clone()].concat())
+                .unwrap()
+                .len(),
+            2
+        );
+        for bytes in [
+            &[][..],
+            &[0x30, 0x80][..],
+            &[0x30, 0x84, 0xff, 0xff, 0xff, 0xff][..],
+            &der[..der.len() - 1],
+        ] {
+            assert!(decode_certificate_chain(bytes).is_err());
+        }
+        drop(pki);
+        assert!(!path.exists());
+    }
+
     #[test]
     fn configuration_rejects_security_mismatch_and_credential_urls() {
         let mut config = OpcUaReadConfig {
             endpoint: "opc.tcp://localhost:4840".into(),
             pki_dir: "/tmp/fixture-pki".into(),
+            certificates: None,
             security_policy: "Basic256Sha256".into(),
             security_mode: OpcUaSecurityMode::SignAndEncrypt,
             node_ids: vec!["ns=2;s=temperature".into()],
@@ -874,6 +1341,7 @@ mod tests {
             &OpcUaConnectConfig {
                 endpoint: format!("opc.tcp://unresolvable.flow-like.invalid:{port}/"),
                 pki_dir: root.join("client").to_string_lossy().into_owned(),
+                certificates: None,
                 security_policy: "None".into(),
                 security_mode: OpcUaSecurityMode::None,
                 timeout_ms: 5000,

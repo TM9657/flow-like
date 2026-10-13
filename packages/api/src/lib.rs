@@ -284,6 +284,10 @@ pub fn construct_router_with_cors(state: Arc<State>, cors: CorsLayer) -> Router 
     let frontend_links = routes::frontend::link_routes()
         .with_state(state.clone())
         .layer(from_fn(deadline_middleware))
+        .layer(inbound_layers.clone());
+    let invitation_links = routes::invite::routes()
+        .with_state(state.clone())
+        .layer(from_fn(deadline_middleware))
         .layer(inbound_layers);
 
     Router::new()
@@ -292,6 +296,7 @@ pub fn construct_router_with_cors(state: Arc<State>, cors: CorsLayer) -> Router 
         .nest("/m", inbound_mcp)
         .nest("/frontend", frontend)
         .merge(frontend_links)
+        .merge(invitation_links)
         .nest("/api/v1", router)
         // One outer boundary observes API, inbound REST/MCP, OpenAPI and fallbacks.
         .layer(from_fn(telemetry::trace_context_middleware))

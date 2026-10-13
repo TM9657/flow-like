@@ -241,6 +241,21 @@ mod execution {
         context: &ExecutionContext,
         suffix: &str,
     ) -> Result<std::path::PathBuf> {
+        scoped_storage_directory(context, suffix, false)
+    }
+
+    pub fn local_app_storage_directory(
+        context: &ExecutionContext,
+        suffix: &str,
+    ) -> Result<std::path::PathBuf> {
+        scoped_storage_directory(context, suffix, true)
+    }
+
+    fn scoped_storage_directory(
+        context: &ExecutionContext,
+        suffix: &str,
+        app_scope: bool,
+    ) -> Result<std::path::PathBuf> {
         use flow_like_storage::{Path, files::store::FlowLikeStore};
         if suffix.is_empty() || suffix.contains(['/', '\\']) || suffix == "." || suffix == ".." {
             return Err(anyhow!("Invalid industrial storage directory"));
@@ -254,15 +269,25 @@ mod execution {
         }
         let Some(FlowLikeStore::Local(local)) = &cache.stores.app_storage_store else {
             return Err(anyhow!(
-                "Certificate storage requires local app storage on this executor"
+                "Industrial security state requires local app storage on this executor"
             ));
         };
         let root = local
             .directory_to_filesystem(&Path::from(""))?
             .canonicalize()?;
-        // Retain the existing certificate location when moving the inspection nodes.
-        let path = local
-            .directory_to_filesystem(&cache.get_storage(false)?.join("inspection").join(suffix))?;
+        let base = if app_scope {
+            let app_id = cache.app_id.as_str();
+            if app_id.is_empty() || app_id.contains(['/', '\\']) || app_id == "." || app_id == ".."
+            {
+                return Err(anyhow!("Invalid app ID for industrial storage"));
+            }
+            // All publishers using the same encryption key share counters across boards.
+            Path::from("apps").join(app_id).join("storage")
+        } else {
+            // Retain the existing certificate location for inspection nodes.
+            cache.get_storage(false)?
+        };
+        let path = local.directory_to_filesystem(&base.join("inspection").join(suffix))?;
         let mut ancestor = path.as_path();
         while !ancestor.try_exists()? {
             if std::fs::symlink_metadata(ancestor).is_ok() {

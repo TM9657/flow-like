@@ -1,0 +1,30 @@
+---
+title: "Zenoh Node Catalog"
+description: "Industrial/Zenoh Flow-Like node category with 6 generated node references."
+sidebar:
+  order: 0
+  label: "Zenoh"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "Zenoh nodes, Industrial/Zenoh, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "Industrial/Zenoh"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"Zenoh Node Catalog\",\"description\":\"Industrial/Zenoh Flow-Like node category with 6 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/industrial/zenoh/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"Industrial/Zenoh\",\"keywords\":\"Zenoh nodes, Industrial/Zenoh, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"Industrial/Zenoh"}
+	label="Zenoh"
+	nodes={nodesByCategory["Industrial/Zenoh"] ?? []}
+	client:load
+/>

@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(flow_like_dds_reference C)
+find_package(CycloneDDS REQUIRED)
+idlc_generate(TARGET telemetry FILES Telemetry.idl)
+add_executable(dds-reference reference.c)
+target_link_libraries(dds-reference PRIVATE telemetry CycloneDDS::ddsc)

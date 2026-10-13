@@ -49,6 +49,17 @@ jobs:
         run: cargo test --locked -p flow-like-ml-burn --features onnx-export onnx_export_requires_a_supported_graph_and_matching_shape
       - name: Metadata without training engines
         run: cargo check --locked -p flow-like-ml-burn -p flow-like-ml-runtime --no-default-features
+      - name: Vendored PyTorch checkpoint reader suite
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          TEST_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TEST_DIR"' EXIT
+          cp -R packages/vendor/pytorch-reader "$TEST_DIR/pytorch-reader"
+          # The crate is excluded from the workspace, so --locked cannot resolve its
+          # dev-dependencies. Seeding the workspace lock keeps the shipped versions.
+          cp Cargo.lock "$TEST_DIR/pytorch-reader/Cargo.lock"
+          cargo test --manifest-path "$TEST_DIR/pytorch-reader/Cargo.toml"
 
   catalog-integration:
     runs-on: ubuntu-latest
@@ -73,8 +84,19 @@ jobs:
           -p flow-like-catalog-ml -p flow-like-catalog-llm -p flow-like-catalog-onnx
           --no-default-features
           --features flow-like-catalog-ml/training-cpu,flow-like-catalog-ml/opcua,flow-like-catalog-ml/genicam,flow-like-catalog-ml/onnx-export,flow-like-catalog-llm/training,flow-like-catalog-onnx/execute
+      # Executors run published models without a training ledger, so catalog-ml must build with inference alone.
+      - name: Compile and lint published-model inference without training
+        run: |
+          cargo check --locked -p flow-like-catalog-ml --no-default-features --features inference
+          cargo clippy --locked -p flow-like-catalog-ml --no-default-features --features inference -- -D clippy::correctness -D clippy::suspicious
+      - name: Published models load and predict from their files
+        run: |
+          cargo test --locked -p flow-like-catalog-ml --no-default-features --features inference --lib inspection::published
+          cargo test --locked -p flow-like-ml-runtime --features native,burn --test portable_models
       - name: Table experiments, continuous learning, and consultant action schemas
         run: |
           cargo test --locked -p flow-like-catalog-ml --features training-cpu --lib inspection::
           cargo test --locked -p flow-like-catalog-llm --lib llm::auto_training
           cargo test --locked -p flow-like-catalog-llm --lib llm::learning
+          cargo test --locked -p flow-like-catalog-llm --features training,flow-like-catalog-ml/training-cpu --lib llm::auto_training
+          cargo test --locked -p flow-like-catalog-llm --features training,flow-like-catalog-ml/training-cpu --lib llm::learning

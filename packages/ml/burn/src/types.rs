@@ -573,12 +573,26 @@ impl TensorDataset {
                     ));
                 }
                 for instances in values {
+                    if instances.len() > MASK_RCNN_MAX_INSTANCES {
+                        return Err(Error::Invalid(format!(
+                            "An image has {} instances; Mask R-CNN accepts at most {MASK_RCNN_MAX_INSTANCES} per image",
+                            instances.len()
+                        )));
+                    }
                     for instance in instances {
                         instance.validate(
                             recipe.outputs(),
                             self.inputs.shape[2],
                             self.inputs.shape[3],
                         )?;
+                    }
+                    if instance_mask_elements(instances)
+                        .is_none_or(|elements| elements > MASK_RCNN_ELEMENT_BUDGET)
+                    {
+                        return Err(Error::Invalid(format!(
+                            "An image's {} full-image instance masks exceed the Mask R-CNN limit of {MASK_RCNN_ELEMENT_BUDGET} mask elements",
+                            instances.len()
+                        )));
                     }
                 }
                 return Ok(());
@@ -701,6 +715,16 @@ fn default_clip() -> f32 {
 }
 impl TrainingConfig {
     pub fn validate(&self) -> Result<()> {
+        self.validate_stored()?;
+        if let Recipe::MaskRcnn { config } = &self.recipe {
+            validate_mask_rcnn_roi_budget(config, self.batch_size)?;
+        }
+        Ok(())
+    }
+
+    /// The checks a saved model's configuration must pass to load. Training budgets stay in
+    /// validate(), so a model trained before a budget existed still loads.
+    pub fn validate_stored(&self) -> Result<()> {
         self.recipe.validate()?;
         if self.recipe.is_instance_segmentation() && self.batch_size > 32 {
             return Err(Error::Invalid(
@@ -724,6 +748,78 @@ impl TrainingConfig {
         }
         Ok(())
     }
+
+    /// Validates `data` against the recipe and against the largest batch a shuffled epoch of
+    /// `batch_size` samples can draw, so per-batch limits fail before training starts.
+    pub fn validate_dataset(&self, data: &TensorDataset) -> Result<()> {
+        data.validate(&self.recipe)?;
+        if let Targets::Instances { values } = &data.targets {
+            validate_instance_batches(values, self.batch_size, MASK_RCNN_ELEMENT_BUDGET)?;
+        }
+        Ok(())
+    }
+}
+
+/// Per-batch element budget for Mask R-CNN ROI mask-head activations and full-image target
+/// masks, and the per-image budget for predicted full-image masks.
+pub(crate) const MASK_RCNN_ELEMENT_BUDGET: usize = 64 * 1024 * 1024;
+pub(crate) const MASK_RCNN_MAX_INSTANCES: usize = 1024;
+
+/// Elements of the widest mask-head activation: `[rois, 2 * base_channels, mask, mask]`.
+pub(crate) fn mask_rcnn_roi_elements(config: &crate::MaskRcnnConfig, rois: usize) -> Option<usize> {
+    let channels = config.base_channels.checked_mul(2)?;
+    let area = config.mask_size.checked_mul(config.mask_size)?;
+    rois.checked_mul(channels)?.checked_mul(area)
+}
+
+pub(crate) fn instance_mask_elements(instances: &[crate::InstanceTarget]) -> Option<usize> {
+    instances.iter().try_fold(0usize, |total, instance| {
+        total.checked_add(instance.mask.values.len())
+    })
+}
+
+fn validate_mask_rcnn_roi_budget(config: &crate::MaskRcnnConfig, batch_size: usize) -> Result<()> {
+    let per_image = mask_rcnn_roi_elements(config, config.training_samples).unwrap_or(usize::MAX);
+    let fitting = MASK_RCNN_ELEMENT_BUDGET / per_image.max(1);
+    if batch_size <= fitting {
+        return Ok(());
+    }
+    Err(Error::Invalid(if fitting == 0 {
+        format!(
+            "Mask R-CNN training ROIs of one image need {per_image} mask-head elements, above the {MASK_RCNN_ELEMENT_BUDGET}-element limit; reduce training_samples, base_channels or mask_size"
+        )
+    } else {
+        format!(
+            "Mask R-CNN batch size {batch_size} exceeds the {MASK_RCNN_ELEMENT_BUDGET}-element ROI mask-head budget; use at most {fitting} images per batch or reduce training_samples, base_channels or mask_size"
+        )
+    }))
+}
+
+fn validate_instance_batches(
+    values: &[Vec<crate::InstanceTarget>],
+    batch_size: usize,
+    budget: usize,
+) -> Result<()> {
+    let mut elements = values
+        .iter()
+        .map(|instances| instance_mask_elements(instances).unwrap_or(usize::MAX))
+        .collect::<Vec<_>>();
+    elements.sort_unstable_by(|a, b| b.cmp(a));
+    let fitting = elements
+        .iter()
+        .scan(0usize, |total, count| {
+            *total = total.saturating_add(*count);
+            Some(*total)
+        })
+        .take_while(|total| *total <= budget)
+        .count();
+    let batch = batch_size.min(elements.len());
+    if fitting < batch {
+        return Err(Error::Invalid(format!(
+            "Instance masks of the {batch} largest images total more than the {budget}-element Mask R-CNN batch limit; use a batch size of at most {fitting}"
+        )));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Default)]
@@ -839,4 +935,103 @@ pub struct BackendProbe {
     pub backend: BackendChoice,
     pub device: String,
     pub max_absolute_error: f32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mask_rcnn(config: crate::MaskRcnnConfig, batch_size: usize) -> TrainingConfig {
+        TrainingConfig {
+            recipe: Recipe::MaskRcnn { config },
+            backend: BackendChoice::Cpu,
+            epochs: 1,
+            batch_size,
+            learning_rate: 0.001,
+            seed: 1,
+            gradient_clip: 5.0,
+        }
+    }
+
+    fn instances(count: usize, side: usize) -> Vec<crate::InstanceTarget> {
+        (0..count)
+            .map(|_| crate::InstanceTarget {
+                bbox: BoundingBox {
+                    class_id: 0,
+                    x_min: 0.25,
+                    y_min: 0.25,
+                    x_max: 0.75,
+                    y_max: 0.75,
+                },
+                mask: TensorData {
+                    shape: vec![side, side],
+                    values: vec![0.0; side * side],
+                },
+            })
+            .collect()
+    }
+
+    #[test]
+    fn mask_rcnn_training_config_rejects_batches_over_the_roi_mask_budget() {
+        // 64 training ROIs x 64 channels x 28 x 28 = 3,211,264 mask-head elements per image.
+        let config = crate::MaskRcnnConfig::default();
+        assert!(mask_rcnn(config.clone(), 20).validate().is_ok());
+        let error = mask_rcnn(config, 21).validate().unwrap_err();
+        assert!(error.to_string().contains("at most 20 images"), "{error}");
+        let oversized = crate::MaskRcnnConfig {
+            base_channels: 256,
+            mask_size: 56,
+            training_samples: 512,
+            ..Default::default()
+        };
+        assert!(mask_rcnn(oversized, 1).validate().is_err());
+    }
+
+    #[test]
+    fn stored_configs_skip_the_training_roi_budget_but_keep_their_limits() {
+        let config = crate::MaskRcnnConfig::default();
+        let over_budget = mask_rcnn(config.clone(), 21);
+        assert!(over_budget.validate().is_err());
+        assert!(over_budget.validate_stored().is_ok());
+        assert!(mask_rcnn(config.clone(), 33).validate_stored().is_err());
+        let mut no_epochs = mask_rcnn(config, 1);
+        no_epochs.epochs = 0;
+        assert!(no_epochs.validate_stored().is_err());
+    }
+
+    #[test]
+    fn instance_datasets_reject_crowded_images_and_oversized_worst_case_batches() {
+        let config = crate::MaskRcnnConfig {
+            input_channels: 1,
+            classes: 1,
+            ..Default::default()
+        };
+        let dataset = |targets: Vec<Vec<crate::InstanceTarget>>| TensorDataset {
+            inputs: TensorData {
+                shape: vec![targets.len(), 1, 16, 16],
+                values: vec![0.0; targets.len() * 256],
+            },
+            targets: Targets::Instances { values: targets },
+        };
+        let crowded = dataset(vec![instances(MASK_RCNN_MAX_INSTANCES + 1, 16)]);
+        let error = crowded
+            .validate(&Recipe::MaskRcnn {
+                config: config.clone(),
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("at most 1024"), "{error}");
+        assert!(
+            mask_rcnn(config, 2)
+                .validate_dataset(&dataset(vec![instances(3, 16), instances(1, 16)]))
+                .is_ok()
+        );
+        // Sorted per-image mask elements are 32, 16 and 16; any two images can share a batch.
+        let values = vec![instances(1, 4), instances(2, 4), instances(1, 4)];
+        assert!(validate_instance_batches(&values, 1, 40).is_ok());
+        let error = validate_instance_batches(&values, 2, 40).unwrap_err();
+        assert!(error.to_string().contains("at most 1"), "{error}");
+        assert!(validate_instance_batches(&values, 2, 48).is_ok());
+        assert!(validate_instance_batches(&values, 8, 64).is_ok());
+        assert!(validate_instance_batches(&values, 8, 63).is_err());
+    }
 }

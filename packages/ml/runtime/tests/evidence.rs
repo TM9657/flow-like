@@ -318,6 +318,52 @@ fn adding_evidence_invalidates_previous_promotion_proof() {
 }
 
 #[test]
+fn typed_evaluations_take_revised_truth_and_leave_out_withdrawn_annotations() {
+    let (_dir, repo, artifact) = fixture(Annotation::Scalar { value: 4. });
+    record(
+        &repo,
+        &artifact,
+        EvidencePrediction::Regression { values: vec![4.] },
+    );
+    let report = repo
+        .evaluate_task(&artifact.id, EvaluationTask::Regression, 2001)
+        .unwrap();
+    let test = repo.get_snapshot(&artifact.snapshot_id).unwrap().test;
+    assert_eq!(report.audited_samples, test.len());
+    assert_eq!(report.metrics["mae"], 0.);
+    let mut measured = test[1].clone();
+    measured.annotation_revision += 1;
+    measured.label_available_at_ms = 2100;
+    measured.source = LabelSource::ObservedOutcome;
+    measured.payload["annotation"] = json!({"kind":"scalar","value":6.0});
+    measured.payload["provenance"] = json!({"kind":"measured","source":"gauge"});
+    repo.record_sample(&artifact.stream, &measured).unwrap();
+    let mut withdrawn = test[0].clone();
+    withdrawn.annotation_revision += 1;
+    withdrawn.label_available_at_ms = 2100;
+    withdrawn.accepted = false;
+    repo.record_sample(&artifact.stream, &withdrawn).unwrap();
+    assert!(matches!(
+        repo.promote_metrics("stale", 0, &report.id, policy("mae", None, Some(1.)), 2101),
+        Err(Error::Conflict(_))
+    ));
+    let revised = repo
+        .evaluate_task(&artifact.id, EvaluationTask::Regression, 2101)
+        .unwrap();
+    assert_eq!(revised.audited_samples, test.len() - 1);
+    assert_eq!(revised.metrics["mae"], 2. / (test.len() - 1) as f64);
+    assert_ne!(revised.truth_digest, report.truth_digest);
+    repo.promote_metrics(
+        "revised",
+        0,
+        &revised.id,
+        policy("mae", None, Some(1.)),
+        2102,
+    )
+    .unwrap();
+}
+
+#[test]
 fn outcome_horizon_and_feature_overlap_are_purged() {
     let dir = tempfile::tempdir().unwrap();
     let repo = TrainingRepository::open(dir.path().join("ledger.sqlite")).unwrap();
@@ -663,6 +709,184 @@ fn instance_masks_match_by_class_and_score_and_fail_gates_on_false_positives() {
     assert_eq!(wrong_class.metrics["mask_mean_average_precision"], 0.);
     assert_eq!(wrong_class.metrics["mask_mean_iou"], 0.);
     assert_eq!(wrong_class.metrics["recall/0"], 0.);
+}
+
+#[test]
+fn empty_predicted_instance_masks_score_as_false_positives() {
+    let (_dir, repo, artifact) = instance_fixture();
+    record(
+        &repo,
+        &artifact,
+        EvidencePrediction::Instances {
+            instances: vec![
+                instance_prediction(0, 0.9, vec![true, false, true, false]),
+                instance_prediction(0, 0.4, vec![false; 4]),
+            ],
+        },
+    );
+    let report = repo
+        .evaluate_task(
+            &artifact.id,
+            EvaluationTask::InstanceSegmentation {
+                classes: 1,
+                iou_threshold: 0.5,
+            },
+            2001,
+        )
+        .unwrap();
+    assert_eq!(report.metrics["precision/0"], 0.5);
+    assert_eq!(report.metrics["recall/0"], 1.);
+    assert_eq!(report.metrics["mask_mean_iou"], 1.);
+}
+
+#[test]
+fn class_bearing_tasks_reject_out_of_range_class_counts() {
+    let (_dir, repo, artifact) = fixture(Annotation::Scalar { value: 4. });
+    for task in [
+        EvaluationTask::Detection {
+            classes: 0,
+            iou_threshold: 0.5,
+        },
+        EvaluationTask::Detection {
+            classes: 50_000_000,
+            iou_threshold: 0.5,
+        },
+        EvaluationTask::Segmentation { classes: 4097 },
+        EvaluationTask::InstanceSegmentation {
+            classes: 0,
+            iou_threshold: 0.5,
+        },
+    ] {
+        let error = repo
+            .evaluate_task(&artifact.id, task, 2001)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("1..=4096"), "{error}");
+    }
+}
+
+fn scalar_artifact(
+    repo: &TrainingRepository,
+    stream_id: &str,
+    content_offset: i64,
+    manifest: serde_json::Value,
+) -> ModelArtifact {
+    let stream = StreamKey {
+        project_id: "factory".into(),
+        stream_id: stream_id.into(),
+        inspection_version: "v1".into(),
+    };
+    for i in 0..9 {
+        record_scalar(
+            repo,
+            &stream,
+            &format!("{stream_id}-{i}"),
+            &format!("lot-{i}"),
+            content_offset + i,
+        );
+    }
+    let job = repo
+        .trigger_after_n(
+            &stream,
+            9,
+            TrainingRequest {
+                engine: "fixture".into(),
+                recipe: json!({}),
+                compute: json!({}),
+            },
+            SplitPolicy::Group {
+                train_fraction: 0.5,
+                validation_fraction: 0.2,
+                seed: 42,
+            },
+            1000,
+        )
+        .unwrap()
+        .unwrap();
+    let lease = repo.claim_job(&job.id, "worker", 1000, 1000).unwrap();
+    repo.finish_training(&lease, stream_id.as_bytes(), manifest, 1001)
+        .unwrap()
+}
+
+fn record_scalar(
+    repo: &TrainingRepository,
+    stream: &StreamKey,
+    id: &str,
+    group: &str,
+    content: i64,
+) -> TrainingSample {
+    let sample = Sample {
+        id: id.into(),
+        group_id: group.into(),
+        stream_id: stream.stream_id.clone(),
+        timestamp_ms: 1,
+        window_start_ms: 1,
+        window_end_ms: 1,
+        input: TensorData {
+            shape: vec![1],
+            values: vec![content as f32],
+        },
+        annotation: Annotation::Scalar {
+            value: content as f64,
+        },
+        provenance: LabelProvenance::Reviewed {
+            reviewer: "operator".into(),
+            reviewed_at_ms: 1,
+        },
+        outcome: None,
+    };
+    let recorded = TrainingSample {
+        id: sample.id.clone(),
+        annotation_revision: 1,
+        group_id: sample.group_id.clone(),
+        captured_at_ms: 1,
+        label_available_at_ms: 1,
+        content_digest: format!("{content:064x}"),
+        source: LabelSource::Reviewed,
+        accepted: true,
+        payload: serde_json::to_value(sample).unwrap(),
+    };
+    repo.record_sample(stream, &recorded).unwrap();
+    recorded
+}
+
+#[test]
+fn audits_exclude_content_that_an_in_project_initialization_model_consumed() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("lineage.sqlite")).unwrap();
+    let source = scalar_artifact(&repo, "source", 0, json!({}));
+    let target = scalar_artifact(
+        &repo,
+        "target",
+        100,
+        json!({"pretrained":{"source_kind":"training_artifact","source_id":source.id}}),
+    );
+    record(
+        &repo,
+        &target,
+        EvidencePrediction::Regression { values: vec![1.] },
+    );
+    // Both streams name their groups lot-0..lot-8; names alone do not link them.
+    repo.evaluate_task(&target.id, EvaluationTask::Regression, 2001)
+        .unwrap();
+    let consumed = repo
+        .get_snapshot(&source.snapshot_id)
+        .unwrap()
+        .train
+        .remove(0);
+    let content = i64::from_str_radix(&consumed.content_digest, 16).unwrap();
+    let copied = record_scalar(&repo, &target.stream, "copied", "fresh-lot", content);
+    record_one(
+        &repo,
+        &target,
+        &copied,
+        EvidencePrediction::Regression { values: vec![1.] },
+    );
+    let error = repo
+        .evaluate_task(&target.id, EvaluationTask::Regression, 2001)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("initialized from"), "{error}");
 }
 
 #[test]

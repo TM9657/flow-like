@@ -1,17 +1,39 @@
+use crate::worker::LocalRunLock;
 use crate::*;
-use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+use rusqlite::{
+    Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior, config::DbConfig,
+    params,
+};
 use std::{
-    collections::BTreeMap,
-    io::Write,
+    collections::{BTreeMap, BTreeSet, HashSet},
+    io::{ErrorKind, Write},
     path::{Path, PathBuf},
     time::Duration,
 };
+
+/// Writers share it from staging a blob until its reference commits; the collector takes
+/// it exclusively, so a staged blob is never mistaken for an unreferenced one.
+const BLOB_STORE_LOCK: &str = "blob-store";
+
+/// JSON path of the content digests that an adopted training artifact keeps in its source row,
+/// outside `PretrainedSource`, so listings, node outputs and published manifests never carry
+/// them.
+pub(crate) const ADOPTED_LINEAGE: &str = "$.lineage_digests";
+
+/// Checkpoints that a resume or a successive-halving continuation can still read.
+const LIVE_CHECKPOINTS: &str = "SELECT json_extract(j.body,'$.checkpoint.blob.path'),NULL FROM jobs j LEFT JOIN experiment_trials t ON t.job_id=j.id WHERE CASE WHEN t.experiment_id IS NULL THEN j.status<>'succeeded' ELSE j.status IN ('queued','running','cancel_requested','paused','interrupted') OR t.experiment_id IN (SELECT id FROM experiments WHERE json_extract(body,'$.selected_trial_id') IS NULL AND json_extract(body,'$.status') IN ('running','cancel_requested','cancelled')) END";
+
+/// How many `eligible_samples` (?1 scope, ?2 time) lie outside `triggered_samples`. Consumed
+/// samples are dropped first; the annotation_label_availability index answers the label-time
+/// lookup, so no annotation body is read.
+const NEW_SAMPLE_COUNT: &str = "WITH pending AS MATERIALIZED (SELECT a.sample_id FROM accepted a WHERE a.scope=?1 AND NOT EXISTS(SELECT 1 FROM triggered_samples t WHERE t.scope=?1 AND t.sample_id=a.sample_id)) SELECT count(*) FROM pending p WHERE (SELECT n.accepted FROM annotations n WHERE n.scope=?1 AND n.sample_id=p.sample_id AND json_extract(n.body,'$.label_available_at_ms')<=?2 ORDER BY n.revision DESC LIMIT 1)=1";
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS ml_meta(version INTEGER NOT NULL);
 INSERT INTO ml_meta(version) SELECT 1 WHERE NOT EXISTS(SELECT 1 FROM ml_meta);
 CREATE TABLE IF NOT EXISTS streams(scope TEXT PRIMARY KEY, next_sequence INTEGER NOT NULL DEFAULT 0, last_trigger_sequence INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS annotations(scope TEXT NOT NULL, sample_id TEXT NOT NULL, revision INTEGER NOT NULL, accepted INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(scope,sample_id,revision));
+CREATE INDEX IF NOT EXISTS annotation_label_availability ON annotations(scope,sample_id,revision,accepted,json_extract(body,'$.label_available_at_ms'));
 CREATE TABLE IF NOT EXISTS accepted(scope TEXT NOT NULL, sample_id TEXT NOT NULL, sequence INTEGER NOT NULL, PRIMARY KEY(scope,sample_id), UNIQUE(scope,sequence));
 CREATE TABLE IF NOT EXISTS snapshots(id TEXT PRIMARY KEY, scope TEXT NOT NULL, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS triggered_samples(scope TEXT NOT NULL, sample_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, PRIMARY KEY(scope,sample_id));
@@ -26,12 +48,34 @@ CREATE TABLE IF NOT EXISTS deployments(id TEXT PRIMARY KEY, scope TEXT NOT NULL,
 CREATE TABLE IF NOT EXISTS deployment_history(id TEXT NOT NULL, generation INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(id,generation));
 ";
 
+pub const LEDGER_DATABASE_FILE: &str = "jobs.sqlite";
+pub const LEDGER_BLOB_DIR: &str = "jobs.artifacts";
+
+/// One file of a ledger snapshot folder, relative to that folder. Blob files are
+/// `jobs.artifacts/{sha}.blob`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LedgerSnapshotFile {
+    pub file: String,
+    pub sha256: String,
+    pub bytes: u64,
+}
+
+/// A self-contained copy of a ledger: a single-file database plus every blob it references.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LedgerSnapshot {
+    pub database: LedgerSnapshotFile,
+    pub blobs: Vec<LedgerSnapshotFile>,
+    pub project_ids: BTreeSet<String>,
+}
+
 /// Cloneable handle. Each operation opens its own connection, so transaction tests cover
 /// competing processes as well as threads. Artifacts live beside the SQLite ledger.
 #[derive(Clone, Debug)]
 pub struct TrainingRepository {
     path: PathBuf,
     blob_dir: PathBuf,
+    /// Canonical directory of the ledger, as resolved when it was opened.
+    root: PathBuf,
     shadow: bool,
 }
 
@@ -41,16 +85,21 @@ impl TrainingRepository {
         if path.as_os_str().is_empty() || path == Path::new(":memory:") {
             return Err(invalid("a persistent SQLite file is required"));
         }
-        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-            std::fs::create_dir_all(parent)?;
-        }
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        std::fs::create_dir_all(parent)?;
+        let root = parent.canonicalize()?;
         let blob_dir = path.with_extension("artifacts");
         std::fs::create_dir_all(&blob_dir)?;
         let repo = Self {
             path,
             blob_dir,
+            root,
             shadow: false,
         };
+        repo.verify_storage()?;
         let mut connection = repo.connection()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -63,7 +112,12 @@ impl TrainingRepository {
                 "unsupported training ledger version {version}"
             )));
         }
+        // After migrations, so they may drop obsolete objects; a rejection rolls them back.
+        verify_schema_objects(&tx)?;
         tx.commit()?;
+        if let Ok(exclusive) = LocalRunLock::acquire(&repo, BLOB_STORE_LOCK) {
+            repo.sweep_blob_store(&exclusive, None);
+        }
         Ok(repo)
     }
 
@@ -77,6 +131,12 @@ impl TrainingRepository {
     pub fn path(&self) -> &Path {
         &self.path
     }
+    /// Checks that the ledger, its blob and lock directories and its journal files are still
+    /// real entries of the ledger's directory. Hosts that reuse an open handle can call it
+    /// instead of reopening; blob writes and sweeps check their own directory every time.
+    pub fn verify_storage(&self) -> Result<()> {
+        verify_storage_entries(&self.root, &self.path, &self.blob_dir)
+    }
     pub(crate) fn writable(&self) -> Result<()> {
         if self.shadow {
             Err(Error::ShadowWrite)
@@ -86,6 +146,8 @@ impl TrainingRepository {
     }
     pub(crate) fn connection(&self) -> Result<Connection> {
         let connection = Connection::open(&self.path)?;
+        connection.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
+        connection.set_db_config(DbConfig::SQLITE_DBCONFIG_TRUSTED_SCHEMA, false)?;
         connection.busy_timeout(Duration::from_secs(15))?;
         connection.pragma_update(None, "foreign_keys", true)?;
         connection.pragma_update(None, "synchronous", "FULL")?;
@@ -222,6 +284,13 @@ impl TrainingRepository {
         Ok(serde_json::from_str(&body)?)
     }
 
+    /// Samples Train After N has not consumed yet: accepted, with an accepted latest revision
+    /// whose label is available at `as_of_ms`, and outside every earlier trigger. Label times
+    /// come from an index, so no sample body is read.
+    pub fn count_new_training_samples(&self, stream: &StreamKey, as_of_ms: i64) -> Result<usize> {
+        count_new_samples(&self.connection()?, &scope(stream)?, as_of_ms)
+    }
+
     /// Counts distinct accepted samples since the last trigger. Reserving the watermark,
     /// immutable snapshot and queued job is one transaction. Failure is retried by resume_job.
     pub fn trigger_after_n(
@@ -246,28 +315,24 @@ impl TrainingRepository {
         }
         let scope = scope(stream)?;
         let mut connection = self.connection()?;
+        // A stream short of N new samples returns before taking the write lock.
+        if count_new_samples(&connection, &scope, at_ms)? < n {
+            return Ok(None);
+        }
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let active: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM jobs WHERE scope=? AND status IN ('queued','running','cancel_requested','paused','interrupted'))", [&scope], |r| r.get(0))?;
-        if active {
+        if active || count_new_samples(&tx, &scope, at_ms)? < n {
             return Ok(None);
         }
         let samples = eligible_samples(&tx, &scope, at_ms)?;
-        let mut new_count = 0;
-        for (_, sample) in &samples {
-            let seen: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM triggered_samples WHERE scope=? AND sample_id=?)",
-                params![scope, sample.id],
-                |r| r.get(0),
-            )?;
-            new_count += usize::from(!seen);
-        }
-        if new_count < n {
-            return Ok(None);
-        }
         if !partitions_ready(&samples, &policy)? {
             return Ok(None);
         }
-        let mut snapshot = create_snapshot(&tx, stream, policy, at_ms)?;
+        let consumed: Vec<String> = samples
+            .iter()
+            .map(|(_, sample)| sample.id.clone())
+            .collect();
+        let mut snapshot = snapshot_from_samples(&tx, stream, policy, at_ms, samples)?;
         if normal_only(&request.recipe) {
             for partition in [&mut snapshot.train, &mut snapshot.validation] {
                 partition.retain(|sample| {
@@ -324,8 +389,8 @@ impl TrainingRepository {
             "UPDATE streams SET last_trigger_sequence=? WHERE scope=?",
             params![snapshot.cutoff_sequence, scope],
         )?;
-        for (_, sample) in &samples {
-            tx.execute("INSERT OR IGNORE INTO triggered_samples(scope,sample_id,snapshot_id) VALUES (?,?,?)",params![scope,sample.id,job.snapshot_id])?;
+        for sample_id in &consumed {
+            tx.execute("INSERT OR IGNORE INTO triggered_samples(scope,sample_id,snapshot_id) VALUES (?,?,?)",params![scope,sample_id,job.snapshot_id])?;
         }
         tx.commit()?;
         Ok(Some(job))
@@ -358,6 +423,8 @@ impl TrainingRepository {
 
     /// Resource reservations are shared by every worker using this ledger. Interrupted
     /// jobs retain reservations until their supervisor reconciles and resumes/cancels them.
+    /// A claim that finds the budget occupied first settles holders whose lease expired and
+    /// whose job lock is free, because their worker process is gone.
     pub fn claim_job_with_resources(
         &self,
         job_id: &str,
@@ -366,10 +433,54 @@ impl TrainingRepository {
         at_ms: i64,
         resources: Option<ResourceRequest>,
     ) -> Result<JobLease> {
+        self.claim_job_state(job_id, owner, lease_ms, at_ms, resources)
+            .map(|(lease, _)| lease)
+    }
+
+    /// Like `claim_job_with_resources`, also returning the job as the claim committed it.
+    pub(crate) fn claim_job_state(
+        &self,
+        job_id: &str,
+        owner: &str,
+        lease_ms: i64,
+        at_ms: i64,
+        resources: Option<ResourceRequest>,
+    ) -> Result<(JobLease, TrainingJob)> {
         self.writable()?;
         if owner.is_empty() || lease_ms <= 0 {
             return Err(invalid("owner and positive lease duration are required"));
         }
+        if resources.as_ref().is_some_and(|resources| {
+            resources.key.is_empty()
+                || resources.budget_bytes == 0
+                || resources.estimated_bytes > i64::MAX as u64
+        }) {
+            return Err(invalid(
+                "resource reservation needs a key and a positive budget",
+            ));
+        }
+        let mut reclaimed = false;
+        loop {
+            match self.claim_once(job_id, owner, lease_ms, at_ms, resources.as_ref())? {
+                Ok(claimed) => return Ok(claimed),
+                Err(occupied)
+                    if !reclaimed && self.reclaim_stopped_holders(&occupied.holders, at_ms) =>
+                {
+                    reclaimed = true;
+                }
+                Err(occupied) => return Err(Error::Conflict(occupied.message)),
+            }
+        }
+    }
+
+    fn claim_once(
+        &self,
+        job_id: &str,
+        owner: &str,
+        lease_ms: i64,
+        at_ms: i64,
+        resources: Option<&ResourceRequest>,
+    ) -> Result<std::result::Result<(JobLease, TrainingJob), Occupied>> {
         let mut conn = self.connection()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut job: TrainingJob = read_json(&tx, "SELECT body FROM jobs WHERE id=?", job_id)?;
@@ -380,28 +491,30 @@ impl TrainingRepository {
             )));
         }
         if let Some(resources) = resources {
-            if resources.key.is_empty()
-                || resources.budget_bytes == 0
-                || resources.estimated_bytes > i64::MAX as u64
-            {
-                return Err(invalid(
-                    "resource reservation needs a key and a positive budget",
-                ));
-            }
             let mut query = tx.prepare(
-                "SELECT bytes FROM resource_reservations WHERE resource_key=? AND job_id<>?",
+                "SELECT job_id,bytes FROM resource_reservations WHERE resource_key=? AND job_id<>? ORDER BY job_id",
             )?;
-            let mut used = 0u64;
-            for row in
-                query.query_map(params![resources.key, job_id], |row| row.get::<_, u64>(0))?
-            {
-                used = used.saturating_add(row?);
-            }
+            let holders = query
+                .query_map(params![resources.key, job_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
             drop(query);
+            let used = holders
+                .iter()
+                .fold(0u64, |used, (_, bytes)| used.saturating_add(*bytes));
             if used.saturating_add(resources.estimated_bytes) > resources.budget_bytes {
-                return Err(Error::Conflict(
-                    "worker resource budget is occupied by another job".into(),
-                ));
+                let holders: Vec<String> = holders.into_iter().map(|(holder, _)| holder).collect();
+                return Ok(Err(Occupied {
+                    message: format!(
+                        "worker resource budget {} is occupied: job(s) {} reserve {used} of {} bytes and this job needs {}",
+                        resources.key,
+                        holders.join(", "),
+                        resources.budget_bytes,
+                        resources.estimated_bytes
+                    ),
+                    holders,
+                }));
             }
             tx.execute("INSERT INTO resource_reservations(job_id,resource_key,bytes) VALUES (?,?,?) ON CONFLICT(job_id) DO UPDATE SET resource_key=excluded.resource_key,bytes=excluded.bytes",params![job_id,resources.key,resources.estimated_bytes])?;
         }
@@ -413,14 +526,40 @@ impl TrainingRepository {
                 .checked_add(lease_ms)
                 .ok_or_else(|| invalid("lease overflow"))?,
         );
+        job.error = None;
         job.updated_at_ms = at_ms;
         save_job(&tx, &job)?;
         tx.commit()?;
-        Ok(JobLease {
-            job_id: job.id,
+        let lease = JobLease {
+            job_id: job.id.clone(),
             owner: owner.into(),
             generation: job.generation,
-        })
+        };
+        Ok(Ok((lease, job)))
+    }
+
+    fn reclaim_stopped_holders(&self, holders: &[String], at_ms: i64) -> bool {
+        let mut reclaimed = false;
+        for holder in holders {
+            let Ok(job) = self.get_job(holder) else {
+                continue;
+            };
+            if !lease_expired(&job, at_ms) {
+                continue;
+            }
+            let Some(_stopped) = self.stopped_worker_lock(holder) else {
+                continue;
+            };
+            reclaimed |= self
+                .reconcile_stopped_job(holder, at_ms)
+                .is_ok_and(|settled| settled.generation != job.generation);
+        }
+        reclaimed
+    }
+
+    /// Acquiring a job's lock proves that no worker process still runs it.
+    fn stopped_worker_lock(&self, job_id: &str) -> Option<LocalRunLock> {
+        LocalRunLock::acquire(self, &format!("job:{job_id}")).ok()
     }
 
     pub fn pending_jobs(&self) -> Result<Vec<TrainingJob>> {
@@ -460,6 +599,18 @@ impl TrainingRepository {
         progress: Value,
         at_ms: i64,
     ) -> Result<()> {
+        self.renew_lease(lease, lease_ms, Some(progress), at_ms)
+    }
+
+    /// Extends the lease and replaces progress only when a value is given, so a renewal
+    /// never writes back progress it read earlier.
+    pub(crate) fn renew_lease(
+        &self,
+        lease: &JobLease,
+        lease_ms: i64,
+        progress: Option<Value>,
+        at_ms: i64,
+    ) -> Result<()> {
         self.writable()?;
         if lease_ms <= 0 {
             return Err(invalid("lease duration must be positive"));
@@ -470,22 +621,97 @@ impl TrainingRepository {
                     .checked_add(lease_ms)
                     .ok_or_else(|| invalid("lease overflow"))?,
             );
-            job.progress = progress;
+            if let Some(progress) = progress {
+                job.progress = progress;
+            }
             Ok(())
         })
     }
 
+    /// Reads the status column without parsing the job body.
+    pub(crate) fn job_status(&self, job_id: &str) -> Result<JobStatus> {
+        let status: String = self
+            .connection()?
+            .query_row("SELECT status FROM jobs WHERE id=?", [job_id], |row| {
+                row.get(0)
+            })
+            .optional()?
+            .ok_or_else(|| Error::NotFound(job_id.into()))?;
+        Ok(serde_json::from_value(Value::String(status))?)
+    }
+
+    /// Keeps a failure that happened before the claim visible on a job that is still waiting
+    /// to run. The status is unchanged and the next successful claim clears the error.
+    pub fn record_job_attempt_error(&self, job_id: &str, error: &str, at_ms: i64) -> Result<()> {
+        self.writable()?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut job: TrainingJob = read_json(&tx, "SELECT body FROM jobs WHERE id=?", job_id)?;
+        if !matches!(
+            job.status,
+            JobStatus::Queued | JobStatus::Paused | JobStatus::Interrupted
+        ) || job.error.as_deref() == Some(error)
+        {
+            return Ok(());
+        }
+        job.error = Some(error.into());
+        job.updated_at_ms = at_ms;
+        save_job(&tx, &job)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Settles this stream's jobs whose lease expired with their worker: a requested
+    /// cancellation becomes Cancelled and a run becomes Interrupted, releasing reservations.
+    /// Jobs whose worker still holds its lock are left alone. Returns the settled jobs.
+    pub fn recover_expired_jobs(&self, stream: &StreamKey, at_ms: i64) -> Result<Vec<TrainingJob>> {
+        self.writable()?;
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT body FROM jobs WHERE scope=? AND status IN ('running','cancel_requested') ORDER BY rowid",
+        )?;
+        let expired: Vec<TrainingJob> = statement
+            .query_map([scope(stream)?], |row| row.get::<_, String>(0))?
+            .map(|row| Ok(serde_json::from_str(&row?)?))
+            .collect::<Result<_>>()?;
+        let mut recovered = Vec::new();
+        for job in expired {
+            if !lease_expired(&job, at_ms) {
+                continue;
+            }
+            let Some(_stopped) = self.stopped_worker_lock(&job.id) else {
+                continue;
+            };
+            let settled = self.reconcile_stopped_job(&job.id, at_ms)?;
+            if settled.generation != job.generation {
+                recovered.push(settled);
+            }
+        }
+        Ok(recovered)
+    }
+
+    /// A job whose lease expired with its worker is settled as Cancelled directly; a live
+    /// worker sees CancelRequested and stops itself.
     pub fn request_cancel(&self, job_id: &str, at_ms: i64) -> Result<TrainingJob> {
         self.writable()?;
+        let stopped = lease_expired(&self.get_job(job_id)?, at_ms)
+            .then(|| self.stopped_worker_lock(job_id))
+            .flatten();
         let mut conn = self.connection()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut job: TrainingJob = read_json(&tx, "SELECT body FROM jobs WHERE id=?", job_id)?;
-        job.status = match job.status {
-            JobStatus::Running | JobStatus::CancelRequested => JobStatus::CancelRequested,
-            JobStatus::Queued | JobStatus::Paused | JobStatus::Interrupted => JobStatus::Cancelled,
-            status => status,
-        };
-        job.updated_at_ms = at_ms;
+        if stopped.is_some() && lease_expired(&job, at_ms) {
+            settle_stopped(&mut job, JobStatus::Cancelled, at_ms);
+        } else {
+            job.status = match job.status {
+                JobStatus::Running | JobStatus::CancelRequested => JobStatus::CancelRequested,
+                JobStatus::Queued | JobStatus::Paused | JobStatus::Interrupted => {
+                    JobStatus::Cancelled
+                }
+                status => status,
+            };
+            job.updated_at_ms = at_ms;
+        }
         save_job(&tx, &job)?;
         tx.commit()?;
         Ok(job)
@@ -534,7 +760,14 @@ impl TrainingRepository {
         Ok(())
     }
 
+    /// A job whose lease expired with its worker is reconciled first, so it resumes too.
     pub fn resume_job(&self, job_id: &str, at_ms: i64) -> Result<TrainingJob> {
+        self.writable()?;
+        if lease_expired(&self.get_job(job_id)?, at_ms)
+            && let Some(_stopped) = self.stopped_worker_lock(job_id)
+        {
+            self.reconcile_stopped_job(job_id, at_ms)?;
+        }
         self.resume_job_with_policy(job_id, at_ms, false)
     }
 
@@ -544,20 +777,13 @@ impl TrainingRepository {
         let mut connection = self.connection()?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut job: TrainingJob = read_json(&tx, "SELECT body FROM jobs WHERE id=?", job_id)?;
-        if matches!(job.status, JobStatus::Running | JobStatus::CancelRequested)
-            && job
-                .lease_expires_at_ms
-                .is_some_and(|deadline| deadline <= at_ms)
-        {
-            job.status = if job.status == JobStatus::CancelRequested {
+        if lease_expired(&job, at_ms) {
+            let status = if job.status == JobStatus::CancelRequested {
                 JobStatus::Cancelled
             } else {
                 JobStatus::Interrupted
             };
-            job.generation += 1;
-            job.lease_owner = None;
-            job.lease_expires_at_ms = None;
-            job.updated_at_ms = at_ms;
+            settle_stopped(&mut job, status, at_ms);
             save_job(&tx, &job)?;
             tx.execute("DELETE FROM resource_reservations WHERE job_id=?", [job_id])?;
         }
@@ -611,18 +837,95 @@ impl TrainingRepository {
         Ok(job)
     }
 
+    /// Replaces the compute settings of a lifecycle job that waits or stopped, so its next
+    /// admission uses them. Its status is kept, and a checkpoint written for the previous
+    /// request stays resumable.
+    pub fn reconfigure_job_compute(
+        &self,
+        job_id: &str,
+        compute: Value,
+        at_ms: i64,
+    ) -> Result<TrainingJob> {
+        self.writable()?;
+        if !compute.is_object() {
+            return Err(invalid("job compute settings must be a JSON object"));
+        }
+        // A worker admitting a queued job holds its lock and would run the request it read.
+        let Some(_idle) = self.stopped_worker_lock(job_id) else {
+            return Err(Error::Conflict(format!(
+                "a worker is starting or running job {job_id}; change its compute after it stops"
+            )));
+        };
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut job: TrainingJob = read_json(&tx, "SELECT body FROM jobs WHERE id=?", job_id)?;
+        if experiment_trial(&tx, job_id)? {
+            return Err(Error::Conflict(format!(
+                "job {job_id} is an experiment trial; its experiment sets its compute"
+            )));
+        }
+        if !matches!(
+            job.status,
+            JobStatus::Queued | JobStatus::Paused | JobStatus::Interrupted
+        ) {
+            return Err(Error::Conflict(format!(
+                "job {job_id} is {:?}; only queued, paused or interrupted jobs can change compute",
+                job.status
+            )));
+        }
+        rewrite_job_request(&mut job, |request| {
+            request.compute = compute;
+            Ok(())
+        })?;
+        job.generation += 1;
+        job.error = None;
+        job.updated_at_ms = at_ms;
+        save_job(&tx, &job)?;
+        tx.commit()?;
+        Ok(job)
+    }
+
     pub fn fail_job(&self, lease: &JobLease, error: impl Into<String>, at_ms: i64) -> Result<()> {
         self.writable()?;
         self.update_leased(lease, at_ms, |job| {
-            job.status = if job.status == JobStatus::CancelRequested {
-                JobStatus::Cancelled
-            } else {
-                JobStatus::Failed
-            };
-            job.error = Some(error.into());
-            job.lease_expires_at_ms = None;
+            settle_failed(job, error.into());
             Ok(())
         })
+    }
+
+    /// A run that exhausted device memory after publishing a checkpoint is Interrupted with
+    /// its reservation released, so it resumes from that checkpoint. Runs without a checkpoint
+    /// fail like `fail_job`, as do experiment trials: their controller fails the trial anyway
+    /// and would charge an Interrupted attempt its whole reserved training slice.
+    pub(crate) fn settle_out_of_memory(
+        &self,
+        lease: &JobLease,
+        error: &str,
+        at_ms: i64,
+    ) -> Result<()> {
+        self.writable()?;
+        let mut conn = self.connection()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut job: TrainingJob =
+            read_json(&tx, "SELECT body FROM jobs WHERE id=?", &lease.job_id)?;
+        validate_lease(&job, lease, at_ms)?;
+        if job.status == JobStatus::Running
+            && job.checkpoint.is_some()
+            && !experiment_trial(&tx, &job.id)?
+        {
+            settle_stopped(&mut job, JobStatus::Interrupted, at_ms);
+            job.error = Some(error.into());
+            tx.execute(
+                "DELETE FROM resource_reservations WHERE job_id=?",
+                [&job.id],
+            )?;
+        } else {
+            settle_failed(&mut job, error.into());
+            job.updated_at_ms = at_ms;
+        }
+        save_job(&tx, &job)?;
+        tx.commit()?;
+        Ok(())
     }
 
     fn update_leased(
@@ -643,8 +946,8 @@ impl TrainingRepository {
         Ok(())
     }
 
-    /// Writes bytes before publishing their reference. Unreferenced blobs after a crash are
-    /// harmless; readers never discover a partially written checkpoint through the ledger.
+    /// Writes bytes before publishing their reference, so readers never discover a partially
+    /// written checkpoint through the ledger. The replaced checkpoint is left to the collector.
     pub fn publish_checkpoint(
         &self,
         lease: &JobLease,
@@ -662,7 +965,8 @@ impl TrainingRepository {
         }
         let job = self.get_job(&lease.job_id)?;
         validate_lease(&job, lease, at_ms)?;
-        let blob = self.put_blob(bytes)?;
+        let writer = self.blob_writer()?;
+        let blob = self.put_blob(&writer, bytes)?;
         let checkpoint = CheckpointRef {
             blob,
             step,
@@ -704,15 +1008,16 @@ impl TrainingRepository {
         if job.status == JobStatus::CancelRequested {
             return Err(Error::Cancelled);
         }
-        let snapshot = self.get_snapshot(&job.snapshot_id)?;
+        let dataset_digest = self.stored_snapshot_digest(&job.snapshot_id)?;
         self.check_experiment_artifact_budget(&job.id, bytes.len() as u64)?;
-        let blob = self.put_blob(bytes)?;
+        let writer = self.blob_writer()?;
+        let blob = self.put_blob(&writer, bytes)?;
         let artifact = ModelArtifact {
             id: id(),
             job_id: job.id.clone(),
             stream: job.stream.clone(),
-            snapshot_id: snapshot.id,
-            dataset_digest: snapshot.digest,
+            snapshot_id: job.snapshot_id.clone(),
+            dataset_digest,
             blob,
             manifest,
             created_at_ms: at_ms,
@@ -772,11 +1077,12 @@ impl TrainingRepository {
         {
             return Err(invalid("invalid pretrained source metadata or byte budget"));
         }
+        let writer = self.blob_writer()?;
         let source = PretrainedSource {
             id: format!("pretrained:{}", id()),
             project_id: project_id.into(),
             source_kind: PretrainedSourceKind::Imported,
-            blob: self.put_blob(bytes)?,
+            blob: self.put_blob(&writer, bytes)?,
             manifest,
             origin,
             created_at_ms: at_ms,
@@ -793,14 +1099,8 @@ impl TrainingRepository {
     }
 
     pub fn get_pretrained_source(&self, source_id: &str) -> Result<PretrainedSource> {
-        if source_id.starts_with("pretrained:") {
-            return read_json(
-                &self.connection()?,
-                "SELECT body FROM pretrained_sources WHERE id=?",
-                source_id,
-            );
-        }
-        Ok(pretrained_artifact(self.get_artifact(source_id)?))
+        find_pretrained_source(&self.connection()?, source_id)?
+            .ok_or_else(|| Error::NotFound(source_id.into()))
     }
 
     pub fn list_pretrained_sources(
@@ -864,35 +1164,34 @@ impl TrainingRepository {
 
     pub fn read_blob_limited(&self, blob: &BlobRef, maximum_bytes: u64) -> Result<Vec<u8>> {
         use std::io::Read;
-        if blob.path != format!("{}.blob", blob.sha256)
-            || blob.sha256.len() != 64
-            || !blob.sha256.bytes().all(|b| b.is_ascii_hexdigit())
-        {
-            return Err(invalid("invalid repository blob reference"));
-        }
-        if blob.bytes == 0 || blob.bytes > maximum_bytes || blob.bytes >= usize::MAX as u64 {
-            return Err(invalid("artifact exceeds the configured byte limit"));
-        }
+        validate_blob_reference(blob, maximum_bytes)?;
         let path = self.blob_dir.join(&blob.path);
         if !std::fs::symlink_metadata(&path)?.file_type().is_file() {
             return Err(invalid("artifact must be a regular repository file"));
         }
-        let file = std::fs::File::open(path)?;
-        if file.metadata()?.len() != blob.bytes {
-            return Err(invalid("artifact digest or size mismatch"));
+        let file = std::fs::File::open(&path)?;
+        let stored = file.metadata()?.len();
+        if stored != blob.bytes {
+            return Err(invalid(format!(
+                "artifact digest or size mismatch: blob {} records {} bytes, but {} holds {stored}",
+                blob.sha256,
+                blob.bytes,
+                path.display()
+            )));
         }
         let mut bytes = Vec::with_capacity((blob.bytes as usize).min(16 * 1024 * 1024));
         file.take(blob.bytes + 1).read_to_end(&mut bytes)?;
-        if bytes.len() as u64 != blob.bytes || digest(&bytes) != blob.sha256 {
-            return Err(invalid("artifact digest or size mismatch"));
-        }
+        verify_blob_content(blob, &bytes)?;
         Ok(bytes)
     }
 
-    fn put_blob(&self, bytes: &[u8]) -> Result<BlobRef> {
+    /// The caller keeps `_writer` until the returned reference is committed. The blob
+    /// directory is checked on every write, because a handle outlives the checks of `open`.
+    fn put_blob(&self, _writer: &LocalRunLock, bytes: &[u8]) -> Result<BlobRef> {
         if bytes.is_empty() {
             return Err(invalid("empty checkpoint/model artifact"));
         }
+        verify_storage_entry(&self.root, &self.blob_dir, true)?;
         let hash = digest(bytes);
         let blob = BlobRef {
             path: format!("{hash}.blob"),
@@ -904,25 +1203,89 @@ impl TrainingRepository {
             self.read_blob(&blob)?;
             return Ok(blob);
         }
-        let staging = self.blob_dir.join(format!("{}.part", id()));
+        let staging = StagingFile(self.blob_dir.join(format!("{}.part", id())));
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&staging)?;
+            .open(&staging.0)?;
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
-        if let Err(error) = std::fs::rename(&staging, &destination) {
-            let _ = std::fs::remove_file(&staging);
-            if destination.exists() {
-                self.read_blob(&blob)?;
-            } else {
+        if let Err(error) = std::fs::rename(&staging.0, &destination) {
+            if !destination.exists() {
                 return Err(error.into());
             }
+            self.read_blob(&blob)?;
         }
         #[cfg(unix)]
         std::fs::File::open(&self.blob_dir)?.sync_all()?;
         Ok(blob)
+    }
+
+    fn blob_writer(&self) -> Result<LocalRunLock> {
+        LocalRunLock::shared(self, BLOB_STORE_LOCK)
+    }
+
+    fn stored_snapshot_digest(&self, snapshot_id: &str) -> Result<String> {
+        self.connection()?
+            .query_row(
+                "SELECT json_extract(body,'$.digest') FROM snapshots WHERE id=?",
+                [snapshot_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten()
+            .ok_or_else(|| Error::NotFound(snapshot_id.into()))
+    }
+
+    /// Deletes blobs that no artifact, pretrained source or resumable checkpoint references,
+    /// plus abandoned staging files, and returns the bytes freed. Skipped while any writer
+    /// is between staging a blob and committing its reference.
+    pub(crate) fn collect_unreferenced_blobs(&self) -> Result<u64> {
+        let exclusive = match LocalRunLock::acquire(self, BLOB_STORE_LOCK) {
+            Ok(lock) => lock,
+            Err(Error::Conflict(_)) => return Ok(0),
+            Err(error) => return Err(error),
+        };
+        let mut connection = self.connection()?;
+        let tx = connection.transaction()?;
+        let referenced = referenced_blobs(&tx)?;
+        drop(tx);
+        Ok(self.sweep_blob_store(&exclusive, Some(&referenced)))
+    }
+
+    /// Without `referenced` only staging files are removed. A blob directory that is no
+    /// longer a real directory of the ledger is left alone.
+    fn sweep_blob_store(
+        &self,
+        _exclusive: &LocalRunLock,
+        referenced: Option<&HashSet<String>>,
+    ) -> u64 {
+        if verify_storage_entry(&self.root, &self.blob_dir, true).is_err() {
+            return 0;
+        }
+        let Ok(entries) = std::fs::read_dir(&self.blob_dir) else {
+            return 0;
+        };
+        let mut freed = 0u64;
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            let stale = name.ends_with(".part")
+                || referenced.is_some_and(|live| is_blob_name(name) && !live.contains(name));
+            if !stale {
+                continue;
+            }
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            if metadata.is_file() && std::fs::remove_file(entry.path()).is_ok() {
+                freed = freed.saturating_add(metadata.len());
+            }
+        }
+        freed
     }
 
     /// Hosts may call this through the controller-owned telemetry channel for shadow runs.
@@ -947,7 +1310,7 @@ impl TrainingRepository {
             &prediction.artifact_id,
         )?;
         if prediction.actual_source.is_some() {
-            validate_prediction_truth(&tx, &artifact.stream, prediction)?;
+            prediction_truth(&tx, &artifact.stream, prediction, true)?;
         }
         let body = serde_json::to_string(prediction)?;
         let existing: Option<String> = tx
@@ -1001,14 +1364,17 @@ impl TrainingRepository {
     ) -> Result<EvaluationReport> {
         self.writable()?;
         let mut conn = self.connection()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        // Artifacts, snapshots and their lineage are immutable: read them before the write lock.
         let artifact: ModelArtifact =
-            read_json(&tx, "SELECT body FROM artifacts WHERE id=?", artifact_id)?;
+            read_json(&conn, "SELECT body FROM artifacts WHERE id=?", artifact_id)?;
         let snapshot: DatasetSnapshot = read_json(
-            &tx,
+            &conn,
             "SELECT body FROM snapshots WHERE id=?",
             &artifact.snapshot_id,
         )?;
+        #[cfg(feature = "native")]
+        let consumed = crate::engines::ConsumedGroups::load(&conn, &artifact, &snapshot)?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut statement =
             tx.prepare("SELECT body FROM predictions WHERE artifact_id=? ORDER BY sample_id")?;
         let mut predictions: Vec<PredictionRecord> = statement
@@ -1035,17 +1401,9 @@ impl TrainingRepository {
                 "prediction evidence was not available at evaluation time",
             ));
         }
-        let training_groups: std::collections::HashSet<_> = snapshot
-            .train
-            .iter()
-            .chain(&snapshot.validation)
-            .map(|s| s.group_id.as_str())
-            .collect();
-        let mut audited = 0usize;
-        let mut correct = 0usize;
         let mut teacher_count = 0usize;
         let mut teacher_correct = 0usize;
-        let mut supports: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+        let mut truths = Vec::new();
         for prediction in &predictions {
             if let Some(teacher) = &prediction.teacher_label {
                 teacher_count += 1;
@@ -1053,83 +1411,70 @@ impl TrainingRepository {
                     prediction.predicted_label.as_ref() == Some(teacher) && !prediction.failed,
                 );
             }
-            if matches!(
+            if !matches!(
                 prediction.actual_source,
                 Some(LabelSource::Reviewed | LabelSource::ObservedOutcome)
             ) {
-                let sample = validate_prediction_truth(&tx, &artifact.stream, prediction)?;
-                if training_groups.contains(sample.group_id.as_str()) {
-                    return Err(invalid(format!(
-                        "sample {} shares a training/validation group",
-                        sample.id
-                    )));
-                }
-                if sample.label_available_at_ms > at_ms {
-                    return Err(invalid("evaluation truth was unavailable when recorded"));
-                }
-                let actual = prediction
-                    .actual_label
-                    .as_ref()
-                    .ok_or_else(|| invalid("missing actual label"))?;
-                let hit = !prediction.failed && prediction.predicted_label.as_ref() == Some(actual);
-                audited += 1;
-                correct += usize::from(hit);
-                let counts = supports.entry(actual.clone()).or_default();
-                counts.0 += 1;
-                counts.1 += usize::from(hit);
+                continue;
             }
+            // A withdrawn annotation no longer provides audited truth.
+            let Some(mut sample) = current_prediction_truth(&tx, &artifact.stream, prediction)?
+            else {
+                continue;
+            };
+            // Only the label is scored, and payloads can hold whole image tensors.
+            let actual = truth_label(&sample).map(str::to_owned);
+            sample.payload = Value::Null;
+            truths.push((prediction, sample, actual));
+        }
+        #[cfg(feature = "native")]
+        consumed.ensure_independent(truths.iter().map(|(_, sample, _)| sample))?;
+        #[cfg(not(feature = "native"))]
+        {
+            let training_groups: std::collections::HashSet<_> = snapshot
+                .train
+                .iter()
+                .chain(&snapshot.validation)
+                .map(|s| s.group_id.as_str())
+                .collect();
+            if let Some((_, sample, _)) = truths
+                .iter()
+                .find(|(_, sample, _)| training_groups.contains(sample.group_id.as_str()))
+            {
+                return Err(invalid(format!(
+                    "sample {} shares a training/validation group",
+                    sample.id
+                )));
+            }
+        }
+        let mut audited = 0usize;
+        let mut correct = 0usize;
+        let mut supports: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+        #[cfg(feature = "native")]
+        let mut scored = Vec::new();
+        for (prediction, sample, actual) in truths {
+            if sample.label_available_at_ms > at_ms {
+                return Err(invalid("evaluation truth was unavailable when recorded"));
+            }
+            let Some(actual) = actual else {
+                continue;
+            };
+            let hit = !prediction.failed
+                && prediction.predicted_label.as_deref() == Some(actual.as_str());
+            audited += 1;
+            correct += usize::from(hit);
+            #[cfg(feature = "native")]
+            scored.push((actual.clone(), prediction));
+            let counts = supports.entry(actual).or_default();
+            counts.0 += 1;
+            counts.1 += usize::from(hit);
         }
         let mut metrics = BTreeMap::new();
         metrics.insert("accuracy".into(), ratio(correct, audited));
         metrics.insert("artifact_bytes".into(), artifact.blob.bytes as f64);
         #[cfg(feature = "native")]
         if let Some(labels) = artifact.manifest.get("labels").and_then(Value::as_array) {
-            let pairs = predictions
-                .iter()
-                .filter(|prediction| {
-                    matches!(
-                        prediction.actual_source,
-                        Some(LabelSource::Reviewed | LabelSource::ObservedOutcome)
-                    )
-                })
-                .map(|prediction| {
-                    if prediction.failed {
-                        return None;
-                    }
-                    let actual = prediction.actual_label.as_deref()?;
-                    let predicted = prediction.predicted_label.as_deref()?;
-                    Some((
-                        labels
-                            .iter()
-                            .position(|label| label.as_str() == Some(actual))?
-                            as u32,
-                        labels
-                            .iter()
-                            .position(|label| label.as_str() == Some(predicted))?
-                            as u32,
-                    ))
-                })
-                .collect::<Option<Vec<_>>>();
-            if let Some(pairs) = pairs.filter(|pairs| !pairs.is_empty()) {
-                let (actual, predicted): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
-                if let Ok(classification) = flow_like_ml_native::evaluation::classification_metrics(
-                    &actual,
-                    &predicted,
-                    labels.len(),
-                ) {
-                    metrics.insert("macro_f1".into(), classification.macro_f1);
-                    metrics.insert("balanced_accuracy".into(), classification.balanced_accuracy);
-                }
-                if let Ok(ordinal) = flow_like_ml_native::evaluation::ordinal_metrics(
-                    &actual,
-                    &predicted,
-                    labels.len(),
-                ) {
-                    metrics.insert("mean_rank_error".into(), ordinal.mean_rank_error);
-                    metrics.insert("macro_rank_error".into(), ordinal.macro_rank_error);
-                    metrics.insert("quadratic_kappa".into(), ordinal.quadratic_kappa);
-                }
-            }
+            metrics.extend(class_order_metrics(labels, &scored));
         }
         metrics.insert(
             "accuracy_wilson_lower_95".into(),
@@ -1315,14 +1660,12 @@ impl TrainingRepository {
                 "evaluation evidence changed; evaluate again before promotion".into(),
             ));
         }
-        for prediction in &evidence {
-            if prediction.actual_source.is_some() {
-                validate_prediction_truth(&tx, &artifact.stream, prediction)?;
-            }
-        }
-        if report.truth_digest.as_deref()
-            != Some(evaluation_truth_digest(&tx, &artifact.stream, &evidence)?.as_str())
-        {
+        if !truth_digest_matches(
+            tx,
+            &artifact.stream,
+            &evidence,
+            report.truth_digest.as_deref(),
+        )? {
             return Err(Error::Conflict(
                 "accepted audit annotations changed; evaluate again before promotion".into(),
             ));
@@ -1462,50 +1805,451 @@ impl TrainingRepository {
         save_deployment(&tx, &deployment)?;
         Ok(deployment)
     }
+
+    /// Writes a consistent single-file copy of the ledger and every blob it references into
+    /// `directory`, which must be empty and is created when missing. The blob store stays
+    /// shared from the copy until the last blob is linked, so the collector cannot remove a
+    /// blob the copy references. Blob files are hard links to the ledger's own blobs where the
+    /// file system allows it, so the folder is read-only: remove it, never write into it.
+    pub fn snapshot_to(&self, directory: &Path) -> Result<LedgerSnapshot> {
+        self.snapshot_while_locked(directory, || Ok(()))
+    }
+
+    /// `locked` runs while the blob store is still shared, after the last blob was linked.
+    fn snapshot_while_locked(
+        &self,
+        directory: &Path,
+        locked: impl FnOnce() -> Result<()>,
+    ) -> Result<LedgerSnapshot> {
+        let directory = empty_directory(directory)?;
+        let partial = PartialSnapshot::new(&directory);
+        {
+            let _shared = LocalRunLock::shared(self, BLOB_STORE_LOCK)?;
+            self.copy_into(&partial)?;
+            locked()?;
+        }
+        partial.sync(&directory)?;
+        let snapshot = Self::verify_snapshot(&directory, u64::MAX)?;
+        partial.keep();
+        Ok(snapshot)
+    }
+
+    /// The database copy and every blob it references. The caller holds the blob store
+    /// shared, so no referenced blob disappears before it is linked.
+    fn copy_into(&self, partial: &PartialSnapshot) -> Result<()> {
+        self.vacuum_into(&partial.database)?;
+        let referenced = single_file_database(&partial.database)?;
+        verify_storage_entry(&self.root, &self.blob_dir, true)?;
+        std::fs::create_dir(&partial.blob_dir)?;
+        for name in &referenced {
+            link_or_copy(&self.blob_dir.join(name), &partial.blob_dir.join(name))?;
+        }
+        Ok(())
+    }
+
+    /// `VACUUM INTO` on a dedicated read-only connection runs in one read transaction, so the
+    /// copy is consistent and includes commits that are still only in the WAL.
+    fn vacuum_into(&self, target: &Path) -> Result<()> {
+        let target = target.to_str().ok_or_else(|| {
+            invalid(format!(
+                "ledger snapshot path {} is not valid UTF-8",
+                target.display()
+            ))
+        })?;
+        let connection = Connection::open_with_flags(
+            &self.path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        connection.busy_timeout(Duration::from_secs(15))?;
+        connection.execute("VACUUM INTO ?1", [target])?;
+        Ok(())
+    }
+
+    /// Checks a snapshot folder without writing to it: a single-file database at version 1 of
+    /// this runtime's schema that passes `PRAGMA quick_check`, every blob it references present,
+    /// every blob matching its sha256 name, and all files together at most `maximum_bytes`.
+    pub fn verify_snapshot(directory: &Path, maximum_bytes: u64) -> Result<LedgerSnapshot> {
+        let database = directory.join(LEDGER_DATABASE_FILE);
+        let blob_dir = directory.join(LEDGER_BLOB_DIR);
+        let (database_bytes, blobs) = snapshot_listing(&database, &blob_dir, maximum_bytes)?;
+        let (referenced, project_ids) = inspect_snapshot_database(&database)?;
+        if let Some(missing) = missing_blob(&referenced, &blobs) {
+            return Err(invalid(format!(
+                "ledger snapshot {} references blob {missing:?}, which it does not contain",
+                directory.display()
+            )));
+        }
+        Ok(LedgerSnapshot {
+            database: hashed_file(&database, LEDGER_DATABASE_FILE.into(), database_bytes)?,
+            blobs: hashed_blobs(&blob_dir, blobs)?,
+            project_ids,
+        })
+    }
+
+    /// Installs a snapshot that `verify_snapshot` accepted as the ledger at `destination`,
+    /// creating the destination's directory when missing. The blobs go into a newly created
+    /// blob directory first; the database is copied beside them and hard-linked last, so
+    /// nothing is ever replaced, an opener never sees a partial ledger and the ledger shares no
+    /// database file with the snapshot. `Error::Conflict` when the ledger, its journal files
+    /// or its blob directory exist, or another install of `destination` runs. A failed install
+    /// removes only what it created; an error from the final directory sync leaves the
+    /// installed ledger in place. Installed blobs are hard links to the snapshot's blob files
+    /// where the file system allows it, so remove the snapshot folder afterwards rather than
+    /// writing into it.
+    pub fn install_snapshot(directory: &Path, destination: &Path) -> Result<()> {
+        let (root, destination) = install_target(destination)?;
+        let _installing = install_lock(&root, &destination)?;
+        let database = directory.join(LEDGER_DATABASE_FILE);
+        regular_file(&database)?;
+        let source_blobs = directory.join(LEDGER_BLOB_DIR);
+        let blobs = snapshot_blobs(&source_blobs)?;
+        let mut installation = Installation::begin(destination)?;
+        installation.link_blobs(&source_blobs, &blobs)?;
+        publish_database(&database, &installation.blob_dir, &installation.destination)?;
+        installation.finish(&root)
+    }
+
+    /// Distinct project ids of the ledger's sample streams, experiments, learning projects,
+    /// jobs, artifacts, pretrained sources and deployments.
+    pub fn project_ids(&self) -> Result<BTreeSet<String>> {
+        project_ids_of(&self.connection()?)
+    }
+
+    /// Copies a pretrained source of `from` into this ledger under the same id and kind, with
+    /// `project_id` rewritten. Both blob stores stay shared until the reference commits, so
+    /// neither collector removes the blob, which is hard-linked where the file system allows
+    /// it and copied otherwise. A training artifact also keeps the content digests of its
+    /// initialization lineage, since this ledger holds none of its snapshots; builds without a
+    /// training engine cannot read lineages and refuse to adopt one. Adopting again returns the
+    /// stored record when its blob is the same, recording a lineage an earlier adoption left
+    /// out; another blob under that id is `Error::Conflict`.
+    pub fn adopt_pretrained_source(
+        &self,
+        from: &TrainingRepository,
+        source_id: &str,
+        project_id: &str,
+    ) -> Result<PretrainedSource> {
+        self.writable()?;
+        if project_id.trim().is_empty() {
+            return Err(invalid(format!(
+                "adopting pretrained source {source_id} needs a target project"
+            )));
+        }
+        let source = from.get_pretrained_source(source_id)?;
+        if let Some(existing) = self.adopted(&source)? {
+            self.backfill_lineage(from, &existing.id)?;
+            return Ok(existing);
+        }
+        let lineage = match source.source_kind {
+            PretrainedSourceKind::Imported => None,
+            PretrainedSourceKind::TrainingArtifact => Some(training_lineage(from, &source.id)?),
+        };
+        let _shared = self.receive_blob(from, &source.blob)?;
+        self.insert_adopted(
+            PretrainedSource {
+                project_id: project_id.into(),
+                ..source
+            },
+            lineage,
+        )
+    }
+
+    /// Records the lineage that an earlier adoption of training artifact `source_id` left out.
+    fn backfill_lineage(&self, from: &TrainingRepository, source_id: &str) -> Result<()> {
+        let connection = self.connection()?;
+        if lacks_lineage(&connection, source_id)? {
+            record_lineage(&connection, source_id, &training_lineage(from, source_id)?)?;
+        }
+        Ok(())
+    }
+
+    /// This ledger's record under `source.id` when it holds the same blob.
+    fn adopted(&self, source: &PretrainedSource) -> Result<Option<PretrainedSource>> {
+        reuse_adoption(
+            find_pretrained_source(&self.connection()?, &source.id)?,
+            source,
+        )
+    }
+
+    /// Stores a blob of `from` here and returns both blob store locks, which the caller
+    /// keeps until the blob's reference commits.
+    fn receive_blob(&self, from: &TrainingRepository, blob: &BlobRef) -> Result<[LocalRunLock; 2]> {
+        validate_blob_reference(blob, u64::MAX)?;
+        let locks = [self.blob_writer()?, from.blob_writer()?];
+        verify_storage_entry(&from.root, &from.blob_dir, true)?;
+        verify_storage_entry(&self.root, &self.blob_dir, true)?;
+        self.store_blob_from(&from.blob_dir.join(&blob.path), blob)?;
+        Ok(locks)
+    }
+
+    /// Inserts an adopted source with the lineage it keeps; a concurrent adoption of the same
+    /// id that committed first is kept instead when it holds the same blob.
+    fn insert_adopted(
+        &self,
+        adopted: PretrainedSource,
+        lineage: Option<String>,
+    ) -> Result<PretrainedSource> {
+        let body = serde_json::to_string(&adopted)?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let stored = find_pretrained_source(&tx, &adopted.id)?;
+        let kept = match reuse_adoption(stored, &adopted)? {
+            Some(existing) => existing,
+            None => {
+                tx.execute(
+                    "INSERT INTO pretrained_sources(id,project_id,body) VALUES(?,?,?)",
+                    params![adopted.id, adopted.project_id, body],
+                )?;
+                adopted
+            }
+        };
+        if let Some(lineage) = &lineage {
+            record_lineage(&tx, &kept.id, lineage)?;
+        }
+        tx.commit()?;
+        Ok(kept)
+    }
+
+    /// Stores another ledger's blob file here: hard-linked, or copied through a staging file
+    /// where linking fails. A blob stored already is kept. The stored blob is then verified.
+    fn store_blob_from(&self, source: &Path, blob: &BlobRef) -> Result<()> {
+        regular_file(source)?;
+        let destination = self.blob_dir.join(&blob.path);
+        let created = match std::fs::hard_link(source, &destination) {
+            Ok(()) => true,
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => false,
+            Err(_) => {
+                let staging = StagingFile(self.blob_dir.join(format!("{}.part", id())));
+                copy_new(source, &staging.0)?;
+                std::fs::rename(&staging.0, &destination)?;
+                true
+            }
+        };
+        if let Err(error) = self.verify_stored_blob(blob) {
+            if created {
+                let _ = std::fs::remove_file(&destination);
+            }
+            return Err(error);
+        }
+        sync_directory(&self.blob_dir)
+    }
+
+    /// `read_blob`'s checks, streaming the file instead of loading it.
+    fn verify_stored_blob(&self, blob: &BlobRef) -> Result<()> {
+        validate_blob_reference(blob, u64::MAX)?;
+        let path = self.blob_dir.join(&blob.path);
+        let stored = regular_file(&path)?.len();
+        let (read, sha256) = file_sha256(&path, blob.bytes)?;
+        if stored != blob.bytes || read != blob.bytes || sha256 != blob.sha256 {
+            return Err(invalid(format!(
+                "artifact digest or size mismatch: {} holds {read} bytes with sha256 {sha256}, but blob {} records {} bytes",
+                path.display(),
+                blob.sha256,
+                blob.bytes
+            )));
+        }
+        Ok(())
+    }
 }
 
+/// Digests the identity, provenance, target and acceptance of each prediction's current truth,
+/// so raw-row (`feature_row`) and transformed-input edits leave sealed evidence valid.
+/// Withdrawn truth digests as null.
 pub(crate) fn evaluation_truth_digest(
     conn: &Connection,
     stream: &StreamKey,
     predictions: &[PredictionRecord],
 ) -> Result<String> {
-    let truth = predictions
-        .iter()
-        .filter(|prediction| prediction.actual_source.is_some())
-        .map(|prediction| validate_prediction_truth(conn, stream, prediction))
-        .collect::<Result<Vec<_>>>()?;
-    Ok(digest(&serde_json::to_vec(&truth)?))
+    immutable_truth_digest(&evaluation_truths(conn, stream, predictions)?)
 }
 
+/// Whether a sealed truth digest still describes the predictions' truth. Reports sealed before
+/// truth digests left out mutable sample parts carry a digest of the full annotation bodies.
+pub(crate) fn truth_digest_matches(
+    conn: &Connection,
+    stream: &StreamKey,
+    predictions: &[PredictionRecord],
+    sealed: Option<&str>,
+) -> Result<bool> {
+    let Some(sealed) = sealed else {
+        return Ok(false);
+    };
+    let truths = evaluation_truths(conn, stream, predictions)?;
+    Ok(immutable_truth_digest(&truths)? == sealed
+        || digest(&serde_json::to_vec(&truths)?) == sealed)
+}
+
+fn evaluation_truths(
+    conn: &Connection,
+    stream: &StreamKey,
+    predictions: &[PredictionRecord],
+) -> Result<Vec<Option<TrainingSample>>> {
+    predictions
+        .iter()
+        .filter(|prediction| prediction.actual_source.is_some())
+        .map(|prediction| current_prediction_truth(conn, stream, prediction))
+        .collect()
+}
+
+fn immutable_truth_digest(truths: &[Option<TrainingSample>]) -> Result<String> {
+    let immutable = truths
+        .iter()
+        .map(|truth| {
+            truth
+                .as_ref()
+                .map(crate::experiment_repository::immutable_sample)
+                .transpose()
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(digest(&serde_json::to_vec(&immutable)?))
+}
+
+/// The latest accepted annotation of the prediction's sample, which also replaces the truth
+/// of a prediction recorded against an earlier revision. Fails when the latest annotation
+/// is withdrawn.
 pub(crate) fn validate_prediction_truth(
     conn: &Connection,
     stream: &StreamKey,
     prediction: &PredictionRecord,
 ) -> Result<TrainingSample> {
-    let body:String=conn.query_row("SELECT body FROM annotations WHERE scope=? AND sample_id=? ORDER BY revision DESC LIMIT 1",params![scope(stream)?,prediction.sample_id],|r|r.get(0)).optional()?.ok_or_else(||invalid("actual labels must reference a recorded sample"))?;
-    let sample: TrainingSample = serde_json::from_str(&body)?;
-    let label = sample
+    current_prediction_truth(conn, stream, prediction)?
+        .ok_or_else(|| invalid("the sample's latest annotation is no longer accepted"))
+}
+
+/// Like `validate_prediction_truth`, but a withdrawn latest annotation yields None so the
+/// prediction can be left out of audited evidence.
+pub(crate) fn current_prediction_truth(
+    conn: &Connection,
+    stream: &StreamKey,
+    prediction: &PredictionRecord,
+) -> Result<Option<TrainingSample>> {
+    prediction_truth(conn, stream, prediction, false)
+}
+
+/// The prediction's ground truth must match an accepted revision of its sample. When it is
+/// recorded, it must match the latest one unless it predates that revision's availability.
+fn prediction_truth(
+    conn: &Connection,
+    stream: &StreamKey,
+    prediction: &PredictionRecord,
+    recording: bool,
+) -> Result<Option<TrainingSample>> {
+    let mut statement = conn.prepare(
+        "SELECT body FROM annotations WHERE scope=? AND sample_id=? ORDER BY revision DESC",
+    )?;
+    let mut rows = statement.query(params![scope(stream)?, prediction.sample_id])?;
+    let Some(row) = rows.next()? else {
+        return Err(invalid("actual labels must reference a recorded sample"));
+    };
+    let latest: TrainingSample = serde_json::from_str(&row.get::<_, String>(0)?)?;
+    if latest.accepted && truth_matches(&latest, prediction) {
+        return Ok(Some(latest));
+    }
+    if !recording || prediction.recorded_at_ms < latest.label_available_at_ms {
+        while let Some(row) = rows.next()? {
+            let revision: TrainingSample = serde_json::from_str(&row.get::<_, String>(0)?)?;
+            if revision.accepted && truth_matches(&revision, prediction) {
+                let current = latest.accepted;
+                return Ok(current.then_some(latest));
+            }
+        }
+    }
+    Err(invalid(
+        "prediction ground truth differs from the accepted annotation",
+    ))
+}
+
+fn truth_matches(sample: &TrainingSample, prediction: &PredictionRecord) -> bool {
+    Some(sample.source) == prediction.actual_source
+        && prediction
+            .actual_label
+            .as_deref()
+            .is_none_or(|actual| truth_label(sample) == Some(actual))
+}
+
+fn truth_label(sample: &TrainingSample) -> Option<&str> {
+    sample
         .payload
         .get("label")
         .or_else(|| {
             sample
                 .payload
                 .get("annotation")
-                .and_then(|a| a.get("label"))
+                .and_then(|annotation| annotation.get("label"))
         })
-        .and_then(Value::as_str);
-    if !sample.accepted
-        || Some(sample.source) != prediction.actual_source
-        || prediction
-            .actual_label
-            .as_deref()
-            .is_some_and(|actual| label != Some(actual))
-    {
-        return Err(invalid(
-            "prediction ground truth differs from the accepted annotation",
-        ));
+        .and_then(Value::as_str)
+}
+
+/// A failed or out-of-schema prediction is a miss for its actual class: it lowers that
+/// class's recall without becoming another class's false positive, and it takes the
+/// largest rank error.
+#[cfg(feature = "native")]
+fn class_order_metrics(
+    labels: &[Value],
+    truths: &[(String, &PredictionRecord)],
+) -> BTreeMap<String, f64> {
+    let mut metrics = BTreeMap::new();
+    let classes = labels.len();
+    let position = |label: &str| {
+        labels
+            .iter()
+            .position(|candidate| candidate.as_str() == Some(label))
+    };
+    let Some(pairs) = truths
+        .iter()
+        .map(|(actual, prediction)| {
+            let predicted = prediction
+                .predicted_label
+                .as_deref()
+                .filter(|_| !prediction.failed)
+                .and_then(position);
+            Some((position(actual.as_str())?, predicted))
+        })
+        .collect::<Option<Vec<_>>>()
+        .filter(|pairs| !pairs.is_empty())
+    else {
+        return metrics;
+    };
+    let actual: Vec<u32> = pairs.iter().map(|&(actual, _)| actual as u32).collect();
+    let missed = pairs.iter().any(|&(_, predicted)| predicted.is_none());
+    let predicted: Vec<u32> = pairs
+        .iter()
+        .map(|&(_, predicted)| predicted.unwrap_or(classes) as u32)
+        .collect();
+    if let Ok(classification) = flow_like_ml_native::evaluation::classification_metrics(
+        &actual,
+        &predicted,
+        classes + usize::from(missed),
+    ) {
+        let macro_f1 = if missed {
+            let f1: Vec<f64> = classification
+                .per_class
+                .iter()
+                .filter(|class| (class.class_id as usize) < classes)
+                .filter_map(|class| class.f1)
+                .collect();
+            (!f1.is_empty()).then(|| f1.iter().sum::<f64>() / f1.len() as f64)
+        } else {
+            Some(classification.macro_f1)
+        };
+        if let Some(macro_f1) = macro_f1 {
+            metrics.insert("macro_f1".into(), macro_f1);
+        }
+        metrics.insert("balanced_accuracy".into(), classification.balanced_accuracy);
     }
-    Ok(sample)
+    let ranked: Vec<u32> = pairs
+        .iter()
+        .map(|&(actual, predicted)| {
+            predicted.unwrap_or(if actual * 2 < classes { classes - 1 } else { 0 }) as u32
+        })
+        .collect();
+    if let Ok(ordinal) = flow_like_ml_native::evaluation::ordinal_metrics(&actual, &ranked, classes)
+    {
+        metrics.insert("mean_rank_error".into(), ordinal.mean_rank_error);
+        metrics.insert("macro_rank_error".into(), ordinal.macro_rank_error);
+        metrics.insert("quadratic_kappa".into(), ordinal.quadratic_kappa);
+    }
+    metrics
 }
 fn ratio(a: usize, b: usize) -> f64 {
     if b == 0 { 0. } else { a as f64 / b as f64 }
@@ -1738,6 +2482,87 @@ fn pretrained_artifact(artifact: ModelArtifact) -> PretrainedSource {
         created_at_ms: artifact.created_at_ms,
     }
 }
+
+/// An id without the `pretrained:` prefix names a training artifact, or a source another
+/// ledger adopted under that artifact's id.
+fn find_pretrained_source(
+    connection: &Connection,
+    source_id: &str,
+) -> Result<Option<PretrainedSource>> {
+    if !source_id.starts_with("pretrained:") {
+        let artifact: Option<String> = connection
+            .query_row(
+                "SELECT body FROM artifacts WHERE id=?",
+                [source_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(body) = artifact {
+            return Ok(Some(pretrained_artifact(serde_json::from_str(&body)?)));
+        }
+    }
+    let body: Option<String> = connection
+        .query_row(
+            "SELECT body FROM pretrained_sources WHERE id=?",
+            [source_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(match body {
+        Some(body) => Some(serde_json::from_str(&body)?),
+        None => None,
+    })
+}
+
+/// A ledger already holding the adopted id keeps its record when the blob is the same.
+fn reuse_adoption(
+    stored: Option<PretrainedSource>,
+    source: &PretrainedSource,
+) -> Result<Option<PretrainedSource>> {
+    match stored {
+        Some(stored) if stored.blob.sha256 == source.blob.sha256 => Ok(Some(stored)),
+        Some(stored) => Err(Error::Conflict(format!(
+            "pretrained source {} already holds blob {} in this ledger, not {}",
+            source.id, stored.blob.sha256, source.blob.sha256
+        ))),
+        None => Ok(None),
+    }
+}
+
+/// The content digests of training artifact `artifact_id`'s initialization lineage in `from`,
+/// as JSON.
+#[cfg(any(feature = "native", feature = "burn"))]
+fn training_lineage(from: &TrainingRepository, artifact_id: &str) -> Result<String> {
+    let digests = crate::engines::LineageDigests::of(&from.connection()?, artifact_id)?;
+    Ok(serde_json::to_string(&digests)?)
+}
+
+#[cfg(not(any(feature = "native", feature = "burn")))]
+fn training_lineage(_from: &TrainingRepository, artifact_id: &str) -> Result<String> {
+    Err(invalid(format!(
+        "adopting training artifact {artifact_id} records its training lineage, which needs a build with a training engine"
+    )))
+}
+
+/// Whether `source_id` names an adopted training artifact whose row lacks its lineage.
+fn lacks_lineage(connection: &Connection, source_id: &str) -> Result<bool> {
+    Ok(connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pretrained_sources WHERE id=?1 AND json_extract(body,'$.source_kind')='training_artifact' AND json_type(body,?2) IS NULL)",
+        params![source_id, ADOPTED_LINEAGE],
+        |row| row.get(0),
+    )?)
+}
+
+/// Stores the lineage digests of adopted training artifact `source_id` unless its row holds
+/// them already.
+fn record_lineage(connection: &Connection, source_id: &str, lineage: &str) -> Result<()> {
+    connection.execute(
+        "UPDATE pretrained_sources SET body=json_set(body,?2,json(?3)) WHERE id=?1 AND json_type(body,?2) IS NULL",
+        params![source_id, ADOPTED_LINEAGE, lineage],
+    )?;
+    Ok(())
+}
+
 fn save_job(tx: &Connection, job: &TrainingJob) -> Result<()> {
     tx.execute(
         "UPDATE jobs SET status=?,body=? WHERE id=?",
@@ -1748,6 +2573,30 @@ fn save_job(tx: &Connection, job: &TrainingJob) -> Result<()> {
             "DELETE FROM resource_reservations WHERE job_id=?",
             [&job.id],
         )?;
+    }
+    Ok(())
+}
+fn experiment_trial(connection: &Connection, job_id: &str) -> Result<bool> {
+    Ok(connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM experiment_trials WHERE job_id=?)",
+        [job_id],
+        |row| row.get(0),
+    )?)
+}
+/// A checkpoint written for the previous request stays resumable under the rewritten one; a
+/// checkpoint that already differed from it stays rejected at admission.
+pub(crate) fn rewrite_job_request(
+    job: &mut TrainingJob,
+    rewrite: impl FnOnce(&mut TrainingRequest) -> Result<()>,
+) -> Result<()> {
+    let previous = digest(&serde_json::to_vec(&job.request)?);
+    rewrite(&mut job.request)?;
+    if let Some(checkpoint) = job
+        .checkpoint
+        .as_mut()
+        .filter(|checkpoint| checkpoint.request_digest == previous)
+    {
+        checkpoint.request_digest = digest(&serde_json::to_vec(&job.request)?);
     }
     Ok(())
 }
@@ -1763,6 +2612,747 @@ fn validate_lease(job: &TrainingJob, lease: &JobLease, at_ms: i64) -> Result<()>
         return Err(Error::LeaseLost);
     }
     Ok(())
+}
+
+fn lease_expired(job: &TrainingJob, at_ms: i64) -> bool {
+    matches!(job.status, JobStatus::Running | JobStatus::CancelRequested)
+        && job
+            .lease_expires_at_ms
+            .is_some_and(|deadline| deadline <= at_ms)
+}
+
+fn settle_stopped(job: &mut TrainingJob, status: JobStatus, at_ms: i64) {
+    job.status = status;
+    job.generation += 1;
+    job.lease_owner = None;
+    job.lease_expires_at_ms = None;
+    job.updated_at_ms = at_ms;
+}
+
+/// A failure during a requested cancellation still ends as Cancelled.
+fn settle_failed(job: &mut TrainingJob, error: String) {
+    job.status = if job.status == JobStatus::CancelRequested {
+        JobStatus::Cancelled
+    } else {
+        JobStatus::Failed
+    };
+    job.error = Some(error);
+    job.lease_expires_at_ms = None;
+}
+
+/// Holders of the reservations that left a claim over budget.
+struct Occupied {
+    holders: Vec<String>,
+    message: String,
+}
+
+/// Removes a staged blob on every exit path; after the rename there is nothing left to remove.
+struct StagingFile(PathBuf);
+impl Drop for StagingFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+fn is_blob_name(name: &str) -> bool {
+    name.strip_suffix(".blob")
+        .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// Rules every blob read applies before touching bytes: the reference names its own sha256
+/// as `{sha}.blob`, and its size is positive, within `maximum_bytes` and addressable.
+pub(crate) fn validate_blob_reference(blob: &BlobRef, maximum_bytes: u64) -> Result<()> {
+    if blob.path != format!("{}.blob", blob.sha256)
+        || blob.sha256.len() != 64
+        || !blob.sha256.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        return Err(invalid(format!(
+            "invalid repository blob reference {:?} for sha256 {:?}",
+            blob.path, blob.sha256
+        )));
+    }
+    if blob.bytes == 0 {
+        return Err(invalid(format!(
+            "artifact blob {} records no bytes",
+            blob.sha256
+        )));
+    }
+    if blob.bytes > maximum_bytes || blob.bytes >= usize::MAX as u64 {
+        return Err(invalid(format!(
+            "artifact exceeds the configured byte limit: blob {} has {} bytes, above the {maximum_bytes} byte limit",
+            blob.sha256, blob.bytes
+        )));
+    }
+    Ok(())
+}
+
+/// `bytes` must be exactly the referenced blob.
+pub(crate) fn verify_blob_content(blob: &BlobRef, bytes: &[u8]) -> Result<()> {
+    if bytes.len() as u64 != blob.bytes {
+        return Err(invalid(format!(
+            "artifact digest or size mismatch: blob {} records {} bytes, but {} were given",
+            blob.sha256,
+            blob.bytes,
+            bytes.len()
+        )));
+    }
+    let actual = digest(bytes);
+    if actual != blob.sha256 {
+        return Err(invalid(format!(
+            "artifact digest or size mismatch: blob {} holds bytes with sha256 {actual}",
+            blob.sha256
+        )));
+    }
+    Ok(())
+}
+
+/// A blob name as `put_blob` writes it: lowercase sha256 hex followed by `.blob`.
+fn is_snapshot_blob_name(name: &str) -> bool {
+    name.strip_suffix(".blob").is_some_and(|hash| {
+        hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+    })
+}
+
+fn referenced_blobs(conn: &Connection) -> Result<HashSet<String>> {
+    let mut referenced = HashSet::new();
+    for sql in [
+        "SELECT json_extract(body,'$.blob.path'),json_extract(body,'$.manifest.source_blob.path') FROM artifacts",
+        "SELECT json_extract(body,'$.blob.path'),NULL FROM pretrained_sources",
+        LIVE_CHECKPOINTS,
+    ] {
+        let mut statement = conn.prepare(sql)?;
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            for column in 0..2 {
+                if let Some(path) = row.get::<_, Option<String>>(column)? {
+                    referenced.insert(path);
+                }
+            }
+        }
+    }
+    Ok(referenced)
+}
+
+/// The ledger, its blob and lock directories and its journal files must be real entries of
+/// the ledger's own directory, so a planted symlink cannot redirect writes elsewhere.
+fn verify_storage_entries(root: &Path, ledger: &Path, blob_dir: &Path) -> Result<()> {
+    let mut entries = vec![
+        (ledger.to_owned(), false),
+        (blob_dir.to_owned(), true),
+        (root.join(".training-locks"), true),
+    ];
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let mut journal = ledger.as_os_str().to_owned();
+        journal.push(suffix);
+        entries.push((PathBuf::from(journal), false));
+    }
+    for (entry, directory) in entries {
+        verify_storage_entry(root, &entry, directory)?;
+    }
+    Ok(())
+}
+
+/// An absent entry passes.
+fn verify_storage_entry(root: &Path, entry: &Path, directory: bool) -> Result<()> {
+    match present(std::fs::symlink_metadata(entry))? {
+        Some(metadata) => verify_present_entry(root, entry, directory, &metadata),
+        None => Ok(()),
+    }
+}
+
+/// SQLite deletes its -wal and -shm files when its last connection closes, so an entry can
+/// vanish after its metadata was read; it then counts as absent.
+fn verify_present_entry(
+    root: &Path,
+    entry: &Path,
+    directory: bool,
+    metadata: &std::fs::Metadata,
+) -> Result<()> {
+    let real = if directory {
+        metadata.is_dir()
+    } else {
+        metadata.is_file()
+    };
+    if real
+        && present(entry.canonicalize())?.is_none_or(|canonical| canonical.parent() == Some(root))
+    {
+        return Ok(());
+    }
+    Err(invalid(format!(
+        "training storage entry {} must be a real {} inside {}",
+        entry.display(),
+        if directory { "directory" } else { "file" },
+        root.display()
+    )))
+}
+
+/// `None` when the path does not exist.
+fn present<T>(result: std::io::Result<T>) -> Result<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// A received ledger must not carry triggers, views or other objects this runtime does not
+/// create: they would run on, or stand in for, the user's own training records.
+fn verify_schema_objects(conn: &Connection) -> Result<()> {
+    let expected = expected_schema_objects()?;
+    let mut statement = conn.prepare("SELECT type,name FROM sqlite_master")?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        let object = (row.get::<_, String>(0)?, row.get::<_, String>(1)?);
+        let internal =
+            object.1.starts_with("sqlite_") && matches!(object.0.as_str(), "table" | "index");
+        if !internal && !expected.contains(&object) {
+            return Err(invalid(format!(
+                "training ledger contains an unexpected {} {}",
+                object.0, object.1
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn expected_schema_objects() -> Result<&'static BTreeSet<(String, String)>> {
+    static OBJECTS: std::sync::OnceLock<BTreeSet<(String, String)>> = std::sync::OnceLock::new();
+    if let Some(objects) = OBJECTS.get() {
+        return Ok(objects);
+    }
+    let connection = Connection::open_in_memory()?;
+    connection.execute_batch(SCHEMA)?;
+    crate::experiment_repository::initialize_experiments(&connection)?;
+    crate::learning_repository::initialize_learning(&connection)?;
+    let mut statement = connection
+        .prepare("SELECT type,name FROM sqlite_master WHERE type IN ('table','index')")?;
+    let objects = statement
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<BTreeSet<_>>>()?;
+    Ok(OBJECTS.get_or_init(|| objects))
+}
+
+/// Project ids read from the record bodies the runtime authorizes on, plus the column that
+/// pretrained source listings filter by.
+const PROJECT_IDS: &str = "SELECT json_extract(scope,'$.project_id') FROM streams UNION SELECT json_extract(body,'$.request.stream.project_id') FROM experiments UNION SELECT json_extract(body,'$.request.stream.project_id') FROM learning_projects UNION SELECT json_extract(body,'$.stream.project_id') FROM jobs UNION SELECT json_extract(body,'$.stream.project_id') FROM artifacts UNION SELECT project_id FROM pretrained_sources UNION SELECT json_extract(body,'$.project_id') FROM pretrained_sources UNION SELECT json_extract(body,'$.stream.project_id') FROM deployments";
+
+fn project_ids_of(connection: &Connection) -> Result<BTreeSet<String>> {
+    let mut statement = connection.prepare(PROJECT_IDS)?;
+    let ids = statement
+        .query_map([], |row| row.get::<_, Option<String>>(0))?
+        .filter_map(|row| row.transpose())
+        .collect::<rusqlite::Result<BTreeSet<_>>>()?;
+    Ok(ids)
+}
+
+/// `directory`, created when missing, as a real and empty directory.
+fn empty_directory(directory: &Path) -> Result<PathBuf> {
+    std::fs::create_dir_all(directory)?;
+    if !std::fs::symlink_metadata(directory)?.is_dir() {
+        return Err(invalid(format!(
+            "ledger snapshot target {} must be a real directory",
+            directory.display()
+        )));
+    }
+    if std::fs::read_dir(directory)?.next().is_some() {
+        return Err(Error::Conflict(format!(
+            "ledger snapshot target {} is not empty",
+            directory.display()
+        )));
+    }
+    Ok(directory.canonicalize()?)
+}
+
+/// Removes what a failed snapshot wrote into its empty directory.
+struct PartialSnapshot {
+    database: PathBuf,
+    blob_dir: PathBuf,
+    kept: bool,
+}
+
+impl PartialSnapshot {
+    fn new(directory: &Path) -> Self {
+        Self {
+            database: directory.join(LEDGER_DATABASE_FILE),
+            blob_dir: directory.join(LEDGER_BLOB_DIR),
+            kept: false,
+        }
+    }
+
+    fn sync(&self, directory: &Path) -> Result<()> {
+        sync_file(&self.database)?;
+        sync_directory(&self.blob_dir)?;
+        sync_directory(directory)
+    }
+
+    fn keep(mut self) {
+        self.kept = true;
+    }
+}
+
+impl Drop for PartialSnapshot {
+    fn drop(&mut self) {
+        if self.kept {
+            return;
+        }
+        for file in database_files(&self.database) {
+            let _ = std::fs::remove_file(file);
+        }
+        let _ = std::fs::remove_dir_all(&self.blob_dir);
+    }
+}
+
+/// A database file followed by the journal files SQLite keeps beside it.
+fn database_files(database: &Path) -> [PathBuf; 4] {
+    ["", "-journal", "-wal", "-shm"].map(|suffix| {
+        let mut path = database.as_os_str().to_owned();
+        path.push(suffix);
+        PathBuf::from(path)
+    })
+}
+
+/// Metadata of `path`, which must be a regular file rather than a symlink or directory.
+fn regular_file(path: &Path) -> Result<std::fs::Metadata> {
+    match present(std::fs::symlink_metadata(path))? {
+        Some(metadata) if metadata.is_file() => Ok(metadata),
+        Some(_) => Err(invalid(format!(
+            "{} must be a regular file",
+            path.display()
+        ))),
+        None => Err(Error::NotFound(path.display().to_string())),
+    }
+}
+
+/// Puts a `VACUUM INTO` copy in rollback-journal mode, so it is one file, and lists the blobs
+/// it references.
+fn single_file_database(database: &Path) -> Result<Vec<String>> {
+    let connection = Connection::open_with_flags(
+        database,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    let mode: String =
+        connection.pragma_update_and_check(None, "journal_mode", "DELETE", |row| row.get(0))?;
+    if !mode.eq_ignore_ascii_case("delete") {
+        return Err(invalid(format!(
+            "ledger snapshot {} stayed in journal mode {mode}",
+            database.display()
+        )));
+    }
+    let mut referenced: Vec<String> = referenced_blobs(&connection)?.into_iter().collect();
+    referenced.sort();
+    if let Some(name) = referenced.iter().find(|name| !is_blob_name(name)) {
+        return Err(invalid(format!(
+            "training ledger references blob {name:?}, which is not a sha256 blob name"
+        )));
+    }
+    Ok(referenced)
+}
+
+/// The database size and the blobs of a snapshot folder. Journal files beside the database,
+/// and files above `maximum_bytes` together, are refused before anything is opened.
+fn snapshot_listing(
+    database: &Path,
+    blob_dir: &Path,
+    maximum_bytes: u64,
+) -> Result<(u64, Vec<(String, u64)>)> {
+    if let Some(journal) = database_files(database)[1..]
+        .iter()
+        .find(|journal| std::fs::symlink_metadata(journal).is_ok())
+    {
+        return Err(invalid(format!(
+            "ledger snapshot {} must be a single-file database, but {} exists",
+            database.display(),
+            journal.display()
+        )));
+    }
+    let database_bytes = regular_file(database)?.len();
+    let blobs = snapshot_blobs(blob_dir)?;
+    let total = u128::from(database_bytes)
+        + blobs
+            .iter()
+            .map(|(_, bytes)| u128::from(*bytes))
+            .sum::<u128>();
+    if total > u128::from(maximum_bytes) {
+        return Err(invalid(format!(
+            "ledger snapshot {} holds {total} bytes, above the {maximum_bytes} byte limit",
+            database.parent().unwrap_or(database).display()
+        )));
+    }
+    Ok((database_bytes, blobs))
+}
+
+/// The blob references and project ids of a snapshot database that passed the format,
+/// schema and integrity checks, read without writing anything beside it.
+fn inspect_snapshot_database(database: &Path) -> Result<(HashSet<String>, BTreeSet<String>)> {
+    ensure_single_file_format(database)?;
+    let connection = open_snapshot_database(database)?;
+    check_snapshot_schema(&connection)?;
+    Ok((referenced_blobs(&connection)?, project_ids_of(&connection)?))
+}
+
+/// The smallest referenced blob name the snapshot does not hold.
+fn missing_blob(referenced: &HashSet<String>, blobs: &[(String, u64)]) -> Option<String> {
+    let present: HashSet<&str> = blobs.iter().map(|(name, _)| name.as_str()).collect();
+    referenced
+        .iter()
+        .filter(|name| !present.contains(name.as_str()))
+        .min()
+        .cloned()
+}
+
+/// Streams every blob's sha256, which must be the name the blob is stored under.
+fn hashed_blobs(blob_dir: &Path, blobs: Vec<(String, u64)>) -> Result<Vec<LedgerSnapshotFile>> {
+    blobs
+        .into_iter()
+        .map(|(name, bytes)| {
+            let file = hashed_file(
+                &blob_dir.join(&name),
+                format!("{LEDGER_BLOB_DIR}/{name}"),
+                bytes,
+            )?;
+            if name != format!("{}.blob", file.sha256) {
+                return Err(invalid(format!(
+                    "ledger snapshot blob {name} has sha256 {}",
+                    file.sha256
+                )));
+            }
+            Ok(file)
+        })
+        .collect()
+}
+
+/// The header must announce a rollback-journal database, so a read-only open neither looks
+/// for nor creates WAL files.
+fn ensure_single_file_format(database: &Path) -> Result<()> {
+    use std::io::Read;
+    let mut header = [0u8; 100];
+    let read = std::fs::File::open(database)?.read_exact(&mut header);
+    let single_file = match read {
+        Ok(()) => &header[..16] == b"SQLite format 3\0" && header[18] == 1 && header[19] == 1,
+        Err(error) if error.kind() == ErrorKind::UnexpectedEof => false,
+        Err(error) => return Err(error.into()),
+    };
+    if !single_file {
+        return Err(invalid(format!(
+            "ledger snapshot {} is not a single-file SQLite database with journal_mode DELETE",
+            database.display()
+        )));
+    }
+    Ok(())
+}
+
+/// A read-only connection that distrusts the received schema. The caller checked that the
+/// database file itself is no symlink; SQLite's NOFOLLOW would also refuse symlinked parent
+/// directories, such as macOS's /var.
+fn open_snapshot_database(database: &Path) -> Result<Connection> {
+    let connection = Connection::open_with_flags(
+        database,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    connection.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
+    connection.set_db_config(DbConfig::SQLITE_DBCONFIG_TRUSTED_SCHEMA, false)?;
+    Ok(connection)
+}
+
+/// Version 1 of this runtime's schema, without foreign objects, and structurally intact.
+fn check_snapshot_schema(connection: &Connection) -> Result<()> {
+    let versions: Vec<i64> = column_values(connection, "SELECT version FROM ml_meta")?;
+    if versions != [1] {
+        return Err(invalid(format!(
+            "ledger snapshot has training ledger versions {versions:?}; this runtime reads version 1"
+        )));
+    }
+    verify_schema_objects(connection)?;
+    let problems: Vec<String> = column_values(connection, "PRAGMA quick_check")?;
+    if problems != ["ok"] {
+        return Err(invalid(format!(
+            "ledger snapshot failed its integrity check: {}",
+            problems.join("; ")
+        )));
+    }
+    Ok(())
+}
+
+/// The first column of every row `sql` returns.
+fn column_values<T: rusqlite::types::FromSql>(
+    connection: &Connection,
+    sql: &str,
+) -> Result<Vec<T>> {
+    let mut statement = connection.prepare(sql)?;
+    let values = statement
+        .query_map([], |row| row.get::<_, T>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(values)
+}
+
+/// Names and sizes of the blobs in a snapshot's blob directory, sorted by name. A missing
+/// directory holds no blobs; any entry other than a regular blob file is refused.
+fn snapshot_blobs(blob_dir: &Path) -> Result<Vec<(String, u64)>> {
+    let Some(metadata) = present(std::fs::symlink_metadata(blob_dir))? else {
+        return Ok(Vec::new());
+    };
+    if !metadata.is_dir() {
+        return Err(invalid(format!(
+            "ledger snapshot blob directory {} must be a real directory",
+            blob_dir.display()
+        )));
+    }
+    let mut blobs = std::fs::read_dir(blob_dir)?
+        .map(|entry| snapshot_blob(blob_dir, entry?))
+        .collect::<Result<Vec<_>>>()?;
+    blobs.sort();
+    Ok(blobs)
+}
+
+/// A regular `{sha}.blob` file of a snapshot's blob directory, with its size.
+fn snapshot_blob(blob_dir: &Path, entry: std::fs::DirEntry) -> Result<(String, u64)> {
+    let metadata = entry.metadata()?;
+    match entry.file_name().into_string() {
+        Ok(name) if is_snapshot_blob_name(&name) && metadata.is_file() => {
+            Ok((name, metadata.len()))
+        }
+        _ => Err(invalid(format!(
+            "ledger snapshot blob directory {} holds unexpected entry {:?}",
+            blob_dir.display(),
+            entry.file_name()
+        ))),
+    }
+}
+
+/// The streamed sha256 of a snapshot file, which must still hold the `bytes` it was listed with.
+fn hashed_file(path: &Path, file: String, bytes: u64) -> Result<LedgerSnapshotFile> {
+    let (read, sha256) = file_sha256(path, bytes)?;
+    if read != bytes {
+        return Err(invalid(format!(
+            "ledger snapshot file {} changed from {bytes} to {read} bytes while it was verified",
+            path.display()
+        )));
+    }
+    Ok(LedgerSnapshotFile {
+        file,
+        sha256,
+        bytes,
+    })
+}
+
+/// The number of bytes read and their sha256, over at most `maximum_bytes + 1` bytes of the
+/// file, so a caller sees when the file is longer than expected.
+fn file_sha256(path: &Path, maximum_bytes: u64) -> Result<(u64, String)> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    struct Hashing(Sha256, u64);
+    impl Write for Hashing {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.update(bytes);
+            self.1 += bytes.len() as u64;
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut hashing = Hashing(Sha256::new(), 0);
+    std::io::copy(
+        &mut std::fs::File::open(path)?.take(maximum_bytes.saturating_add(1)),
+        &mut hashing,
+    )?;
+    let Hashing(hasher, read) = hashing;
+    Ok((read, format!("{:x}", hasher.finalize())))
+}
+
+/// Hard-links `source` to `target`, or copies it with a sync where linking fails, such as
+/// across file systems. `target` is never replaced, and a failed copy removes its partial file.
+fn link_or_copy(source: &Path, target: &Path) -> Result<()> {
+    regular_file(source)?;
+    match std::fs::hard_link(source, target) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => Err(error.into()),
+        Err(_) => copy_new(source, target),
+    }
+}
+
+/// Copies `source` into a file that must not exist yet, and syncs it. A failed copy removes
+/// the file it created, so no caller is left with a partial target it cannot account for.
+fn copy_new(source: &Path, target: &Path) -> Result<()> {
+    let output = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)?;
+    copy_synced(source, output).inspect_err(|_| {
+        let _ = std::fs::remove_file(target);
+    })
+}
+
+/// `output` is closed when this returns, so a failed copy can be removed on every platform.
+fn copy_synced(source: &Path, mut output: std::fs::File) -> Result<()> {
+    std::io::copy(&mut std::fs::File::open(source)?, &mut output)?;
+    output.sync_all()?;
+    Ok(())
+}
+
+fn sync_file(path: &Path) -> Result<()> {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)?
+        .sync_all()?;
+    Ok(())
+}
+
+/// Makes the entries created in `directory` durable; Windows offers no directory sync.
+fn sync_directory(directory: &Path) -> Result<()> {
+    #[cfg(unix)]
+    std::fs::File::open(directory)?.sync_all()?;
+    #[cfg(not(unix))]
+    let _ = directory;
+    Ok(())
+}
+
+/// Exclusive lock of one install destination, beside the ledger's other locks.
+fn install_lock(root: &Path, destination: &Path) -> Result<std::fs::File> {
+    let directory = root.join(".training-locks");
+    std::fs::create_dir_all(&directory)?;
+    if !std::fs::symlink_metadata(&directory)?.is_dir() {
+        return Err(invalid(format!(
+            "training lock directory {} must be a real directory",
+            directory.display()
+        )));
+    }
+    let path = directory.join(format!(
+        "install-{}.lock",
+        digest(destination.as_os_str().as_encoded_bytes())
+    ));
+    if std::fs::symlink_metadata(&path).is_ok_and(|metadata| !metadata.is_file()) {
+        return Err(invalid(format!(
+            "training lock {} must be a regular file",
+            path.display()
+        )));
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(std::fs::TryLockError::WouldBlock) => Err(Error::Conflict(format!(
+            "another import is installing training ledger {}",
+            destination.display()
+        ))),
+        Err(std::fs::TryLockError::Error(error)) => Err(error.into()),
+    }
+}
+
+/// The canonical directory of an install destination, created when missing, and the
+/// destination inside it.
+fn install_target(destination: &Path) -> Result<(PathBuf, PathBuf)> {
+    let name = destination.file_name().ok_or_else(|| {
+        invalid(format!(
+            "ledger destination {} names no file",
+            destination.display()
+        ))
+    })?;
+    let parent = destination
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let root = parent.canonicalize()?;
+    let destination = root.join(name);
+    Ok((root, destination))
+}
+
+fn ledger_exists(destination: &Path, entry: &Path) -> Error {
+    Error::Conflict(format!(
+        "training ledger {} already exists: {} is present",
+        destination.display(),
+        entry.display()
+    ))
+}
+
+/// Copies the snapshot database into `staging_dir` and hard-links the synced copy to
+/// `destination`. A hard link never replaces a file, and the installed ledger shares no
+/// database file with the snapshot, which SQLite would otherwise write through. A staging
+/// file left by a crash is swept like any other staged blob.
+fn publish_database(source: &Path, staging_dir: &Path, destination: &Path) -> Result<()> {
+    let staging = StagingFile(staging_dir.join(format!("{}.part", id())));
+    copy_new(source, &staging.0)?;
+    std::fs::hard_link(&staging.0, destination).map_err(|error| {
+        if error.kind() == ErrorKind::AlreadyExists {
+            ledger_exists(destination, destination)
+        } else {
+            error.into()
+        }
+    })
+}
+
+/// A ledger being installed. Dropped unfinished, it removes the blob links it made, then its
+/// blob directory unless a ledger appeared at the destination meanwhile and uses it.
+struct Installation {
+    destination: PathBuf,
+    blob_dir: PathBuf,
+    blobs: Vec<PathBuf>,
+    installed: bool,
+}
+
+impl Installation {
+    /// Claims an absent ledger by creating its blob directory exclusively.
+    fn begin(destination: PathBuf) -> Result<Self> {
+        let blob_dir = destination.with_extension("artifacts");
+        for entry in database_files(&destination).iter().chain([&blob_dir]) {
+            if present(std::fs::symlink_metadata(entry))?.is_some() {
+                return Err(ledger_exists(&destination, entry));
+            }
+        }
+        std::fs::create_dir(&blob_dir).map_err(|error| {
+            if error.kind() == ErrorKind::AlreadyExists {
+                ledger_exists(&destination, &blob_dir)
+            } else {
+                error.into()
+            }
+        })?;
+        Ok(Self {
+            destination,
+            blob_dir,
+            blobs: Vec::new(),
+            installed: false,
+        })
+    }
+
+    fn link_blobs(&mut self, source_dir: &Path, blobs: &[(String, u64)]) -> Result<()> {
+        for (name, _) in blobs {
+            let target = self.blob_dir.join(name);
+            link_or_copy(&source_dir.join(name), &target)?;
+            self.blobs.push(target);
+        }
+        sync_directory(&self.blob_dir)
+    }
+
+    /// The database is published, so a failed sync of `root` no longer undoes anything.
+    fn finish(mut self, root: &Path) -> Result<()> {
+        self.installed = true;
+        sync_directory(root)
+    }
+}
+
+impl Drop for Installation {
+    fn drop(&mut self) {
+        if self.installed {
+            return;
+        }
+        for blob in &self.blobs {
+            let _ = std::fs::remove_file(blob);
+        }
+        if std::fs::symlink_metadata(&self.destination).is_err() {
+            let _ = std::fs::remove_dir(&self.blob_dir);
+        }
+    }
+}
+
+fn count_new_samples(conn: &Connection, scope: &str, at_ms: i64) -> Result<usize> {
+    Ok(conn.query_row(NEW_SAMPLE_COUNT, params![scope, at_ms], |row| row.get(0))?)
 }
 
 fn eligible_samples(
@@ -1855,8 +3445,19 @@ fn create_snapshot(
     policy: SplitPolicy,
     at_ms: i64,
 ) -> Result<DatasetSnapshot> {
+    let samples = eligible_samples(tx, &scope(stream)?, at_ms)?;
+    snapshot_from_samples(tx, stream, policy, at_ms, samples)
+}
+
+/// `samples` are the stream's `eligible_samples` at `at_ms`, read in the same transaction.
+fn snapshot_from_samples(
+    tx: &Transaction<'_>,
+    stream: &StreamKey,
+    policy: SplitPolicy,
+    at_ms: i64,
+    samples: Vec<(i64, TrainingSample)>,
+) -> Result<DatasetSnapshot> {
     let scope = scope(stream)?;
-    let samples = eligible_samples(tx, &scope, at_ms)?;
     if samples.is_empty() {
         return Err(invalid("no accepted labels are available at snapshot time"));
     }
@@ -2097,4 +3698,504 @@ pub(crate) fn training_ready(snapshot: &DatasetSnapshot, recipe: &Value) -> Resu
         }
     }
     Ok(support.into_iter().all(|count| count >= per_class))
+}
+
+#[cfg(test)]
+mod blob_store_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn queued_job(repo: &TrainingRepository, stream_id: &str) -> TrainingJob {
+        let stream = StreamKey {
+            project_id: "blobs".into(),
+            stream_id: stream_id.into(),
+            inspection_version: "v1".into(),
+        };
+        for i in 0..6 {
+            repo.record_sample(
+                &stream,
+                &TrainingSample {
+                    id: format!("sample-{i}"),
+                    annotation_revision: 1,
+                    group_id: format!("group-{i}"),
+                    captured_at_ms: 1,
+                    label_available_at_ms: 1,
+                    content_digest: format!("{i:064x}"),
+                    source: LabelSource::Reviewed,
+                    accepted: true,
+                    payload: json!({"label":"normal"}),
+                },
+            )
+            .unwrap();
+        }
+        repo.trigger_after_n(
+            &stream,
+            6,
+            TrainingRequest {
+                engine: "fixture".into(),
+                recipe: json!({}),
+                compute: json!({}),
+            },
+            SplitPolicy::Group {
+                train_fraction: 0.5,
+                validation_fraction: 0.25,
+                seed: 7,
+            },
+            now_ms(),
+        )
+        .unwrap()
+        .unwrap()
+    }
+
+    fn stored(repo: &TrainingRepository, blob: &BlobRef) -> bool {
+        repo.blob_dir.join(&blob.path).exists()
+    }
+
+    #[test]
+    fn superseded_and_finished_checkpoints_are_collected_while_resumable_ones_stay() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let job = queued_job(&repo, "line");
+        let lease = repo.claim_job(&job.id, "worker", 60_000, now_ms()).unwrap();
+        let first = repo
+            .publish_checkpoint(&lease, b"epoch-1", 1, json!({}), false, now_ms())
+            .unwrap();
+        let second = repo
+            .publish_checkpoint(&lease, b"epoch-2", 2, json!({}), false, now_ms())
+            .unwrap();
+        let orphan_bytes = b"written before a crash lost its reference";
+        let orphan = repo.blob_dir.join(format!("{}.blob", "f".repeat(64)));
+        std::fs::write(&orphan, orphan_bytes).unwrap();
+        assert_eq!(
+            repo.collect_unreferenced_blobs().unwrap(),
+            first.blob.bytes + orphan_bytes.len() as u64
+        );
+        assert!(!stored(&repo, &first.blob));
+        assert!(!orphan.exists());
+        assert!(stored(&repo, &second.blob), "a running job resumes from it");
+        let artifact = repo
+            .finish_training(&lease, b"model", json!({}), now_ms())
+            .unwrap();
+        repo.collect_unreferenced_blobs().unwrap();
+        assert!(!stored(&repo, &second.blob), "a finished job never resumes");
+        assert!(stored(&repo, &artifact.blob));
+
+        let cancelled = queued_job(&repo, "cancelled");
+        let lease = repo
+            .claim_job(&cancelled.id, "worker", 60_000, now_ms())
+            .unwrap();
+        let kept = repo
+            .publish_checkpoint(&lease, b"cancelled-epoch", 1, json!({}), false, now_ms())
+            .unwrap();
+        repo.request_cancel(&cancelled.id, now_ms()).unwrap();
+        repo.acknowledge_cancel(&lease, now_ms()).unwrap();
+        repo.collect_unreferenced_blobs().unwrap();
+        assert!(stored(&repo, &kept.blob), "a cancelled job resumes from it");
+    }
+
+    #[test]
+    fn succeeded_trial_checkpoints_stay_while_their_experiment_can_continue() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let job = queued_job(&repo, "trial");
+        let lease = repo.claim_job(&job.id, "worker", 60_000, now_ms()).unwrap();
+        let checkpoint = repo
+            .publish_checkpoint(&lease, b"halving-parent", 3, json!({}), false, now_ms())
+            .unwrap();
+        repo.finish_training(&lease, b"trial-model", json!({}), now_ms())
+            .unwrap();
+        let connection = repo.connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO experiments(id,scope,body) VALUES ('experiment','scope',?)",
+                [json!({"status":"running","selected_trial_id":null}).to_string()],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO experiment_trials(id,experiment_id,job_id,idempotency_key,candidate_index,body) VALUES ('trial','experiment',?,'key',0,'{}')",
+                [&job.id],
+            )
+            .unwrap();
+        repo.collect_unreferenced_blobs().unwrap();
+        assert!(stored(&repo, &checkpoint.blob));
+        connection
+            .execute(
+                "UPDATE experiments SET body=? WHERE id='experiment'",
+                [json!({"status":"evaluating","selected_trial_id":"trial"}).to_string()],
+            )
+            .unwrap();
+        repo.collect_unreferenced_blobs().unwrap();
+        assert!(!stored(&repo, &checkpoint.blob));
+    }
+
+    #[test]
+    fn writers_in_flight_defer_collection_and_staging_sweeps() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("jobs.sqlite");
+        let repo = TrainingRepository::open(&path).unwrap();
+        let staged = repo.blob_dir.join("interrupted.part");
+        let orphan = repo.blob_dir.join(format!("{}.blob", "e".repeat(64)));
+        std::fs::write(&staged, b"partial").unwrap();
+        std::fs::write(&orphan, b"orphan").unwrap();
+        let writer = repo.blob_writer().unwrap();
+        assert_eq!(repo.collect_unreferenced_blobs().unwrap(), 0);
+        TrainingRepository::open(&path).unwrap();
+        assert!(staged.exists() && orphan.exists());
+        drop(writer);
+        TrainingRepository::open(&path).unwrap();
+        assert!(!staged.exists());
+        assert!(orphan.exists(), "opening only sweeps staging files");
+        assert_eq!(
+            repo.collect_unreferenced_blobs().unwrap(),
+            b"orphan".len() as u64
+        );
+    }
+
+    #[test]
+    fn journal_files_that_vanish_during_the_storage_check_count_as_absent() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let wal = root.join("jobs.sqlite-wal");
+        std::fs::write(&wal, b"").unwrap();
+        let metadata = std::fs::symlink_metadata(&wal).unwrap();
+        // The last connection closes between the two lookups.
+        std::fs::remove_file(&wal).unwrap();
+        verify_present_entry(&root, &wal, false, &metadata).unwrap();
+        std::fs::create_dir(&wal).unwrap();
+        let metadata = std::fs::symlink_metadata(&wal).unwrap();
+        assert!(matches!(
+            verify_present_entry(&root, &wal, false, &metadata),
+            Err(Error::Invalid(_))
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_blob_directory_replaced_by_a_symlink_after_open_is_neither_written_nor_swept() {
+        let directory = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        std::fs::remove_dir(&repo.blob_dir).unwrap();
+        std::os::unix::fs::symlink(outside.path(), &repo.blob_dir).unwrap();
+        let staged = outside.path().join("unrelated.part");
+        std::fs::write(&staged, b"not the ledger's").unwrap();
+        let written = repo.register_pretrained_source(
+            "project",
+            b"weights",
+            json!({"engine":"burn","format_version":1,"config":{},"input_shape":[1]}),
+            json!({}),
+            1024,
+            now_ms(),
+        );
+        assert!(matches!(written, Err(Error::Invalid(_))), "{written:?}");
+        assert_eq!(repo.collect_unreferenced_blobs().unwrap(), 0);
+        let names: Vec<_> = std::fs::read_dir(outside.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("unrelated.part")]);
+        assert!(matches!(repo.verify_storage(), Err(Error::Invalid(_))));
+    }
+
+    #[cfg(not(any(feature = "native", feature = "burn")))]
+    #[test]
+    fn builds_without_a_training_engine_refuse_to_adopt_training_artifacts() {
+        let directory = tempfile::tempdir().unwrap();
+        let ledger = |name: &str| directory.path().join(name).join(LEDGER_DATABASE_FILE);
+        let app = TrainingRepository::open(ledger("app")).unwrap();
+        let job = queued_job(&app, "line");
+        let lease = app.claim_job(&job.id, "worker", 60_000, now_ms()).unwrap();
+        let artifact = app
+            .finish_training(&lease, b"model", json!({}), now_ms())
+            .unwrap();
+        let user = TrainingRepository::open(ledger("user")).unwrap();
+        let refused = user.adopt_pretrained_source(&app, &artifact.id, "blobs:user");
+        assert!(
+            matches!(&refused, Err(Error::Invalid(message)) if message.contains("training engine")),
+            "{refused:?}"
+        );
+        assert!(user.get_pretrained_source(&artifact.id).is_err());
+        assert!(!stored(&user, &artifact.blob));
+    }
+
+    #[test]
+    fn ledger_connections_are_defensive_and_distrust_schema_functions() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let connection = repo.connection().unwrap();
+        assert!(
+            connection
+                .db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE)
+                .unwrap()
+        );
+        assert!(
+            !connection
+                .db_config(DbConfig::SQLITE_DBCONFIG_TRUSTED_SCHEMA)
+                .unwrap()
+        );
+    }
+}
+
+#[cfg(test)]
+mod sample_count_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn annotation(index: usize, revision: u64, accepted: bool, label_at_ms: i64) -> TrainingSample {
+        TrainingSample {
+            id: format!("sample-{index}"),
+            annotation_revision: revision,
+            group_id: format!("group-{index}"),
+            captured_at_ms: 1,
+            label_available_at_ms: label_at_ms,
+            content_digest: format!("{index:064x}"),
+            source: LabelSource::Reviewed,
+            accepted,
+            payload: json!({"label":"normal","input":{"shape":[2],"values":[0.5,1.5]}}),
+        }
+    }
+
+    /// Train After N's former count: parse every eligible sample, then look up its trigger.
+    fn parsed_count(connection: &Connection, scope: &str, at_ms: i64) -> usize {
+        eligible_samples(connection, scope, at_ms)
+            .unwrap()
+            .iter()
+            .filter(|(_, sample)| {
+                !connection
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM triggered_samples WHERE scope=? AND sample_id=?)",
+                        rusqlite::params![scope, sample.id],
+                        |row| row.get::<_, bool>(0),
+                    )
+                    .unwrap()
+            })
+            .count()
+    }
+
+    #[test]
+    fn new_sample_count_matches_the_parsed_count_and_reads_label_times_from_the_index() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let stream = StreamKey {
+            project_id: "counts".into(),
+            stream_id: "line".into(),
+            inspection_version: "v1".into(),
+        };
+        for sample in [
+            annotation(0, 1, true, 10),
+            // Withdrawn once its second revision is available.
+            annotation(1, 1, true, 10),
+            annotation(1, 2, false, 20),
+            // Never accepted.
+            annotation(2, 1, false, 10),
+            // Accepted by a later revision.
+            annotation(3, 1, false, 10),
+            annotation(3, 2, true, 30),
+            // Labelled only at 50.
+            annotation(4, 1, true, 50),
+            // Consumed by an earlier trigger.
+            annotation(5, 1, true, 10),
+            // Relabelled, accepted throughout.
+            annotation(6, 1, true, 10),
+            annotation(6, 2, true, 40),
+        ] {
+            repo.record_sample(&stream, &sample).unwrap();
+        }
+        let stream_scope = scope(&stream).unwrap();
+        let connection = repo.connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO triggered_samples(scope,sample_id,snapshot_id) VALUES (?,'sample-5','earlier')",
+                [&stream_scope],
+            )
+            .unwrap();
+        for (at_ms, expected) in [(5, 0), (15, 3), (25, 2), (35, 3), (45, 3), (55, 4)] {
+            assert_eq!(
+                repo.count_new_training_samples(&stream, at_ms).unwrap(),
+                expected,
+                "at {at_ms}"
+            );
+            assert_eq!(
+                parsed_count(&connection, &stream_scope, at_ms),
+                expected,
+                "at {at_ms}"
+            );
+        }
+        let plan = connection
+            .prepare(&format!("EXPLAIN QUERY PLAN {NEW_SAMPLE_COUNT}"))
+            .unwrap()
+            .query_map(rusqlite::params![stream_scope, 0], |row| {
+                row.get::<_, String>(3)
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert!(
+            plan.iter()
+                .any(|step| step.contains("annotation_label_availability")),
+            "{plan:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod truth_digest_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn truth_digests_ignore_raw_row_edits_and_still_accept_full_body_seals() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let stream = StreamKey {
+            project_id: "truth".into(),
+            stream_id: "line".into(),
+            inspection_version: "v1".into(),
+        };
+        let recorded = TrainingSample {
+            id: "audited".into(),
+            annotation_revision: 1,
+            group_id: "lot".into(),
+            captured_at_ms: 1,
+            label_available_at_ms: 1,
+            content_digest: "a".repeat(64),
+            source: LabelSource::Reviewed,
+            accepted: true,
+            payload: json!({"label":"good","feature_row":{"temperature":20}}),
+        };
+        repo.record_sample(&stream, &recorded).unwrap();
+        let predictions = [PredictionRecord {
+            sample_id: recorded.id.clone(),
+            artifact_id: "model".into(),
+            predicted_label: Some("good".into()),
+            teacher_label: None,
+            actual_label: Some("good".into()),
+            actual_source: Some(LabelSource::Reviewed),
+            latency_ms: 1.,
+            failed: false,
+            recorded_at_ms: 2,
+            details: json!({}),
+        }];
+        let connection = repo.connection().unwrap();
+        let verifies = |sealed: Option<&str>| {
+            truth_digest_matches(&connection, &stream, &predictions, sealed).unwrap()
+        };
+        let sealed = evaluation_truth_digest(&connection, &stream, &predictions).unwrap();
+        let legacy = digest(&serde_json::to_vec(&[Some(&recorded)]).unwrap());
+        assert_ne!(sealed, legacy);
+        assert!(verifies(Some(sealed.as_str())) && verifies(Some(legacy.as_str())));
+        assert!(!verifies(None) && !verifies(Some("0".repeat(64).as_str())));
+
+        let mut edited = recorded.clone();
+        edited.payload["feature_row"] = json!({"temperature":21});
+        repo.record_prepared_sample(&stream, &edited).unwrap();
+        assert_eq!(
+            evaluation_truth_digest(&connection, &stream, &predictions).unwrap(),
+            sealed
+        );
+        assert!(verifies(Some(sealed.as_str())));
+        assert!(
+            !verifies(Some(legacy.as_str())),
+            "a full-body digest covers the raw row"
+        );
+
+        let mut relabelled = edited;
+        relabelled.annotation_revision = 2;
+        relabelled.payload["label"] = json!("defect");
+        repo.record_sample(&stream, &relabelled).unwrap();
+        assert!(!verifies(Some(sealed.as_str())));
+    }
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn blob_collection_waits_while_a_snapshot_links_its_blobs() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join(LEDGER_DATABASE_FILE)).unwrap();
+        let source = repo
+            .register_pretrained_source(
+                "app:board",
+                b"weights",
+                json!({"engine":"burn","format_version":1,"config":{},"input_shape":[1]}),
+                json!({}),
+                1024,
+                now_ms(),
+            )
+            .unwrap();
+        let orphan_bytes = b"unreferenced";
+        let orphan = repo.blob_dir.join(format!("{}.blob", "e".repeat(64)));
+        std::fs::write(&orphan, orphan_bytes).unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let snapshot = repo
+            .snapshot_while_locked(target.path(), || {
+                assert_eq!(repo.collect_unreferenced_blobs()?, 0);
+                assert!(orphan.exists());
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            snapshot
+                .blobs
+                .iter()
+                .map(|blob| blob.file.clone())
+                .collect::<Vec<_>>(),
+            vec![format!("{LEDGER_BLOB_DIR}/{}", source.blob.path)]
+        );
+        assert_eq!(
+            repo.collect_unreferenced_blobs().unwrap(),
+            orphan_bytes.len() as u64
+        );
+        assert!(!orphan.exists());
+        assert!(
+            target
+                .path()
+                .join(LEDGER_BLOB_DIR)
+                .join(&source.blob.path)
+                .exists()
+        );
+    }
+
+    #[test]
+    fn a_failed_snapshot_leaves_its_target_empty_for_a_retry() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join(LEDGER_DATABASE_FILE)).unwrap();
+        let source = repo
+            .register_pretrained_source(
+                "app:board",
+                b"weights",
+                json!({"engine":"burn","format_version":1,"config":{},"input_shape":[1]}),
+                json!({}),
+                1024,
+                now_ms(),
+            )
+            .unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let failed = repo.snapshot_while_locked(target.path(), || Err(Error::Cancelled));
+        assert!(matches!(failed, Err(Error::Cancelled)), "{failed:?}");
+        assert!(
+            std::fs::read_dir(target.path()).unwrap().next().is_none(),
+            "the partial snapshot was removed"
+        );
+        assert!(repo.blob_dir.join(&source.blob.path).exists());
+        let snapshot = repo.snapshot_to(target.path()).unwrap();
+        assert_eq!(snapshot.blobs.len(), 1);
+    }
+
+    #[test]
+    fn a_failed_copy_removes_the_target_it_created_but_never_one_it_found() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.blob");
+        let target = directory.path().join("target.blob");
+        assert!(copy_new(&source, &target).is_err());
+        assert!(!target.exists(), "the partial copy was removed");
+        std::fs::write(&source, b"source").unwrap();
+        std::fs::write(&target, b"kept").unwrap();
+        assert!(copy_new(&source, &target).is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"kept");
+    }
 }

@@ -124,6 +124,19 @@ pub struct ExperimentUsage {
     pub artifact_bytes: u64,
     pub reserved_artifact_bytes: u64,
     pub dataset_bytes: u64,
+    /// Part of `artifact_bytes` held by the last checkpoints of settled trials, which stay on
+    /// disk while the search may still continue or resume them. Released when a winner is
+    /// selected or the experiment finalizes.
+    #[serde(default)]
+    pub checkpoint_bytes: u64,
+}
+
+/// Wall time is charged only while a controller works on the experiment, never while it waits
+/// in a queue or stays stopped.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct ExperimentClock {
+    pub active_since_ms: Option<i64>,
+    pub elapsed_ms: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
@@ -144,6 +157,41 @@ pub struct Experiment {
     pub stop_reason: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
+    /// Absent on records written before active wall-time accounting; those count from creation.
+    #[serde(default)]
+    pub clock: Option<ExperimentClock>,
+}
+
+impl Experiment {
+    /// Wall time charged against `maximum_wall_time_ms` up to `now_ms`.
+    pub fn wall_elapsed_ms(&self, now_ms: i64) -> u64 {
+        let Some(clock) = &self.clock else {
+            return elapsed_between(self.created_at_ms, now_ms);
+        };
+        let active = clock
+            .active_since_ms
+            .map_or(0, |since| elapsed_between(since, now_ms));
+        clock.elapsed_ms.saturating_add(active)
+    }
+
+    pub fn wall_remaining_ms(&self, now_ms: i64) -> u64 {
+        self.request
+            .budget
+            .maximum_wall_time_ms
+            .saturating_sub(self.wall_elapsed_ms(now_ms))
+    }
+
+    /// Wall time held back from candidate training for the frozen winner's final holdout
+    /// evaluation: a tenth of the wall budget, at most five minutes.
+    pub fn audit_allowance_ms(&self) -> u64 {
+        (self.request.budget.maximum_wall_time_ms / 10).min(MAXIMUM_AUDIT_ALLOWANCE_MS)
+    }
+}
+
+const MAXIMUM_AUDIT_ALLOWANCE_MS: u64 = 300_000;
+
+fn elapsed_between(start_ms: i64, end_ms: i64) -> u64 {
+    u64::try_from(end_ms.saturating_sub(start_ms)).unwrap_or(0)
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]

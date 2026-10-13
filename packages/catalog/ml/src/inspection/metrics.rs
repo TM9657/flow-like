@@ -241,32 +241,27 @@ fn threshold(input: ThresholdRequest) -> Result<Option<ThresholdSelection>> {
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DistributionDriftRequest {
+    /// Baseline window.
     pub reference: Vec<f64>,
+    /// Window to compare.
     pub current: Vec<f64>,
     pub alpha: f64,
+    /// Increasing interior PSI bin edges; leave empty to compare with KS only.
     pub bin_edges: Vec<f64>,
     pub psi_threshold: f64,
 }
-#[derive(Clone, Serialize, Deserialize, JsonSchema)]
-pub struct DistributionDrift {
-    pub ks: KsResult,
-    pub population_stability_index: f64,
-    pub psi_drift: bool,
-}
 fn distribution_drift(input: DistributionDriftRequest) -> Result<DistributionDrift> {
-    flow_like_ml_core::require(
-        input.psi_threshold.is_finite() && input.psi_threshold > 0.0,
-        "PSI threshold must be positive",
-    )?;
-    let psi = population_stability_index(&input.reference, &input.current, &input.bin_edges)?;
-    Ok(DistributionDrift {
-        ks: ks_test(&input.reference, &input.current, input.alpha)?,
-        population_stability_index: psi,
-        psi_drift: psi > input.psi_threshold,
-    })
+    Ok(detect_distribution_drift(
+        &input.reference,
+        &input.current,
+        input.alpha,
+        &input.bin_edges,
+        input.psi_threshold,
+    )?)
 }
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct LossDriftRequest {
+    /// Detector state from a previous run; it continues with the parameters below.
     pub state: Option<PageHinkley>,
     pub delta: f64,
     pub threshold: f64,
@@ -280,9 +275,15 @@ pub struct LossDrift {
     pub first_detection_index: Option<usize>,
 }
 fn loss_drift(input: LossDriftRequest) -> Result<LossDrift> {
+    let configured = PageHinkley::new(input.delta, input.threshold, input.minimum_samples)?;
     let mut state = match input.state {
-        Some(state) => state,
-        None => PageHinkley::new(input.delta, input.threshold, input.minimum_samples)?,
+        Some(mut state) => {
+            state.delta = configured.delta;
+            state.threshold = configured.threshold;
+            state.minimum_samples = configured.minimum_samples;
+            state
+        }
+        None => configured,
     };
     let mut first = None;
     for (i, value) in input.values.into_iter().enumerate() {
@@ -430,12 +431,13 @@ operation!(
     DistributionDriftNode,
     "ml_distribution_drift",
     "Distribution Drift",
-    "Compare reference and current distributions using KS and PSI",
+    "Compare reference and current distributions with KS and, when bin_edges are given, PSI. psi_drift is left empty when the windows are too small for PSI to separate drift from noise; psi_note says why",
     "distributionDrift",
     "AI/ML/Monitoring",
     DistributionDriftRequest,
     DistributionDrift,
-    distribution_drift
+    distribution_drift,
+    version = 2
 );
 #[crate::register_node]
 #[derive(Default)]
@@ -444,10 +446,38 @@ operation!(
     LossDriftNode,
     "ml_loss_drift",
     "Loss Drift",
-    "Update a persisted Page-Hinkley detector for increasing prediction error",
+    "Update a persisted Page-Hinkley detector for increasing prediction error. The configured delta, threshold and minimum samples also apply to a supplied state",
     "lossDrift",
     "AI/ML/Monitoring",
     LossDriftRequest,
     LossDrift,
-    loss_drift
+    loss_drift,
+    version = 1
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loss_drift_applies_configured_parameters_to_a_supplied_state() {
+        let request = |state, threshold, values| LossDriftRequest {
+            state,
+            delta: 0.0,
+            threshold,
+            minimum_samples: 1,
+            values,
+        };
+        let baseline = loss_drift(request(None, 100.0, vec![0.0; 10])).unwrap();
+        assert!(!baseline.drift);
+        let lenient =
+            loss_drift(request(Some(baseline.state.clone()), 100.0, vec![5.0, 5.0])).unwrap();
+        assert!(!lenient.drift);
+        let strict =
+            loss_drift(request(Some(baseline.state.clone()), 1.0, vec![5.0, 5.0])).unwrap();
+        assert!(strict.drift);
+        assert_eq!(strict.first_detection_index, Some(0));
+        assert_eq!(strict.state.threshold, 1.0);
+        assert!(loss_drift(request(Some(baseline.state), 0.0, vec![5.0])).is_err());
+    }
+}

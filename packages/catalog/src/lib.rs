@@ -414,7 +414,11 @@ fn runtime_implementation_available(node: &dyn NodeLogic) -> bool {
     let definition = node.get_node();
     if matches!(
         definition.category.as_str(),
-        "AI/ML/Lifecycle" | "AI/ML/Compute" | "AI/ML/Auto Training" | "AI/ML/Continuous Learning"
+        "AI/ML/Lifecycle"
+            | "AI/ML/Compute"
+            | "AI/ML/Auto Training"
+            | "AI/ML/Continuous Learning"
+            | "AI/ML/Export"
     ) && !cfg!(feature = "training-metadata")
     {
         return false;
@@ -427,6 +431,15 @@ fn runtime_implementation_available(node: &dyn NodeLogic) -> bool {
             cfg!(any(target_os = "linux", target_os = "windows"))
         }
         "ml_export_student_onnx" => cfg!(feature = "training-onnx-export"),
+        // Their categories also hold nodes that run without a training build, such as the
+        // pure AI/ML/Inference helpers, so these are gated by name.
+        "ml_prompt_sam2"
+        | "ml_fine_tune_sam2"
+        | "ml_extract_pretrained_features"
+        | "ml_import_pretrained_vision"
+        | "ml_list_pretrained_vision"
+        | "ml_predict_published_model"
+        | "ml_extract_published_features" => cfg!(feature = "training-metadata"),
         "ml_read_opcua_sensor" => cfg!(feature = "package-industrial"),
         "ml_capture_genicam_frame" => cfg!(feature = "sensor-genicam"),
         "ai_audio_local_text_to_speech" => cfg!(feature = "local-tts"),
@@ -440,27 +453,52 @@ fn runtime_implementation_available(node: &dyn NodeLogic) -> bool {
 mod inspection_catalog_tests {
     use super::*;
 
+    const TRAINING_METADATA_NODES: &[&str] = &[
+        "ml_train_burn_model",
+        "ml_student_inference",
+        "ml_promote_student",
+        "ml_probe_training_device",
+        "ml_auto_train_tabular",
+        "ml_auto_train_forecast",
+        "ml_auto_train_vision",
+        "ml_auto_train_anomaly",
+        "ml_get_auto_training",
+        "ml_predict_auto_model",
+        "ml_export_auto_model",
+        "ml_create_learning_project",
+        "ml_step_learning_project",
+        "ml_route_learning_project",
+        "ml_prompt_sam2",
+        "ml_fine_tune_sam2",
+        "ml_extract_pretrained_features",
+        "ml_import_pretrained_vision",
+        "ml_list_pretrained_vision",
+        "ml_predict_published_model",
+        "ml_extract_published_features",
+        "ml_export_model",
+        "ml_import_model",
+        "ml_export_training_ledger",
+        "ml_import_training_ledger",
+    ];
+
+    const NODES_WITHOUT_TRAINING: &[&str] = &[
+        "ml_training_readiness",
+        "ml_preprocess_inspection_image",
+        "ml_native_model_inference",
+        "ml_apply_decision_threshold",
+        "ml_student_confidence_gate",
+        "ml_apply_calibration",
+    ];
+
     #[test]
     fn inspection_nodes_follow_runtime_features() {
         let catalog = get_catalog_from(&[CatalogPackage::Ml, CatalogPackage::Industrial]);
         let has = |name: &str| catalog.iter().any(|node| node.get_node().name == name);
-        for name in [
-            "ml_train_burn_model",
-            "ml_student_inference",
-            "ml_promote_student",
-            "ml_probe_training_device",
-            "ml_auto_train_tabular",
-            "ml_auto_train_forecast",
-            "ml_auto_train_vision",
-            "ml_auto_train_anomaly",
-            "ml_get_auto_training",
-            "ml_predict_auto_model",
-            "ml_export_auto_model",
-            "ml_create_learning_project",
-            "ml_step_learning_project",
-            "ml_route_learning_project",
-        ] {
+        for &name in TRAINING_METADATA_NODES {
             assert_eq!(has(name), cfg!(feature = "training-metadata"), "{name}");
+        }
+        for &name in NODES_WITHOUT_TRAINING {
+            assert!(has(name), "{name} runs without a training build");
         }
         assert_eq!(
             has("ml_export_student_onnx"),

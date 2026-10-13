@@ -1318,6 +1318,7 @@ const DATABASE_MUTATION_OPERATIONS = new Set([
 	"add_column",
 	"drop_columns",
 	"alter_column",
+	"set_column_metadata",
 ]);
 
 export interface CreatedAppTargetMismatchOptions {

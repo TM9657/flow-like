@@ -14,12 +14,11 @@ import {
 	uploadToSignedUrl,
 } from "@flow-like/flow-like-ui";
 import { asArray } from "@flow-like/flow-like-ui/lib/response-shape";
-import { stabilizeSignedUrls } from "@flow-like/flow-like-ui/lib/stable-asset-url";
 import type { IStorageItemActionResult } from "@flow-like/flow-like-ui/state/backend-state/types";
 import { invoke } from "@tauri-apps/api/core";
 import { dirname, resolve } from "@tauri-apps/api/path";
 import { save } from "@tauri-apps/plugin-dialog";
-import { mkdir, open, remove } from "@tauri-apps/plugin-fs";
+import { mkdir, open, remove, rename } from "@tauri-apps/plugin-fs";
 import { fetcher } from "../../lib/api";
 import type { TauriBackend } from "../tauri-provider";
 
@@ -41,8 +40,8 @@ function isLocalAssetUrl(url: string): boolean {
 }
 
 /**
- * Write one file to the path behind an `asset://` URL, streaming anything large
- * enough that buffering it would spike memory.
+ * Write beside the destination, then replace it after closing the complete file.
+ * A failed or cancelled upload leaves the previous contents intact.
  */
 async function writeLocalFile(
 	url: string,
@@ -50,6 +49,10 @@ async function writeLocalFile(
 	onBytes: (loaded: number) => void,
 	signal: AbortSignal,
 ): Promise<void> {
+	const checkCancelled = () => {
+		if (signal.aborted) throw new BulkUploadAbortError();
+	};
+	checkCancelled();
 	const rawPath = decodeURIComponent(
 		url
 			.replace("http://asset.localhost/", "")
@@ -60,48 +63,69 @@ async function writeLocalFile(
 	await mkdir(parentDir, { recursive: true });
 
 	const resolvedPath = await resolve(rawPath);
-	const fileHandle = await open(resolvedPath, {
-		append: false,
-		create: true,
+	const temporaryPath = await resolve(
+		parentDir,
+		`flow-like-upload-${crypto.randomUUID()}.tmp`,
+	);
+	checkCancelled();
+	const fileHandle = await open(temporaryPath, {
+		createNew: true,
 		write: true,
-		truncate: true,
 	});
 	if (!fileHandle) {
 		throw new Error(`Could not open ${rawPath} for writing`);
 	}
+	const writeAll = async (bytes: Uint8Array) => {
+		let offset = 0;
+		while (offset < bytes.length) {
+			checkCancelled();
+			const written = await fileHandle.write(bytes.subarray(offset));
+			if (
+				!Number.isSafeInteger(written) ||
+				written <= 0 ||
+				written > bytes.length - offset
+			) {
+				throw new Error(`Could not write the complete file: ${rawPath}`);
+			}
+			offset += written;
+		}
+	};
 
-	let complete = false;
+	let closed = false;
+	let committed = false;
 	try {
 		if (file.size < LOCAL_STREAM_THRESHOLD_BYTES) {
-			await fileHandle.write(new Uint8Array(await file.arrayBuffer()));
+			const bytes = new Uint8Array(await file.arrayBuffer());
+			checkCancelled();
+			await writeAll(bytes);
 			onBytes(file.size);
-			complete = true;
-			return;
-		}
-
-		const reader = file.stream().getReader();
-		let bytesWritten = 0;
-		try {
-			for (;;) {
-				if (signal.aborted) throw new BulkUploadAbortError();
-				const { done, value } = await reader.read();
-				if (done) break;
-				await fileHandle.write(value);
-				bytesWritten += value.length;
-				onBytes(bytesWritten);
+		} else {
+			const reader = file.stream().getReader();
+			let bytesWritten = 0;
+			try {
+				for (;;) {
+					checkCancelled();
+					const { done, value } = await reader.read();
+					if (done) break;
+					checkCancelled();
+					await writeAll(value);
+					bytesWritten += value.length;
+					onBytes(bytesWritten);
+				}
+			} finally {
+				reader.releaseLock();
 			}
-		} finally {
-			reader.releaseLock();
 		}
-		complete = true;
-	} finally {
 		await fileHandle.close();
-		// `truncate` already emptied any file that was here, so abandoning the
-		// write halfway would leave a partial file in place of the original
-		// and list it as a normal storage item.
-		if (!complete) {
-			await remove(resolvedPath).catch(() => {});
-		}
+		closed = true;
+		checkCancelled();
+		// A sibling stays on the same filesystem, where rename replaces the old
+		// file without first removing it. Failed replacement keeps the old file.
+		await rename(temporaryPath, resolvedPath);
+		committed = true;
+	} finally {
+		if (!closed) await fileHandle.close().catch(() => {});
+		if (!committed) await remove(temporaryPath).catch(() => {});
 	}
 }
 
@@ -185,6 +209,60 @@ export class StorageState implements IStorageState {
 
 		return asArray(items);
 	}
+	async renameStorageItem(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		await this.renameInternal(appId, prefix, newName, isDir, "app");
+	}
+	async renameStorageItemUser(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		await this.renameInternal(appId, prefix, newName, isDir, "user");
+	}
+	private async renameInternal(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+		scope: StorageScope,
+	): Promise<void> {
+		if (await this.backend.isOffline(appId)) {
+			await invoke(
+				scope === "user" ? "storage_user_rename" : "storage_rename",
+				{
+					appId,
+					prefix,
+					newName,
+					isDir,
+				},
+			);
+			return;
+		}
+
+		const { profile, auth, queryClient } = this.backend;
+		if (!profile || !auth || !queryClient) {
+			throw new Error("Backend is not properly initialized for renaming.");
+		}
+		const endpoint =
+			scope === "user"
+				? `apps/${appId}/data/user/rename`
+				: `apps/${appId}/data/rename`;
+		await fetcher<void>(
+			profile,
+			endpoint,
+			{
+				method: "POST",
+				body: JSON.stringify({ prefix, new_name: newName, is_dir: isDir }),
+			},
+			auth,
+		);
+	}
 	async deleteStorageItems(appId: string, prefixes: string[]): Promise<void> {
 		const isOffline = await this.backend.isOffline(appId);
 
@@ -267,19 +345,18 @@ export class StorageState implements IStorageState {
 			const auth = this.backend.auth;
 			// The route caps a request at MAX_PREFIXES and rejects anything
 			// larger, so a large selection goes over in batches.
+			// Keep the returned URLs because storage files can be overwritten.
 			return requestPrefixesInBatches(
 				prefixes,
 				async (batch) =>
-					stabilizeSignedUrls(
-						await fetcher<IStorageItemActionResult[]>(
-							profile,
-							`apps/${appId}/data/download`,
-							{
-								method: "POST",
-								body: JSON.stringify({ prefixes: batch }),
-							},
-							auth,
-						),
+					fetcher<IStorageItemActionResult[]>(
+						profile,
+						`apps/${appId}/data/download`,
+						{
+							method: "POST",
+							body: JSON.stringify({ prefixes: batch }),
+						},
+						auth,
 					),
 				{ errorMessage: "Download failed" },
 			);
@@ -311,19 +388,18 @@ export class StorageState implements IStorageState {
 			const auth = this.backend.auth;
 			// The route caps a request at MAX_PREFIXES and rejects anything
 			// larger, so a large selection goes over in batches.
+			// Keep the returned URLs because storage files can be overwritten.
 			return requestPrefixesInBatches(
 				prefixes,
 				async (batch) =>
-					stabilizeSignedUrls(
-						await fetcher<IStorageItemActionResult[]>(
-							profile,
-							`apps/${appId}/data/user/download`,
-							{
-								method: "POST",
-								body: JSON.stringify({ prefixes: batch }),
-							},
-							auth,
-						),
+					fetcher<IStorageItemActionResult[]>(
+						profile,
+						`apps/${appId}/data/user/download`,
+						{
+							method: "POST",
+							body: JSON.stringify({ prefixes: batch }),
+						},
+						auth,
 					),
 				{ errorMessage: "Download failed" },
 			);

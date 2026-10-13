@@ -10,13 +10,14 @@ use crate::{
     credentials::{CredentialsAccess, RuntimeCredentials},
     ensure_in_project,
     error::ApiError,
-    middleware::jwt::AppUser,
+    middleware::jwt::{AppPermissionResponse, AppUser},
     state::AppState,
 };
 use axum::{
     Extension, Json,
     extract::{Path, State},
 };
+use flow_like_storage::databases::column_access::first_table_with_hidden_columns;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -250,6 +251,7 @@ pub async fn presign_project_db_access(
 
     let permission =
         crate::ensure_any_permission!(user, &app_id, &state, file_permission, db_permission);
+    ensure_no_hidden_columns(&state, &user, &app_id, &permission).await?;
     let identifier = permission.identifier();
     if access_mode == "write" {
         crate::capacity::check_storage_write(&state, &app_id, &identifier, 0).await?;
@@ -281,4 +283,26 @@ pub async fn presign_project_db_access(
         access_mode,
         expiration,
     }))
+}
+
+/// Raw storage credentials bypass column read restrictions, so a role that may not read
+/// every column of every table gets none.
+pub(crate) async fn ensure_no_hidden_columns(
+    state: &AppState,
+    user: &AppUser,
+    app_id: &str,
+    permission: &AppPermissionResponse,
+) -> Result<(), ApiError> {
+    let scope = super::ScopeParams::default();
+    let reader = super::column_reader(permission, &scope);
+    if reader.is_unrestricted() {
+        return Ok(());
+    }
+    let connection = super::resolve_connection(state, user, app_id, &scope).await?;
+    match first_table_with_hidden_columns(&connection, &reader).await? {
+        Some(table) => Err(ApiError::forbidden(format!(
+            "Direct database access is unavailable: table '{table}' has columns your role cannot read. Read the tables through the API instead."
+        ))),
+        None => Ok(()),
+    }
 }

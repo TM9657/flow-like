@@ -4,8 +4,8 @@ use crate::{
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
     routes::app::db::{
-        ScopedPaginationParams, resolve_connection, table_input_error, table_rejection_message,
-        validate_table_name,
+        ScopedPaginationParams, column_reader, resolve_connection, table_input_error,
+        table_rejection_message, validate_table_name,
     },
     state::AppState,
 };
@@ -78,7 +78,7 @@ pub async fn query_table(
     Query(selector): Query<DatabaseSelector>,
     Json(payload): Json<QueryTablePayload>,
 ) -> Result<Json<Vec<flow_like_types::Value>>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -95,7 +95,8 @@ pub async fn query_table(
 
     let connection = resolve_connection(&state, &user, &app_id, &params.scope_params()).await?;
     let db = LanceDBVectorStore::from_connection_with_selector(connection, table.clone(), selector)
-        .await?;
+        .await?
+        .with_column_reader(column_reader(&permission, &params.scope_params()));
 
     if let Some(sql) = payload.sql {
         let items = run_sql_query(&db, table, &sql, &payload.sql_params).await?;

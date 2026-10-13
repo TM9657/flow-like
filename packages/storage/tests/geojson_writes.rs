@@ -431,6 +431,7 @@ async fn sql_converts_between_geometry_and_geojson_or_wkt_text() -> Result<()> {
 #[tokio::test]
 async fn workbench_columns_describe_st_astext_as_plain_text() -> Result<()> {
     use flow_like_storage::{
+        contracts::column_metadata::ColumnReader,
         databases::workbench::{WorkbenchSurface, execute_readonly_sql},
         geometry::EXTENSION_NAME,
     };
@@ -450,6 +451,7 @@ async fn workbench_columns_describe_st_astext_as_plain_text() -> Result<()> {
         "SELECT geometry, ST_AsText(geometry) AS wkt FROM sites",
         &Value::Null,
         Some(10),
+        &ColumnReader::Unrestricted,
     )
     .await?;
     let column = |name: &str| {

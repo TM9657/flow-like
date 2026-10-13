@@ -1,8 +1,9 @@
 #![cfg(feature = "opcua")]
 
 use flow_like_industrial::opcua::{
-    OpcUaBrowseRequest, OpcUaClient, OpcUaConnectConfig, OpcUaCredentials, OpcUaReadRequest,
-    OpcUaSecurityMode, OpcUaSubscribeRequest, OpcUaValue, OpcUaWriteItem, OpcUaWriteValue,
+    OpcUaBrowseRequest, OpcUaCertificates, OpcUaClient, OpcUaConnectConfig, OpcUaCredentials,
+    OpcUaReadRequest, OpcUaSecurityMode, OpcUaSubscribeRequest, OpcUaValue, OpcUaWriteItem,
+    OpcUaWriteValue,
 };
 use opcua::crypto::{CertificateStore, X509};
 use std::{
@@ -15,6 +16,7 @@ use std::{
 // The Compose fixture runs Python asyncua, independently of our Rust OPC UA SDK.
 // These tests require explicit fixture settings so an unavailable server fails the run.
 struct Fixture {
+    material: PathBuf,
     pki: PathBuf,
     config: OpcUaConnectConfig,
     server_certificate: Vec<u8>,
@@ -68,13 +70,31 @@ impl Fixture {
                 OpcUaSecurityMode::None
             },
             timeout_ms: 10_000,
+            certificates: None,
         };
         Self {
+            material: certificates,
             pki,
             config,
             server_certificate,
             server_certificate_name,
         }
+    }
+
+    fn custom() -> Self {
+        let mut fixture = Self::new(true, false);
+        fixture.config.certificates = Some(OpcUaCertificates {
+            application_uri: "urn:flow-like:test:custom-client".into(),
+            certificate_pem: fixture.pem("custom-client.crt.pem"),
+            private_key_pem: fixture.pem("custom-client.pem"),
+            trusted_certificates_pem: vec![fixture.pem("root-ca.crt.pem")],
+            issuer_certificates_pem: vec![fixture.pem("issuer-ca.crt.pem")],
+        });
+        fixture
+    }
+
+    fn pem(&self, name: &str) -> String {
+        fs::read_to_string(self.material.join(name)).unwrap()
     }
 }
 
@@ -397,4 +417,116 @@ async fn opcua_rejects_wrong_password_then_accepts_correct_credentials() {
         .unwrap();
     assert_eq!(readings[0].value, Some(OpcUaValue::Signed(42)));
     client.disconnect().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires the asyncua Compose fixture and INDUSTRIAL_OPCUA_* settings"]
+async fn opcua_custom_inline_identity_and_ca_chain_connect() {
+    let fixture = Fixture::custom();
+    let original_identity = fs::read(fixture.pki.join("own/cert.der")).unwrap();
+    let original_key = fs::read(fixture.pki.join("private/private.pem")).unwrap();
+    let client = OpcUaClient::connect(&fixture.config, Some(&credentials()))
+        .await
+        .expect("the custom identity and explicit CA chain must establish an encrypted session");
+    let readings = client
+        .read(&OpcUaReadRequest {
+            node_ids: vec![node("Secure", "ReadOnly")],
+            max_age_ms: 0.0,
+        })
+        .await
+        .unwrap();
+    assert!(readings[0].quality_good);
+    assert_eq!(readings[0].value, Some(OpcUaValue::Signed(42)));
+    client.disconnect().await.unwrap();
+    drop(client);
+
+    assert_eq!(
+        fs::read(fixture.pki.join("own/cert.der")).unwrap(),
+        original_identity,
+        "inline identity must preserve the existing certificate store",
+    );
+    assert_eq!(
+        fs::read(fixture.pki.join("private/private.pem")).unwrap(),
+        original_key,
+    );
+    assert_eq!(
+        fs::read_dir(fixture.pki.join("trusted")).unwrap().count(),
+        0,
+        "custom CA trust must not persist the server leaf in the existing store",
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires the asyncua Compose fixture and INDUSTRIAL_OPCUA_* settings"]
+async fn opcua_custom_certificates_reject_wrong_ca() {
+    let mut fixture = Fixture::custom();
+    let wrong_ca = fixture.pem("wrong-ca.crt.pem");
+    fixture
+        .config
+        .certificates
+        .as_mut()
+        .unwrap()
+        .trusted_certificates_pem = vec![wrong_ca];
+    assert!(
+        OpcUaClient::connect(&fixture.config, Some(&credentials()))
+            .await
+            .is_err(),
+        "an unrelated CA must not authenticate the server certificate",
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires the asyncua Compose fixture and INDUSTRIAL_OPCUA_* settings"]
+async fn opcua_custom_certificates_require_intermediate_issuer() {
+    let mut fixture = Fixture::custom();
+    fixture
+        .config
+        .certificates
+        .as_mut()
+        .unwrap()
+        .issuer_certificates_pem
+        .clear();
+    assert!(
+        OpcUaClient::connect(&fixture.config, Some(&credentials()))
+            .await
+            .is_err(),
+        "the root alone cannot validate a leaf whose intermediate was not supplied",
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires the asyncua Compose fixture and INDUSTRIAL_OPCUA_* settings"]
+async fn opcua_custom_certificates_reject_mismatched_private_key() {
+    let mut fixture = Fixture::custom();
+    let wrong_key = fixture.pem("client.pem");
+    fixture
+        .config
+        .certificates
+        .as_mut()
+        .unwrap()
+        .private_key_pem = wrong_key;
+    assert!(
+        OpcUaClient::connect(&fixture.config, Some(&credentials()))
+            .await
+            .is_err(),
+        "a private key from another identity must be rejected",
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires the asyncua Compose fixture and INDUSTRIAL_OPCUA_* settings"]
+async fn opcua_custom_certificates_reject_wrong_application_uri() {
+    let mut fixture = Fixture::custom();
+    fixture
+        .config
+        .certificates
+        .as_mut()
+        .unwrap()
+        .application_uri = "urn:flow-like:test:wrong-application".into();
+    assert!(
+        OpcUaClient::connect(&fixture.config, Some(&credentials()))
+            .await
+            .is_err(),
+        "the application URI must match the custom identity's certificate SAN",
+    );
 }

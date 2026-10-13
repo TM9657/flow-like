@@ -5,6 +5,7 @@ import {
 	executeNodeRuntime,
 	resolveUiInspectWidgetEntries,
 	runBoardTestsRuntime,
+	setColumnMetadataRuntime,
 } from "./use-frontend-runtime-tool-executor";
 
 describe("normalizeDatabaseTableIdentifier", () => {
@@ -84,6 +85,74 @@ describe("resolveUiInspectWidgetEntries", () => {
 		expect(
 			resolveUiInspectWidgetEntries(list, "app-expenses").match,
 		).toBeUndefined();
+	});
+});
+
+describe("setColumnMetadataRuntime", () => {
+	function recordingDbState() {
+		const calls: unknown[][] = [];
+		return {
+			calls,
+			dbState: {
+				setColumnMetadata: async (...args: unknown[]) => {
+					calls.push(args);
+					return { ...(args[3] as object), stored: true } as never;
+				},
+			},
+		};
+	}
+
+	test("stores the normalized metadata and reports what the backend kept", async () => {
+		const { calls, dbState } = recordingDbState();
+		const result = await setColumnMetadataRuntime(dbState, {
+			appId: "app-1",
+			tableName: "employees",
+			column: "salary",
+			metadata: {
+				display_name: " Annual salary ",
+				classification: "Confidential",
+				pii: true,
+				read_attributes: ["hr", "hr", " finance "],
+			},
+			userScoped: false,
+		});
+		const stored = {
+			display_name: "Annual salary",
+			classification: "confidential",
+			pii: true,
+			read_attributes: ["hr", "finance"],
+		};
+		expect(calls).toEqual([["app-1", "employees", "salary", stored, false]]);
+		expect(result).toEqual({
+			status: "ok",
+			table_name: "employees",
+			column: "salary",
+			column_metadata: { ...stored, stored: true } as never,
+		});
+	});
+
+	test("refuses incomplete or invalid calls before writing", async () => {
+		const { calls, dbState } = recordingDbState();
+		const base = {
+			appId: "app-1",
+			tableName: "employees",
+			column: "salary",
+			userScoped: false,
+		};
+		const cases: [Partial<typeof base> & { metadata: unknown }, RegExp][] = [
+			[{ tableName: undefined, metadata: {} }, /requires table_name/],
+			[{ column: undefined, metadata: {} }, /requires column/],
+			[{ metadata: undefined }, /column_metadata must be an object/],
+			[{ metadata: { classification: "secret" } }, /must be one of public/],
+			[{ metadata: { pii: "yes" } }, /pii must be true or false/],
+			[{ metadata: { read_attributes: "hr" } }, /array of strings/],
+		];
+		for (const [overrides, message] of cases) {
+			await expect(
+				setColumnMetadataRuntime(dbState, { ...base, ...overrides }),
+			).rejects.toThrow(message);
+		}
+		expect(calls).toEqual([]);
 	});
 });
 

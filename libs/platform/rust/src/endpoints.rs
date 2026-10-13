@@ -120,6 +120,7 @@ endpoints! {
     alter_table_columns(app_id, table) PUT ["apps", app_id, "db", table, "columns"];
     drop_table_columns(app_id, table) DELETE ["apps", app_id, "db", table, "columns"];
     set_table_primary_key(app_id, table) PUT ["apps", app_id, "db", table, "primary-key"];
+    set_table_column_metadata(app_id, table, column) PUT ["apps", app_id, "db", table, "columns", column, "metadata"];
     build_table_index(app_id, table) POST ["apps", app_id, "db", table, "index"];
     drop_table_index(app_id, table, index_name) DELETE ["apps", app_id, "db", table, "index", index_name];
     get_table_indices(app_id, table) GET ["apps", app_id, "db", table, "indices"];

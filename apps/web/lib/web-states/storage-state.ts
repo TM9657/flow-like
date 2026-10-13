@@ -10,7 +10,6 @@ import {
 	toUploadTasks,
 	uploadToSignedUrl,
 } from "@flow-like/flow-like-ui";
-import { stabilizeSignedUrls } from "@flow-like/flow-like-ui/lib/stable-asset-url";
 import type { IStorageItemActionResult } from "@flow-like/flow-like-ui/state/backend-state/types";
 import { type WebBackendRef, apiDelete, apiFetch, apiPost } from "./api-utils";
 
@@ -116,6 +115,32 @@ export class WebStorageState implements IStorageState {
 		await apiDelete(`apps/${appId}/data/user`, this.backend.auth, { prefixes });
 	}
 
+	async renameStorageItem(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		await apiPost(
+			`apps/${appId}/data/rename`,
+			{ prefix, new_name: newName, is_dir: isDir },
+			this.backend.auth,
+		);
+	}
+
+	async renameStorageItemUser(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		await apiPost(
+			`apps/${appId}/data/user/rename`,
+			{ prefix, new_name: newName, is_dir: isDir },
+			this.backend.auth,
+		);
+	}
+
 	// Batched: the route caps a request at MAX_PREFIXES and now rejects
 	// anything larger, and callers (an a2ui surface resolving its images, a
 	// multi-file selection) legitimately ask for more than that.
@@ -123,15 +148,14 @@ export class WebStorageState implements IStorageState {
 		endpoint: string,
 		prefixes: string[],
 	): Promise<IStorageItemActionResult[]> {
+		// Keep the returned URLs because storage files can be overwritten.
 		return requestPrefixesInBatches(
 			prefixes,
 			async (batch) =>
-				stabilizeSignedUrls(
-					await apiPost<IStorageItemActionResult[]>(
-						endpoint,
-						{ prefixes: batch },
-						this.backend.auth,
-					),
+				apiPost<IStorageItemActionResult[]>(
+					endpoint,
+					{ prefixes: batch },
+					this.backend.auth,
 				),
 			{ errorMessage: "Download failed" },
 		);

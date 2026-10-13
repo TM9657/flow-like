@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 # Keep vendored upstream test suites out of workspace test runs.
-exclude = ["packages/vendor/swift-rs", "packages/vendor/profirust", "packages/vendor/pytorch-reader", "packages/vendor/telegenic", "packages/vendor/ads"]
+exclude = ["packages/vendor/swift-rs", "packages/vendor/profirust", "packages/vendor/pytorch-reader", "packages/vendor/telegenic", "packages/vendor/ads", "packages/vendor/dust-dds"]
 # Bare Cargo commands target the shared editing loop. Product crates remain one
 # short alias away, while CI always passes --workspace explicitly.
 default-members = [
@@ -344,6 +344,8 @@ wasmtime-wasi = "=48.0.3"
 wasmtime-wasi-http = "=48.0.3"
 
 [patch.crates-io]
+# Fix DDS request cancellation, XTypes matching, and participant disposal.
+dust_dds = { path = "packages/vendor/dust-dds" }
 # Accept Beckhoff's notification stream lengths with complete payload validation.
 ads = { path = "packages/vendor/ads" }
 # Read bootstrap registers individually for cameras that reject batched reads.

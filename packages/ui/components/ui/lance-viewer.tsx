@@ -41,11 +41,13 @@ import {
 	Copy,
 	Database,
 	Download,
+	Fingerprint,
 	GripVertical,
 	Info,
 	KeyRound,
 	ListTree,
 	Loader2,
+	Lock,
 	Maximize2,
 	Minimize2,
 	MoreHorizontal,
@@ -65,6 +67,12 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { cn } from "../../lib";
 import {
+	type IColumnMetadata,
+	columnMetadataFromField,
+	isColumnReadRestricted,
+	isEmptyColumnMetadata,
+} from "../../lib/column-metadata";
+import {
 	detectEpochUnit,
 	formatAbsoluteDateTime,
 	formatCalendarDate,
@@ -75,7 +83,10 @@ import {
 import { geoArrowIndexKind } from "../../lib/geoarrow-index";
 import { resolveStorageFile } from "../../lib/storage-file";
 import { looksLikeUserColumnName } from "../../lib/user-display";
-import type { IIndexConfig } from "../../state/backend-state/db-state";
+import type {
+	IAddColumnPayload,
+	IIndexConfig,
+} from "../../state/backend-state/db-state";
 import { accountIdFromValue } from "../../state/backend-state/user-state";
 import {
 	Badge,
@@ -110,6 +121,10 @@ import {
 	buttonVariants,
 } from "./";
 import { BinaryCellPreview, BinaryValueDetail } from "./binary-value-cell";
+import {
+	DataClassificationDot,
+	useDataClassificationCopy,
+} from "./data-classification";
 import { GeometryCell, GeometryDetails } from "./geometry-cell";
 import { PortalContainerProvider } from "./portal-container";
 import { StorageFileChip, StorageFilePreview } from "./storage-file-cell";
@@ -159,6 +174,8 @@ export interface LanceField {
 	temporal?: LanceTemporalUnit;
 	/** Set on a top-level column that could become the table key. */
 	keyEligible?: boolean;
+	/** Display name, description, sensitivity and read restriction of a labelled top-level column. */
+	columnMetadata?: IColumnMetadata;
 }
 
 export interface LanceSchema {
@@ -203,10 +220,19 @@ export interface LanceDBExplorerProps {
 	) => Promise<void>;
 	onOptimize?: (keepVersions?: boolean) => Promise<void>;
 	onDropColumns?: (columns: string[]) => Promise<void>;
-	onAddColumn?: (name: string, sqlExpression: string) => Promise<void>;
+	onAddColumn?: (column: IAddColumnPayload) => Promise<void>;
 	onAlterColumn?: (column: string, nullable: boolean) => Promise<void>;
 	/** Marks a column as the permanent table key; the host refreshes the schema. */
 	onSetPrimaryKey?: (column: string) => Promise<void>;
+	/** Replaces a column's metadata; the host refreshes the schema. */
+	onSetColumnMetadata?: (
+		column: string,
+		metadata: IColumnMetadata,
+	) => Promise<unknown>;
+	/** The viewer may change who can read a column (admins and owners). */
+	canManageColumnAccess?: boolean;
+	/** Role attributes offered when restricting who can read a column. */
+	knownAttributes?: readonly string[];
 	onBuildIndex?: (column: string, indexType: string) => Promise<void>;
 	onGetIndices?: () => Promise<IIndexConfig[]>;
 	onDropIndex?: (indexName: string) => Promise<void>;
@@ -311,6 +337,9 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 	onAddColumn,
 	onAlterColumn,
 	onSetPrimaryKey,
+	onSetColumnMetadata,
+	canManageColumnAccess,
+	knownAttributes,
 	onBuildIndex,
 	onGetIndices,
 	onDropIndex,
@@ -749,6 +778,9 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 							onAddColumn={onAddColumn}
 							onAlterColumn={onAlterColumn}
 							onSetPrimaryKey={onSetPrimaryKey}
+							onSetColumnMetadata={onSetColumnMetadata}
+							canManageColumnAccess={canManageColumnAccess}
+							knownAttributes={knownAttributes}
 							onBuildIndex={onBuildIndex}
 							onGetIndices={onGetIndices}
 							onDropIndex={onDropIndex}
@@ -1332,23 +1364,113 @@ const UserCell: React.FC<{
 	/>
 );
 
-const KeyColumnHeader: React.FC<{ name: string }> = ({ name }) => {
-	const { t } = useTranslation("common");
-	const hint = t(
-		"tableKeyHint",
-		"Key column: Upserts on this column can't create duplicate rows.",
-	);
+const HeaderMarker: React.FC<{
+	label: string;
+	className?: string;
+	tooltip?: React.ReactNode;
+	children: React.ReactNode;
+}> = ({ label, className, tooltip, children }) => (
+	<Tooltip>
+		<TooltipTrigger asChild>
+			<span
+				role="img"
+				aria-label={label}
+				className={cn("inline-flex shrink-0", className)}
+			>
+				{children}
+			</span>
+		</TooltipTrigger>
+		<TooltipContent side="bottom" className="max-w-xs">
+			{tooltip ?? label}
+		</TooltipContent>
+	</Tooltip>
+);
+
+/** The display name stands in for the column name, which the tooltip keeps reachable. */
+const ColumnHeaderLabel: React.FC<{ field: LanceField }> = ({ field }) => {
+	const displayName = field.columnMetadata?.display_name;
+	const description = field.columnMetadata?.description;
+	if (!displayName && !description) return <span>{field.name}</span>;
 	return (
-		<span className="inline-flex items-center gap-1">
-			{name}
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<span className="inline-flex shrink-0 text-primary">
-						<KeyRound className="size-3" role="img" aria-label={hint} />
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<span className="truncate">
+					{displayName ?? field.name}
+					{displayName && <span className="sr-only"> ({field.name})</span>}
+				</span>
+			</TooltipTrigger>
+			<TooltipContent side="bottom" className="max-w-xs">
+				{displayName && <span className="block font-mono">{field.name}</span>}
+				{description && (
+					<span className="block whitespace-pre-line text-primary-foreground/80">
+						{description}
 					</span>
-				</TooltipTrigger>
-				<TooltipContent side="bottom">{hint}</TooltipContent>
-			</Tooltip>
+				)}
+			</TooltipContent>
+		</Tooltip>
+	);
+};
+
+const ColumnHeader: React.FC<{ field: LanceField; isKey: boolean }> = ({
+	field,
+	isKey,
+}) => {
+	const { t } = useTranslation("common");
+	const levels = useDataClassificationCopy();
+	const metadata = field.columnMetadata;
+	const classification = metadata?.classification;
+	const readers = metadata?.read_attributes ?? [];
+	return (
+		<span className="inline-flex min-w-0 items-center gap-1">
+			<ColumnHeaderLabel field={field} />
+			{classification && (
+				<HeaderMarker
+					label={levels[classification].label}
+					tooltip={
+						<>
+							<span className="block font-medium">
+								{levels[classification].label}
+							</span>
+							<span className="block text-primary-foreground/80">
+								{levels[classification].description}
+							</span>
+						</>
+					}
+				>
+					<DataClassificationDot classification={classification} />
+				</HeaderMarker>
+			)}
+			{metadata?.pii && (
+				<HeaderMarker
+					label={t("piiLabel", "Contains personal data")}
+					className="text-muted-foreground"
+				>
+					<Fingerprint className="size-3" />
+				</HeaderMarker>
+			)}
+			{isColumnReadRestricted(metadata) && (
+				<HeaderMarker
+					label={t(
+						"columnReadRestrictedHint",
+						"Only admins and roles with {{attributes}} can read this column.",
+						{ attributes: readers.join(", ") },
+					)}
+					className="text-muted-foreground"
+				>
+					<Lock className="size-3" />
+				</HeaderMarker>
+			)}
+			{isKey && (
+				<HeaderMarker
+					label={t(
+						"tableKeyHint",
+						"Key column: Upserts on this column can't create duplicate rows.",
+					)}
+					className="text-primary"
+				>
+					<KeyRound className="size-3" />
+				</HeaderMarker>
+			)}
 		</span>
 	);
 };
@@ -1359,7 +1481,7 @@ const buildColumnForField = (
 ): ColumnDef<Record<string, any>> => ({
 	id: f.name,
 	accessorFn: (row: Record<string, any>) => row[f.name],
-	header: isKey ? () => <KeyColumnHeader name={f.name} /> : f.name,
+	header: () => <ColumnHeader field={f} isKey={isKey} />,
 	enableSorting: f.kind !== "binary",
 	enableColumnFilter: true,
 	cell: ({ getValue, row }) => (
@@ -2163,9 +2285,14 @@ const arrowTopLevelFieldToLance = (
 	f: ArrowSchemaJSON["fields"][number],
 ): LanceField => {
 	const field = arrowFieldToLance(f);
-	return field.kind !== "geometry" && canArrowFieldBeKey(f ?? {})
-		? { ...field, keyEligible: true }
-		: field;
+	const columnMetadata = columnMetadataFromField(f?.metadata);
+	return {
+		...field,
+		...(field.kind !== "geometry" && canArrowFieldBeKey(f ?? {})
+			? { keyEligible: true }
+			: {}),
+		...(isEmptyColumnMetadata(columnMetadata) ? {} : { columnMetadata }),
+	};
 };
 
 const ARROW_TIME_UNITS: Record<string, LanceTemporalUnit> = {

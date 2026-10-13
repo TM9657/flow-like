@@ -727,8 +727,8 @@ export class AppState implements IAppState {
 						await invoke("create_app", {
 							metadata: meta,
 							bits: app.bits,
-							template: "",
 							id: app.id,
+							addToProfile: false,
 						});
 					} catch (error) {
 						console.warn(

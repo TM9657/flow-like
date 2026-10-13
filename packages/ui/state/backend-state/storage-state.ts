@@ -24,6 +24,18 @@ export interface IStorageState {
 	): Promise<IStorageItem[]>;
 	deleteStorageItems(appId: string, prefixes: string[]): Promise<void>;
 	deleteStorageItemsUser(appId: string, prefixes: string[]): Promise<void>;
+	renameStorageItem(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void>;
+	renameStorageItemUser(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void>;
 	downloadStorageItems(
 		appId: string,
 		prefixes: string[],

@@ -136,6 +136,57 @@ pub(super) async fn context_with_logic(logic: Arc<dyn NodeLogic>) -> ExecutionCo
 }
 
 #[tokio::test]
+async fn security_storage_is_app_scoped_and_rejects_shadow_runs() {
+    use flow_like::{flow::execution::context::ExecutionContextCache, state::FlowLikeStores};
+    use flow_like_storage::{
+        Path,
+        files::store::{FlowLikeStore, local_store::LocalObjectStore},
+    };
+
+    let root = std::env::temp_dir().join(format!("industrial-storage-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&root).unwrap();
+    let (mut context, _) = context(false).await;
+    context.execution_cache = Some(ExecutionContextCache {
+        stores: FlowLikeStores {
+            app_storage_store: Some(FlowLikeStore::Local(Arc::new(
+                LocalObjectStore::new(root.clone()).unwrap(),
+            ))),
+            ..Default::default()
+        },
+        app_id: "app-one".into(),
+        model_usage_app_id: None,
+        board_dir: Path::from("apps/app-one/boards/one"),
+        board_id: "one".into(),
+        node_id: Arc::from("node-one"),
+        sub: "tester".into(),
+        shadow: false,
+    });
+    let publisher = crate::runtime::local_app_storage_directory(&context, "pubsub").unwrap();
+    let reader = crate::runtime::local_storage_directory(&context, "reader").unwrap();
+    context.execution_cache.as_mut().unwrap().board_dir = Path::from("apps/app-one/boards/two");
+    assert_eq!(
+        publisher,
+        crate::runtime::local_app_storage_directory(&context, "pubsub").unwrap()
+    );
+    assert_ne!(
+        reader,
+        crate::runtime::local_storage_directory(&context, "reader").unwrap()
+    );
+    context.execution_cache.as_mut().unwrap().app_id = "app-two".into();
+    assert_ne!(
+        publisher,
+        crate::runtime::local_app_storage_directory(&context, "pubsub").unwrap()
+    );
+    context.execution_cache.as_mut().unwrap().shadow = true;
+    assert!(crate::runtime::local_app_storage_directory(&context, "pubsub").is_err());
+    context.execution_cache.as_mut().unwrap().shadow = false;
+    assert!(crate::runtime::local_app_storage_directory(&context, "../escape").is_err());
+    context.execution_cache.as_mut().unwrap().app_id = "../escape".into();
+    assert!(crate::runtime::local_app_storage_directory(&context, "pubsub").is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
 async fn handler_success_and_failure_are_visible_to_consumer() {
     for fail in [false, true] {
         let (context, calls) = context(fail).await;

@@ -3,12 +3,13 @@
 use crate::{
     manifest::{PackageManifest, PackageWidgetEntry},
     registry::{
-        CachedPackage, DownloadRequest, DownloadResponse, InstalledPackage, InstalledVersion,
-        LocalRegistryState, PackageSource, PackageVersion, PublishRequest, PublishResponse,
-        RegistryConfig, RegistryEntry, SearchFilters, SearchResults, OFFICIAL_REGISTRY_URL,
+        CachedPackage, CachedWidgetBundle, DownloadRequest, DownloadResponse, InstalledPackage,
+        InstalledVersion, LocalRegistryState, PackageSource, PackageVersion, PublishRequest,
+        PublishResponse, RegistryConfig, RegistryEntry, SearchFilters, SearchResults,
+        WidgetBundleDownload, OFFICIAL_REGISTRY_URL,
     },
-    widget_bundle::{sha256_hex, widget_store_dir, WidgetBundleReader},
-    widget_frame::is_valid_package_id,
+    widget_bundle::{sha256_hex, widget_store_dir, WidgetBundleReader, BUNDLE_MANIFEST_PATH},
+    widget_frame::{is_valid_bundle_hash, is_valid_package_id},
 };
 use anyhow::{anyhow, Result};
 use chrono::Utc;
@@ -427,32 +428,33 @@ impl RegistryClient {
         wasm_ready && widgets_ready
     }
 
-    /// Remove unpacked widget-store directories for a package that are no
-    /// longer referenced by any installed version. Best-effort.
+    /// Remove unpacked widget-store directories for a package that neither an
+    /// installed version nor a cached bundle names any more. Best-effort.
     async fn prune_widget_store(&self, package_id: &str) {
         let _store = self.widget_store.lock().await;
         let referenced: std::collections::HashSet<String> = {
             let state = self.state.read().await;
-            state
-                .installed
+            let mut set: std::collections::HashSet<String> = state
+                .widget_bundles
                 .get(package_id)
-                .map(|pkg| {
-                    let mut set: std::collections::HashSet<String> = pkg
-                        .versions
+                .map(|bundles| bundles.keys().cloned().collect())
+                .unwrap_or_default();
+            if let Some(pkg) = state.installed.get(package_id) {
+                set.extend(
+                    pkg.versions
                         .values()
-                        .filter_map(|iv| iv.widget_bundle_hash.clone())
-                        .collect();
-                    if let Some(hash) = pkg
-                        .manifest
-                        .widget_bundle_hash
-                        .clone()
-                        .filter(|h| !h.is_empty())
-                    {
-                        set.insert(hash);
-                    }
-                    set
-                })
-                .unwrap_or_default()
+                        .filter_map(|iv| iv.widget_bundle_hash.clone()),
+                );
+                if let Some(hash) = pkg
+                    .manifest
+                    .widget_bundle_hash
+                    .clone()
+                    .filter(|h| !h.is_empty())
+                {
+                    set.insert(hash);
+                }
+            }
+            set
         };
 
         let package_dir = self.config.cache_dir.join("widgets").join(package_id);
@@ -1068,6 +1070,144 @@ impl RegistryClient {
             .await
     }
 
+    /// Puts the widget bundle `bundle_hash` of `package_id@version` into the
+    /// widget store without installing the version, for a page that places a
+    /// version this device does not hold. The registry hands it out under the
+    /// rules of its widget sandbox (with `app_id`, through that project's pin,
+    /// which also covers older versions), and the bytes must hash to
+    /// `bundle_hash`, so which registry served them does not matter.
+    pub async fn cache_widget_bundle(
+        &self,
+        package_id: &str,
+        version: &str,
+        bundle_hash: &str,
+        auth_token: Option<&str>,
+        app_id: Option<&str>,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            is_valid_package_id(package_id)
+                && Self::is_safe_version(version)
+                && is_valid_bundle_hash(bundle_hash),
+            "Cannot fetch widget bundle {:?} of {:?}@{:?}: malformed package id, version or hash",
+            bundle_hash,
+            package_id,
+            version
+        );
+        if let Some(rival) = self.directory_rival(package_id).await {
+            return Err(Self::shared_directory_error(package_id, &rival));
+        }
+
+        let mut store = self.widget_store.lock().await;
+        if !self.widget_bundle_unpacked(package_id, bundle_hash) {
+            drop(store);
+            let bytes = self
+                .fetch_widget_bundle(package_id, version, bundle_hash, auth_token, app_id)
+                .await?;
+            store = self.widget_store.lock().await;
+            self.install_widget_bundle(package_id, bytes, Some(bundle_hash.to_string()))
+                .await?;
+        }
+        let recorded = self
+            .state
+            .write()
+            .await
+            .widget_bundles
+            .entry(package_id.to_string())
+            .or_default()
+            .insert(
+                bundle_hash.to_string(),
+                CachedWidgetBundle {
+                    version: version.to_string(),
+                    registry_url: self.config.default_registry.clone(),
+                    cached_at: Utc::now(),
+                },
+            )
+            .is_none();
+        drop(store);
+        if recorded {
+            self.save_state().await?;
+        }
+        Ok(())
+    }
+
+    fn widget_bundle_unpacked(&self, package_id: &str, bundle_hash: &str) -> bool {
+        widget_store_dir(&self.config.cache_dir, package_id, bundle_hash)
+            .join(BUNDLE_MANIFEST_PATH)
+            .is_file()
+    }
+
+    async fn fetch_widget_bundle(
+        &self,
+        package_id: &str,
+        version: &str,
+        bundle_hash: &str,
+        auth_token: Option<&str>,
+        app_id: Option<&str>,
+    ) -> Result<Vec<u8>> {
+        let mut url = reqwest::Url::parse(&self.config.default_registry)?;
+        url.path_segments_mut()
+            .map_err(|_| {
+                anyhow!(
+                    "Registry URL {} cannot hold a path",
+                    self.config.default_registry
+                )
+            })?
+            .pop_if_empty()
+            .extend(["package", package_id, "widget-bundle", version]);
+        if let Some(app_id) = app_id {
+            url.query_pairs_mut().append_pair("app_id", app_id);
+        }
+        let mut req = self.http_client.get(url);
+        if let Some(token) = auth_token
+            .map(String::from)
+            .or_else(|| self.config.auth_token.clone())
+        {
+            req = req.header("Authorization", format!("Bearer {}", token));
+        }
+        let response = req.send().await?;
+        if !response.status().is_success() {
+            return Err(Self::http_response_error("Failed to fetch widget bundle", response).await);
+        }
+
+        let answer: WidgetBundleDownload = response.json().await?;
+        anyhow::ensure!(
+            answer.package_id == package_id && answer.version == version,
+            "Registry answered the widget bundle request for {}@{} with {}@{}",
+            package_id,
+            version,
+            answer.package_id,
+            answer.version
+        );
+        anyhow::ensure!(
+            answer.bundle_hash == bundle_hash,
+            "The registry's widget bundle of {}@{} is {}, not {} that the page was built with",
+            package_id,
+            version,
+            answer.bundle_hash,
+            bundle_hash
+        );
+
+        let bundle = self
+            .http_client
+            .get(&answer.download_url)
+            .send()
+            .await
+            .map_err(reqwest::Error::without_url)?;
+        if !bundle.status().is_success() {
+            return Err(anyhow!(
+                "Failed to download widget bundle of {}@{}: {}",
+                package_id,
+                version,
+                bundle.status()
+            ));
+        }
+        Ok(bundle
+            .bytes()
+            .await
+            .map_err(reqwest::Error::without_url)?
+            .to_vec())
+    }
+
     pub async fn install_version(
         &self,
         package_id: &str,
@@ -1482,6 +1622,7 @@ impl RegistryClient {
         let mut state = self.state.write().await;
         state.installed.clear();
         state.cache_metadata.clear();
+        state.widget_bundles.clear();
         drop(state);
         self.save_state().await?;
 
@@ -3367,5 +3508,119 @@ mod tests {
             .is_err());
         assert!(blocked.is_dir());
         assert_eq!(file_names(temp.path()), vec!["blocked.wasm", "node.wasm"]);
+    }
+
+    const PAGE_BUNDLE_ROUTE: &str =
+        "/api/v1/registry/package/com.acme.maps/widget-bundle/1.0.0?app_id=app_1";
+
+    /// A hub whose widget-bundle route names `bundle_hash` and serves `bytes`.
+    async fn spawn_widget_bundle_hub(bundle_hash: &str, bytes: Vec<u8>) -> String {
+        let bundle_hash = bundle_hash.to_string();
+        let base = spawn_mock_routes(move |base| {
+            let answer = WidgetBundleDownload {
+                package_id: "com.acme.maps".into(),
+                version: "1.0.0".into(),
+                bundle_hash,
+                download_url: format!("{base}/bundles/1.0.0.flwb"),
+            };
+            HashMap::from([
+                (
+                    PAGE_BUNDLE_ROUTE.to_string(),
+                    serde_json::to_vec(&answer).unwrap(),
+                ),
+                ("/bundles/1.0.0.flwb".to_string(), bytes),
+            ])
+        })
+        .await;
+        format!("{base}/api/v1/registry")
+    }
+
+    async fn cache_page_bundle(client: &RegistryClient, bundle_hash: &str) -> Result<()> {
+        client
+            .cache_widget_bundle(
+                "com.acme.maps",
+                "1.0.0",
+                bundle_hash,
+                Some("token"),
+                Some("app_1"),
+            )
+            .await
+    }
+
+    #[tokio::test]
+    async fn test_a_page_bundle_is_kept_by_hash_without_installing_its_version() {
+        let temp = tempfile::tempdir().unwrap();
+        let cache_dir = temp.path().join("cache");
+        let (bytes, hash) = build_test_bundle("com.acme.maps", "map", "pinned before");
+        let registry = spawn_widget_bundle_hub(&hash, bytes).await;
+        let client = registry_client(&cache_dir, &registry);
+        client.init().await.unwrap();
+
+        cache_page_bundle(&client, &hash).await.unwrap();
+
+        let store = widget_store_dir(&cache_dir, "com.acme.maps", &hash);
+        assert!(store.join(BUNDLE_MANIFEST_PATH).is_file());
+        assert!(client.get_installed("com.acme.maps").await.is_none());
+        client.prune_widget_store("com.acme.maps").await;
+        assert!(store.is_dir(), "a prune keeps a cached bundle");
+
+        let reopened = registry_client(&cache_dir, "http://127.0.0.1:9/api/v1/registry");
+        reopened.init().await.unwrap();
+        reopened.prune_widget_store("com.acme.maps").await;
+        assert!(store.is_dir(), "the record survives a restart");
+        cache_page_bundle(&reopened, &hash)
+            .await
+            .expect("a held bundle needs no registry");
+
+        reopened.clear_cache().await.unwrap();
+        assert!(!store.exists());
+    }
+
+    #[tokio::test]
+    async fn test_a_page_bundle_of_another_build_is_refused() {
+        let temp = tempfile::tempdir().unwrap();
+        let cache_dir = temp.path().join("cache");
+        let (bytes, hash) = build_test_bundle("com.acme.maps", "map", "published");
+        let (_, page_hash) = build_test_bundle("com.acme.maps", "map", "local build");
+        let registry = spawn_widget_bundle_hub(&hash, bytes.clone()).await;
+        let client = registry_client(&cache_dir, &registry);
+        client.init().await.unwrap();
+
+        let error = cache_page_bundle(&client, &page_hash).await.unwrap_err();
+        assert!(
+            error.to_string().contains("that the page was built with"),
+            "{error}"
+        );
+
+        let (other_bytes, _) = build_test_bundle("com.acme.maps", "map", "tampered");
+        let lying = spawn_widget_bundle_hub(&hash, other_bytes).await;
+        let error = cache_page_bundle(&registry_client(&cache_dir, &lying), &hash)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("hash mismatch"), "{error}");
+
+        assert!(!cache_dir.join("widgets").join("com.acme.maps").exists());
+        assert!(client.state.read().await.widget_bundles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_a_page_bundle_the_registry_refuses_names_its_answer() {
+        let temp = tempfile::tempdir().unwrap();
+        let registry = format!(
+            "{}/api/v1/registry",
+            spawn_mock_routes(|_| HashMap::new()).await
+        );
+        let client = registry_client(&temp.path().join("cache"), &registry);
+        client.init().await.unwrap();
+
+        let error = cache_page_bundle(&client, &"ab".repeat(32))
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .starts_with("Failed to fetch widget bundle: 404"),
+            "{error}"
+        );
     }
 }

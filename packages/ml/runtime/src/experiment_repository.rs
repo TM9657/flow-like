@@ -48,9 +48,7 @@ pub(crate) fn reserve_recovered_trial(
             "experiment no longer permits candidate training".into(),
         ));
     }
-    if at_ms < value.updated_at_ms {
-        return Err(invalid("recovery predates experiment state"));
-    }
+    let at_ms = ordered_at(&value, at_ms);
     let previous = trial.reserved_training_time_ms;
     value.usage.reserved_training_time_ms = value
         .usage
@@ -73,9 +71,7 @@ pub(crate) fn reserve_recovered_trial(
         .training_time_ms
         .checked_add(value.usage.reserved_training_time_ms)
         .and_then(|used| used.checked_add(reserve));
-    let failure = if at_ms as i128 - value.created_at_ms as i128
-        > value.request.budget.maximum_wall_time_ms as i128
-    {
+    let failure = if value.wall_elapsed_ms(at_ms) > value.request.budget.maximum_wall_time_ms {
         Some("experiment wall time budget exhausted during recovery".to_string())
     } else if remaining.is_none_or(|total| total > value.request.budget.maximum_training_time_ms) {
         Some("experiment training time budget exhausted during recovery".to_string())
@@ -94,6 +90,7 @@ pub(crate) fn reserve_recovered_trial(
         value.stop_reason = Some(reason.clone());
         if unsettled_trials(connection, &value.id)? <= 1 {
             value.status = ExperimentStatus::BudgetExhausted;
+            pause_clock(&mut value, at_ms);
         }
     } else {
         value.usage.reserved_training_time_ms += reserve;
@@ -102,48 +99,62 @@ pub(crate) fn reserve_recovered_trial(
     trial.updated_at_ms = at_ms;
     touch(&mut value, at_ms);
     save_trial(connection, &trial)?;
+    charge_retained_checkpoints(connection, &mut value)?;
     save_experiment(connection, &value)?;
     Ok(failure)
 }
 
 impl TrainingRepository {
-    /// Prepared datasets may refit feature transforms while the accepted source row stays fixed.
+    /// Prepared datasets refit feature transforms, so the transformed `input` of a recorded
+    /// revision may differ. An edited source row (`feature_row` and its raw `content_digest`)
+    /// replaces the stored content at the same revision or enters with the sample's next
+    /// revision; identity, provenance, target and acceptance of a recorded revision stay fixed.
     pub fn record_prepared_sample(
         &self,
         stream: &StreamKey,
         sample: &TrainingSample,
     ) -> Result<SampleReceipt> {
         self.writable()?;
-        let connection = self.connection()?;
-        let scope = serde_json::to_string(stream)?;
-        let existing: Option<String> = connection
-            .query_row(
-                "SELECT body FROM annotations WHERE scope=? AND sample_id=? AND revision=?",
-                params![scope, sample.id, sample.annotation_revision],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if let Some(existing) = existing {
-            let existing: TrainingSample = serde_json::from_str(&existing)?;
-            if immutable_sample(&existing)? != immutable_sample(sample)? {
-                return Err(Error::Conflict(
-                    "prepared sample changed accepted identity, provenance or target".into(),
-                ));
+        let scope = ledger_scope(stream)?;
+        let mut connection = self.connection()?;
+        let unchanged = match recorded_annotation(&connection, &scope, sample)? {
+            Some(existing) => {
+                ensure_same_prepared_sample(&existing, sample)?;
+                !prepared_content_changed(&existing, sample)
             }
-            let accepted_sequence = connection
-                .query_row(
-                    "SELECT sequence FROM accepted WHERE scope=? AND sample_id=?",
-                    params![scope, sample.id],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            return Ok(SampleReceipt {
-                inserted: false,
-                accepted_sequence,
-            });
-        }
-        drop(connection);
-        self.record_sample(stream, sample)
+            None => false,
+        };
+        let inserted = if unchanged {
+            false
+        } else {
+            let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let inserted = record_prepared_in(&tx, stream, &scope, sample)?;
+            tx.commit()?;
+            inserted
+        };
+        Ok(SampleReceipt {
+            inserted,
+            accepted_sequence: accepted_sequence_of(&connection, &scope, &sample.id)?,
+        })
+    }
+
+    /// `record_prepared_sample` for a batch in one write transaction. Reports, in order,
+    /// whether each sample stored a new revision; a refused sample records none of the batch.
+    pub fn record_prepared_samples(
+        &self,
+        stream: &StreamKey,
+        samples: &[TrainingSample],
+    ) -> Result<Vec<bool>> {
+        self.writable()?;
+        let scope = ledger_scope(stream)?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let inserted = samples
+            .iter()
+            .map(|sample| record_prepared_in(&tx, stream, &scope, sample))
+            .collect::<Result<Vec<_>>>()?;
+        tx.commit()?;
+        Ok(inserted)
     }
     pub(crate) fn check_experiment_artifact_budget(&self, job_id: &str, bytes: u64) -> Result<()> {
         let connection = self.connection()?;
@@ -171,12 +182,12 @@ impl TrainingRepository {
         self.writable()?;
         validate_snapshot(&snapshot)?;
         let mut connection = self.connection()?;
-        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        validate_snapshot_truth(&tx, &snapshot)?;
+        validate_snapshot_truth(&connection, &snapshot)?;
         if snapshot.id.is_empty() {
             snapshot.id = id();
         }
         snapshot.digest = snapshot_hash(&snapshot)?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         insert_snapshot(&tx, &snapshot)?;
         tx.commit()?;
         Ok(snapshot)
@@ -187,44 +198,71 @@ impl TrainingRepository {
         validate_request(&request)?;
         let snapshot =
             self.get_snapshot_limited(&request.snapshot_id, request.budget.maximum_dataset_bytes)?;
-        if snapshot.stream != request.stream || snapshot.as_of_ms > at_ms {
-            return Err(invalid(
-                "experiment snapshot belongs to another stream or future time",
-            ));
-        }
         validate_snapshot(&snapshot)?;
+        ensure_experiment_snapshot(&request, &snapshot, at_ms)?;
         let mut connection = self.connection()?;
+        validate_snapshot_truth(&connection, &snapshot)?;
+        let prepared = prepare_dataset(&request.spec, &snapshot)?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        validate_snapshot_truth(&tx, &snapshot)?;
-        let mut experiment = Experiment {
-            id: id(),
-            request,
-            status: ExperimentStatus::Running,
-            generation: 0,
-            usage: ExperimentUsage::default(),
-            best_trial_id: None,
-            selected_trial_id: None,
-            selected_at_ms: None,
-            final_evaluation_id: None,
-            target_met: false,
-            unmet_constraints: vec![],
-            stop_reason: None,
-            created_at_ms: at_ms,
-            updated_at_ms: at_ms,
-        };
-        crate::learning_repository::validate_learning_experiment_create(
-            &tx,
-            &experiment.request,
-            at_ms,
-        )?;
-        let preprocessing = experiment.request.preprocessing_manifest.clone();
-        register_dataset(&tx, &mut experiment, &snapshot, preprocessing)?;
-        for candidate in &experiment.request.candidates {
-            validate_candidate_dataset(&tx, &experiment, candidate)?;
-        }
-        save_experiment(&tx, &experiment)?;
+        let experiment = insert_experiment(&tx, request, &snapshot, prepared, at_ms)?;
         tx.commit()?;
         Ok(experiment)
+    }
+
+    /// Import a prepared split and create its experiment in one transaction, so a split that
+    /// exceeds the dataset budget or fails validation leaves no snapshot behind.
+    /// `request.snapshot_id` is replaced by the imported snapshot's ID.
+    pub fn create_experiment_with_snapshot(
+        &self,
+        mut snapshot: DatasetSnapshot,
+        mut request: ExperimentRequest,
+        at_ms: i64,
+    ) -> Result<Experiment> {
+        self.writable()?;
+        validate_request(&request)?;
+        validate_snapshot(&snapshot)?;
+        if snapshot.id.is_empty() {
+            snapshot.id = id();
+        }
+        snapshot.digest = snapshot_hash(&snapshot)?;
+        let maximum = request.budget.maximum_dataset_bytes;
+        if serialized_bytes(&snapshot)? > maximum {
+            return Err(invalid(format!(
+                "serialized snapshot exceeds the {maximum} byte budget"
+            )));
+        }
+        request.snapshot_id = snapshot.id.clone();
+        ensure_experiment_snapshot(&request, &snapshot, at_ms)?;
+        let mut connection = self.connection()?;
+        validate_snapshot_truth(&connection, &snapshot)?;
+        let prepared = prepare_dataset(&request.spec, &snapshot)?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        insert_snapshot(&tx, &snapshot)?;
+        let experiment = insert_experiment(&tx, request, &snapshot, prepared, at_ms)?;
+        tx.commit()?;
+        Ok(experiment)
+    }
+
+    /// Start charging wall time when a controller begins working on a running experiment.
+    /// Idempotent; queued jobs get the deadline the restarted clock implies.
+    pub fn mark_experiment_active(&self, experiment_id: &str, at_ms: i64) -> Result<Experiment> {
+        self.writable()?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut value = experiment(&tx, experiment_id)?;
+        let at_ms = ordered_at(&value, at_ms);
+        if !matches!(
+            value.status,
+            ExperimentStatus::Running | ExperimentStatus::Evaluating
+        ) || !activate_clock(&mut value, at_ms)
+        {
+            return Ok(value);
+        }
+        value.updated_at_ms = at_ms;
+        refresh_queued_deadlines(&tx, &value, at_ms)?;
+        save_experiment(&tx, &value)?;
+        tx.commit()?;
+        Ok(value)
     }
 
     pub fn get_experiment(&self, experiment_id: &str) -> Result<Experiment> {
@@ -345,11 +383,7 @@ impl TrainingRepository {
         let mut connection = self.connection()?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut value = experiment(&tx, experiment_id)?;
-        if at_ms < value.updated_at_ms {
-            return Err(invalid(
-                "table output registration predates experiment state",
-            ));
-        }
+        let at_ms = ordered_at(&value, at_ms);
         for table in created {
             if !value.request.created_tables.contains(&table) {
                 value.request.created_tables.push(table);
@@ -432,9 +466,7 @@ impl TrainingRepository {
         ) {
             return Ok(value);
         }
-        if at_ms < value.updated_at_ms {
-            return Err(invalid("cancellation predates experiment state"));
-        }
+        let at_ms = ordered_at(&value, at_ms);
         let trials: Vec<ExperimentTrial> = query(
             &tx,
             "SELECT body FROM experiment_trials WHERE experiment_id=? ORDER BY candidate_index",
@@ -450,12 +482,22 @@ impl TrainingRepository {
                     running = true;
                 }
                 JobStatus::Queued | JobStatus::Paused | JobStatus::Interrupted => {
+                    // A paused or interrupted attempt ran without a measured duration.
+                    let attempted = job.status != JobStatus::Queued;
                     job.status = JobStatus::Cancelled;
                     if trial.status == ExperimentTrialStatus::Scheduled {
+                        let charged = if attempted {
+                            trial.reserved_training_time_ms
+                        } else {
+                            0
+                        };
                         value.usage.reserved_training_time_ms = value
                             .usage
                             .reserved_training_time_ms
                             .saturating_sub(trial.reserved_training_time_ms);
+                        value.usage.training_time_ms =
+                            value.usage.training_time_ms.saturating_add(charged);
+                        trial.training_time_ms = trial.training_time_ms.saturating_add(charged);
                         trial.reserved_training_time_ms = 0;
                         value.usage.reserved_artifact_bytes = value
                             .usage
@@ -502,12 +544,18 @@ impl TrainingRepository {
             ExperimentStatus::Cancelled
         };
         value.stop_reason = Some("cancelled".into());
+        charge_retained_checkpoints(&tx, &mut value)?;
+        pause_clock(&mut value, at_ms);
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
         tx.commit()?;
         Ok(value)
     }
 
+    /// Requeue cancelled work. Trials the remaining budget cannot cover, including wall time
+    /// beyond the final audit's allowance, are settled as failed; when nothing can resume for
+    /// budget reasons the experiment stops as budget-exhausted, so its validated candidates can
+    /// still be selected and audited.
     pub fn resume_experiment(&self, experiment_id: &str, at_ms: i64) -> Result<Experiment> {
         self.writable()?;
         let mut connection = self.connection()?;
@@ -521,8 +569,12 @@ impl TrainingRepository {
         {
             return Err(Error::Conflict("experiment must be stopped before resuming; a revealed final holdout cannot be reused for search".into()));
         }
-        value.status = ExperimentStatus::Running;
-        ensure_running(&value, at_ms)?;
+        let at_ms = ordered_at(&value, at_ms);
+        // Like the controller, start no trial once only the final audit's allowance remains.
+        let wall_exhausted = value.wall_remaining_ms(at_ms) <= value.audit_allowance_ms();
+        let deadline = wall_deadline_ms(&value, at_ms)?;
+        let mut resumed = false;
+        let mut resource_exhausted = false;
         let trials: Vec<ExperimentTrial> = query(
             &tx,
             "SELECT body FROM experiment_trials WHERE experiment_id=? ORDER BY candidate_index",
@@ -531,74 +583,60 @@ impl TrainingRepository {
         for mut trial in trials {
             let mut job: TrainingJob =
                 read(&tx, "SELECT body FROM jobs WHERE id=?", &trial.job_id)?;
-            if job.status == JobStatus::Succeeded
-                && trial.status == ExperimentTrialStatus::Cancelled
-            {
-                trial.status = ExperimentTrialStatus::Scheduled;
-                trial.error = None;
-                trial.updated_at_ms = at_ms;
+            let completed = job.status == JobStatus::Succeeded
+                && trial.status == ExperimentTrialStatus::Cancelled;
+            let cancelled = job.status == JobStatus::Cancelled
+                && matches!(
+                    trial.status,
+                    ExperimentTrialStatus::Cancelled | ExperimentTrialStatus::Scheduled
+                );
+            if !completed && !cancelled {
+                continue;
+            }
+            // A worker that stopped before the controller settled it ran unmeasured.
+            let unmeasured = trial.reserved_training_time_ms;
+            settle_time(&mut value, &mut trial, unmeasured)?;
+            trial.updated_at_ms = at_ms;
+            let fits = !wall_exhausted
+                && (completed || reserve_resumed_slice(&tx, &mut value, &mut trial)?);
+            if !fits {
+                resource_exhausted |= !wall_exhausted;
+                trial.status = ExperimentTrialStatus::Failed;
+                trial.error = Some("budget exhausted on resume".into());
                 save_trial(&tx, &trial)?;
                 continue;
             }
-            if job.status != JobStatus::Cancelled {
-                continue;
-            }
-            if trial.reserved_training_time_ms > 0 {
-                value.usage.reserved_training_time_ms = value
-                    .usage
-                    .reserved_training_time_ms
-                    .saturating_sub(trial.reserved_training_time_ms);
-                value.usage.training_time_ms = value
-                    .usage
-                    .training_time_ms
-                    .saturating_add(trial.reserved_training_time_ms);
-                trial.training_time_ms = trial
-                    .training_time_ms
-                    .saturating_add(trial.reserved_training_time_ms);
-            }
-            let reserve = value.request.budget.worker_limits.maximum_duration_ms;
-            if value
-                .usage
-                .training_time_ms
-                .saturating_add(value.usage.reserved_training_time_ms)
-                .saturating_add(reserve)
-                > value.request.budget.maximum_training_time_ms
-            {
-                return Err(invalid(
-                    "remaining training budget cannot resume this experiment",
-                ));
-            }
-            value.usage.reserved_training_time_ms += reserve;
-            trial.reserved_training_time_ms = reserve;
-            if trial.reserved_artifact_bytes == 0 {
-                let reserve = value.request.budget.worker_limits.maximum_artifact_bytes;
-                if value
-                    .usage
-                    .artifact_bytes
-                    .saturating_add(value.usage.reserved_artifact_bytes)
-                    .saturating_add(reserve)
-                    > value.request.budget.maximum_artifact_bytes
-                {
-                    return Err(invalid(
-                        "remaining artifact budget cannot resume this experiment",
-                    ));
-                }
-                value.usage.reserved_artifact_bytes += reserve;
-                trial.reserved_artifact_bytes = reserve;
-            }
+            resumed = true;
             trial.status = ExperimentTrialStatus::Scheduled;
             trial.error = None;
-            trial.updated_at_ms = at_ms;
-            job.status = JobStatus::Queued;
-            job.generation += 1;
-            job.lease_owner = None;
-            job.lease_expires_at_ms = None;
-            job.error = None;
-            job.updated_at_ms = at_ms;
-            update_job(&tx, &job)?;
+            if cancelled {
+                job.status = JobStatus::Queued;
+                job.generation += 1;
+                job.lease_owner = None;
+                job.lease_expires_at_ms = None;
+                job.error = None;
+                job.updated_at_ms = at_ms;
+                refresh_job_deadline(&mut job, deadline)?;
+                update_job(&tx, &job)?;
+            }
             save_trial(&tx, &trial)?;
         }
-        value.stop_reason = None;
+        charge_retained_checkpoints(&tx, &mut value)?;
+        let exhausted = if wall_exhausted {
+            Some("wall_time_budget_exhausted")
+        } else if resource_exhausted && !resumed {
+            Some("resource_budget_exhausted")
+        } else {
+            None
+        };
+        if let Some(reason) = exhausted {
+            value.status = ExperimentStatus::BudgetExhausted;
+            value.stop_reason = Some(reason.into());
+            pause_clock(&mut value, at_ms);
+        } else {
+            value.status = ExperimentStatus::Running;
+            value.stop_reason = None;
+        }
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
         tx.commit()?;
@@ -606,6 +644,8 @@ impl TrainingRepository {
     }
 
     /// Resume only the already selected model's final audit. Search remains permanently sealed.
+    /// Without remaining wall time the experiment stops as budget-exhausted and can be finalized
+    /// without its audit.
     pub fn resume_frozen_experiment_audit(
         &self,
         experiment_id: &str,
@@ -626,16 +666,15 @@ impl TrainingRepository {
                 "only a stopped, frozen final audit can resume".into(),
             ));
         }
-        if at_ms < value.updated_at_ms
-            || (at_ms as i128 - value.created_at_ms as i128)
-                > value.request.budget.maximum_wall_time_ms as i128
-        {
-            return Err(invalid(
-                "experiment wall time budget exhausted or clock moved backwards",
-            ));
+        let at_ms = ordered_at(&value, at_ms);
+        if value.wall_elapsed_ms(at_ms) > value.request.budget.maximum_wall_time_ms {
+            value.status = ExperimentStatus::BudgetExhausted;
+            value.stop_reason = Some("wall_time_budget_exhausted".into());
+            pause_clock(&mut value, at_ms);
+        } else {
+            value.status = ExperimentStatus::Evaluating;
+            value.stop_reason = None;
         }
-        value.status = ExperimentStatus::Evaluating;
-        value.stop_reason = None;
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
         tx.commit()?;
@@ -697,6 +736,7 @@ impl TrainingRepository {
         {
             return Err(invalid("trial artifact provenance mismatch"));
         }
+        let at_ms = ordered_at(&value, at_ms);
         settle_time(&mut value, &mut trial, training_time_ms)?;
         if trial.artifact_id.is_none() {
             value.usage.artifact_bytes = value
@@ -705,16 +745,19 @@ impl TrainingRepository {
                 .checked_add(artifact.blob.bytes)
                 .ok_or_else(|| invalid("artifact budget overflow"))?;
         }
+        trial.artifact_id = Some(artifact.id);
+        trial.status = ExperimentTrialStatus::Validated;
+        trial.validation_metrics = metrics.clone();
+        trial.updated_at_ms = at_ms;
+        save_trial(&tx, &trial)?;
+        charge_retained_checkpoints(&tx, &mut value)?;
         if value.usage.artifact_bytes > value.request.budget.maximum_artifact_bytes
             || value.usage.training_time_ms > value.request.budget.maximum_training_time_ms
         {
             value.status = ExperimentStatus::BudgetExhausted;
             value.stop_reason = Some("resource_budget_exhausted".into());
+            pause_clock(&mut value, at_ms);
         }
-        trial.artifact_id = Some(artifact.id);
-        trial.status = ExperimentTrialStatus::Validated;
-        trial.validation_metrics = metrics.clone();
-        trial.updated_at_ms = at_ms;
         let best = value
             .best_trial_id
             .as_deref()
@@ -728,7 +771,6 @@ impl TrainingRepository {
         {
             value.best_trial_id = Some(trial.id.clone());
         }
-        save_trial(&tx, &trial)?;
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
         tx.commit()?;
@@ -759,19 +801,36 @@ impl TrainingRepository {
             return Ok(trial);
         }
         let mut value = experiment(&tx, &trial.experiment_id)?;
+        let at_ms = ordered_at(&value, at_ms);
         let mut job: TrainingJob = read(&tx, "SELECT body FROM jobs WHERE id=?", &trial.job_id)?;
         if matches!(job.status, JobStatus::Running | JobStatus::CancelRequested) {
             return Err(Error::Conflict(
                 "active worker must settle before recording trial failure".into(),
             ));
         }
-        if job.status == JobStatus::Queued {
-            job.status = JobStatus::Failed;
+        let cancelling = matches!(
+            value.status,
+            ExperimentStatus::Cancelled | ExperimentStatus::CancelRequested
+        );
+        let mut charged = training_time_ms;
+        if matches!(
+            job.status,
+            JobStatus::Queued | JobStatus::Paused | JobStatus::Interrupted
+        ) {
+            // A paused or interrupted attempt ran up to its reserved slice without measurement.
+            if job.status != JobStatus::Queued {
+                charged = charged.max(trial.reserved_training_time_ms);
+            }
+            job.status = if cancelling {
+                JobStatus::Cancelled
+            } else {
+                JobStatus::Failed
+            };
             job.error = Some(error.into());
             job.updated_at_ms = at_ms;
             update_job(&tx, &job)?;
         }
-        settle_time(&mut value, &mut trial, training_time_ms)?;
+        settle_time(&mut value, &mut trial, charged)?;
         if trial.artifact_id.is_none()
             && let Some(artifact_id) = job.artifact_id.as_deref()
         {
@@ -784,11 +843,7 @@ impl TrainingRepository {
                 .ok_or_else(|| invalid("artifact budget overflow"))?;
             trial.artifact_id = Some(artifact.id);
         }
-        trial.status = if job.status == JobStatus::Cancelled
-            || matches!(
-                value.status,
-                ExperimentStatus::Cancelled | ExperimentStatus::CancelRequested
-            ) {
+        trial.status = if job.status == JobStatus::Cancelled || cancelling {
             ExperimentTrialStatus::Cancelled
         } else {
             ExperimentTrialStatus::Failed
@@ -796,6 +851,7 @@ impl TrainingRepository {
         trial.error = Some(error.into());
         trial.updated_at_ms = at_ms;
         save_trial(&tx, &trial)?;
+        charge_retained_checkpoints(&tx, &mut value)?;
         if value.status == ExperimentStatus::CancelRequested && active_jobs(&tx, &value.id)? == 0 {
             value.status = ExperimentStatus::Cancelled;
         }
@@ -836,9 +892,14 @@ impl TrainingRepository {
             .best_trial_id
             .clone()
             .ok_or_else(|| invalid("experiment has no validated candidate"))?;
+        let at_ms = ordered_at(&value, at_ms);
         value.selected_trial_id = Some(winner);
         value.selected_at_ms = Some(at_ms);
         value.status = ExperimentStatus::Evaluating;
+        // The search is sealed, so the blob collector reclaims every trial checkpoint.
+        set_checkpoint_charge(&mut value, 0)?;
+        // The final audit spends wall time even after a budget stop paused the clock.
+        activate_clock(&mut value, at_ms);
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
         tx.commit()?;
@@ -865,8 +926,10 @@ impl TrainingRepository {
                 "stop active trials before ending the experiment budget".into(),
             ));
         }
+        let at_ms = ordered_at(&value, at_ms);
         value.status = ExperimentStatus::BudgetExhausted;
         value.stop_reason = Some(reason.into());
+        pause_clock(&mut value, at_ms);
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
         tx.commit()?;
@@ -903,6 +966,7 @@ impl TrainingRepository {
                 "experiment still has active workers".into(),
             ));
         }
+        let at_ms = ordered_at(&value, at_ms);
         value.target_met = false;
         value.unmet_constraints.clear();
         if let Some(evaluation_id) = evaluation_id {
@@ -942,24 +1006,6 @@ impl TrainingRepository {
                     "final evaluation provenance, task or time differs from the selected model",
                 ));
             }
-            let predictions: Vec<PredictionRecord> = query(
-                &tx,
-                "SELECT body FROM predictions WHERE artifact_id=? ORDER BY sample_id",
-                &artifact.id,
-            )?;
-            if digest(&serde_json::to_vec(&predictions)?) != report.evidence_digest
-                || report.truth_digest.as_deref()
-                    != Some(
-                        crate::repository::evaluation_truth_digest(
-                            &tx,
-                            &artifact.stream,
-                            &predictions,
-                        )?
-                        .as_str(),
-                    )
-            {
-                return Err(Error::Conflict("final evaluation evidence changed".into()));
-            }
             let dataset: DatasetSnapshot = read(
                 &tx,
                 "SELECT body FROM snapshots WHERE id=?",
@@ -970,12 +1016,25 @@ impl TrainingRepository {
                 .iter()
                 .map(|sample| sample.id.as_str())
                 .collect();
-            if predictions
-                .iter()
-                .map(|prediction| prediction.sample_id.as_str())
-                .collect::<BTreeSet<_>>()
-                != test_ids
+            let mut predictions: Vec<PredictionRecord> = query(
+                &tx,
+                "SELECT body FROM predictions WHERE artifact_id=? ORDER BY sample_id",
+                &artifact.id,
+            )?;
+            // The audit evaluates the holdout cohort only. Shadow traffic may score other
+            // samples with the winner; those predictions are not final evidence.
+            predictions.retain(|p| test_ids.contains(p.sample_id.as_str()));
+            if digest(&serde_json::to_vec(&predictions)?) != report.evidence_digest
+                || !crate::repository::truth_digest_matches(
+                    &tx,
+                    &artifact.stream,
+                    &predictions,
+                    report.truth_digest.as_deref(),
+                )?
             {
+                return Err(Error::Conflict("final evaluation evidence changed".into()));
+            }
+            if predictions.len() != test_ids.len() {
                 return Err(invalid(
                     "final evidence must cover exactly the frozen holdout",
                 ));
@@ -1031,22 +1090,35 @@ impl TrainingRepository {
             value.target_met = value.unmet_constraints.is_empty();
             value.final_evaluation_id = Some(evaluation_id.into());
             value.status = ExperimentStatus::Completed;
+            value.stop_reason = Some(stop_reason.into());
         } else {
             if value.selected_trial_id.is_some() {
                 value
                     .unmet_constraints
                     .push("final independent evaluation is unavailable".into());
             }
-            value.status = if stop_reason.contains("budget") {
-                ExperimentStatus::BudgetExhausted
-            } else {
-                ExperimentStatus::Failed
-            };
+            // A budget stop explains why no candidate was audited; keep it over a later reason.
+            let budget_stopped = value.status == ExperimentStatus::BudgetExhausted
+                && value
+                    .stop_reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.contains("budget"));
+            if !budget_stopped {
+                value.status = if stop_reason.contains("budget") {
+                    ExperimentStatus::BudgetExhausted
+                } else {
+                    ExperimentStatus::Failed
+                };
+                value.stop_reason = Some(stop_reason.into());
+            }
         }
-        value.stop_reason = Some(stop_reason.into());
+        set_checkpoint_charge(&mut value, 0)?;
+        pause_clock(&mut value, at_ms);
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
         tx.commit()?;
+        // Finished searches release superseded checkpoints; a failed sweep is retried later.
+        let _ = self.collect_unreferenced_blobs();
         Ok(value)
     }
 
@@ -1060,16 +1132,9 @@ impl TrainingRepository {
         let mut connection = self.connection()?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut experiment = experiment(&tx, experiment_id)?;
+        let at_ms = ordered_at(&experiment, at_ms);
         ensure_running(&experiment, at_ms)?;
-        if experiment
-            .request
-            .candidates
-            .len()
-            .checked_add(candidates.len())
-            .is_none_or(|n| n > experiment.request.budget.maximum_trials)
-        {
-            return Err(invalid("candidate count exceeds experiment trial budget"));
-        }
+        ensure_candidate_capacity(&experiment, candidates.len())?;
         for candidate in &candidates {
             validate_candidate(candidate)?;
             validate_candidate_dataset(&tx, &experiment, candidate)?;
@@ -1091,54 +1156,74 @@ impl TrainingRepository {
         self.writable()?;
         validate_snapshot(&derived)?;
         let mut connection = self.connection()?;
+        let prepared = prepare_derived_dataset(&connection, experiment_id, &mut derived, at_ms)?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut experiment = experiment(&tx, experiment_id)?;
+        let at_ms = ordered_at(&experiment, at_ms);
         ensure_running(&experiment, at_ms)?;
-        let original: DatasetSnapshot = read(
+        let dataset = insert_derived_dataset(
             &tx,
-            "SELECT body FROM snapshots WHERE id=?",
-            &experiment.request.snapshot_id,
+            &mut experiment,
+            &derived,
+            preprocessing_manifest,
+            prepared,
         )?;
-        if derived.stream != original.stream
-            || derived.policy != original.policy
-            || derived.as_of_ms != original.as_of_ms
-            || derived.cutoff_sequence != original.cutoff_sequence
-            || derived.excluded != original.excluded
-        {
-            return Err(invalid(
-                "derived dataset changed its source, split policy or cutoff",
-            ));
-        }
-        for (before, after) in [
-            (&original.train, &derived.train),
-            (&original.validation, &derived.validation),
-            (&original.test, &derived.test),
-        ] {
-            if before.len() != after.len() {
-                return Err(invalid("derived dataset changed split membership"));
-            }
-            let before: BTreeMap<_, _> = before.iter().map(|sample| (&sample.id, sample)).collect();
-            for sample in after {
-                let original = before
-                    .get(&sample.id)
-                    .ok_or_else(|| invalid("derived dataset moved a sample between splits"))?;
-                if immutable_sample(original)? != immutable_sample(sample)? {
-                    return Err(invalid(
-                        "derived dataset changed sample identity, target or provenance",
-                    ));
-                }
-            }
-        }
-        if derived.id.is_empty() {
-            derived.id = id();
-        }
-        derived.digest = snapshot_hash(&derived)?;
-        insert_snapshot(&tx, &derived)?;
-        let dataset = register_dataset(&tx, &mut experiment, &derived, preprocessing_manifest)?;
         touch(&mut experiment, at_ms);
         save_experiment(&tx, &experiment)?;
         tx.commit()?;
         Ok(dataset)
+    }
+
+    /// Register a derived dataset together with the candidates that train on it. Capacity and
+    /// candidates are checked before dataset bytes are charged; nothing persists on failure.
+    /// The caller assigns `derived.id` so candidates can reference it as `dataset_snapshot_id`.
+    pub fn register_experiment_candidates(
+        &self,
+        experiment_id: &str,
+        mut derived: DatasetSnapshot,
+        preprocessing_manifest: Value,
+        candidates: Vec<TrainingRequest>,
+        at_ms: i64,
+    ) -> Result<(ExperimentDataset, Experiment)> {
+        self.writable()?;
+        if derived.id.trim().is_empty() {
+            return Err(invalid(
+                "derived dataset needs an assigned ID before candidates can reference it",
+            ));
+        }
+        if candidates.is_empty() {
+            return Err(invalid(
+                "derived dataset registration needs at least one candidate",
+            ));
+        }
+        validate_snapshot(&derived)?;
+        for candidate in &candidates {
+            validate_candidate(candidate)?;
+        }
+        let mut connection = self.connection()?;
+        let prepared = prepare_derived_dataset(&connection, experiment_id, &mut derived, at_ms)?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut experiment = experiment(&tx, experiment_id)?;
+        let at_ms = ordered_at(&experiment, at_ms);
+        ensure_running(&experiment, at_ms)?;
+        ensure_candidate_capacity(&experiment, candidates.len())?;
+        for candidate in &candidates {
+            if candidate_dataset_id(&experiment, candidate) != derived.id {
+                validate_candidate_dataset(&tx, &experiment, candidate)?;
+            }
+        }
+        let dataset = insert_derived_dataset(
+            &tx,
+            &mut experiment,
+            &derived,
+            preprocessing_manifest,
+            prepared,
+        )?;
+        experiment.request.candidates.extend(candidates);
+        touch(&mut experiment, at_ms);
+        save_experiment(&tx, &experiment)?;
+        tx.commit()?;
+        Ok((dataset, experiment))
     }
 
     /// Charge a conservative call allowance before invoking an external model. A failed call
@@ -1185,6 +1270,7 @@ impl TrainingRepository {
         if calls >= maximum_calls {
             return Err(invalid("experiment consultation call budget exhausted"));
         }
+        let at_ms = ordered_at(&value, at_ms);
         charge_llm(&mut value, tokens, cost_micros, at_ms)?;
         append_event(
             &tx,
@@ -1193,6 +1279,76 @@ impl TrainingRepository {
             serde_json::json!({"tokens":tokens,"cost_micros":cost_micros,"maximum_calls":maximum_calls}),
             at_ms,
         )?;
+        save_experiment(&tx, &value)?;
+        tx.commit()?;
+        Ok(value)
+    }
+
+    /// Replace one unsettled consultation reservation with the provider-reported usage. Usage
+    /// above the reservation was already billed, so it is charged up to the budget.
+    pub fn settle_experiment_consultation(
+        &self,
+        experiment_id: &str,
+        reserved_tokens: u64,
+        reserved_cost_micros: u64,
+        actual_tokens: u64,
+        actual_cost_micros: u64,
+        at_ms: i64,
+    ) -> Result<Experiment> {
+        self.writable()?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut value = experiment(&tx, experiment_id)?;
+        let at_ms = ordered_at(&value, at_ms);
+        let events: Vec<Value> = query(
+            &tx,
+            "SELECT body FROM experiment_events WHERE experiment_id=? ORDER BY sequence",
+            experiment_id,
+        )?;
+        let matching = |kind: &str, tokens: &str, cost: &str| {
+            events
+                .iter()
+                .filter(|event| {
+                    event["kind"] == kind
+                        && event["body"][tokens].as_u64() == Some(reserved_tokens)
+                        && event["body"][cost].as_u64() == Some(reserved_cost_micros)
+                })
+                .count()
+        };
+        if matching("consultation_reserved", "tokens", "cost_micros")
+            <= matching(
+                "consultation_settled",
+                "reserved_tokens",
+                "reserved_cost_micros",
+            )
+        {
+            return Err(Error::Conflict(
+                "no unsettled consultation reservation matches this settlement".into(),
+            ));
+        }
+        let budget = &value.request.budget;
+        let tokens = settled_charge(
+            value.usage.llm_tokens,
+            reserved_tokens,
+            actual_tokens,
+            budget.maximum_llm_tokens,
+        );
+        let cost = settled_charge(
+            value.usage.llm_cost_micros,
+            reserved_cost_micros,
+            actual_cost_micros,
+            budget.maximum_llm_cost_micros,
+        );
+        value.usage.llm_tokens = tokens;
+        value.usage.llm_cost_micros = cost;
+        append_event(
+            &tx,
+            experiment_id,
+            "consultation_settled",
+            serde_json::json!({"reserved_tokens":reserved_tokens,"reserved_cost_micros":reserved_cost_micros,"tokens":actual_tokens,"cost_micros":actual_cost_micros}),
+            at_ms,
+        )?;
+        touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
         tx.commit()?;
         Ok(value)
@@ -1225,6 +1381,7 @@ impl TrainingRepository {
             return Ok(serde_json::from_str(&previous)?);
         }
         let mut value = experiment(&tx, &parent.experiment_id)?;
+        let at_ms = ordered_at(&value, at_ms);
         ensure_running(&value, at_ms)?;
         let job: TrainingJob = read(&tx, "SELECT body FROM jobs WHERE id=?", &parent.job_id)?;
         if parent.status != ExperimentTrialStatus::Validated
@@ -1359,21 +1516,176 @@ fn save_trial(connection: &Connection, trial: &ExperimentTrial) -> Result<()> {
 }
 fn touch(experiment: &mut Experiment, at_ms: i64) {
     experiment.generation += 1;
-    experiment.updated_at_ms = at_ms;
+    experiment.updated_at_ms = experiment.updated_at_ms.max(at_ms);
+}
+/// Callers read the clock before waiting for the write lock, so another writer may have
+/// committed a later time meanwhile. Ordering after it keeps state times monotonic.
+fn ordered_at(experiment: &Experiment, at_ms: i64) -> i64 {
+    at_ms.max(experiment.updated_at_ms)
 }
 fn ensure_running(experiment: &Experiment, at_ms: i64) -> Result<()> {
     if experiment.status != ExperimentStatus::Running || experiment.selected_trial_id.is_some() {
         return Err(Error::Conflict("experiment is not accepting work".into()));
     }
-    if at_ms < experiment.updated_at_ms
-        || (at_ms as i128 - experiment.created_at_ms as i128)
-            > experiment.request.budget.maximum_wall_time_ms as i128
-    {
-        return Err(invalid(
-            "experiment wall time budget exhausted or clock moved backwards",
-        ));
+    if at_ms < experiment.updated_at_ms {
+        return Err(Error::Conflict("experiment clock moved backwards".into()));
+    }
+    if experiment.wall_elapsed_ms(at_ms) > experiment.request.budget.maximum_wall_time_ms {
+        return Err(invalid("experiment wall time budget exhausted"));
     }
     Ok(())
+}
+fn pause_clock(experiment: &mut Experiment, at_ms: i64) {
+    let elapsed_ms = experiment.wall_elapsed_ms(at_ms);
+    experiment.clock = Some(ExperimentClock {
+        active_since_ms: None,
+        elapsed_ms,
+    });
+}
+/// Records without a clock already count from creation, so only a paused clock starts.
+fn activate_clock(experiment: &mut Experiment, at_ms: i64) -> bool {
+    match &mut experiment.clock {
+        Some(clock) if clock.active_since_ms.is_none() => {
+            clock.active_since_ms = Some(at_ms);
+            true
+        }
+        _ => false,
+    }
+}
+/// Trials end before the audit allowance, so one admitted just before the search window closes
+/// cannot spend the frozen winner's final evaluation time.
+fn wall_deadline_ms(experiment: &Experiment, at_ms: i64) -> Result<i64> {
+    let search_ms = experiment
+        .wall_remaining_ms(at_ms)
+        .saturating_sub(experiment.audit_allowance_ms());
+    i64::try_from(at_ms as i128 + search_ms as i128)
+        .map_err(|_| invalid("experiment deadline overflows the supported clock"))
+}
+/// Settled trials hold no artifact reservation, yet their last checkpoint stays on disk while
+/// the search may continue or resume them. Each distinct checkpoint blob that is not also an
+/// artifact of the experiment counts once, until a winner is selected or the search finalizes.
+fn charge_retained_checkpoints(connection: &Connection, experiment: &mut Experiment) -> Result<()> {
+    let retained = if experiment.selected_trial_id.is_some() {
+        0
+    } else {
+        let bytes: i64 = connection.query_row(
+            "SELECT COALESCE(SUM(bytes),0) FROM (SELECT MAX(json_extract(j.body,'$.checkpoint.blob.bytes')) AS bytes FROM experiment_trials t JOIN jobs j ON j.id=t.job_id WHERE t.experiment_id=?1 AND json_extract(t.body,'$.reserved_artifact_bytes')=0 AND json_extract(j.body,'$.checkpoint.blob.path') IS NOT NULL AND json_extract(j.body,'$.checkpoint.blob.path') NOT IN (SELECT json_extract(a.body,'$.blob.path') FROM experiment_trials s JOIN jobs k ON k.id=s.job_id JOIN artifacts a ON a.id=json_extract(k.body,'$.artifact_id') WHERE s.experiment_id=?1 AND json_extract(a.body,'$.blob.path') IS NOT NULL) GROUP BY json_extract(j.body,'$.checkpoint.blob.path'))",
+            [&experiment.id],
+            |row| row.get(0),
+        )?;
+        u64::try_from(bytes).map_err(|_| invalid("retained checkpoint size is negative"))?
+    };
+    set_checkpoint_charge(experiment, retained)
+}
+/// Reserves a requeued trial's slice when the remaining budget covers it. A trial holding a
+/// reservation no longer pays for its retained checkpoint, so the charge is recomputed with
+/// the tentative reservation saved and restored when the slice does not fit.
+fn reserve_resumed_slice(
+    connection: &Connection,
+    experiment: &mut Experiment,
+    trial: &mut ExperimentTrial,
+) -> Result<bool> {
+    let budget = &experiment.request.budget;
+    let (slice_ms, slice_bytes) = (
+        budget.worker_limits.maximum_duration_ms,
+        budget.worker_limits.maximum_artifact_bytes,
+    );
+    let (maximum_ms, maximum_bytes) = (
+        budget.maximum_training_time_ms,
+        budget.maximum_artifact_bytes,
+    );
+    let usage = &mut experiment.usage;
+    if usage
+        .training_time_ms
+        .saturating_add(usage.reserved_training_time_ms)
+        .saturating_add(slice_ms)
+        > maximum_ms
+    {
+        return Ok(false);
+    }
+    usage.reserved_training_time_ms += slice_ms;
+    usage.reserved_artifact_bytes += slice_bytes;
+    trial.reserved_training_time_ms = slice_ms;
+    trial.reserved_artifact_bytes = slice_bytes;
+    save_trial(connection, trial)?;
+    charge_retained_checkpoints(connection, experiment)?;
+    let usage = &mut experiment.usage;
+    if usage
+        .artifact_bytes
+        .saturating_add(usage.reserved_artifact_bytes)
+        <= maximum_bytes
+    {
+        return Ok(true);
+    }
+    usage.reserved_training_time_ms -= slice_ms;
+    usage.reserved_artifact_bytes -= slice_bytes;
+    trial.reserved_training_time_ms = 0;
+    trial.reserved_artifact_bytes = 0;
+    save_trial(connection, trial)?;
+    charge_retained_checkpoints(connection, experiment)?;
+    Ok(false)
+}
+fn set_checkpoint_charge(experiment: &mut Experiment, bytes: u64) -> Result<()> {
+    let usage = &mut experiment.usage;
+    usage.artifact_bytes = usage
+        .artifact_bytes
+        .saturating_sub(usage.checkpoint_bytes)
+        .checked_add(bytes)
+        .ok_or_else(|| invalid("artifact budget overflow"))?;
+    usage.checkpoint_bytes = bytes;
+    Ok(())
+}
+/// Workers stop at the absolute deadline in their recipe. A checkpoint written for the same
+/// recipe stays resumable because only the deadline changes.
+fn refresh_job_deadline(job: &mut TrainingJob, deadline_ms: i64) -> Result<bool> {
+    if job
+        .request
+        .recipe
+        .get("experiment_deadline_ms")
+        .and_then(Value::as_i64)
+        == Some(deadline_ms)
+    {
+        return Ok(false);
+    }
+    crate::repository::rewrite_job_request(job, |request| {
+        request
+            .recipe
+            .as_object_mut()
+            .ok_or_else(|| invalid("experiment job recipe must be an object"))?
+            .insert(
+                "experiment_deadline_ms".into(),
+                serde_json::json!(deadline_ms),
+            );
+        Ok(())
+    })?;
+    Ok(true)
+}
+fn refresh_queued_deadlines(
+    connection: &Connection,
+    experiment: &Experiment,
+    at_ms: i64,
+) -> Result<()> {
+    let deadline = wall_deadline_ms(experiment, at_ms)?;
+    let jobs: Vec<TrainingJob> = query(
+        connection,
+        "SELECT j.body FROM experiment_trials t JOIN jobs j ON j.id=t.job_id WHERE t.experiment_id=? AND j.status='queued'",
+        &experiment.id,
+    )?;
+    for mut job in jobs {
+        if refresh_job_deadline(&mut job, deadline)? {
+            job.updated_at_ms = at_ms;
+            update_job(connection, &job)?;
+        }
+    }
+    Ok(())
+}
+fn settled_charge(used: u64, reserved: u64, actual: u64, maximum: u64) -> u64 {
+    if actual <= reserved {
+        used.saturating_sub(reserved - actual)
+    } else {
+        used.saturating_add(actual - reserved)
+            .min(maximum.max(used))
+    }
 }
 fn charge_llm(
     experiment: &mut Experiment,
@@ -1381,6 +1693,7 @@ fn charge_llm(
     cost_micros: u64,
     at_ms: i64,
 ) -> Result<()> {
+    let at_ms = ordered_at(experiment, at_ms);
     ensure_running(experiment, at_ms)?;
     let new_tokens = experiment
         .usage
@@ -1587,9 +1900,15 @@ fn validate_snapshot(snapshot: &DatasetSnapshot) -> Result<()> {
     }
     Ok(())
 }
-fn immutable_sample(sample: &TrainingSample) -> Result<Value> {
+/// What splits and sealed evidence bind: everything but the transformed `input` and the raw
+/// source row (`feature_row`). The source `content_digest` stays bound, so evidence sealed over
+/// earlier content stops verifying once a re-preparation records edited content.
+pub(crate) fn immutable_sample(sample: &TrainingSample) -> Result<Value> {
     let mut value = serde_json::to_value(sample)?;
     let payload = &mut value["payload"];
+    if let Some(object) = payload.as_object_mut() {
+        object.remove("feature_row");
+    }
     let sample_payload = if payload.get("sample").is_some() {
         &mut payload["sample"]
     } else {
@@ -1600,6 +1919,227 @@ fn immutable_sample(sample: &TrainingSample) -> Result<Value> {
     }
     Ok(value)
 }
+fn recorded_annotation(
+    connection: &Connection,
+    scope: &str,
+    sample: &TrainingSample,
+) -> Result<Option<TrainingSample>> {
+    let body: Option<String> = connection
+        .query_row(
+            "SELECT body FROM annotations WHERE scope=? AND sample_id=? AND revision=?",
+            params![scope, sample.id, sample.annotation_revision],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(body.map(|body| serde_json::from_str(&body)).transpose()?)
+}
+/// What a re-prepared sample keeps at its revision: identity, provenance, target and acceptance.
+/// Its source content follows edits to the source row.
+fn prepared_identity(sample: &TrainingSample) -> Result<Value> {
+    let mut value = immutable_sample(sample)?;
+    if let Some(object) = value.as_object_mut() {
+        object.remove("content_digest");
+    }
+    Ok(value)
+}
+fn ensure_same_prepared_sample(recorded: &TrainingSample, sample: &TrainingSample) -> Result<()> {
+    if prepared_identity(recorded)? != prepared_identity(sample)? {
+        return Err(Error::Conflict(format!(
+            "prepared sample '{}' changed accepted identity, provenance or target of revision {}",
+            sample.id, sample.annotation_revision
+        )));
+    }
+    Ok(())
+}
+/// Only edited source content is written back; every preparation refits the transformed input.
+fn prepared_content_changed(recorded: &TrainingSample, sample: &TrainingSample) -> bool {
+    recorded.content_digest != sample.content_digest
+        || recorded.payload.get("feature_row") != sample.payload.get("feature_row")
+}
+/// Records one prepared sample in the caller's write transaction; true when it stored a new
+/// revision. Edited source content replaces the content of an already recorded revision.
+fn record_prepared_in(
+    connection: &Connection,
+    stream: &StreamKey,
+    scope: &str,
+    sample: &TrainingSample,
+) -> Result<bool> {
+    let Some(existing) = recorded_annotation(connection, scope, sample)? else {
+        insert_prepared_revision(connection, stream, scope, sample)?;
+        return Ok(true);
+    };
+    ensure_same_prepared_sample(&existing, sample)?;
+    if prepared_content_changed(&existing, sample) {
+        if !is_content_digest(&sample.content_digest) {
+            return Err(invalid(format!(
+                "prepared sample '{}' needs a SHA256 content digest",
+                sample.id
+            )));
+        }
+        connection.execute(
+            "UPDATE annotations SET body=? WHERE scope=? AND sample_id=? AND revision=?",
+            params![
+                serde_json::to_string(sample)?,
+                scope,
+                sample.id,
+                sample.annotation_revision
+            ],
+        )?;
+    }
+    Ok(false)
+}
+/// `record_sample` for prepared samples, except that a new revision may carry edited source
+/// content; its group and capture time must still match the earlier revisions.
+fn insert_prepared_revision(
+    connection: &Connection,
+    stream: &StreamKey,
+    scope: &str,
+    sample: &TrainingSample,
+) -> Result<()> {
+    validate_prepared_sample(stream, sample)?;
+    connection.execute("INSERT OR IGNORE INTO streams(scope) VALUES (?)", [scope])?;
+    ensure_follows_recorded_revisions(connection, scope, sample)?;
+    connection.execute(
+        "INSERT INTO annotations(scope,sample_id,revision,accepted,body) VALUES (?,?,?,?,?)",
+        params![
+            scope,
+            sample.id,
+            sample.annotation_revision,
+            sample.accepted,
+            serde_json::to_string(sample)?
+        ],
+    )?;
+    if sample.accepted {
+        accept_sample(connection, scope, &sample.id)?;
+    }
+    Ok(())
+}
+/// A sample's first accepted revision takes the stream's next sequence number.
+fn accept_sample(connection: &Connection, scope: &str, sample_id: &str) -> Result<()> {
+    let sequenced = connection.execute(
+        "INSERT INTO accepted(scope,sample_id,sequence) SELECT ?1,?2,next_sequence+1 FROM streams WHERE scope=?1 AND NOT EXISTS(SELECT 1 FROM accepted WHERE scope=?1 AND sample_id=?2)",
+        params![scope, sample_id],
+    )?;
+    if sequenced == 1 {
+        connection.execute(
+            "UPDATE streams SET next_sequence=next_sequence+1 WHERE scope=?",
+            [scope],
+        )?;
+    }
+    Ok(())
+}
+fn ensure_follows_recorded_revisions(
+    connection: &Connection,
+    scope: &str,
+    sample: &TrainingSample,
+) -> Result<()> {
+    let prior: Option<String> = connection
+        .query_row(
+            "SELECT body FROM annotations WHERE scope=? AND sample_id=? ORDER BY revision DESC LIMIT 1",
+            params![scope, sample.id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(prior) = prior else {
+        return Ok(());
+    };
+    let prior: TrainingSample = serde_json::from_str(&prior)?;
+    if sample.annotation_revision <= prior.annotation_revision
+        || sample.group_id != prior.group_id
+        || sample.captured_at_ms != prior.captured_at_ms
+    {
+        return Err(Error::Conflict(format!(
+            "prepared sample '{}' revision {} must follow revision {} and keep its group and capture time",
+            sample.id, sample.annotation_revision, prior.annotation_revision
+        )));
+    }
+    Ok(())
+}
+/// The checks `record_sample` applies before a revision enters the ledger.
+fn validate_prepared_sample(stream: &StreamKey, sample: &TrainingSample) -> Result<()> {
+    match identity_refusal(sample).or_else(|| payload_refusal(stream, sample)) {
+        Some(refusal) => Err(invalid(format!(
+            "prepared sample '{}' {refusal}",
+            sample.id
+        ))),
+        None => Ok(()),
+    }
+}
+fn identity_refusal(sample: &TrainingSample) -> Option<&'static str> {
+    if sample.id.is_empty()
+        || sample.group_id.is_empty()
+        || !is_content_digest(&sample.content_digest)
+        || sample.annotation_revision > i64::MAX as u64
+    {
+        Some("needs an ID, a group, a SHA256 content digest and a valid revision")
+    } else if sample.label_available_at_ms < sample.captured_at_ms {
+        Some("has a label that precedes its capture")
+    } else {
+        None
+    }
+}
+fn payload_refusal(stream: &StreamKey, sample: &TrainingSample) -> Option<&'static str> {
+    let payload = sample.payload.get("sample").unwrap_or(&sample.payload);
+    let differs = |field: &str, expected: &str| {
+        payload
+            .get(field)
+            .is_some_and(|value| value.as_str() != Some(expected))
+    };
+    let time = |field: &str| {
+        payload
+            .get(field)
+            .and_then(Value::as_i64)
+            .unwrap_or(sample.captured_at_ms)
+    };
+    let outcome_available = payload
+        .pointer("/outcome/available_at_ms")
+        .and_then(Value::as_i64);
+    if differs("id", sample.id.as_str()) || differs("group_id", sample.group_id.as_str()) {
+        Some("has a payload identity that differs from its ledger identity")
+    } else if differs("stream_id", stream.stream_id.as_str()) {
+        Some("has a payload stream that differs from the repository scope")
+    } else if outcome_available.is_some_and(|available| available > sample.label_available_at_ms) {
+        Some("has an outcome that is unavailable at its label time")
+    } else if time("window_start_ms") > time("window_end_ms") {
+        Some("has a feature window that starts after it ends")
+    } else {
+        None
+    }
+}
+fn is_content_digest(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+fn ledger_scope(stream: &StreamKey) -> Result<String> {
+    if [
+        &stream.project_id,
+        &stream.stream_id,
+        &stream.inspection_version,
+    ]
+    .iter()
+    .any(|value| value.trim().is_empty())
+    {
+        return Err(invalid(
+            "project, stream and inspection version must be nonempty",
+        ));
+    }
+    Ok(serde_json::to_string(stream)?)
+}
+fn accepted_sequence_of(
+    connection: &Connection,
+    scope: &str,
+    sample_id: &str,
+) -> Result<Option<i64>> {
+    Ok(connection
+        .query_row(
+            "SELECT sequence FROM accepted WHERE scope=? AND sample_id=?",
+            params![scope, sample_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+/// Annotation revisions are append-only. A concurrent re-preparation may still replace a
+/// revision's source content after this check, which counts as an edit after creation: the
+/// final audit refuses evidence over changed content. Callers run it before the write lock.
 fn validate_snapshot_truth(connection: &Connection, snapshot: &DatasetSnapshot) -> Result<()> {
     let scope = serde_json::to_string(&snapshot.stream)?;
     for sample in snapshot
@@ -1608,16 +2148,11 @@ fn validate_snapshot_truth(connection: &Connection, snapshot: &DatasetSnapshot) 
         .chain(&snapshot.validation)
         .chain(&snapshot.test)
     {
-        let body: Option<String> = connection
-            .query_row(
-                "SELECT body FROM annotations WHERE scope=? AND sample_id=? AND revision=?",
-                params![scope, sample.id, sample.annotation_revision],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let original: TrainingSample = serde_json::from_str(&body.ok_or_else(|| {
-            invalid("prepared snapshot sample was not recorded in the annotation ledger")
-        })?)?;
+        let Some(original) = recorded_annotation(connection, &scope, sample)? else {
+            return Err(invalid(
+                "prepared snapshot sample was not recorded in the annotation ledger",
+            ));
+        };
         if immutable_sample(&original)? != immutable_sample(sample)? {
             return Err(invalid(
                 "prepared snapshot changed accepted target or provenance",
@@ -1654,33 +2189,19 @@ fn insert_snapshot(connection: &Connection, snapshot: &DatasetSnapshot) -> Resul
     )?;
     Ok(())
 }
-fn register_dataset(
-    connection: &Connection,
-    experiment: &mut Experiment,
-    snapshot: &DatasetSnapshot,
-    preprocessing_manifest: Value,
-) -> Result<ExperimentDataset> {
-    let previous: Option<String> = connection
-        .query_row(
-            "SELECT body FROM experiment_datasets WHERE experiment_id=? AND snapshot_id=?",
-            params![experiment.id, snapshot.id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    if let Some(previous) = previous {
-        let dataset: ExperimentDataset = serde_json::from_str(&previous)?;
-        if dataset.digest != snapshot.digest
-            || dataset.preprocessing_manifest != preprocessing_manifest
-        {
-            return Err(Error::Conflict("dataset registration is immutable".into()));
-        }
-        return Ok(dataset);
-    }
+/// Worker view of a dataset, built before the write lock because it touches every sample: the
+/// final holdout is removed and anomaly tasks keep only normal examples.
+struct PreparedDataset {
+    training: DatasetSnapshot,
+    /// Serialized size of the registered dataset and its worker view together.
+    bytes: u64,
+}
+fn prepare_dataset(spec: &Value, snapshot: &DatasetSnapshot) -> Result<PreparedDataset> {
     let mut training = snapshot.clone();
     training.id = id();
     training.test.clear();
     if matches!(
-        experiment.request.spec.get("task").and_then(Value::as_str),
+        spec.get("task").and_then(Value::as_str),
         Some("visual_anomaly" | "sensor_anomaly" | "sequence_autoencoder")
     ) {
         for partition in [&mut training.train, &mut training.validation] {
@@ -1698,7 +2219,6 @@ fn register_dataset(
             ));
         }
     }
-    let spec = &experiment.request.spec;
     if !crate::repository::training_ready(
         &training,
         &serde_json::json!({"inspection_task":spec["task"],"labels":spec["labels"],"minimum_examples":spec["minimum_examples"],"minimum_examples_per_class":spec["minimum_examples_per_class"]}),
@@ -1711,14 +2231,40 @@ fn register_dataset(
     let bytes = serialized_bytes(snapshot)?
         .checked_add(serialized_bytes(&training)?)
         .ok_or_else(|| invalid("dataset size overflow"))?;
+    Ok(PreparedDataset { training, bytes })
+}
+fn register_dataset(
+    connection: &Connection,
+    experiment: &mut Experiment,
+    snapshot: &DatasetSnapshot,
+    preprocessing_manifest: Value,
+    prepared: PreparedDataset,
+) -> Result<ExperimentDataset> {
+    let previous: Option<String> = connection
+        .query_row(
+            "SELECT body FROM experiment_datasets WHERE experiment_id=? AND snapshot_id=?",
+            params![experiment.id, snapshot.id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(previous) = previous {
+        let dataset: ExperimentDataset = serde_json::from_str(&previous)?;
+        if dataset.digest != snapshot.digest
+            || dataset.preprocessing_manifest != preprocessing_manifest
+        {
+            return Err(Error::Conflict("dataset registration is immutable".into()));
+        }
+        return Ok(dataset);
+    }
     let total = experiment
         .usage
         .dataset_bytes
-        .checked_add(bytes)
+        .checked_add(prepared.bytes)
         .ok_or_else(|| invalid("dataset budget overflow"))?;
     if total > experiment.request.budget.maximum_dataset_bytes {
         return Err(invalid("experiment dataset storage budget exhausted"));
     }
+    let training = prepared.training;
     insert_snapshot(connection, &training)?;
     let dataset = ExperimentDataset {
         snapshot_id: snapshot.id.clone(),
@@ -1734,20 +2280,166 @@ fn register_dataset(
     experiment.usage.dataset_bytes = total;
     Ok(dataset)
 }
+fn ensure_experiment_snapshot(
+    request: &ExperimentRequest,
+    snapshot: &DatasetSnapshot,
+    at_ms: i64,
+) -> Result<()> {
+    if snapshot.stream != request.stream || snapshot.as_of_ms > at_ms {
+        return Err(invalid(
+            "experiment snapshot belongs to another stream or future time",
+        ));
+    }
+    Ok(())
+}
+/// Callers check the snapshot with `ensure_experiment_snapshot` and prepare its dataset first.
+fn insert_experiment(
+    connection: &Connection,
+    request: ExperimentRequest,
+    snapshot: &DatasetSnapshot,
+    prepared: PreparedDataset,
+    at_ms: i64,
+) -> Result<Experiment> {
+    let mut experiment = Experiment {
+        id: id(),
+        request,
+        status: ExperimentStatus::Running,
+        generation: 0,
+        usage: ExperimentUsage::default(),
+        best_trial_id: None,
+        selected_trial_id: None,
+        selected_at_ms: None,
+        final_evaluation_id: None,
+        target_met: false,
+        unmet_constraints: vec![],
+        stop_reason: None,
+        created_at_ms: at_ms,
+        updated_at_ms: at_ms,
+        clock: Some(ExperimentClock::default()),
+    };
+    crate::learning_repository::validate_learning_experiment_create(
+        connection,
+        &experiment.request,
+        at_ms,
+    )?;
+    let preprocessing = experiment.request.preprocessing_manifest.clone();
+    register_dataset(
+        connection,
+        &mut experiment,
+        snapshot,
+        preprocessing,
+        prepared,
+    )?;
+    for candidate in &experiment.request.candidates {
+        validate_candidate_dataset(connection, &experiment, candidate)?;
+    }
+    save_experiment(connection, &experiment)?;
+    Ok(experiment)
+}
+/// Derived features may change inputs only; split membership, cutoff and truth stay fixed.
+fn validate_derived_dataset(
+    connection: &Connection,
+    experiment: &Experiment,
+    derived: &DatasetSnapshot,
+) -> Result<()> {
+    let original: DatasetSnapshot = read(
+        connection,
+        "SELECT body FROM snapshots WHERE id=?",
+        &experiment.request.snapshot_id,
+    )?;
+    if derived.stream != original.stream
+        || derived.policy != original.policy
+        || derived.as_of_ms != original.as_of_ms
+        || derived.cutoff_sequence != original.cutoff_sequence
+        || derived.excluded != original.excluded
+    {
+        return Err(invalid(
+            "derived dataset changed its source, split policy or cutoff",
+        ));
+    }
+    for (before, after) in [
+        (&original.train, &derived.train),
+        (&original.validation, &derived.validation),
+        (&original.test, &derived.test),
+    ] {
+        if before.len() != after.len() {
+            return Err(invalid("derived dataset changed split membership"));
+        }
+        let before: BTreeMap<_, _> = before.iter().map(|sample| (&sample.id, sample)).collect();
+        for sample in after {
+            let original = before
+                .get(&sample.id)
+                .ok_or_else(|| invalid("derived dataset moved a sample between splits"))?;
+            if immutable_sample(original)? != immutable_sample(sample)? {
+                return Err(invalid(
+                    "derived dataset changed sample identity, target or provenance",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+/// The split and the task contract are fixed at creation, so a derived dataset is checked and
+/// prepared before the write lock; the caller re-checks that the experiment still runs.
+fn prepare_derived_dataset(
+    connection: &Connection,
+    experiment_id: &str,
+    derived: &mut DatasetSnapshot,
+    at_ms: i64,
+) -> Result<PreparedDataset> {
+    let current = experiment(connection, experiment_id)?;
+    ensure_running(&current, ordered_at(&current, at_ms))?;
+    validate_derived_dataset(connection, &current, derived)?;
+    if derived.id.is_empty() {
+        derived.id = id();
+    }
+    derived.digest = snapshot_hash(derived)?;
+    prepare_dataset(&current.request.spec, derived)
+}
+fn insert_derived_dataset(
+    connection: &Connection,
+    experiment: &mut Experiment,
+    derived: &DatasetSnapshot,
+    preprocessing_manifest: Value,
+    prepared: PreparedDataset,
+) -> Result<ExperimentDataset> {
+    insert_snapshot(connection, derived)?;
+    register_dataset(
+        connection,
+        experiment,
+        derived,
+        preprocessing_manifest,
+        prepared,
+    )
+}
+fn ensure_candidate_capacity(experiment: &Experiment, additional: usize) -> Result<()> {
+    if experiment
+        .request
+        .candidates
+        .len()
+        .checked_add(additional)
+        .is_none_or(|n| n > experiment.request.budget.maximum_trials)
+    {
+        return Err(invalid("candidate count exceeds experiment trial budget"));
+    }
+    Ok(())
+}
+fn candidate_dataset_id<'a>(experiment: &'a Experiment, request: &'a TrainingRequest) -> &'a str {
+    request
+        .recipe
+        .get("dataset_snapshot_id")
+        .and_then(Value::as_str)
+        .unwrap_or(&experiment.request.snapshot_id)
+}
 fn validate_candidate_dataset(
     connection: &Connection,
     experiment: &Experiment,
     request: &TrainingRequest,
 ) -> Result<ExperimentDataset> {
-    let id = request
-        .recipe
-        .get("dataset_snapshot_id")
-        .and_then(Value::as_str)
-        .unwrap_or(&experiment.request.snapshot_id);
     let body: Option<String> = connection
         .query_row(
             "SELECT body FROM experiment_datasets WHERE experiment_id=? AND snapshot_id=?",
-            params![experiment.id, id],
+            params![experiment.id, candidate_dataset_id(experiment, request)],
             |row| row.get(0),
         )
         .optional()?;
@@ -1870,6 +2562,7 @@ fn submit_trial(
     checkpoint: Option<CheckpointRef>,
 ) -> Result<ExperimentTrial> {
     let experiment_id = experiment.id.clone();
+    let at_ms = ordered_at(experiment, at_ms);
     ensure_running(experiment, at_ms)?;
     crate::learning_repository::validate_learning_dispatch(tx, experiment)?;
     let budget = &experiment.request.budget;
@@ -1896,11 +2589,9 @@ fn submit_trial(
         spec["input_shape"] = shape.clone();
     }
     request.recipe["inspection_spec"] = spec;
-    let deadline = i64::try_from(
-        experiment.created_at_ms as i128 + experiment.request.budget.maximum_wall_time_ms as i128,
-    )
-    .map_err(|_| invalid("experiment deadline overflows the supported clock"))?;
-    request.recipe["experiment_deadline_ms"] = serde_json::json!(deadline);
+    // Dispatch starts the wall clock; the trial ends before the final audit's allowance.
+    request.recipe["experiment_deadline_ms"] =
+        serde_json::json!(wall_deadline_ms(experiment, at_ms)?);
     let active = unsettled_trials(tx, &experiment_id)?;
     if active >= budget.maximum_parallel_trials {
         return Err(Error::Conflict(
@@ -1982,6 +2673,7 @@ fn submit_trial(
     experiment.usage.submitted_trials += 1;
     experiment.usage.reserved_training_time_ms += reserved;
     experiment.usage.reserved_artifact_bytes += reserved_artifact;
+    activate_clock(experiment, at_ms);
     touch(experiment, at_ms);
     save_experiment(&tx, experiment)?;
     Ok(trial)

@@ -3,11 +3,13 @@
 //! The copy is a second, independent app: every board, node, pin, layer,
 //! event, page, widget and template gets a fresh id through [`super::remap`] —
 //! the same rewrite a fork uses — and every other file under the app (uploads,
-//! the project database, media) is copied byte for byte. Nothing is stripped:
-//! the copy stays on the same device with the same owner.
+//! the project database, media, published models) is copied byte for byte.
+//! Nothing is stripped: the copy stays on the same device with the same owner.
 //!
 //! Version history does not travel. Only the board versions an event is
-//! pinned to are copied, because the event cannot run without them.
+//! pinned to are copied, because the event cannot run without them. Neither
+//! does the legacy training ledger under `storage/inspection/`: a training
+//! ledger is device-local working state of its own app.
 
 use super::{
     App,
@@ -27,7 +29,10 @@ use flow_like_storage::{
         buffered::{BufReader, BufWriter},
     },
 };
-use flow_like_types::{Timestamp, Value, anyhow, create_id, proto, tokio};
+use flow_like_types::{
+    Timestamp, Value, anyhow, create_id, proto, storage_paths::is_legacy_training_ledger_path,
+    tokio,
+};
 use futures::{StreamExt, TryStreamExt};
 use serde::Serialize;
 use std::{
@@ -213,6 +218,9 @@ impl Duplication {
         let mut files = BTreeMap::new();
         for (store, in_storage) in [(&self.meta, false), (&self.storage, true)] {
             for (rel, meta) in list_prefix(store, &self.src).await? {
+                if is_legacy_training_ledger_path(&rel) {
+                    continue;
+                }
                 let prefer = in_storage && is_content_path(&rel);
                 if prefer || !files.contains_key(&rel) {
                     files.insert(rel, SourceFile { in_storage, meta });
@@ -1285,6 +1293,58 @@ mod tests {
         assert!(report.warnings.iter().any(|w| w.contains("board_gone")));
         assert!(report.warnings.iter().any(|w| w.contains("event_orphan")));
         assert!(report.warnings.iter().any(|w| w.contains("page_missing")));
+    }
+
+    #[tokio::test]
+    async fn duplicate_leaves_the_legacy_training_ledger_and_copies_published_models() {
+        const LEDGER: [&str; 4] = [
+            "storage/inspection/jobs.sqlite",
+            "storage/inspection/jobs.sqlite-wal",
+            "storage/inspection/jobs.artifacts/x.blob",
+            "storage/inspection/.training-locks/a.lock",
+        ];
+        const MODELS: [&str; 3] = [
+            "storage/models/artifacts/a/weights.bin",
+            "storage/models/artifacts/a/manifest.json",
+            "storage/models/experiments/auto.json",
+        ];
+        let (state, meta, storage) = setup_state();
+        seed(&meta, &storage).await;
+        // The desktop registers one directory as both stores.
+        for store in [&meta, &storage] {
+            for rel in LEDGER {
+                store
+                    .put(&path(SRC, rel), PutPayload::from(rel.as_bytes().to_vec()))
+                    .await
+                    .unwrap();
+            }
+        }
+        for rel in MODELS {
+            storage
+                .put(&path(SRC, rel), PutPayload::from(rel.as_bytes().to_vec()))
+                .await
+                .unwrap();
+        }
+
+        let report = App::duplicate_local(state, SRC, None).await.unwrap();
+        let dst = report.app_id.as_str();
+        for store in [&meta, &storage] {
+            let copied = keys(store, dst).await;
+            assert!(
+                LEDGER.iter().all(|rel| !copied.contains(*rel)),
+                "{copied:?}"
+            );
+        }
+        let copied = keys(&storage, dst).await;
+        for rel in MODELS {
+            assert!(copied.contains(rel), "{rel} missing from {copied:?}");
+        }
+        for rel in LEDGER {
+            assert!(
+                storage.head(&path(SRC, rel)).await.is_ok(),
+                "source lost {rel}"
+            );
+        }
     }
 
     /// Tauri commands spawn their future, so it must be `Send`.

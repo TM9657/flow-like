@@ -11,6 +11,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use flow_like_catalog_core::DEFAULT_GRAPH_SAMPLE_SIZE;
+use flow_like_storage::contracts::column_metadata::ColumnReader;
 use flow_like_storage::databases::graph::lancegraph::{self, RemoteOntologyImportDef};
 use flow_like_storage::databases::workbench::{self, WorkbenchSurface};
 use flow_like_storage::lancedb::Connection;
@@ -30,7 +31,7 @@ async fn open_import_target(
     user: &AppUser,
     app_id: &str,
     import_id: &str,
-) -> Result<(RemoteOntologyImportDef, Connection), ApiError> {
+) -> Result<(RemoteOntologyImportDef, Connection, ColumnReader), ApiError> {
     let local = resolve_connection(state, user, app_id, &ScopeParams::default()).await?;
     let import = lancegraph::find_ontology_import(&local, import_id)
         .await?
@@ -41,7 +42,7 @@ async fn open_import_target(
         ));
     }
 
-    crate::routes::app::connection::remote_ontologies::ensure_remote_ontology_access(
+    let reader = crate::routes::app::connection::remote_ontologies::ensure_remote_ontology_access(
         state,
         app_id,
         &import.target_app_id,
@@ -69,7 +70,7 @@ async fn open_import_target(
         ));
     }
 
-    Ok((import, target))
+    Ok((import, target, reader))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -124,10 +125,10 @@ pub async fn sample_import(
         RolePermissions::ReadDatabase
     );
 
-    let (import, target) = open_import_target(&state, &user, &app_id, &import_id).await?;
+    let (import, target, reader) = open_import_target(&state, &user, &app_id, &import_id).await?;
+    let contract = lancegraph::restrict_overlay(&target, import.contract, &reader).await?;
     let results =
-        lancegraph::sample_overlay(&target, &import.contract, &params.label, params.n.min(500))
-            .await?;
+        lancegraph::sample_overlay(&target, &contract, &params.label, params.n.min(500)).await?;
 
     Ok(Json(results))
 }
@@ -182,7 +183,7 @@ pub async fn query_import(
         RolePermissions::ReadDatabase
     );
 
-    let (import, target) = open_import_target(&state, &user, &app_id, &import_id).await?;
+    let (import, target, reader) = open_import_target(&state, &user, &app_id, &import_id).await?;
     let params = payload.params.unwrap_or(Value::Null);
     let result = workbench::execute_readonly_sql(
         &target,
@@ -191,6 +192,7 @@ pub async fn query_import(
         &payload.sql,
         &params,
         payload.limit,
+        &reader,
     )
     .await?;
 

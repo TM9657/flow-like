@@ -54,6 +54,11 @@ pub enum FittedColumn {
     },
 }
 
+/// Version 1 keyed categories by raw JSON text, so `3` and `3.0` were different categories.
+const LEGACY_FORMAT_VERSION: u32 = 1;
+const FORMAT_VERSION: u32 = 2;
+const MAX_EXACT_INTEGER: f64 = 9_007_199_254_740_992.0;
+
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct FittedTabularPreprocessor {
     pub format_version: u32,
@@ -81,7 +86,9 @@ fn numeric(value: &Value, name: &str) -> Result<Option<f64>> {
     )?;
     Ok(Some(value))
 }
-fn category(value: &Value, name: &str) -> Result<Option<String>> {
+/// Canonical keys write integral numbers up to 2^53 as integers, so an integer and a float
+/// column carrying the same code agree.
+fn category(value: &Value, name: &str, canonical: bool) -> Result<Option<String>> {
     if value.is_null() {
         return Ok(None);
     }
@@ -89,9 +96,72 @@ fn category(value: &Value, name: &str) -> Result<Option<String>> {
         value.is_string() || value.is_boolean() || value.is_number(),
         format!("Categorical column '{name}' must contain scalar values"),
     )?;
-    let key = serde_json::to_string(value)?;
+    let key = match value.as_f64() {
+        Some(number)
+            if canonical
+                && !value.is_i64()
+                && !value.is_u64()
+                && number.fract() == 0.0
+                && number.abs() <= MAX_EXACT_INTEGER =>
+        {
+            (number as i64).to_string()
+        }
+        _ => serde_json::to_string(value)?,
+    };
     require(key.len() <= 4096, "Categorical value exceeds 4096 bytes")?;
     Ok(Some(key))
+}
+
+/// The other version 1 spelling of an integral code within 2^53: `3` for `3.0` and `3.0` for `3`.
+fn legacy_alternate_key(value: &Value) -> Option<String> {
+    let number = value.as_f64()?;
+    if number.fract() != 0.0 || number.abs() > MAX_EXACT_INTEGER {
+        return None;
+    }
+    if value.is_f64() {
+        Some((number as i64).to_string())
+    } else {
+        serde_json::to_string(&Value::from(number)).ok()
+    }
+}
+
+/// Sums in sorted order so the statistic depends only on the training values, not on row order.
+fn average(values: &[f64]) -> f64 {
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let count = sorted.len() as f64;
+    let quotient = sorted.iter().sum::<f64>() / count;
+    if quotient.is_finite() {
+        quotient
+    } else {
+        sorted.iter().map(|value| value / count).sum()
+    }
+}
+
+/// Offset and scale of a column. A constant column, or one whose spread is within the rounding
+/// error of the two-pass variance (n * eps * |mean|), keeps scale 1 so later deviations stay finite
+/// and proportionate instead of being divided by rounding noise.
+fn standardization(values: &[f64]) -> (f64, f64) {
+    let (minimum, maximum) = values.iter().fold(
+        (f64::INFINITY, f64::NEG_INFINITY),
+        |(minimum, maximum), value| (minimum.min(*value), maximum.max(*value)),
+    );
+    if minimum == maximum {
+        return (minimum, 1.0);
+    }
+    let count = values.len() as f64;
+    let mean = average(values);
+    let mut squares = values
+        .iter()
+        .map(|value| (value - mean).powi(2) / count)
+        .collect::<Vec<_>>();
+    squares.sort_by(f64::total_cmp);
+    let deviation = squares.iter().sum::<f64>().sqrt();
+    if deviation <= count * f64::EPSILON * mean.abs() {
+        (mean, 1.0)
+    } else {
+        (mean, deviation)
+    }
 }
 
 impl FittedTabularPreprocessor {
@@ -143,10 +213,7 @@ impl FittedTabularPreprocessor {
                             "Column '{name}' is entirely missing in training; select constant imputation or remove it"
                         ),
                     )?;
-                    present
-                        .iter()
-                        .map(|value| value / present.len() as f64)
-                        .sum()
+                    average(&present)
                 }
                 Imputation::Median => {
                     require(
@@ -168,16 +235,8 @@ impl FittedTabularPreprocessor {
                 .iter()
                 .map(|value| value.unwrap_or(imputation))
                 .collect::<Vec<_>>();
-            let mean = filled
-                .iter()
-                .map(|value| value / filled.len() as f64)
-                .sum::<f64>();
-            let variance = filled
-                .iter()
-                .map(|value| (value - mean).powi(2) / filled.len() as f64)
-                .sum::<f64>();
             let (offset, scale) = if options.standardize {
-                (mean, if variance > 0.0 { variance.sqrt() } else { 1.0 })
+                standardization(&filled)
             } else {
                 (0.0, 1.0)
             };
@@ -196,7 +255,7 @@ impl FittedTabularPreprocessor {
         for name in &options.categorical_columns {
             let mut vocabulary = BTreeSet::new();
             for index in training {
-                if let Some(value) = category(cell(&rows[*index], name)?, name)? {
+                if let Some(value) = category(cell(&rows[*index], name)?, name, true)? {
                     vocabulary.insert(value);
                 }
                 require(
@@ -228,7 +287,7 @@ impl FittedTabularPreprocessor {
             })
             .collect::<Result<Vec<_>>>()?;
         let result = Self {
-            format_version: 1,
+            format_version: FORMAT_VERSION,
             columns,
             output_features,
             training_rows: training.len(),
@@ -240,7 +299,7 @@ impl FittedTabularPreprocessor {
 
     pub fn validate(&self) -> Result<()> {
         require(
-            self.format_version == 1
+            matches!(self.format_version, LEGACY_FORMAT_VERSION | FORMAT_VERSION)
                 && self.training_rows > 0
                 && !self.columns.is_empty()
                 && self.columns.len() <= 65536,
@@ -322,11 +381,18 @@ impl FittedTabularPreprocessor {
                     values.push(value);
                 }
                 FittedColumn::Categorical { name, vocabulary } => {
-                    let value = category(cell(row, name)?, name)?;
-                    let index = match value {
+                    let legacy = self.format_version == LEGACY_FORMAT_VERSION;
+                    let raw = cell(row, name)?;
+                    let index = match category(raw, name, !legacy)? {
                         None => 0,
                         Some(value) => vocabulary
                             .binary_search(&value)
+                            .or_else(|miss| {
+                                match legacy.then(|| legacy_alternate_key(raw)).flatten() {
+                                    Some(alternate) => vocabulary.binary_search(&alternate),
+                                    None => Err(miss),
+                                }
+                            })
                             .map_or(1, |index| index + 2),
                     };
                     let start = values.len();
@@ -431,5 +497,149 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    fn single_column(numeric: bool, imputation: Imputation) -> TabularOptions {
+        let column = vec![String::from(if numeric { "value" } else { "code" })];
+        TabularOptions {
+            numeric_columns: if numeric { column.clone() } else { vec![] },
+            categorical_columns: if numeric { vec![] } else { column },
+            imputation,
+            standardize: true,
+            maximum_categories_per_column: 10,
+            maximum_output_features: 20,
+        }
+    }
+
+    fn encoded(fitted: &FittedTabularPreprocessor, row: Value) -> Vec<f32> {
+        fitted.transform_row(&row).unwrap().values
+    }
+
+    fn hot_slot(fitted: &FittedTabularPreprocessor, code: Value) -> usize {
+        let values = encoded(fitted, json!({ "code": code }));
+        values.iter().position(|value| *value == 1.0).unwrap()
+    }
+
+    #[test]
+    fn constant_training_columns_keep_unit_scale() {
+        let options = single_column(true, Imputation::Median);
+        for constant in [1.0, 25.0, 0.1] {
+            let rows: Vec<_> = (0..700).map(|_| json!({"value": constant})).collect();
+            let training: Vec<_> = (0..rows.len()).collect();
+            let fitted = FittedTabularPreprocessor::fit(&rows, &training, &options).unwrap();
+            let expected = FittedColumn::Numeric {
+                name: "value".into(),
+                imputation: constant,
+                offset: constant,
+                scale: 1.0,
+            };
+            assert_eq!(fitted.columns, [expected]);
+            assert_eq!(encoded(&fitted, json!({"value": constant + 1.0})), [1.0]);
+        }
+        let noisy: Vec<_> = (0..700)
+            .map(|index| json!({"value": if index % 2 == 0 { 0.3 } else { 0.1 + 0.2 }}))
+            .collect();
+        let training: Vec<_> = (0..noisy.len()).collect();
+        let options = single_column(true, Imputation::Mean);
+        let fitted = FittedTabularPreprocessor::fit(&noisy, &training, &options).unwrap();
+        let FittedColumn::Numeric { scale, .. } = fitted.columns[0] else {
+            panic!("Expected a numeric column");
+        };
+        assert_eq!(scale, 1.0);
+        assert!((encoded(&fitted, json!({"value": 1.3}))[0] - 1.0).abs() < 1e-6);
+        let missing = [json!({"value": null}), json!({"value": null})];
+        let options = single_column(true, Imputation::Constant { value: 5.0 });
+        let fitted = FittedTabularPreprocessor::fit(&missing, &[0, 1], &options).unwrap();
+        assert_eq!(encoded(&fitted, json!({"value": null})), [0.0]);
+        assert_eq!(encoded(&fitted, json!({"value": 6.0})), [1.0]);
+    }
+
+    #[test]
+    fn statistics_do_not_depend_on_training_row_order() {
+        let rows: Vec<_> = (0..54)
+            .map(|index| json!({"value": 0.1 + index as f64 * 0.77 + (index % 7) as f64 * 1e-3}))
+            .collect();
+        let forward: Vec<_> = (0..rows.len()).collect();
+        let mut shuffled = forward.clone();
+        shuffled.reverse();
+        shuffled.swap(3, 40);
+        let options = single_column(true, Imputation::Mean);
+        assert_eq!(
+            FittedTabularPreprocessor::fit(&rows, &forward, &options)
+                .unwrap()
+                .columns,
+            FittedTabularPreprocessor::fit(&rows, &shuffled, &options)
+                .unwrap()
+                .columns
+        );
+    }
+
+    #[test]
+    fn integer_and_integral_float_codes_share_a_category() {
+        let options = single_column(false, Imputation::Median);
+        let training = [0, 1, 2, 3];
+        let floats = [
+            json!({"code": 1.0}),
+            json!({"code": 3.0}),
+            json!({"code": 0.5}),
+            json!({"code": "3"}),
+        ];
+        let fitted = FittedTabularPreprocessor::fit(&floats, &training, &options).unwrap();
+        assert_eq!(fitted.format_version, FORMAT_VERSION);
+        let FittedColumn::Categorical { vocabulary, .. } = &fitted.columns[0] else {
+            panic!("Expected a categorical column");
+        };
+        assert_eq!(vocabulary, &["\"3\"", "0.5", "1", "3"]);
+        assert_eq!(hot_slot(&fitted, json!(3)), 5);
+        assert_eq!(hot_slot(&fitted, json!(3.0)), 5);
+        assert_eq!(hot_slot(&fitted, json!("3")), 2);
+        assert_eq!(hot_slot(&fitted, json!(0.5)), 3);
+        assert_eq!(hot_slot(&fitted, json!(2)), 1);
+        let integers = [
+            json!({"code": 1}),
+            json!({"code": 3}),
+            json!({"code": 0.5}),
+            json!({"code": "3"}),
+        ];
+        let refitted = FittedTabularPreprocessor::fit(&integers, &training, &options).unwrap();
+        assert_eq!(refitted.columns, fitted.columns);
+    }
+
+    fn legacy_codes(vocabulary: &[&str]) -> FittedTabularPreprocessor {
+        let mut output_features = vec!["code:missing".to_string(), "code:unknown".to_string()];
+        output_features.extend(vocabulary.iter().map(|value| format!("code:{value}")));
+        FittedTabularPreprocessor {
+            format_version: LEGACY_FORMAT_VERSION,
+            columns: vec![FittedColumn::Categorical {
+                name: "code".into(),
+                vocabulary: vocabulary.iter().map(|value| value.to_string()).collect(),
+            }],
+            output_features,
+            training_rows: 2,
+            training_digest: "0".repeat(64),
+        }
+    }
+
+    #[test]
+    fn legacy_manifests_match_the_other_spelling_of_an_integral_code() {
+        let legacy = legacy_codes(&["\"7\"", "-2", "1.0", "3.0"]);
+        let restored: FittedTabularPreprocessor =
+            serde_json::from_value(serde_json::to_value(&legacy).unwrap()).unwrap();
+        assert_eq!(hot_slot(&restored, json!(3.0)), 5);
+        assert_eq!(hot_slot(&restored, json!(3)), 5);
+        assert_eq!(hot_slot(&restored, json!(1)), 4);
+        assert_eq!(hot_slot(&restored, json!(-2.0)), 3);
+        assert_eq!(hot_slot(&restored, json!(-2)), 3);
+        assert_eq!(hot_slot(&restored, json!(7)), 1);
+        assert_eq!(hot_slot(&restored, json!(3.5)), 1);
+        assert_eq!(hot_slot(&restored, json!(1e300)), 1);
+        let both = legacy_codes(&["3", "3.0"]);
+        assert_eq!(hot_slot(&both, json!(3)), 2);
+        assert_eq!(hot_slot(&both, json!(3.0)), 3);
+        let unsupported = FittedTabularPreprocessor {
+            format_version: FORMAT_VERSION + 1,
+            ..legacy
+        };
+        assert!(unsupported.validate().is_err());
     }
 }

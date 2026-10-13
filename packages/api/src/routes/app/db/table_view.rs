@@ -3,7 +3,9 @@ use crate::{
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
-    routes::app::db::{ScopedPaginationParams, resolve_connection, validate_table_name},
+    routes::app::db::{
+        ScopedPaginationParams, column_reader, resolve_connection, validate_table_name,
+    },
     state::AppState,
 };
 use axum::{
@@ -54,7 +56,7 @@ pub async fn table_view(
     Query(params): Query<ScopedPaginationParams>,
     Query(selector): Query<DatabaseSelector>,
 ) -> Result<Json<TableViewResponse>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -71,7 +73,9 @@ pub async fn table_view(
 
     // Single connection reused for all 3 operations
     let connection = resolve_connection(&state, &user, &app_id, &params.scope_params()).await?;
-    let db = LanceDBVectorStore::from_connection_with_selector(connection, table, selector).await?;
+    let db = LanceDBVectorStore::from_connection_with_selector(connection, table, selector)
+        .await?
+        .with_column_reader(column_reader(&permission, &params.scope_params()));
 
     let schema = db.schema().await?;
     let count = db.count(None).await?;

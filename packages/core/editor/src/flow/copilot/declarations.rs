@@ -467,6 +467,11 @@ static DECLARATION_FILES: &[DeclarationFileSource] = &[
         content: include_str!("../../../../../ast/flow.d/index.flow.d"),
     },
     DeclarationFileSource {
+        path: "industrial.flow.d",
+        stem: "industrial",
+        content: include_str!("../../../../../ast/flow.d/industrial.flow.d"),
+    },
+    DeclarationFileSource {
         path: "logging.flow.d",
         stem: "logging",
         content: include_str!("../../../../../ast/flow.d/logging.flow.d"),
@@ -550,6 +555,11 @@ static DECLARATION_FILES: &[DeclarationFileSource] = &[
         path: "packages/index.flow.d",
         stem: "index",
         content: include_str!("../../../../../ast/flow.d/packages/index.flow.d"),
+    },
+    DeclarationFileSource {
+        path: "packages/industrial.flow.d",
+        stem: "industrial",
+        content: include_str!("../../../../../ast/flow.d/packages/industrial.flow.d"),
     },
     DeclarationFileSource {
         path: "packages/llm.flow.d",

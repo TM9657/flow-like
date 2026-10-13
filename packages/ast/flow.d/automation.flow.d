@@ -1683,7 +1683,7 @@ declare namespace computer {
     // === Automation/Computer/Agent ===
 
     /**
-     * Lets a vision model operate the desktop until a goal is reached: it looks at a screenshot (optionally with numbered accessibility marks), calls mouse and keyboard tools, waits for the screen to settle, checks the result and repeats. Works with any vision model that supports tool calling. Ends when the model reports done or asks the user, or when it is stuck or out of steps or time
+     * Operate the desktop toward a goal using a vision model with tool calling. An optional Decision Model selects routine actions from observed elements; the vision model handles complex interactions and confirms completion. Stops when done, when input is needed, or when stuck or out of steps or time
      * @node computer_use_agent @alias computerUseAgent
      * @param session — Computer session handle
      * @param model — Vision model with tool calling that operates the desktop
@@ -1697,15 +1697,16 @@ declare namespace computer {
      * @param settleMs (optional) — Longest wait after actions for the screen to stop changing before the next screenshot (0–10000)
      * @param forbiddenText (optional) — Regular expressions the agent may never type; a matching type call is refused
      * @param extraInstructions (optional) — Optional guidance added to the task, e.g. which app to use or what to avoid
+     * @param decisionModel (optional) — Optional SystemOne model from Find Decision Model or Load Bit. Chooses observed elements and routine actions from accessibility/OCR text. The vision model handles text entry, planning, verification and fallback. Leave empty for the vision model alone
      * @returns sessionOut — Computer session handle (pass-through)
      * @returns status — done, failed, stuck, max_steps, timeout or needs_input
      * @returns answer — The model's result or summary, the question for the user, or why the agent stopped
-     * @returns steps — Trajectory: per turn the screenshot seen, the model's text, each action with its arguments, desktop coordinates and result, and the duration
+     * @returns steps — Trajectory: per turn the screenshot seen, model text, action results, optional decision selection or fallback reason, and duration
      * @returns finalImage — The last screenshot, without marks
      * @returns finalFrame — Desktop rectangle and pixel size of the final screenshot
      * @impure has side effects / drives control flow
      */
-    function useAgent({ session: Struct, model: Struct, goal?: string, displayIndex?: int, targetWindow?: string, perception?: string, maxSteps?: int, maxDurationS?: int, maxActionsPerStep?: int, settleMs?: int, forbiddenText?: string[], extraInstructions?: string }): { sessionOut: Struct, status: string, answer: string, steps: Struct[], finalImage: Struct, finalFrame: Struct };
+    function useAgent({ session: Struct, model: Struct, goal?: string, displayIndex?: int, targetWindow?: string, perception?: string, maxSteps?: int, maxDurationS?: int, maxActionsPerStep?: int, settleMs?: int, forbiddenText?: string[], extraInstructions?: string, decisionModel?: Struct }): { sessionOut: Struct, status: string, answer: string, steps: Struct[], finalImage: Struct, finalFrame: Struct };
 
     // === Automation/Computer/Capture ===
 

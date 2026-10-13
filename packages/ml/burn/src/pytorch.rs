@@ -8,6 +8,17 @@ use std::{
 
 const MAX_PICKLE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRIES: usize = 100_000;
+/// Storage bytes all tensor reads together may touch, as a multiple of the import byte limit.
+const MAX_READ_AMPLIFICATION: u64 = 64;
+
+/// Legacy torch.save output: a raw pickle stream (PyTorch 0.1.10 to 1.5, or
+/// `_use_new_zipfile_serialization=False`) or a TAR archive (before 0.1.10). A SafeTensors
+/// file never matches, since its ninth byte opens the JSON header.
+pub(crate) fn is_legacy_checkpoint(bytes: &[u8]) -> bool {
+    let pickle = matches!(bytes, [0x80, 2..=5, ..]);
+    let tar = bytes.get(257..262) == Some(b"ustar".as_slice());
+    (pickle || tar) && bytes.get(8) != Some(&b'{')
+}
 
 /// Convert a modern torch.save ZIP archive into the explicit tensor format used by importers.
 /// The caller records the original checkpoint digest before conversion.
@@ -15,7 +26,7 @@ pub(crate) fn convert_pytorch_weights(
     bytes: &[u8],
     maximum_bytes: u64,
 ) -> Result<(Vec<u8>, String)> {
-    preflight_archive(bytes, maximum_bytes)?;
+    let largest_storage = preflight_archive(bytes, maximum_bytes)?;
     // The reader uses lazy file-backed tensors. Give it a private immutable snapshot of the
     // already hashed bytes, so reopening a caller's path cannot change the imported weights.
     let mut checkpoint = tempfile::NamedTempFile::new()?;
@@ -46,6 +57,15 @@ pub(crate) fn convert_pytorch_weights(
     }
     let reader = PytorchReader::new(checkpoint.path())
         .map_err(|error| Error::Record(format!("Invalid PyTorch weights: {error}")))?;
+    // Each real tensor is one torch.Tensor leaf and one uniquely named reader entry. A forged
+    // leaf passes the entry check above, and a real tensor elsewhere could supply its name.
+    let typed = tensor_typed_leaves(&metadata);
+    if typed != reader.len() {
+        return Err(Error::Invalid(format!(
+            "PyTorch checkpoint holds values typed torch.Tensor that are not tensors ({typed} typed, {} readable)",
+            reader.len()
+        )));
+    }
     let mut total = 0u64;
     let mut tensors = Vec::with_capacity(selected.len());
     let mut names = selected
@@ -56,6 +76,15 @@ pub(crate) fn convert_pytorch_weights(
         return Err(Error::Invalid(
             "PyTorch state dictionary contains no tensors".into(),
         ));
+    }
+    // A tensor reads only inside its own uncompressed storage entry, but views can share one
+    // large storage, so the bytes read are bounded by the largest entry per tensor.
+    let read_limit = maximum_bytes.saturating_mul(MAX_READ_AMPLIFICATION);
+    if (names.len() as u64).saturating_mul(largest_storage) > read_limit {
+        return Err(Error::Invalid(format!(
+            "PyTorch checkpoint has {} tensors over storages of up to {largest_storage} bytes, which may read more than the {read_limit} byte import read limit",
+            names.len()
+        )));
     }
     names.sort_unstable();
     for name in names {
@@ -118,6 +147,21 @@ pub(crate) fn convert_pytorch_weights(
     Ok((converted, format!("pytorch_zip:{selected}")))
 }
 
+/// Values typed torch.Tensor in the dicts and lists the reader collects tensors from.
+fn tensor_typed_leaves(root: &PickleValue) -> usize {
+    let mut pending = vec![root];
+    let mut count = 0;
+    while let Some(value) = pending.pop() {
+        match value {
+            PickleValue::Dict(entries) => pending.extend(entries.values()),
+            PickleValue::List(items) => pending.extend(items),
+            PickleValue::Unsupported(kind) if kind == "torch.Tensor" => count += 1,
+            _ => {}
+        }
+    }
+    count
+}
+
 fn validate_module_metadata(value: &PickleValue) -> Result<()> {
     let PickleValue::Dict(modules) = value else {
         return Err(Error::Invalid(
@@ -172,7 +216,8 @@ fn select_state_dict(
     Ok(("", root))
 }
 
-fn preflight_archive(bytes: &[u8], maximum_bytes: u64) -> Result<()> {
+/// Returns the size of the largest tensor storage entry.
+fn preflight_archive(bytes: &[u8], maximum_bytes: u64) -> Result<u64> {
     if bytes.len() as u64 > maximum_bytes {
         return Err(Error::Invalid(
             "PyTorch checkpoint exceeds the import byte limit".into(),
@@ -194,6 +239,7 @@ fn preflight_archive(bytes: &[u8], maximum_bytes: u64) -> Result<()> {
     let mut root = None::<String>;
     let mut pickle = false;
     let mut expanded = 0u64;
+    let mut largest_storage = 0u64;
     for index in 0..archive.len() {
         let entry = archive
             .by_index(index)
@@ -231,6 +277,16 @@ fn preflight_archive(bytes: &[u8], maximum_bytes: u64) -> Result<()> {
                     "Invalid PyTorch tensor storage entry".into(),
                 ));
             }
+            // torch.save never compresses storages; a compressed one would be inflated from its
+            // start again on every tensor read.
+            if entry.compression() != zip::CompressionMethod::Stored
+                || entry.compressed_size() != entry.size()
+            {
+                return Err(Error::Invalid(format!(
+                    "PyTorch tensor storage {name} must be stored uncompressed, as torch.save writes it"
+                )));
+            }
+            largest_storage = largest_storage.max(entry.size());
         } else if ![
             "byteorder",
             "version",
@@ -257,7 +313,7 @@ fn preflight_archive(bytes: &[u8], maximum_bytes: u64) -> Result<()> {
     if !pickle {
         return Err(Error::Invalid("PyTorch archive has no data.pkl".into()));
     }
-    Ok(())
+    Ok(largest_storage)
 }
 
 #[cfg(test)]
@@ -275,50 +331,83 @@ mod tests {
         pickle.extend(value.to_le_bytes());
     }
 
+    /// A one-dimensional float view into the storage saved as `data/0`.
+    fn view(
+        pickle: &mut Vec<u8>,
+        name: &str,
+        storage_elements: u32,
+        offset: u32,
+        elements: u32,
+        stride: u32,
+    ) {
+        string(pickle, name);
+        pickle.extend(b"ctorch._utils\n_rebuild_tensor_v2\n((");
+        string(pickle, "storage");
+        pickle.extend(b"ctorch\nFloatStorage\n");
+        string(pickle, "0");
+        string(pickle, "cpu");
+        integer(pickle, storage_elements);
+        pickle.extend([b't', b'Q']);
+        integer(pickle, offset);
+        pickle.push(b'(');
+        integer(pickle, elements);
+        pickle.extend([b't', b'(']);
+        integer(pickle, stride);
+        pickle.extend([b't', 0x89, b'}', b't', b'R']);
+    }
+
     fn fixture(section: &str, elements: u32, extra_value: bool) -> Vec<u8> {
         let mut pickle = vec![0x80, 2, b'}', b'('];
         for field in section.split('.').filter(|field| !field.is_empty()) {
             string(&mut pickle, field);
-            pickle.extend([b'}', b'(']);
+            pickle.extend(b"}(");
         }
-        string(&mut pickle, "linear.weight");
-        pickle.extend(b"ctorch._utils\n_rebuild_tensor_v2\n((");
-        string(&mut pickle, "storage");
-        pickle.extend(b"ctorch\nFloatStorage\n");
-        string(&mut pickle, "0");
-        string(&mut pickle, "cpu");
-        integer(&mut pickle, 1);
-        pickle.extend([b't', b'Q']);
-        integer(&mut pickle, 0);
-        pickle.push(b'(');
-        integer(&mut pickle, elements);
-        pickle.extend([b't', b'(']);
-        integer(&mut pickle, 0);
-        pickle.extend([b't', 0x89, b'}', b't', b'R']);
+        view(&mut pickle, "linear.weight", 1, 0, elements, 0);
         if extra_value {
             string(&mut pickle, "unexpected");
             integer(&mut pickle, 3);
         }
-        for _ in 0..=section.split('.').filter(|field| !field.is_empty()).count() {
-            pickle.push(b'u');
-        }
+        let depth = section.split('.').filter(|field| !field.is_empty()).count();
+        pickle.extend(std::iter::repeat_n(b'u', depth + 1));
         pickle.push(b'.');
-        archive(&pickle, None)
+        archive(&pickle, &3.5f32.to_le_bytes(), None, &[])
     }
 
-    fn archive(pickle: &[u8], extra: Option<(&str, &[u8])>) -> Vec<u8> {
+    fn shared_storage(views: u32, elements: u32) -> Vec<u8> {
+        let mut pickle = vec![0x80, 2, b'}', b'('];
+        for index in 0..views {
+            view(&mut pickle, &format!("view{index}"), elements, index, 1, 1);
+        }
+        pickle.extend(b"u.");
+        let storage = (0..elements)
+            .flat_map(|value| (value as f32).to_le_bytes())
+            .collect::<Vec<_>>();
+        archive(&pickle, &storage, None, &[])
+    }
+
+    /// Entries are stored uncompressed, as torch.save writes them, unless listed in `deflated`.
+    fn archive(
+        pickle: &[u8],
+        storage: &[u8],
+        extra: Option<(&str, &[u8])>,
+        deflated: &[&str],
+    ) -> Vec<u8> {
         let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
         for (name, data) in [
             ("weights/data.pkl", pickle),
-            ("weights/data/0", 3.5f32.to_le_bytes().as_slice()),
+            ("weights/data/0", storage),
             ("weights/version", b"3".as_slice()),
             ("weights/byteorder", b"little".as_slice()),
         ]
         .into_iter()
         .chain(extra)
         {
+            let method = if deflated.contains(&name) {
+                zip::CompressionMethod::Deflated
+            } else {
+                zip::CompressionMethod::Stored
+            };
+            let options = zip::write::SimpleFileOptions::default().compression_method(method);
             writer.start_file(name, options).unwrap();
             writer.write_all(data).unwrap();
         }
@@ -390,7 +479,17 @@ mod tests {
     #[test]
     fn rejects_compressed_storage_expansion_unknown_members_and_legacy_pickle() {
         let storage = vec![0u8; 1024 * 1024];
-        let bytes = archive(b"\x80\x02}.", Some(("weights/data/1", &storage)));
+        let bytes = archive(b"\x80\x02}.", &storage, None, &["weights/data/0"]);
+        assert!(bytes.len() < 4096);
+        assert!(
+            convert_pytorch_weights(&bytes, 4096)
+                .unwrap_err()
+                .to_string()
+                .contains("must be stored uncompressed")
+        );
+        let mut pickle = b"\x80\x02}.".to_vec();
+        pickle.resize(4090, 0);
+        let bytes = archive(&pickle, &[0; 4], None, &["weights/data.pkl"]);
         assert!(bytes.len() < 4096);
         assert!(
             convert_pytorch_weights(&bytes, 4096)
@@ -400,7 +499,9 @@ mod tests {
         );
         let bytes = archive(
             b"\x80\x02}.",
+            &[0; 4],
             Some(("weights/code.py", b"arbitrary payload")),
+            &[],
         );
         assert!(
             convert_pytorch_weights(&bytes, 4096)
@@ -409,6 +510,92 @@ mod tests {
                 .contains("Unrecognized PyTorch archive entry")
         );
         assert!(convert_pytorch_weights(b"\x80\x02}.", 4096).is_err());
+    }
+
+    #[test]
+    fn bounds_the_bytes_read_through_views_of_one_shared_storage() {
+        let limit = 128 * 1024;
+        let (bytes, _) = convert_pytorch_weights(&shared_storage(100, 16 * 1024), limit).unwrap();
+        let tensors = safetensors::SafeTensors::deserialize(&bytes).unwrap();
+        assert_eq!(tensors.len(), 100);
+        assert_eq!(
+            tensors.tensor("view99").unwrap().data(),
+            99f32.to_le_bytes()
+        );
+        assert!(
+            convert_pytorch_weights(&shared_storage(200, 16 * 1024), limit)
+                .unwrap_err()
+                .to_string()
+                .contains("import read limit")
+        );
+    }
+
+    #[test]
+    fn rejects_forged_tensor_leaves_whose_name_a_real_tensor_supplies() {
+        // {"model": {"linear.weight": forged}, "model.linear.weight": tensor}: the forged entry
+        // passes the per-entry check, and the import would read the tensor outside the dict.
+        for forged in [
+            b"ctorch\nTensor\n".as_slice(),
+            b"ctorch\nTensor\n)R".as_slice(),
+        ] {
+            let mut pickle = vec![0x80, 2, b'}', b'('];
+            string(&mut pickle, "model");
+            pickle.extend(b"}(");
+            string(&mut pickle, "linear.weight");
+            pickle.extend(forged);
+            pickle.push(b'u');
+            view(&mut pickle, "model.linear.weight", 1, 0, 2, 0);
+            pickle.extend(b"u.");
+            let bytes = archive(&pickle, &3.5f32.to_le_bytes(), None, &[]);
+            let error = convert_pytorch_weights(&bytes, 1024 * 1024).unwrap_err();
+            assert!(
+                error.to_string().contains("that are not tensors"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_checkpoints_get_a_resave_hint_and_safetensors_never_match() {
+        let pickle = b"\x80\x02\x8a\x0a\x6c\xfc\x9c\x46\xf9\x20\x6a\xa8\x50\x19";
+        let mut tar = vec![0u8; 1024];
+        tar[..8].copy_from_slice(b"sys_info");
+        tar[257..263].copy_from_slice(b"ustar\0");
+        // A 640-byte SafeTensors header length also starts with 0x80 0x02.
+        let header = format!(
+            "{:<640}",
+            r#"{"w":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}"#
+        );
+        let weights = [
+            640u64.to_le_bytes().as_slice(),
+            header.as_bytes(),
+            1f32.to_le_bytes().as_slice(),
+        ]
+        .concat();
+        safetensors::SafeTensors::deserialize(&weights).unwrap();
+        let metadata = crate::PretrainedWeightsMetadata {
+            source: "test fixture".into(),
+            license: None,
+            weights_license: None,
+            revision: None,
+            expected_sha256: None,
+        };
+        let import = |bytes: &[u8]| {
+            let mut checkpoint = tempfile::NamedTempFile::new().unwrap();
+            checkpoint.write_all(bytes).unwrap();
+            crate::pretrained::read_import_weights(checkpoint.path(), &metadata, 4096)
+        };
+        for legacy in [pickle.as_slice(), tar.as_slice()] {
+            assert!(is_legacy_checkpoint(legacy));
+            assert!(
+                import(legacy)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("Legacy PyTorch checkpoint format is not supported")
+            );
+        }
+        assert!(!is_legacy_checkpoint(&weights));
+        assert_eq!(import(&weights).unwrap().2, "safetensors_f32");
     }
 
     #[test]

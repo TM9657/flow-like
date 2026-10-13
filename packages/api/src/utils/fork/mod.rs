@@ -4479,7 +4479,10 @@ mod tests {
             "apps/src/storage/db/tables.lance/_versions/1.manifest",
             "apps/src/storage/db/tables.lance/_transactions/1-abc.txn",
             "apps/src/storage/db/tables.lance/_indices/idx/index.idx",
+            "apps/src/storage/models/artifacts/a/weights.bin",
             "apps/src/storage/notes.txt",
+            "apps/src/storage/inspection/jobs.sqlite",
+            "apps/src/storage/inspection/jobs.artifacts/x.blob",
         ];
         for path in sources {
             src.put(&Path::from(path), bytes::Bytes::from_static(b"x").into())
@@ -4487,13 +4490,15 @@ mod tests {
                 .expect("seed source object");
         }
 
+        // The default policy copies the data but never the legacy training ledger.
+        let skip = policy::storage_skip(&ForkPolicy::default());
         let tally = copy_object_prefix(
             &src,
             &dst,
             &Path::from("apps/src/storage"),
             &Path::from("apps/dst/storage"),
             "app storage",
-            None,
+            skip.as_deref(),
         )
         .await
         .expect("copy storage prefix");
@@ -4515,11 +4520,12 @@ mod tests {
                 "apps/dst/storage/db/tables.lance/_transactions/1-abc.txn".to_string(),
                 "apps/dst/storage/db/tables.lance/_versions/1.manifest".to_string(),
                 "apps/dst/storage/db/tables.lance/data/chunk.lance".to_string(),
+                "apps/dst/storage/models/artifacts/a/weights.bin".to_string(),
                 "apps/dst/storage/notes.txt".to_string(),
             ]
         );
-        assert_eq!(tally.objects, 5);
-        assert_eq!(tally.bytes, 5, "each seeded object is one byte");
+        assert_eq!(tally.objects, 6);
+        assert_eq!(tally.bytes, 6, "each seeded object is one byte");
     }
 
     /// The policy must never split a `{table}.lance/` directory: a table
@@ -4540,6 +4546,8 @@ mod tests {
             "apps/src/storage/db/tables.lance/_indices/idx/index.idx",
             "apps/src/storage/db/__graph_overlays__.lance/data/chunk.lance",
             "apps/src/storage/db/__graph_overlays__.lance/_versions/1.manifest",
+            "apps/src/storage/models/artifacts/a/weights.bin",
+            "apps/src/storage/inspection/jobs.sqlite-wal",
             "apps/src/storage/notes.txt",
             "apps/src/storage/node_scratch/out.json",
         ];
@@ -4583,7 +4591,7 @@ mod tests {
                 "apps/dst/storage/node_scratch/out.json".to_string(),
                 "apps/dst/storage/notes.txt".to_string(),
             ],
-            "user tables drop whole, reserved tables and flow scratch stay"
+            "user tables and published models drop whole, reserved tables and flow scratch stay"
         );
     }
 
@@ -4597,6 +4605,8 @@ mod tests {
         for path in [
             "apps/src/storage/db/tables.lance/data/chunk.lance",
             "apps/src/storage/db/__graph_overlays__.lance/data/chunk.lance",
+            "apps/src/storage/models/artifacts/a/weights.bin",
+            "apps/src/storage/inspection/.training-locks/a.lock",
             "apps/src/storage/notes.txt",
         ] {
             src.put(&Path::from(path), bytes::Bytes::from_static(b"x").into())

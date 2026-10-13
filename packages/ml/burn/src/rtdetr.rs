@@ -7,7 +7,7 @@ use crate::{
     rtdetr_backbone::{HybridEncoder, PResNet},
 };
 use burn::{
-    module::{Module, Param},
+    module::{Module, Param, ParamGroup},
     nn::{LayerNorm, Linear},
     tensor::{Device, Tensor, TensorData, activation::sigmoid},
 };
@@ -57,12 +57,14 @@ impl DetrPrediction {
             return Err(Error::Invalid("DETR box and logit shapes differ".into()));
         }
         let scores = sigmoid(self.logits)
-            .to_data()
+            .try_into_data()
+            .map_err(crate::execution::device_error)?
             .try_to_vec::<f32>()
             .map_err(|e| Error::Record(e.to_string()))?;
         let boxes = self
             .boxes
-            .to_data()
+            .try_into_data()
+            .map_err(crate::execution::device_error)?
             .try_to_vec::<f32>()
             .map_err(|e| Error::Record(e.to_string()))?;
         if scores.iter().chain(&boxes).any(|v| !v.is_finite()) {
@@ -270,6 +272,11 @@ impl RtdetrV2 {
         self = self.unfreeze();
         if freeze_backbone {
             self.backbone = self.backbone.freeze();
+        } else if self.config.backbone == RtdetrV2Backbone::ResNet50 {
+            // Upstream R50 recipe (freeze_at 0, freeze_norm): frozen stem and FrozenBatchNorm2d.
+            self.backbone = self
+                .backbone
+                .freeze_group(ParamGroup::from_any_predicates(vec!["stem.", ".norm."]));
         }
         self
     }
@@ -605,5 +612,84 @@ mod tests {
             .try_to_vec::<f32>()
             .unwrap();
         assert!(second_boxes.iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn resnet50_fine_tuning_keeps_the_upstream_frozen_stem_and_batch_norms() {
+        let _guard = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let device = crate::backend::device(&crate::BackendChoice::Cpu, true).unwrap();
+        let probes = [
+            "backbone.stem.0.conv.weight",
+            "backbone.stem.0.norm.gamma",
+            "backbone.stages.1.0.first.conv.weight",
+            "backbone.stages.1.0.first.norm.beta",
+        ];
+        for backbone in [RtdetrV2Backbone::ResNet50, RtdetrV2Backbone::ResNet18] {
+            let frozen = backbone == RtdetrV2Backbone::ResNet50;
+            let config = RtdetrV2Config {
+                backbone,
+                classes: 2,
+                queries: 4,
+            };
+            // Parameters stay lazy until probed, so the full backbone is never initialized here.
+            let model = RtdetrV2::new(&config, &device)
+                .unwrap()
+                .configure_fine_tuning(false);
+            let mut state = Trainability {
+                probes: &probes,
+                path: Vec::new(),
+                tensors: Vec::new(),
+                flags: Vec::new(),
+            };
+            model.visit(&mut state);
+            for (probe, trainable) in probes.iter().zip([!frozen, !frozen, true, !frozen]) {
+                let actual = state
+                    .tensors
+                    .iter()
+                    .find(|(path, _)| path == probe)
+                    .map(|(_, value)| *value);
+                assert_eq!(actual, Some(trainable), "{backbone:?} {probe}");
+            }
+            let flags = |prefix: &str| {
+                state
+                    .flags
+                    .iter()
+                    .filter(|(path, _)| path.starts_with(prefix))
+                    .map(|(_, enabled)| *enabled)
+                    .collect::<Vec<_>>()
+            };
+            let backbone_norms = flags("backbone.");
+            assert!(!backbone_norms.is_empty());
+            assert!(backbone_norms.iter().all(|enabled| *enabled != frozen));
+            let encoder_norms = flags("encoder.");
+            assert!(!encoder_norms.is_empty());
+            assert!(encoder_norms.iter().all(|enabled| *enabled));
+        }
+    }
+
+    struct Trainability<'a> {
+        probes: &'a [&'a str],
+        path: Vec<String>,
+        tensors: Vec<(String, bool)>,
+        flags: Vec<(String, bool)>,
+    }
+    impl burn::module::ModuleVisitor for Trainability<'_> {
+        fn enter_module(&mut self, name: &str, _container_type: &str) {
+            self.path.push(name.to_string());
+        }
+        fn exit_module(&mut self, _name: &str, _container_type: &str) {
+            self.path.pop();
+        }
+        fn visit_float<const D: usize>(&mut self, parameter: &Param<Tensor<D>>) {
+            let path = self.path.join(".");
+            if self.probes.contains(&path.as_str()) {
+                self.tensors.push((path, parameter.is_require_grad()));
+            }
+        }
+        fn visit_flag(&mut self, flag: &Param<burn::module::Flag>) {
+            self.flags.push((self.path.join("."), flag.is_enabled()));
+        }
     }
 }

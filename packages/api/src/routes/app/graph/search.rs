@@ -1,6 +1,10 @@
 use crate::{
-    ensure_any_permission, error::ApiError, middleware::jwt::AppUser,
-    permission::role_permission::RolePermissions, routes::app::db::ScopeParams, state::AppState,
+    ensure_any_permission,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    routes::app::db::{ScopeParams, column_reader},
+    state::AppState,
 };
 use axum::{
     Extension, Json,
@@ -49,7 +53,7 @@ pub async fn search_nodes(
     Query(scope): Query<ScopeParams>,
     Json(payload): Json<SearchNodesPayload>,
 ) -> Result<Json<Vec<SubgraphNode>>, ApiError> {
-    ensure_any_permission!(
+    let permission = ensure_any_permission!(
         user,
         &app_id,
         &state,
@@ -59,7 +63,13 @@ pub async fn search_nodes(
 
     let (connection, overlay) =
         super::load_scoped_overlay(&state, &user, &app_id, &overlay_id, &scope).await?;
-    let store = lancegraph::LanceGraphStore::new(connection, overlay, None).await?;
+    let store = lancegraph::LanceGraphStore::new_for(
+        connection,
+        overlay,
+        None,
+        column_reader(&permission, &scope),
+    )
+    .await?;
     let results = store.search_nodes(&payload.query, payload.limit).await?;
 
     Ok(Json(results))

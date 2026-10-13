@@ -11,11 +11,11 @@ enum PinType {
 
 message PinOptions {
   repeated string valid_values = 1;
-  double range_min = 2;
-  double range_max = 3;
-  double step = 4;
-  bool enforce_schema = 5;
-  bool enforce_generic_value_type = 6;
+  optional double range_min = 2;
+  optional double range_max = 3;
+  optional double step = 4;
+  optional bool enforce_schema = 5;
+  optional bool enforce_generic_value_type = 6;
   optional bool sensitive = 7;
   optional bool optional = 8;
 }

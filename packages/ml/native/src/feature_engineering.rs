@@ -3,6 +3,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet, VecDeque},
     time::Instant,
 };
@@ -237,6 +238,8 @@ pub struct FeatureStream {
     state: FeatureStreamState,
     lookups: BTreeMap<usize, JoinLookup>,
     usage: (usize, usize, usize),
+    /// Eviction order of window groups: last timestamp, then step index, then key.
+    recency: BTreeSet<(i64, usize, String)>,
     join_bytes: usize,
 }
 enum JoinLookup {
@@ -316,7 +319,37 @@ fn timestamp(row: &Value, column: &str) -> Result<i64> {
         .as_i64()
         .ok_or_else(|| invalid(format!("Timestamp '{column}' must be integer milliseconds")))
 }
-fn key(row: &Value, columns: &[&str], allow_null: bool) -> Result<Option<String>> {
+/// Version 1 keyed joins and window groups by raw JSON text, so 17 and 17.0 never matched; its
+/// models were trained on that and keep it.
+const LEGACY_FORMAT_VERSION: u32 = 1;
+const FORMAT_VERSION: u32 = 2;
+
+/// Integral floats within ±2^53 key as integers, so 17 and 17.0 join and group together.
+fn key_part(value: &Value) -> Cow<'_, Value> {
+    let exact = 2f64.powi(53);
+    match value.as_f64() {
+        Some(number) if value.is_f64() && number.fract() == 0. && number.abs() <= exact => {
+            Cow::Owned(Value::from(number as i64))
+        }
+        _ => Cow::Borrowed(value),
+    }
+}
+fn key_text<'a>(values: impl IntoIterator<Item = &'a Value>, canonical: bool) -> Result<String> {
+    let parts: Vec<_> = values
+        .into_iter()
+        .map(|value| {
+            if canonical {
+                key_part(value)
+            } else {
+                Cow::Borrowed(value)
+            }
+        })
+        .collect();
+    let key = serde_json::to_string(&parts)?;
+    require(key.len() <= 4096, "Join/group key exceeds 4096 bytes")?;
+    Ok(key)
+}
+fn key(row: &Value, columns: &[&str], allow_null: bool, canonical: bool) -> Result<Option<String>> {
     let mut values = Vec::new();
     for column in columns {
         let value = cell(row, column)?;
@@ -329,9 +362,7 @@ fn key(row: &Value, columns: &[&str], allow_null: bool) -> Result<Option<String>
         )?;
         values.push(value);
     }
-    let key = serde_json::to_string(&values)?;
-    require(key.len() <= 4096, "Join/group key exceeds 4096 bytes")?;
-    Ok(Some(key))
+    key_text(values, canonical).map(Some)
 }
 fn insert(row: &mut Value, column: &str, value: Value) -> Result<()> {
     let object = row
@@ -688,14 +719,14 @@ impl FeaturePipeline {
                     Ok(projected)
                 })
                 .collect::<Result<Vec<_>>>()?;
-            build_lookup(step, &projected)?;
+            build_lookup(step, &projected, true)?;
             joins.push(FittedJoinSource {
                 step_index,
                 rows: projected,
             });
         }
         let fitted = FittedFeaturePipeline {
-            format_version: 1,
+            format_version: FORMAT_VERSION,
             pipeline: self.clone(),
             policy: policy.clone(),
             limits: limits.clone(),
@@ -765,7 +796,13 @@ fn evaluate(expression: &Expression, row: &Value) -> Result<Option<f64>> {
                     }
                     left / right
                 }
-                BinaryOperator::Power => left.powf(right),
+                BinaryOperator::Power => {
+                    let value = left.powf(right);
+                    if value.is_nan() || (left == 0. && right < 0.) {
+                        return Ok(None);
+                    }
+                    value
+                }
                 BinaryOperator::Minimum => left.min(right),
                 BinaryOperator::Maximum => left.max(right),
                 BinaryOperator::Greater => f64::from(u8::from(left > right)),
@@ -777,7 +814,7 @@ fn evaluate(expression: &Expression, row: &Value) -> Result<Option<f64>> {
         }
     }
 }
-fn build_lookup(step: &FeatureStep, rows: &[Value]) -> Result<JoinLookup> {
+fn build_lookup(step: &FeatureStep, rows: &[Value], canonical: bool) -> Result<JoinLookup> {
     let FeatureStep::JoinSources { keys, join, .. } = step else {
         return Err(invalid("Lookup is attached to a non-join step"));
     };
@@ -786,7 +823,7 @@ fn build_lookup(step: &FeatureStep, rows: &[Value]) -> Result<JoinLookup> {
         JoinKind::Exact => {
             let mut lookup = BTreeMap::new();
             for (index, row) in rows.iter().enumerate() {
-                let key = key(row, &columns, false)?.unwrap();
+                let key = key(row, &columns, false, canonical)?.unwrap();
                 require(
                     lookup.insert(key, index).is_none(),
                     "Exact join source has duplicate keys; row multiplication is forbidden",
@@ -801,7 +838,7 @@ fn build_lookup(step: &FeatureStep, rows: &[Value]) -> Result<JoinLookup> {
         } => {
             let mut lookup: BTreeMap<String, Vec<_>> = BTreeMap::new();
             for (index, row) in rows.iter().enumerate() {
-                let key = key(row, &columns, false)?.unwrap();
+                let key = key(row, &columns, false, canonical)?.unwrap();
                 let time = timestamp(row, right_timestamp)?;
                 let available = right_available_at
                     .as_ref()
@@ -876,11 +913,13 @@ fn window_row(
     timestamp_column: &str,
     features: &[WindowFeature],
     previous: Option<&WindowGroup>,
+    canonical: bool,
 ) -> Result<(String, WindowGroup)> {
     let group_key = key(
         row,
         &group_by.iter().map(String::as_str).collect::<Vec<_>>(),
         false,
+        canonical,
     )?
     .unwrap();
     let now = timestamp(row, timestamp_column)?;
@@ -1029,37 +1068,33 @@ fn add_usage(total: &mut (usize, usize, usize), amount: (usize, usize, usize)) -
         .ok_or_else(|| invalid("Window state size overflow"))?;
     Ok(())
 }
+fn release_usage(total: &mut (usize, usize, usize), amount: (usize, usize, usize)) {
+    total.0 -= amount.0;
+    total.1 -= amount.1;
+    total.2 -= amount.2;
+}
+fn usage_fits(usage: (usize, usize, usize), limits: &FeatureLimits) -> bool {
+    usage.0 <= limits.maximum_groups
+        && usage.1 <= limits.maximum_history_rows
+        && usage.2 <= limits.maximum_bytes
+}
 fn check_usage(usage: (usize, usize, usize), limits: &FeatureLimits) -> Result<()> {
     require(
-        usage.0 <= limits.maximum_groups
-            && usage.1 <= limits.maximum_history_rows
-            && usage.2 <= limits.maximum_bytes,
+        usage_fits(usage, limits),
         "Window state exceeds group, history or byte budget; shorten the window or increase the declared budget",
     )
 }
-fn check_capacity(joins: usize, state: usize, output: usize, limits: &FeatureLimits) -> Result<()> {
-    let total = joins
+fn capacity_fits(joins: usize, state: usize, output: usize, limits: &FeatureLimits) -> bool {
+    joins
         .checked_add(state)
-        .and_then(|sum| sum.checked_add(output));
+        .and_then(|sum| sum.checked_add(output))
+        .is_some_and(|total| total <= limits.maximum_bytes)
+}
+fn check_capacity(joins: usize, state: usize, output: usize, limits: &FeatureLimits) -> Result<()> {
     require(
-        total.is_some_and(|total| total <= limits.maximum_bytes),
+        capacity_fits(joins, state, output, limits),
         "Fitted joins, window state and transformed rows exceed the shared byte budget",
     )
-}
-fn replace_group_usage(
-    mut usage: (usize, usize, usize),
-    key: &str,
-    previous: Option<&WindowGroup>,
-    next: (usize, usize, usize),
-) -> Result<(usize, usize, usize)> {
-    if let Some(previous) = previous {
-        let old = group_usage(key, previous);
-        usage.0 -= old.0;
-        usage.1 -= old.1;
-        usage.2 -= old.2;
-    }
-    add_usage(&mut usage, next)?;
-    Ok(usage)
 }
 fn next_window_usage(
     key: &str,
@@ -1128,6 +1163,9 @@ fn row_bounds(row: &Value, limits: &FeatureLimits) -> Result<usize> {
 }
 
 impl FittedFeaturePipeline {
+    fn canonical_keys(&self) -> bool {
+        self.format_version != LEGACY_FORMAT_VERSION
+    }
     fn join_storage_bytes(&self) -> Result<usize> {
         let mut bytes = 0usize;
         for source in &self.joins {
@@ -1141,7 +1179,9 @@ impl FittedFeaturePipeline {
                 .collect::<Vec<_>>();
             for row in &source.rows {
                 let row_size = serialized_bytes(row)?;
-                let key_size = key(row, &keys, false)?.unwrap().len();
+                let key_size = key(row, &keys, false, self.canonical_keys())?
+                    .unwrap()
+                    .len();
                 bytes = bytes
                     .checked_add(row_size)
                     .and_then(|bytes| bytes.checked_add(key_size + 64))
@@ -1170,7 +1210,7 @@ impl FittedFeaturePipeline {
     }
     pub fn validate(&self) -> Result<()> {
         require(
-            self.format_version == 1,
+            matches!(self.format_version, LEGACY_FORMAT_VERSION | FORMAT_VERSION),
             "Unknown fitted feature pipeline version",
         )?;
         self.pipeline.validate(&self.policy, &self.limits)?;
@@ -1240,7 +1280,7 @@ impl FittedFeaturePipeline {
                 rows <= self.limits.maximum_join_rows && bytes <= self.limits.maximum_bytes,
                 "Fitted join exceeds row or byte limits",
             )?;
-            build_lookup(step, &joined.rows)?;
+            build_lookup(step, &joined.rows, self.canonical_keys())?;
         }
         require(
             found.len()
@@ -1285,6 +1325,7 @@ impl FittedFeaturePipeline {
         )?;
         let mut seen = BTreeSet::new();
         let mut usage = (0, 0, 0);
+        let mut recency = BTreeSet::new();
         for window in &state.windows {
             require(
                 seen.insert(window.step_index),
@@ -1308,7 +1349,7 @@ impl FittedFeaturePipeline {
                 let keys: Vec<Value> = serde_json::from_str(group_key)?;
                 require(
                     keys.len() == group_by.len()
-                        && serde_json::to_string(&keys)? == *group_key
+                        && key_text(&keys, self.canonical_keys())? == *group_key
                         && keys
                             .iter()
                             .all(|key| key.is_string() || key.is_number() || key.is_boolean()),
@@ -1331,6 +1372,11 @@ impl FittedFeaturePipeline {
                 add_usage(&mut usage, group_usage(group_key, group))?;
                 check_usage(usage, &self.limits)?;
                 check_capacity(join_bytes, usage.2, 0, &self.limits)?;
+                recency.insert((
+                    group.last_timestamp_ms,
+                    window.step_index,
+                    group_key.clone(),
+                ));
             }
         }
         require(
@@ -1347,9 +1393,10 @@ impl FittedFeaturePipeline {
             .joins
             .iter()
             .map(|joined| {
+                let step = &self.pipeline.steps[joined.step_index];
                 Ok((
                     joined.step_index,
-                    build_lookup(&self.pipeline.steps[joined.step_index], &joined.rows)?,
+                    build_lookup(step, &joined.rows, self.canonical_keys())?,
                 ))
             })
             .collect::<Result<_>>()?;
@@ -1358,10 +1405,20 @@ impl FittedFeaturePipeline {
             state,
             lookups,
             usage,
+            recency,
             join_bytes,
         })
     }
     pub fn transform_rows(&self, rows: &[Value]) -> Result<Vec<Value>> {
+        self.transform_table(rows, false)
+    }
+    /// `transform_rows` for training data: fails when a join step finds no source row for any
+    /// row, as a key type mismatch (17 against "17") or misaligned timestamps cause, instead of
+    /// training on joined columns that are null throughout.
+    pub fn transform_training_rows(&self, rows: &[Value]) -> Result<Vec<Value>> {
+        self.transform_table(rows, true)
+    }
+    fn transform_table(&self, rows: &[Value], require_join_matches: bool) -> Result<Vec<Value>> {
         let deadline = Deadline::new(&self.limits);
         require(
             rows.len() <= self.limits.maximum_rows,
@@ -1392,6 +1449,7 @@ impl FittedFeaturePipeline {
                     .collect::<Result<Vec<_>>>()?;
                 order.sort_by_key(|position| (times[*position], *position));
             }
+            let mut matches = JoinMatches::default();
             for position in order {
                 deadline.check()?;
                 let previous_bytes = serialized_bytes(&result[position])?;
@@ -1399,21 +1457,112 @@ impl FittedFeaturePipeline {
                     index,
                     &mut result[position],
                     &deadline,
-                    stream.usage,
+                    (0, 0, 0),
                     bytes,
+                    Some(&mut matches),
                 )?;
                 bytes = bytes
                     .checked_sub(previous_bytes)
                     .and_then(|value| value.checked_add(serialized_bytes(&result[position]).ok()?))
                     .ok_or_else(|| invalid("Transformed table byte count overflow"))?;
                 if let Some(update) = update {
-                    stream.commit_updates(vec![update], bytes)?;
+                    stream.commit_updates(vec![update], bytes, false)?;
                 }
                 check_capacity(stream.join_bytes, stream.usage.2, bytes, &self.limits)?;
                 row_bounds(&result[position], &self.limits)?;
             }
+            if require_join_matches && matches.rows > 0 && matches.matched == 0 {
+                return Err(self.unmatched_join(index, &matches, &result));
+            }
         }
         Ok(result)
+    }
+    fn unmatched_join(&self, index: usize, matches: &JoinMatches, rows: &[Value]) -> Error {
+        let FeatureStep::JoinSources {
+            alias, keys, join, ..
+        } = &self.pipeline.steps[index]
+        else {
+            return invalid("Join match count is attached to a non-join step");
+        };
+        let source_rows = self
+            .joins
+            .iter()
+            .find(|joined| joined.step_index == index)
+            .map_or(&[][..], |joined| joined.rows.as_slice());
+        let pairs = keys
+            .iter()
+            .map(|key| {
+                format!(
+                    "{} ({}) = {} ({})",
+                    key.left,
+                    value_kinds(rows, &key.left),
+                    key.right,
+                    value_kinds(source_rows, &key.right)
+                )
+            })
+            .collect::<Vec<_>>();
+        let timing = match join {
+            JoinKind::Exact => String::new(),
+            JoinKind::BackwardAsOf { left_timestamp, .. } => format!(
+                ", and as-of source rows must be available by each row's {left_timestamp} within \
+                 the tolerance"
+            ),
+        };
+        invalid(format!(
+            "Join '{alias}' matched none of {} rows ({} with a key) on {}; key columns must hold \
+             the same type, since 17 never matches \"17\"{timing}",
+            matches.rows,
+            matches.keyed,
+            if pairs.is_empty() {
+                "timestamps alone".to_string()
+            } else {
+                pairs.join(", ")
+            }
+        ))
+    }
+}
+
+#[derive(Default)]
+struct JoinMatches {
+    rows: usize,
+    keyed: usize,
+    matched: usize,
+}
+
+/// The JSON kinds `column` holds across `rows`, for error messages.
+fn value_kinds(rows: &[Value], column: &str) -> String {
+    let kinds: BTreeSet<&str> = rows
+        .iter()
+        .filter_map(|row| row.get(column))
+        .map(|value| match value {
+            Value::Null => "null",
+            Value::Bool(_) => "boolean",
+            Value::Number(_) => "number",
+            Value::String(_) => "string",
+            Value::Array(_) | Value::Object(_) => "nested",
+        })
+        .collect();
+    if kinds.is_empty() {
+        "absent".into()
+    } else {
+        kinds.into_iter().collect::<Vec<_>>().join("/")
+    }
+}
+
+impl FeatureStreamState {
+    fn groups(&self, step_index: usize) -> Result<&BTreeMap<String, WindowGroup>> {
+        self.windows
+            .iter()
+            .find(|window| window.step_index == step_index)
+            .map(|window| &window.groups)
+            .ok_or_else(|| invalid("Missing window state"))
+    }
+    fn groups_mut(&mut self, step_index: usize) -> Result<&mut BTreeMap<String, WindowGroup>> {
+        self.windows
+            .iter_mut()
+            .find(|window| window.step_index == step_index)
+            .map(|window| &mut window.groups)
+            .ok_or_else(|| invalid("Missing window state"))
     }
 }
 
@@ -1424,77 +1573,91 @@ impl FeatureStream {
     pub fn transform_row(&mut self, row: &Value) -> Result<Value> {
         let deadline = Deadline::new(&self.fitted.limits);
         let mut bytes = self.fitted.input_row_bounds(row)?;
-        check_capacity(self.join_bytes, self.usage.2, bytes, &self.fitted.limits)?;
+        check_capacity(self.join_bytes, 0, bytes, &self.fitted.limits)?;
         let mut result = row.clone();
         let mut pending = Vec::new();
-        let mut usage = self.usage;
+        let mut pinned = (0, 0, 0);
         for index in 0..self.fitted.pipeline.steps.len() {
             deadline.check()?;
-            if let Some(update) = self.apply_step(index, &mut result, &deadline, usage, bytes)? {
-                let previous = self
-                    .state
-                    .windows
-                    .iter()
-                    .find(|window| window.step_index == index)
-                    .and_then(|window| window.groups.get(&update.1));
-                usage = replace_group_usage(
-                    usage,
-                    &update.1,
-                    previous,
-                    group_usage(&update.1, &update.2),
-                )?;
+            let update = self.apply_step(index, &mut result, &deadline, pinned, bytes, None)?;
+            if let Some(update) = update {
+                add_usage(&mut pinned, group_usage(&update.1, &update.2))?;
                 pending.push(update);
             }
             bytes = row_bounds(&result, &self.fitted.limits)?;
-            check_capacity(self.join_bytes, usage.2, bytes, &self.fitted.limits)?;
+            check_capacity(self.join_bytes, pinned.2, bytes, &self.fitted.limits)?;
         }
         deadline.check()?;
-        self.commit_updates(pending, bytes)?;
+        self.commit_updates(pending, bytes, true)?;
         Ok(result)
     }
+    /// With `evict`, groups that `pending` leaves untouched are dropped oldest last timestamp first
+    /// until the state fits its budget, so a returning group restarts with empty history.
     fn commit_updates(
         &mut self,
         pending: Vec<(usize, String, WindowGroup)>,
         output_bytes: usize,
+        evict: bool,
     ) -> Result<()> {
+        let limits = &self.fitted.limits;
         let mut usage = self.usage;
         for (index, key, group) in &pending {
-            let window = self
-                .state
-                .windows
-                .iter()
-                .find(|window| window.step_index == *index)
-                .ok_or_else(|| invalid("Missing window state"))?;
-            if let Some(previous) = window.groups.get(key) {
-                let old = group_usage(key, previous);
-                usage.0 -= old.0;
-                usage.1 -= old.1;
-                usage.2 -= old.2;
+            if let Some(previous) = self.state.groups(*index)?.get(key) {
+                release_usage(&mut usage, group_usage(key, previous));
             }
             add_usage(&mut usage, group_usage(key, group))?;
-            check_usage(usage, &self.fitted.limits)?;
         }
-        check_capacity(self.join_bytes, usage.2, output_bytes, &self.fitted.limits)?;
+        let mut evicted = Vec::new();
+        if evict {
+            let touched: BTreeSet<_> = pending
+                .iter()
+                .map(|(index, key, _)| (*index, key.as_str()))
+                .collect();
+            for entry in &self.recency {
+                if usage_fits(usage, limits)
+                    && capacity_fits(self.join_bytes, usage.2, output_bytes, limits)
+                {
+                    break;
+                }
+                let (_, index, key) = entry;
+                if touched.contains(&(*index, key.as_str())) {
+                    continue;
+                }
+                if let Some(group) = self.state.groups(*index)?.get(key) {
+                    release_usage(&mut usage, group_usage(key, group));
+                    evicted.push(entry.clone());
+                }
+            }
+        }
+        check_usage(usage, limits)?;
+        check_capacity(self.join_bytes, usage.2, output_bytes, limits)?;
+        for entry in evicted {
+            self.state.groups_mut(entry.1)?.remove(&entry.2);
+            self.recency.remove(&entry);
+        }
         for (index, key, group) in pending {
-            self.state
-                .windows
-                .iter_mut()
-                .find(|window| window.step_index == index)
-                .unwrap()
-                .groups
-                .insert(key, group);
+            let time = group.last_timestamp_ms;
+            if let Some(previous) = self.state.groups_mut(index)?.insert(key.clone(), group) {
+                let stale = (previous.last_timestamp_ms, index, key.clone());
+                self.recency.remove(&stale);
+            }
+            self.recency.insert((time, index, key));
         }
         self.usage = usage;
         Ok(())
     }
+    /// `pinned` is the usage of this row's earlier window updates, which eviction cannot reclaim.
+    /// A join step counts the row into `matches`.
     fn apply_step(
         &self,
         index: usize,
         row: &mut Value,
         deadline: &Deadline,
-        usage: (usize, usize, usize),
+        pinned: (usize, usize, usize),
         output_bytes: usize,
+        matches: Option<&mut JoinMatches>,
     ) -> Result<Option<(usize, String, WindowGroup)>> {
+        let canonical = self.fitted.canonical_keys();
         match &self.fitted.pipeline.steps[index] {
             FeatureStep::DeriveColumns { columns } => {
                 for column in columns {
@@ -1511,17 +1674,14 @@ impl FeatureStream {
                     row,
                     &group_by.iter().map(String::as_str).collect::<Vec<_>>(),
                     false,
+                    canonical,
                 )?
                 .unwrap();
-                let previous = self
-                    .state
-                    .windows
-                    .iter()
-                    .find(|window| window.step_index == index)
-                    .and_then(|window| window.groups.get(&key));
+                let previous = self.state.groups(index)?.get(&key);
                 let next =
                     next_window_usage(&key, timestamp(row, timestamp_column)?, features, previous)?;
-                let projected = replace_group_usage(usage, &key, previous, next)?;
+                let mut projected = pinned;
+                add_usage(&mut projected, next)?;
                 check_usage(projected, &self.fitted.limits)?;
                 check_capacity(
                     self.join_bytes,
@@ -1529,7 +1689,14 @@ impl FeatureStream {
                     output_bytes,
                     &self.fitted.limits,
                 )?;
-                let (key, group) = window_row(row, group_by, timestamp_column, features, previous)?;
+                let (key, group) = window_row(
+                    row,
+                    group_by,
+                    timestamp_column,
+                    features,
+                    previous,
+                    canonical,
+                )?;
                 return Ok(Some((index, key, group)));
             }
             FeatureStep::JoinSources {
@@ -1543,7 +1710,9 @@ impl FeatureStream {
                     row,
                     &keys.iter().map(|key| key.left.as_str()).collect::<Vec<_>>(),
                     true,
+                    canonical,
                 )?;
+                let keyed = key.is_some();
                 let selected = match (&self.lookups[&index], join, key) {
                     (JoinLookup::Exact(lookup), JoinKind::Exact, Some(key)) => {
                         lookup.get(&key).copied()
@@ -1581,6 +1750,11 @@ impl FeatureStream {
                     (_, _, None) => None,
                     _ => return Err(invalid("Fitted join lookup type differs from its step")),
                 };
+                if let Some(matches) = matches {
+                    matches.rows += 1;
+                    matches.keyed += usize::from(keyed);
+                    matches.matched += usize::from(selected.is_some());
+                }
                 if selected.is_none() && *missing == MissingJoin::Error {
                     return Err(invalid("Join has no permitted matching source row"));
                 }
@@ -1681,6 +1855,23 @@ mod tests {
                 },
             ],
         }
+    }
+    fn lag_pipeline() -> FeaturePipeline {
+        FeaturePipeline {
+            steps: vec![FeatureStep::WindowFeatures {
+                group_by: vec!["device".into()],
+                timestamp_column: "time".into(),
+                features: vec![WindowFeature {
+                    name: "lag".into(),
+                    column: "x".into(),
+                    operation: WindowOperation::Lag { steps: 1 },
+                }],
+            }],
+        }
+    }
+    fn group_keys(stream: &FeatureStream, window: usize) -> Vec<String> {
+        let state = stream.state();
+        state.windows[window].groups.keys().cloned().collect()
     }
     #[test]
     fn causal_batch_and_resumed_stream_match_without_future_or_group_leakage() {
@@ -1823,12 +2014,6 @@ mod tests {
                 .is_err()
         );
         assert_eq!(stream.state(), initial);
-        assert!(
-            stream
-                .transform_row(&json!({"device":"b","time":2,"x":0.}))
-                .is_err()
-        );
-        assert_eq!(stream.state(), initial);
         stream
             .transform_row(&json!({"device":"a","time":2,"x":1.}))
             .unwrap();
@@ -1839,6 +2024,11 @@ mod tests {
                 .is_err()
         );
         assert_eq!(stream.state(), state);
+        let replaced = stream
+            .transform_row(&json!({"device":"b","time":3,"x":4.}))
+            .unwrap();
+        assert_eq!(replaced["history_mean"], 4.);
+        assert_eq!(group_keys(&stream, 0), ["[\"b\"]"]);
         let mut corrupt = state;
         corrupt.pipeline_digest = "other".into();
         assert!(fitted.stream_with_state(corrupt).is_err());
@@ -2065,5 +2255,472 @@ mod tests {
         }
         repeated.steps.push(next);
         assert!(repeated.fit(&sources, &policy, &limits).is_err());
+    }
+    #[test]
+    fn stream_evicts_least_recent_window_groups_at_capacity() {
+        let rows = [
+            json!({"device":"a","time":1,"x":1.}),
+            json!({"device":"b","time":2,"x":2.}),
+            json!({"device":"a","time":3,"x":3.}),
+            json!({"device":"c","time":4,"x":4.}),
+            json!({"device":"b","time":5,"x":5.}),
+            json!({"device":"c","time":6,"x":6.}),
+        ];
+        let pipeline = lag_pipeline();
+        for limits in [
+            FeatureLimits {
+                maximum_groups: 2,
+                ..FeatureLimits::default()
+            },
+            FeatureLimits {
+                maximum_history_rows: 2,
+                ..FeatureLimits::default()
+            },
+        ] {
+            let fitted = pipeline.fit(&BTreeMap::new(), &policy(), &limits).unwrap();
+            let mut stream = fitted.stream().unwrap();
+            let lags: Vec<_> = rows
+                .iter()
+                .map(|row| stream.transform_row(row).unwrap()["lag"].as_f64())
+                .collect();
+            assert_eq!(lags, [None, None, Some(1.), None, None, Some(4.)]);
+            assert_eq!(group_keys(&stream, 0), ["[\"b\"]", "[\"c\"]"]);
+            let state: FeatureStreamState =
+                serde_json::from_slice(&serde_json::to_vec(&stream.state()).unwrap()).unwrap();
+            let mut resumed = fitted.stream_with_state(state).unwrap();
+            let returning = resumed
+                .transform_row(&json!({"device":"a","time":7,"x":7.}))
+                .unwrap();
+            assert!(returning["lag"].is_null());
+            assert_eq!(group_keys(&resumed, 0), ["[\"a\"]", "[\"c\"]"]);
+            assert!(fitted.transform_rows(&rows).is_err());
+        }
+
+        let limits = FeatureLimits {
+            maximum_groups: 2,
+            ..FeatureLimits::default()
+        };
+        let fitted = pipeline.fit(&BTreeMap::new(), &policy(), &limits).unwrap();
+        let mut stream = fitted.stream().unwrap();
+        for row in [
+            json!({"device":"b","time":1,"x":1.}),
+            json!({"device":"a","time":1,"x":1.}),
+            json!({"device":"c","time":2,"x":2.}),
+        ] {
+            stream.transform_row(&row).unwrap();
+        }
+        assert_eq!(group_keys(&stream, 0), ["[\"b\"]", "[\"c\"]"]);
+
+        let mut twice = pipeline;
+        let mut second = twice.steps[0].clone();
+        if let FeatureStep::WindowFeatures { features, .. } = &mut second {
+            features[0].name = "second_lag".into();
+        }
+        twice.steps.push(second);
+        let fitted = twice.fit(&BTreeMap::new(), &policy(), &limits).unwrap();
+        let mut stream = fitted.stream().unwrap();
+        for row in [
+            json!({"device":"a","time":1,"x":1.}),
+            json!({"device":"b","time":2,"x":2.}),
+        ] {
+            stream.transform_row(&row).unwrap();
+        }
+        let returning = stream
+            .transform_row(&json!({"device":"a","time":3,"x":3.}))
+            .unwrap();
+        assert!(returning["lag"].is_null() && returning["second_lag"].is_null());
+        assert_eq!(group_keys(&stream, 0), ["[\"a\"]"]);
+        assert_eq!(group_keys(&stream, 1), ["[\"a\"]"]);
+        let limits = FeatureLimits {
+            maximum_groups: 1,
+            ..FeatureLimits::default()
+        };
+        let fitted = twice.fit(&BTreeMap::new(), &policy(), &limits).unwrap();
+        let mut stream = fitted.stream().unwrap();
+        let empty = stream.state();
+        assert!(
+            stream
+                .transform_row(&json!({"device":"a","time":1,"x":1.}))
+                .is_err()
+        );
+        assert_eq!(stream.state(), empty);
+    }
+    #[test]
+    fn stream_evicts_window_groups_to_fit_the_shared_byte_budget() {
+        let limits = FeatureLimits {
+            maximum_bytes: 1024,
+            ..FeatureLimits::default()
+        };
+        let rows: Vec<_> = (0..10)
+            .map(|i| json!({"device": format!("d{i}"), "time": i + 1, "x": i as f64}))
+            .collect();
+        let mut policy = policy();
+        policy
+            .allowed_sources
+            .insert("side".into(), vec!["device".into(), "note".into()]);
+        let mut joined = lag_pipeline();
+        joined.steps.insert(
+            0,
+            FeatureStep::JoinSources {
+                alias: "side".into(),
+                keys: vec![JoinKey {
+                    left: "device".into(),
+                    right: "device".into(),
+                }],
+                join: JoinKind::Exact,
+                columns: vec![JoinColumn {
+                    source: "note".into(),
+                    name: "note".into(),
+                }],
+                missing: MissingJoin::Null,
+            },
+        );
+        let side = BTreeMap::from([(
+            "side".into(),
+            vec![json!({"device":"zz","note":"y".repeat(300)})],
+        )]);
+        let mut kept_counts = Vec::new();
+        for (pipeline, sources) in [(lag_pipeline(), BTreeMap::new()), (joined, side)] {
+            let fitted = pipeline.fit(&sources, &policy, &limits).unwrap();
+            let mut stream = fitted.stream().unwrap();
+            for row in &rows {
+                let output = stream.transform_row(row).unwrap();
+                let total = stream.join_bytes + stream.usage.2 + serialized_bytes(&output).unwrap();
+                assert!(total <= limits.maximum_bytes, "{total}");
+            }
+            let kept = group_keys(&stream, 0);
+            assert!(!kept.is_empty() && kept.len() < rows.len(), "{kept:?}");
+            let newest: Vec<_> = (rows.len() - kept.len()..rows.len())
+                .map(|i| format!("[\"d{i}\"]"))
+                .collect();
+            assert_eq!(kept, newest);
+            let returning = stream
+                .transform_row(&json!({"device":"d0","time":11,"x":0.}))
+                .unwrap();
+            assert!(returning["lag"].is_null());
+            let retained = stream
+                .transform_row(&json!({"device":"d9","time":12,"x":12.}))
+                .unwrap();
+            assert_eq!(retained["lag"], 9.);
+            assert!(fitted.transform_rows(&rows).is_err());
+            kept_counts.push(kept.len());
+        }
+        assert!(kept_counts[1] < kept_counts[0], "{kept_counts:?}");
+    }
+    #[test]
+    fn numeric_join_and_group_keys_compare_by_value() {
+        let mut policy = policy();
+        policy
+            .allowed_sources
+            .insert("stores".into(), vec!["store".into(), "region".into()]);
+        let limits = FeatureLimits::default();
+        let join = FeaturePipeline {
+            steps: vec![FeatureStep::JoinSources {
+                alias: "stores".into(),
+                keys: vec![JoinKey {
+                    left: "device".into(),
+                    right: "store".into(),
+                }],
+                join: JoinKind::Exact,
+                columns: vec![JoinColumn {
+                    source: "region".into(),
+                    name: "region".into(),
+                }],
+                missing: MissingJoin::Null,
+            }],
+        };
+        let sources = BTreeMap::from([(
+            "stores".into(),
+            vec![
+                json!({"store":17.,"region":"north"}),
+                json!({"store":-0.,"region":"zero"}),
+                json!({"store":0.5,"region":"half"}),
+            ],
+        )]);
+        let fitted = join.fit(&sources, &policy, &limits).unwrap();
+        let regions: Value = fitted
+            .transform_rows(&[
+                json!({"device":17}),
+                json!({"device":17.}),
+                json!({"device":0}),
+                json!({"device":0.5}),
+                json!({"device":"17"}),
+                json!({"device":18}),
+            ])
+            .unwrap()
+            .into_iter()
+            .map(|row| row["region"].clone())
+            .collect();
+        assert_eq!(
+            regions,
+            json!(["north", "north", "zero", "half", null, null])
+        );
+        let mut ambiguous = sources.clone();
+        ambiguous
+            .get_mut("stores")
+            .unwrap()
+            .push(json!({"store":17,"region":"duplicate"}));
+        assert!(join.fit(&ambiguous, &policy, &limits).is_err());
+
+        let pipeline = lag_pipeline();
+        let fitted = pipeline.fit(&BTreeMap::new(), &policy, &limits).unwrap();
+        let rows = [
+            json!({"device":7,"time":1,"x":1.}),
+            json!({"device":7.,"time":2,"x":2.}),
+        ];
+        assert_eq!(fitted.transform_rows(&rows).unwrap()[1]["lag"], 1.);
+        let mut stream = fitted.stream().unwrap();
+        for row in &rows {
+            stream.transform_row(row).unwrap();
+        }
+        assert_eq!(group_keys(&stream, 0), ["[7]"]);
+        for spelling in ["[7.0]", "[7.00]"] {
+            let mut malformed = stream.state();
+            let group = malformed.windows[0].groups.remove("[7]").unwrap();
+            malformed.windows[0].groups.insert(spelling.into(), group);
+            assert!(fitted.stream_with_state(malformed).is_err());
+        }
+    }
+    #[test]
+    fn legacy_pipelines_keep_the_text_keys_they_were_trained_with() {
+        let mut policy = policy();
+        policy
+            .allowed_sources
+            .insert("stores".into(), vec!["store".into(), "region".into()]);
+        let limits = FeatureLimits::default();
+        let join = FeaturePipeline {
+            steps: vec![FeatureStep::JoinSources {
+                alias: "stores".into(),
+                keys: vec![JoinKey {
+                    left: "device".into(),
+                    right: "store".into(),
+                }],
+                join: JoinKind::Exact,
+                columns: vec![JoinColumn {
+                    source: "region".into(),
+                    name: "region".into(),
+                }],
+                missing: MissingJoin::Null,
+            }],
+        };
+        let sources = BTreeMap::from([(
+            "stores".into(),
+            vec![
+                json!({"store":17.,"region":"float"}),
+                json!({"store":-0.,"region":"zero"}),
+            ],
+        )]);
+        let current = join.fit(&sources, &policy, &limits).unwrap();
+        assert_eq!(current.format_version, FORMAT_VERSION);
+        let mut legacy = current.clone();
+        legacy.format_version = LEGACY_FORMAT_VERSION;
+        legacy.joins[0]
+            .rows
+            .push(json!({"store":17,"region":"integer"}));
+        let mut both_spellings = legacy.clone();
+        both_spellings.format_version = FORMAT_VERSION;
+        assert!(both_spellings.validate().is_err());
+        let rows = [
+            json!({"device":17}),
+            json!({"device":17.}),
+            json!({"device":0}),
+        ];
+        let regions = |fitted: &FittedFeaturePipeline| -> Vec<Value> {
+            fitted
+                .transform_rows(&rows)
+                .unwrap()
+                .into_iter()
+                .map(|row| row["region"].clone())
+                .collect()
+        };
+        assert_eq!(
+            regions(&legacy),
+            [json!("integer"), json!("float"), json!(null)]
+        );
+        assert_eq!(
+            regions(&current),
+            [json!("float"), json!("float"), json!("zero")]
+        );
+
+        let mut lag = lag_pipeline()
+            .fit(&BTreeMap::new(), &policy, &limits)
+            .unwrap();
+        lag.format_version = LEGACY_FORMAT_VERSION;
+        let rows = [
+            json!({"device":7,"time":1,"x":1.}),
+            json!({"device":7.,"time":2,"x":2.}),
+        ];
+        assert!(lag.transform_rows(&rows).unwrap()[1]["lag"].is_null());
+        let mut stream = lag.stream().unwrap();
+        for row in &rows {
+            stream.transform_row(row).unwrap();
+        }
+        assert_eq!(group_keys(&stream, 0), ["[7.0]", "[7]"]);
+        let mut resumed = lag.stream_with_state(stream.state()).unwrap();
+        let next = resumed
+            .transform_row(&json!({"device":7.,"time":3,"x":3.}))
+            .unwrap();
+        assert_eq!(next["lag"], 2.);
+        lag.format_version = FORMAT_VERSION + 1;
+        assert!(lag.validate().is_err());
+    }
+    #[test]
+    fn training_transform_rejects_a_join_that_matches_no_row() {
+        let mut policy = policy();
+        policy
+            .allowed_sources
+            .insert("stores".into(), vec!["store".into(), "region".into()]);
+        let join = FeaturePipeline {
+            steps: vec![FeatureStep::JoinSources {
+                alias: "stores".into(),
+                keys: vec![JoinKey {
+                    left: "device".into(),
+                    right: "store".into(),
+                }],
+                join: JoinKind::Exact,
+                columns: vec![JoinColumn {
+                    source: "region".into(),
+                    name: "region".into(),
+                }],
+                missing: MissingJoin::Null,
+            }],
+        };
+        let rows = [json!({"device":17}), json!({"device":18})];
+        let fit = |stores: Vec<Value>| {
+            join.fit(
+                &BTreeMap::from([("stores".into(), stores)]),
+                &policy,
+                &FeatureLimits::default(),
+            )
+            .unwrap()
+        };
+        let text_keys = fit(vec![
+            json!({"store":"17","region":"north"}),
+            json!({"store":"18","region":"south"}),
+        ]);
+        let served = text_keys.transform_rows(&rows).unwrap();
+        assert!(served.iter().all(|row| row["region"].is_null()));
+        let error = text_keys
+            .transform_training_rows(&rows)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("'stores'"), "{error}");
+        assert!(
+            error.contains("device (number) = store (string)"),
+            "{error}"
+        );
+        let numeric_keys = fit(vec![json!({"store":18,"region":"south"})]);
+        let trained = numeric_keys.transform_training_rows(&rows).unwrap();
+        assert_eq!(trained, numeric_keys.transform_rows(&rows).unwrap());
+        assert_eq!(trained[1]["region"], "south");
+        assert!(numeric_keys.transform_training_rows(&rows[..1]).is_err());
+    }
+    #[test]
+    fn power_outside_its_domain_is_missing_not_an_overflow() {
+        let pipeline = FeaturePipeline {
+            steps: vec![FeatureStep::DeriveColumns {
+                columns: vec![DerivedColumn {
+                    name: "power".into(),
+                    expression: Expression::Binary {
+                        op: BinaryOperator::Power,
+                        left: Box::new(column("x")),
+                        right: Box::new(column("y")),
+                    },
+                }],
+            }],
+        };
+        let fitted = pipeline
+            .fit(&BTreeMap::new(), &policy(), &FeatureLimits::default())
+            .unwrap();
+        let powers: Vec<_> = fitted
+            .transform_rows(&[
+                json!({"x":-8.,"y":0.5}),
+                json!({"x":0.,"y":-1.}),
+                json!({"x":-0.,"y":-2.}),
+                json!({"x":-2.,"y":3.}),
+                json!({"x":0.,"y":0.}),
+                json!({"x":9.,"y":0.5}),
+            ])
+            .unwrap()
+            .into_iter()
+            .map(|row| row["power"].as_f64())
+            .collect();
+        assert_eq!(powers[..5], [None, None, None, Some(-8.), Some(1.)]);
+        assert!((powers[5].unwrap() - 3.).abs() < 1e-12);
+        let overflow = fitted.transform_rows(&[json!({"x":10.,"y":400.})]);
+        assert!(overflow.is_err());
+    }
+    #[test]
+    fn feature_steps_reject_undeclared_and_metadata_inputs() {
+        let mut policy = policy();
+        policy.allowed_sources.insert(
+            "side".into(),
+            vec!["device".into(), "time".into(), "value".into()],
+        );
+        let derive = |input: &str| FeaturePipeline {
+            steps: vec![FeatureStep::DeriveColumns {
+                columns: vec![DerivedColumn {
+                    name: "new".into(),
+                    expression: column(input),
+                }],
+            }],
+        };
+        let window = |group: &str, time: &str, input: &str| FeaturePipeline {
+            steps: vec![FeatureStep::WindowFeatures {
+                group_by: vec![group.into()],
+                timestamp_column: time.into(),
+                features: vec![WindowFeature {
+                    name: "new".into(),
+                    column: input.into(),
+                    operation: WindowOperation::Lag { steps: 1 },
+                }],
+            }],
+        };
+        let join = |left: &str, right: &str, time: &str, selected: &str| FeaturePipeline {
+            steps: vec![FeatureStep::JoinSources {
+                alias: "side".into(),
+                keys: vec![JoinKey {
+                    left: left.into(),
+                    right: right.into(),
+                }],
+                join: JoinKind::BackwardAsOf {
+                    left_timestamp: time.into(),
+                    right_timestamp: "time".into(),
+                    right_available_at: None,
+                    tolerance_ms: None,
+                },
+                columns: vec![JoinColumn {
+                    source: selected.into(),
+                    name: "new".into(),
+                }],
+                missing: MissingJoin::Null,
+            }],
+        };
+        let limits = FeatureLimits::default();
+        for declared in [
+            derive("x"),
+            window("device", "time", "x"),
+            join("device", "device", "time", "value"),
+        ] {
+            assert!(declared.validate(&policy, &limits).is_ok());
+        }
+        for undeclared in [
+            derive("z"),
+            derive("device"),
+            window("device", "time", "z"),
+            window("device", "time", "device"),
+            window("z", "time", "x"),
+            window("device", "z", "x"),
+            join("z", "device", "time", "value"),
+            join("device", "z", "time", "value"),
+            join("device", "device", "z", "value"),
+            join("device", "device", "time", "z"),
+        ] {
+            assert!(undeclared.validate(&policy, &limits).is_err());
+        }
+        let declared = derive("x");
+        let mut fitted = declared.fit(&BTreeMap::new(), &policy, &limits).unwrap();
+        fitted.pipeline = derive("z");
+        assert!(fitted.transform_rows(&[json!({"x":1.,"z":2.})]).is_err());
     }
 }

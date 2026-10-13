@@ -64,16 +64,18 @@ fn build_standalone_schema(schema: &Value, root_schema: &Value) -> Value {
         return new_schema;
     }
 
-    // For arrays, build schema with items
+    // For arrays, describe one element: a list pin carries its item's schema and `ValueType::Array`
+    // marks the list (as Break Struct, Cast and Query Widget expect). Keeping the array schema here
+    // made Push / Make Array hand an array schema to their element pins, so a Make Struct (Schema)
+    // building the elements found no properties.
     if resolved.get("type").and_then(|t| t.as_str()) == Some("array") {
+        if let Some(items) = resolved.get("items") {
+            return build_standalone_schema(items, root_schema);
+        }
         let mut new_schema = json!({
             "$schema": "http://json-schema.org/draft-07/schema#",
-            "type": "array"
+            "type": "object"
         });
-
-        if let Some(items) = resolved.get("items") {
-            new_schema["items"] = items.clone();
-        }
         add_root_definitions(&mut new_schema, root_schema);
 
         return new_schema;
@@ -376,5 +378,120 @@ mod tests {
         assert!(properties.contains_key("gradient"));
         assert!(properties.contains_key("image"));
         assert!(properties.contains_key("blur"));
+    }
+}
+
+
+/// A field holding a list of structs: the field pin must describe one element, so a Push into it
+/// and a Make Struct (Schema) building that element stay typed, nested lists included.
+#[cfg(test)]
+mod list_field_tests {
+    use super::*;
+    use crate::utils::array::push::PushArrayNode;
+    use flow_like::flow::pin::Pin;
+    use flow_like::flow_like_storage::object_store::path::Path;
+
+    fn response_schema() -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "requestId": { "type": "string" },
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string" },
+                            "name": { "type": "string" },
+                            "versions": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": { "revision": { "type": "integer" } },
+                                    "required": ["revision"]
+                                }
+                            }
+                        },
+                        "required": ["path", "name"]
+                    }
+                }
+            },
+            "required": ["requestId", "entries"]
+        })
+    }
+
+    fn connect(from: &mut Node, from_pin: &str, to: &mut Node, to_pin: &str) {
+        let from_id = from.get_pin_by_name(from_pin).unwrap().id.clone();
+        let to_id = to.get_pin_by_name(to_pin).unwrap().id.clone();
+        from.get_pin_mut_by_name(from_pin).unwrap().connected_to.insert(to_id.clone());
+        to.get_pin_mut_by_name(to_pin).unwrap().depends_on.insert(from_id);
+    }
+
+    fn board(nodes: &[&Node]) -> Board {
+        let mut board = Board::new_detached(Some("list-field-test".into()), Path::default());
+        for node in nodes {
+            board.nodes.insert(node.id.clone(), (*node).clone());
+        }
+        board
+    }
+
+    fn schema_of(pin: &Pin) -> Value {
+        flow_like_types::json::from_str(pin.schema.as_deref().expect("pin has a schema")).unwrap()
+    }
+
+    fn field_names(node: &Node) -> Vec<String> {
+        let mut names: Vec<String> = node
+            .pins
+            .values()
+            .filter_map(|pin| pin.name.strip_prefix(MAKE_STRUCT_PIN_PREFIX).map(str::to_string))
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[flow_like_types::tokio::test(crate = "flow_like_types::tokio")]
+    async fn list_of_struct_fields_keep_their_element_schema() {
+        // A consumer declaring the schema, like a Query Widget argument.
+        let mut consumer = Node::new("consumer", "Consumer", "", "Test");
+        consumer
+            .add_input_pin("response", "Response", "", VariableType::Struct)
+            .schema = Some(response_schema().to_string());
+
+        let mut make_response = MakeStructFromSchemaNode::default().get_node();
+        connect(&mut make_response, "struct_out", &mut consumer, "response");
+        MakeStructFromSchemaNode::default()
+            .on_update(&mut make_response, &board(&[&consumer]))
+            .await;
+
+        let entries_pin = format!("{MAKE_STRUCT_PIN_PREFIX}entries");
+        let entries = make_response.get_pin_by_name(&entries_pin).unwrap();
+        assert_eq!(entries.data_type, VariableType::Struct);
+        assert_eq!(entries.value_type, ValueType::Array);
+        let entry_schema = schema_of(entries);
+        assert_eq!(entry_schema["type"], "object");
+        assert!(entry_schema["properties"].get("path").is_some());
+
+        // Push into Entries hands the element schema to its value pin…
+        let mut push = PushArrayNode::default().get_node();
+        connect(&mut push, "array_out", &mut make_response, &entries_pin);
+        PushArrayNode::default()
+            .on_update(&mut push, &board(&[&consumer, &make_response]))
+            .await;
+        assert_eq!(schema_of(push.get_pin_by_name("value").unwrap())["type"], "object");
+
+        // …so a Make Struct (Schema) building one element gets its fields, nested lists included.
+        let mut make_entry = MakeStructFromSchemaNode::default().get_node();
+        connect(&mut make_entry, "struct_out", &mut push, "value");
+        MakeStructFromSchemaNode::default()
+            .on_update(&mut make_entry, &board(&[&consumer, &make_response, &push]))
+            .await;
+        assert!(make_entry.error.is_none(), "{:?}", make_entry.error);
+        assert_eq!(field_names(&make_entry), ["name", "path", "versions"]);
+
+        let versions = make_entry
+            .get_pin_by_name(&format!("{MAKE_STRUCT_PIN_PREFIX}versions"))
+            .unwrap();
+        assert_eq!(versions.value_type, ValueType::Array);
+        assert!(schema_of(versions)["properties"].get("revision").is_some());
     }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Trans, useTranslation } from "@flow-like/locales";
-import { Copy, Plus, Star, Trash2, X } from "lucide-react";
+import { Copy, Star, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { RolePermissions } from "../../../lib/permission/role-permission";
 import { cn } from "../../../lib/utils";
@@ -17,6 +17,7 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from "../../ui/alert-dialog";
+import { AttributeTagsInput } from "../../ui/attribute-tags-input";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
@@ -377,18 +378,6 @@ function AttributesField({
 	onChange: (next: string[]) => void;
 }>) {
 	const { t } = useTranslation("settings");
-	const [draft, setDraft] = useState("");
-	const suggestions = knownAttributes.filter(
-		(attribute) => !attributes.includes(attribute),
-	);
-
-	const add = (value: string) => {
-		const trimmed = value.trim();
-		if (!trimmed || attributes.includes(trimmed)) return;
-		onChange([...attributes, trimmed]);
-		setDraft("");
-	};
-
 	return (
 		<div className="flex flex-col gap-2 pt-3 border-t">
 			<Label className="text-xs">{t("attributes", "Attributes")}</Label>
@@ -398,69 +387,11 @@ function AttributesField({
 					"Tags that policy rules and member filters match on. They grant nothing on their own.",
 				)}
 			</p>
-			<div className="flex gap-2">
-				<Input
-					value={draft}
-					placeholder={t("egRegioneu", "e.g. region:eu")}
-					className="flex-1 font-mono text-xs"
-					onChange={(event) => setDraft(event.target.value)}
-					onKeyDown={(event) => {
-						if (event.key !== "Enter") return;
-						event.preventDefault();
-						add(draft);
-					}}
-				/>
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={!draft.trim()}
-					onClick={() => add(draft)}
-				>
-					{t("add", "Add")}
-				</Button>
-			</div>
-			{attributes.length > 0 && (
-				<div className="flex flex-wrap gap-1.5">
-					{attributes.map((attribute) => (
-						<span
-							key={attribute}
-							className="inline-flex items-center gap-1 rounded-md border bg-muted/50 pl-2 pr-1 py-0.5 font-mono text-xs"
-						>
-							{attribute}
-							<button
-								type="button"
-								aria-label={t("removeAttribute", "Remove {{attribute}}", {
-									attribute,
-								})}
-								className="text-muted-foreground hover:text-destructive"
-								onClick={() =>
-									onChange(attributes.filter((item) => item !== attribute))
-								}
-							>
-								<X className="h-3 w-3" />
-							</button>
-						</span>
-					))}
-				</div>
-			)}
-			{suggestions.length > 0 && (
-				<div className="flex flex-wrap items-center gap-1.5">
-					<span className="text-xs text-muted-foreground">
-						{t("alreadyInUse", "Already in use:")}
-					</span>
-					{suggestions.map((attribute) => (
-						<button
-							key={attribute}
-							type="button"
-							onClick={() => add(attribute)}
-							className="inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-0.5 font-mono text-xs text-muted-foreground hover:border-solid hover:border-primary hover:text-primary"
-						>
-							<Plus className="h-2.5 w-2.5" />
-							{attribute}
-						</button>
-					))}
-				</div>
-			)}
+			<AttributeTagsInput
+				value={attributes}
+				suggestions={knownAttributes}
+				onChange={onChange}
+			/>
 		</div>
 	);
 }

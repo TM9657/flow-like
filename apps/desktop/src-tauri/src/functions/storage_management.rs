@@ -1,9 +1,14 @@
 use crate::{
-    functions::TauriFunctionError,
+    functions::{TauriFunctionError, app::TRAINING_DRAIN_TIMEOUT},
     settings::{LogRetentionSettings, Settings},
     state::{TauriFlowLikeState, TauriSettingsState},
 };
 use flow_like::app::App;
+use flow_like_catalog::ml::inspection::lifecycle::{TrainingDrain, drain_app_training};
+use flow_like_types::storage_paths::{
+    TRAINING_LEDGER_ROOT, is_legacy_training_ledger_path, storage_path_segment,
+    training_ledger_app_dir,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -104,16 +109,19 @@ impl PathStats {
 }
 
 fn path_stats(path: &Path) -> PathStats {
+    tree_stats(path, &mut HashSet::new())
+}
+
+/// Stats of the tree at `path`, without following symlinks. A file with several hard links
+/// counts once across the walks that share `seen`.
+fn tree_stats(path: &Path, seen: &mut HashSet<(u64, u64)>) -> PathStats {
     let Ok(metadata) = fs::symlink_metadata(path) else {
         return PathStats::default();
     };
+    let counted = metadata.is_file() && linked_file(&metadata).is_none_or(|id| seen.insert(id));
     let mut stats = PathStats {
-        size_bytes: if metadata.is_file() {
-            metadata.len()
-        } else {
-            0
-        },
-        file_count: u64::from(metadata.is_file()),
+        size_bytes: if counted { metadata.len() } else { 0 },
+        file_count: u64::from(counted),
         updated_at: metadata.modified().ok(),
     };
     if !metadata.is_dir() {
@@ -123,14 +131,33 @@ fn path_stats(path: &Path) -> PathStats {
         return stats;
     };
     for entry in entries.flatten() {
-        stats.merge(path_stats(&entry.path()));
+        stats.merge(tree_stats(&entry.path(), seen));
     }
     stats
+}
+
+/// The device and inode of a file with more than one hard link.
+#[cfg(unix)]
+fn linked_file(metadata: &fs::Metadata) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    (metadata.nlink() > 1).then(|| (metadata.dev(), metadata.ino()))
+}
+
+#[cfg(not(unix))]
+fn linked_file(_metadata: &fs::Metadata) -> Option<(u64, u64)> {
+    None
 }
 
 fn to_ms(time: Option<SystemTime>) -> Option<u64> {
     time.and_then(|value| value.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+}
+
+/// The app's device-local training ledgers, which live beside `apps/` in the project directory.
+fn training_ledger_path(project_dir: &Path, app_id: &str) -> PathBuf {
+    training_ledger_app_dir(app_id)
+        .split('/')
+        .fold(project_dir.to_path_buf(), |path, part| path.join(part))
 }
 
 fn direct_items(
@@ -163,6 +190,56 @@ fn direct_items(
         .collect::<Vec<_>>();
     items.sort_by_key(|item| std::cmp::Reverse(item.size_bytes));
     items
+}
+
+/// Each app's files with its training ledgers, then the ledgers no app folder claims, which an
+/// app's deletion keeps while its training is still running. A file hard-linked into an app's
+/// folder and its ledgers counts once.
+fn app_items(project_dir: &Path) -> Vec<StorageItem> {
+    let entries = |root: PathBuf| {
+        fs::read_dir(root)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|entry| {
+                let id = entry.file_name().to_string_lossy().to_string();
+                (id, entry.path())
+            })
+    };
+    let mut claimed = HashSet::new();
+    let mut items = Vec::new();
+    for (id, path) in entries(project_dir.join("apps")) {
+        let ledgers = training_ledger_path(project_dir, &id);
+        let mut seen = HashSet::new();
+        let mut stats = tree_stats(&path, &mut seen);
+        stats.merge(tree_stats(&ledgers, &mut seen));
+        claimed.insert(ledgers);
+        let detail = format!("Local app · {} files", stats.file_count);
+        items.push(deletable_item(id.clone(), id, detail, stats));
+    }
+    for (id, path) in entries(project_dir.join(TRAINING_LEDGER_ROOT).join("apps")) {
+        if claimed.contains(&path) || storage_path_segment(&id, "app") != id || !path.is_dir() {
+            continue;
+        }
+        let stats = path_stats(&path);
+        let name = format!("Training ledgers {}", short_id(&id));
+        let detail = format!("Left by a deleted app · {} files", stats.file_count);
+        items.push(deletable_item(id, name, detail, stats));
+    }
+    items.sort_by_key(|item| std::cmp::Reverse(item.size_bytes));
+    items
+}
+
+fn deletable_item(id: String, name: String, detail: String, stats: PathStats) -> StorageItem {
+    StorageItem {
+        id,
+        name,
+        detail,
+        size_bytes: stats.size_bytes,
+        file_count: stats.file_count,
+        updated_at_ms: to_ms(stats.updated_at),
+        deletable: true,
+    }
 }
 
 fn log_items(logs_dir: &Path, active_runs: &HashSet<String>) -> Vec<StorageItem> {
@@ -306,16 +383,7 @@ fn build_overview(
     log_retention: &LogRetentionSettings,
     active_runs: &HashSet<String>,
 ) -> StorageOverview {
-    let app_root = paths.project_dir.join("apps");
-    let mut apps = direct_items(
-        &app_root,
-        "Local app and project files",
-        &HashSet::new(),
-        true,
-    );
-    for app in &mut apps {
-        app.detail = format!("Local app · {} files", app.file_count);
-    }
+    let apps = app_items(&paths.project_dir);
 
     let mut bits = direct_items(
         &paths.bit_dir,
@@ -418,6 +486,53 @@ fn remove_path(path: &Path) -> std::io::Result<()> {
     } else {
         fs::remove_file(path)
     }
+}
+
+/// Deletes an app folder and returns the bytes it kept: while the app's training still runs,
+/// the legacy App ledger inside the folder (`storage/inspection/jobs.sqlite` and its
+/// companions) stays where the running job expects it.
+fn remove_app_folder(path: &Path, keep_legacy_ledger: bool) -> std::io::Result<u64> {
+    if !keep_legacy_ledger {
+        return remove_path(path).map(|()| 0);
+    }
+    let kept = remove_tree_except(path, path, &is_legacy_training_ledger_path)?;
+    if fs::read_dir(path)?.next().is_none() {
+        fs::remove_dir(path)?;
+    }
+    Ok(kept)
+}
+
+/// Removes everything below `directory` whose path relative to `root` `keep` rejects, then
+/// every directory left empty. Returns the bytes kept.
+fn remove_tree_except(
+    root: &Path,
+    directory: &Path,
+    keep: &dyn Fn(&str) -> bool,
+) -> std::io::Result<u64> {
+    let mut kept = 0;
+    for entry in fs::read_dir(directory)? {
+        let path = entry?.path();
+        let relative = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        let metadata = fs::symlink_metadata(&path)?;
+        if keep(&relative) {
+            kept += path_stats(&path).size_bytes;
+        } else if metadata.is_dir() {
+            let below = remove_tree_except(root, &path, keep)?;
+            if below == 0 && fs::read_dir(&path)?.next().is_none() {
+                fs::remove_dir(&path)?;
+            }
+            kept += below;
+        } else {
+            fs::remove_file(&path)?;
+        }
+    }
+    Ok(kept)
 }
 
 /// Remove now-empty parent directories left behind after deleting a leaf entry,
@@ -671,12 +786,70 @@ struct DeleteOutcome {
     deleted_runs: Vec<(String, String)>,
 }
 
+/// Stops the background training of the apps about to be deleted. Returns the apps whose
+/// training was still running when the drain gave up, and the drains, which keep new training
+/// of these apps refused until they drop.
+async fn drain_training(
+    project_dir: &Path,
+    app_ids: &[String],
+) -> (HashSet<String>, Vec<TrainingDrain>) {
+    let drains = app_ids
+        .iter()
+        .filter(|id| valid_component(id))
+        .map(|id| async move {
+            let drain = drain_app_training(project_dir, id, TRAINING_DRAIN_TIMEOUT).await;
+            (id, drain)
+        });
+    let mut still_running = HashSet::new();
+    let mut held = Vec::new();
+    for (id, drain) in futures::future::join_all(drains).await {
+        if drain.report.still_running > 0 {
+            still_running.insert(id.clone());
+        }
+        held.push(drain);
+    }
+    (still_running, held)
+}
+
+/// Removes a deleted app's training ledgers under `project_dir`, the whole directory tree,
+/// unless its training is still running. Returns the bytes left on disk; a ledger that cannot
+/// be removed is a warning, not a failure.
+pub(crate) fn remove_training_ledgers(
+    project_dir: &Path,
+    app_id: &str,
+    still_running: bool,
+) -> u64 {
+    let ledgers = training_ledger_path(project_dir, app_id);
+    if still_running {
+        tracing::warn!(
+            app_id,
+            ledgers = %ledgers.display(),
+            "Training of the deleted app did not stop in time; keeping its training ledgers"
+        );
+        return path_stats(&ledgers).size_bytes;
+    }
+    match remove_path(&ledgers) {
+        Ok(()) => 0,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
+        Err(error) => {
+            tracing::warn!(
+                app_id,
+                ledgers = %ledgers.display(),
+                %error,
+                "Failed to delete the training ledgers of the deleted app"
+            );
+            path_stats(&ledgers).size_bytes
+        }
+    }
+}
+
 fn delete_items_blocking(
     paths: &StoragePaths,
     log_retention: &LogRetentionSettings,
     category: &str,
     ids: Vec<String>,
     active_runs: &HashSet<String>,
+    still_training: &HashSet<String>,
 ) -> Result<DeleteOutcome, TauriFunctionError> {
     let overview = build_overview(paths, log_retention, active_runs);
     let Some(inventory) = overview
@@ -711,6 +884,10 @@ fn delete_items_blocking(
                 .extend(delete_log_item(paths, item, &mut outcome.result));
             continue;
         }
+        if category == "apps" {
+            delete_app_item(paths, item, still_training, &mut outcome);
+            continue;
+        }
         let Some(path) = item_path(paths, category, &id) else {
             outcome.result.skipped_items.push(id);
             continue;
@@ -720,14 +897,52 @@ fn delete_items_blocking(
                 outcome.result.deleted_items += 1;
                 outcome.result.freed_bytes =
                     outcome.result.freed_bytes.saturating_add(item.size_bytes);
-                if category == "apps" {
-                    outcome.deleted_apps.push(id);
-                }
             }
             Err(_) => outcome.result.skipped_items.push(id),
         }
     }
     Ok(outcome)
+}
+
+/// Deletes an app's folder, then its training ledgers unless its training is still running.
+/// An item without a folder is the ledgers a deleted app left behind, deleted once they are
+/// gone.
+fn delete_app_item(
+    paths: &StoragePaths,
+    item: &StorageItem,
+    still_training: &HashSet<String>,
+    outcome: &mut DeleteOutcome,
+) {
+    let Some(path) = item_path(paths, "apps", &item.id) else {
+        outcome.result.skipped_items.push(item.id.clone());
+        return;
+    };
+    let still_running = still_training.contains(&item.id);
+    let (removed, legacy_kept) = match remove_app_folder(&path, still_running) {
+        Ok(kept) => (true, kept),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (false, 0),
+        Err(_) => {
+            outcome.result.skipped_items.push(item.id.clone());
+            return;
+        }
+    };
+    let kept = legacy_kept.saturating_add(remove_training_ledgers(
+        &paths.project_dir,
+        &item.id,
+        still_running,
+    ));
+    if !removed && (still_running || kept > 0) {
+        outcome.result.skipped_items.push(item.id.clone());
+        return;
+    }
+    outcome.result.deleted_items += 1;
+    outcome.result.freed_bytes = outcome
+        .result
+        .freed_bytes
+        .saturating_add(item.size_bytes.saturating_sub(kept));
+    if removed {
+        outcome.deleted_apps.push(item.id.clone());
+    }
 }
 
 #[tauri::command(async)]
@@ -750,14 +965,21 @@ pub async fn delete_local_storage_items(
             settings.log_retention.clone(),
         )
     };
+    let (still_training, drains) = if category == "apps" {
+        drain_training(&paths.project_dir, &ids).await
+    } else {
+        Default::default()
+    };
     let category_for_task = category.clone();
     let outcome = flow_like_types::tokio::task::spawn_blocking(move || {
+        let _drains = drains;
         delete_items_blocking(
             &paths,
             &log_retention,
             &category_for_task,
             ids,
             &active_runs,
+            &still_training,
         )
     })
     .await
@@ -910,5 +1132,239 @@ mod tests {
         assert!(result.skipped_items.is_empty());
 
         fs::remove_dir_all(logs_dir).unwrap();
+    }
+
+    fn scratch_paths(label: &str) -> StoragePaths {
+        let root = std::env::temp_dir().join(format!(
+            "flow-like-storage-{label}-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        StoragePaths {
+            project_dir: root.join("projects"),
+            bit_dir: root.join("bits"),
+            logs_dir: root.join("logs"),
+            temporary_dir: root.join("tmp"),
+            user_dir: root,
+        }
+    }
+
+    fn write_bytes(path: &Path, size: usize) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, vec![0_u8; size]).unwrap();
+    }
+
+    /// Writes an app file of `app_bytes` and an App ledger of `ledger_bytes`; returns the
+    /// app's ledger directory.
+    fn app_with_ledger(
+        paths: &StoragePaths,
+        app_id: &str,
+        app_bytes: usize,
+        ledger_bytes: usize,
+    ) -> PathBuf {
+        write_bytes(
+            &paths
+                .project_dir
+                .join("apps")
+                .join(app_id)
+                .join("manifest.app"),
+            app_bytes,
+        );
+        let ledgers = training_ledger_path(&paths.project_dir, app_id);
+        write_bytes(&ledgers.join("project").join("jobs.sqlite"), ledger_bytes);
+        ledgers
+    }
+
+    #[test]
+    fn app_items_count_their_training_ledgers_and_deleting_an_app_removes_them() {
+        let paths = scratch_paths("ledgers");
+        let ledgers = app_with_ledger(&paths, "doomed", 10, 5);
+        write_bytes(&ledgers.join("users").join("user").join("jobs.sqlite"), 3);
+        let kept = app_with_ledger(&paths, "kept", 20, 2);
+        let retention = LogRetentionSettings::default();
+
+        let overview = build_overview(&paths, &retention, &HashSet::new());
+        let apps = overview
+            .categories
+            .iter()
+            .find(|category| category.key == "apps")
+            .unwrap();
+        let doomed = apps.items.iter().find(|item| item.id == "doomed").unwrap();
+        assert_eq!((doomed.size_bytes, doomed.file_count), (18, 3));
+        assert_eq!(doomed.detail, "Local app · 3 files");
+        let order = apps
+            .items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(order, ["kept", "doomed"]);
+        assert_eq!(apps.size_bytes, 40);
+
+        let outcome = delete_items_blocking(
+            &paths,
+            &retention,
+            "apps",
+            vec!["doomed".to_string()],
+            &HashSet::new(),
+            &HashSet::new(),
+        )
+        .unwrap();
+        assert_eq!(outcome.deleted_apps, ["doomed"]);
+        assert_eq!(outcome.result.freed_bytes, 18);
+        assert!(!paths.project_dir.join("apps").join("doomed").exists());
+        assert!(!ledgers.exists());
+        assert!(kept.join("project").join("jobs.sqlite").is_file());
+        assert!(
+            paths
+                .project_dir
+                .join("apps")
+                .join("kept")
+                .join("manifest.app")
+                .is_file()
+        );
+
+        fs::remove_dir_all(&paths.user_dir).unwrap();
+    }
+
+    #[test]
+    fn deleting_an_app_whose_training_kept_running_keeps_its_ledgers() {
+        let paths = scratch_paths("still-training");
+        let ledgers = app_with_ledger(&paths, "busy", 10, 5);
+        let retention = LogRetentionSettings::default();
+
+        let outcome = delete_items_blocking(
+            &paths,
+            &retention,
+            "apps",
+            vec!["busy".to_string()],
+            &HashSet::new(),
+            &HashSet::from(["busy".to_string()]),
+        )
+        .unwrap();
+        assert_eq!(outcome.deleted_apps, ["busy"]);
+        assert_eq!(outcome.result.deleted_items, 1);
+        assert_eq!(outcome.result.freed_bytes, 10);
+        assert!(!paths.project_dir.join("apps").join("busy").exists());
+        assert!(ledgers.join("project").join("jobs.sqlite").is_file());
+
+        fs::remove_dir_all(&paths.user_dir).unwrap();
+    }
+
+    #[test]
+    fn deleting_an_app_whose_training_kept_running_keeps_its_legacy_ledger_in_place() {
+        let paths = scratch_paths("still-training-legacy");
+        app_with_ledger(&paths, "busy", 10, 5);
+        let inspection = paths.project_dir.join("apps/busy/storage/inspection");
+        write_bytes(&inspection.join("jobs.sqlite"), 7);
+        write_bytes(&inspection.join("jobs.artifacts/source.blob"), 3);
+        write_bytes(&inspection.join("pki/device.pem"), 4);
+
+        let outcome = delete_items_blocking(
+            &paths,
+            &LogRetentionSettings::default(),
+            "apps",
+            vec!["busy".to_string()],
+            &HashSet::new(),
+            &HashSet::from(["busy".to_string()]),
+        )
+        .unwrap();
+        assert_eq!(outcome.deleted_apps, ["busy"]);
+        assert_eq!(outcome.result.freed_bytes, 14);
+        assert!(inspection.join("jobs.sqlite").is_file());
+        assert!(inspection.join("jobs.artifacts/source.blob").is_file());
+        assert!(!inspection.join("pki").exists());
+        assert!(!paths.project_dir.join("apps/busy/manifest.app").exists());
+
+        fs::remove_dir_all(&paths.user_dir).unwrap();
+    }
+
+    fn apps_category(paths: &StoragePaths) -> StorageCategory {
+        build_overview(paths, &LogRetentionSettings::default(), &HashSet::new())
+            .categories
+            .into_iter()
+            .find(|category| category.key == "apps")
+            .unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hard_linked_ledger_blobs_count_once_for_their_app() {
+        let paths = scratch_paths("hard-links");
+        let ledgers = app_with_ledger(&paths, "linked", 10, 5);
+        let legacy = paths
+            .project_dir
+            .join("apps/linked/storage/inspection/jobs.artifacts/source.blob");
+        write_bytes(&legacy, 100);
+        let pretrained = ledgers.join("project/jobs.artifacts/pretrained.blob");
+        write_bytes(&pretrained, 40);
+        let adopted = ledgers.join("users/user/jobs.artifacts");
+        fs::create_dir_all(&adopted).unwrap();
+        fs::hard_link(&legacy, adopted.join("source.blob")).unwrap();
+        fs::hard_link(&pretrained, adopted.join("pretrained.blob")).unwrap();
+
+        let apps = apps_category(&paths);
+        let linked = &apps.items[0];
+        assert_eq!(linked.id, "linked");
+        assert_eq!((linked.size_bytes, linked.file_count), (155, 4));
+        assert_eq!(path_stats(&ledgers).size_bytes, 145);
+
+        fs::remove_dir_all(&paths.user_dir).unwrap();
+    }
+
+    #[test]
+    fn ledgers_left_by_a_deleted_app_are_listed_and_can_be_deleted() {
+        let paths = scratch_paths("unclaimed-ledgers");
+        let kept = app_with_ledger(&paths, "kept", 10, 5);
+        let left = training_ledger_path(&paths.project_dir, "deleted");
+        write_bytes(&left.join("project").join("jobs.sqlite"), 7);
+        write_bytes(&left.join("users").join("user").join("jobs.sqlite"), 3);
+        fs::create_dir_all(left.join("project").join("jobs.artifacts")).unwrap();
+        let foreign = paths
+            .project_dir
+            .join(TRAINING_LEDGER_ROOT)
+            .join("apps")
+            .join("not a segment");
+        write_bytes(&foreign.join("jobs.sqlite"), 1);
+        let retention = LogRetentionSettings::default();
+
+        let apps = apps_category(&paths);
+        let ids = apps
+            .items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, ["kept", "deleted"]);
+        let deleted = &apps.items[1];
+        assert_eq!((deleted.size_bytes, deleted.file_count), (10, 2));
+        assert_eq!(deleted.detail, "Left by a deleted app · 2 files");
+        assert!(deleted.deletable);
+
+        let delete = |still_training: HashSet<String>| {
+            delete_items_blocking(
+                &paths,
+                &retention,
+                "apps",
+                vec!["deleted".to_string()],
+                &HashSet::new(),
+                &still_training,
+            )
+            .unwrap()
+        };
+        let running = delete(HashSet::from(["deleted".to_string()]));
+        assert_eq!(running.result.skipped_items, ["deleted"]);
+        assert!(left.join("project").join("jobs.sqlite").is_file());
+        let outcome = delete(HashSet::new());
+        assert!(outcome.deleted_apps.is_empty());
+        assert_eq!(
+            (outcome.result.deleted_items, outcome.result.freed_bytes),
+            (1, 10)
+        );
+        assert!(!left.exists());
+        assert!(kept.join("project").join("jobs.sqlite").is_file());
+        assert!(foreign.is_dir());
+
+        fs::remove_dir_all(&paths.user_dir).unwrap();
     }
 }

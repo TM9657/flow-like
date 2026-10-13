@@ -11,6 +11,7 @@ use crate::databases::graph::lancegraph::{
     validate_readonly_sql,
 };
 use datafusion::prelude::SessionContext;
+use flow_like_storage_contracts::column_metadata::ColumnReader;
 use flow_like_types::{Result, Value, anyhow};
 use lancedb::Connection;
 use serde::{Deserialize, Serialize};
@@ -84,6 +85,7 @@ async fn build_context(
     connection: &Connection,
     surface: &WorkbenchSurface,
     views: &[WorkbenchView],
+    reader: &ColumnReader,
 ) -> Result<SessionContext> {
     let ctx = SessionContext::new_with_state(
         crate::databases::df_provider::with_lance_order_pushdown(SessionContext::new().state()),
@@ -102,7 +104,7 @@ async fn build_context(
                 if is_reserved_table(&name) {
                     continue;
                 }
-                let adapter = open_table_adapter(connection, &name).await?;
+                let adapter = open_table_adapter(connection, &name, reader).await?;
                 ctx.register_table(&name, adapter)?;
                 base_tables.insert(name);
             }
@@ -117,7 +119,7 @@ async fn build_context(
                 if !base_tables.insert(table.clone()) {
                     continue;
                 }
-                let adapter = open_table_adapter(connection, table).await?;
+                let adapter = open_table_adapter(connection, table, reader).await?;
                 ctx.register_table(table, adapter)?;
             }
         }
@@ -125,7 +127,12 @@ async fn build_context(
             let projections =
                 crate::databases::graph::lancegraph::frozen_remote_table_projections(overlay)?;
             for (table, columns) in projections {
-                let adapter = open_table_adapter(connection, &table).await?;
+                let adapter = open_table_adapter(connection, &table, reader).await?;
+                let visible = adapter.schema();
+                let columns = columns
+                    .into_iter()
+                    .filter(|column| visible.field_with_name(column).is_ok())
+                    .collect::<Vec<_>>();
                 let column_refs = columns.iter().map(String::as_str).collect::<Vec<_>>();
                 let projected = ctx.read_table(adapter)?.select_columns(&column_refs)?;
                 ctx.register_table(&table, projected.into_view())?;
@@ -252,7 +259,8 @@ async fn register_views(
 
 /// Executes a single read-only SQL statement against the given surface, with the
 /// supplied views registered and parameters bound. Enforces the shared read-only
-/// validation, concurrency permit, timeout, and row cap.
+/// validation, concurrency permit, timeout, and row cap. Tables show `reader` only the
+/// columns it may read, so views built on hidden columns fail to plan.
 pub async fn execute_readonly_sql(
     connection: &Connection,
     surface: WorkbenchSurface,
@@ -260,6 +268,7 @@ pub async fn execute_readonly_sql(
     sql: &str,
     params: &Value,
     limit: Option<usize>,
+    reader: &ColumnReader,
 ) -> Result<SqlQueryResult> {
     let safety = CypherSafetyConfig::default();
     let limit = limit
@@ -275,7 +284,7 @@ pub async fn execute_readonly_sql(
     let param_values = bind_params(params)?;
     let timeout = std::time::Duration::from_millis(safety.timeout_ms);
 
-    let ctx = build_context(connection, &surface, &views).await?;
+    let ctx = build_context(connection, &surface, &views, reader).await?;
 
     let df = tokio::time::timeout(timeout, ctx.sql(sql))
         .await
@@ -567,6 +576,7 @@ mod tests {
             "SELECT id, name, public FROM people",
             &Value::Null,
             Some(10),
+            &ColumnReader::Unrestricted,
         )
         .await?;
         assert_eq!(allowed.row_count, 1);
@@ -579,6 +589,7 @@ mod tests {
             "SELECT secret FROM people",
             &Value::Null,
             Some(10),
+            &ColumnReader::Unrestricted,
         )
         .await;
         assert!(denied.is_err());
@@ -590,6 +601,7 @@ mod tests {
             "SELECT secret FROM people",
             &Value::Null,
             Some(10),
+            &ColumnReader::Unrestricted,
         )
         .await?;
         assert_eq!(
@@ -641,6 +653,7 @@ mod tests {
             "SELECT COUNT(*) AS cnt FROM points",
             &Value::Null,
             Some(10),
+            &ColumnReader::Unrestricted,
         )
         .await?;
         assert_eq!(
@@ -657,6 +670,7 @@ mod tests {
             "SELECT COUNT(*) AS cnt FROM points WHERE id = '1'",
             &Value::Null,
             Some(10),
+            &ColumnReader::Unrestricted,
         )
         .await?;
         assert_eq!(
@@ -699,6 +713,7 @@ mod tests {
              WHERE ST_Intersects(geometry, flow_geomfromtext($area)) ORDER BY id",
             &json!({"area": "POLYGON((12 51.5,15 51.5,15 53.5,12 53.5,12 51.5))"}),
             Some(10),
+            &ColumnReader::Unrestricted,
         )
         .await?;
 
@@ -731,6 +746,7 @@ mod tests {
             "SELECT id FROM places WHERE ST_Contains($area, geometry) ORDER BY id",
             &json!({"area": {"type": "Polygon", "coordinates": [[[12.0, 51.5], [15.0, 51.5], [15.0, 53.5], [12.0, 53.5], [12.0, 51.5]]]}}),
             Some(10),
+            &ColumnReader::Unrestricted,
         )
         .await?;
         assert_eq!(bound.rows, vec![json!({"id": 1}), json!({"id": 3})]);
@@ -753,6 +769,7 @@ mod tests {
             sql,
             &Value::Null,
             Some(2),
+            &ColumnReader::Unrestricted,
         )
         .await?;
         assert_eq!(exact.row_count, 2);
@@ -765,6 +782,7 @@ mod tests {
             sql,
             &Value::Null,
             Some(1),
+            &ColumnReader::Unrestricted,
         )
         .await?;
         assert_eq!(capped.row_count, 1);

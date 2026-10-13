@@ -274,6 +274,10 @@ pub(crate) fn read_import_weights(
     if bytes.starts_with(b"PK\x03\x04") {
         let (bytes, format) = crate::pytorch::convert_pytorch_weights(&bytes, maximum_bytes)?;
         Ok((bytes, digest, format))
+    } else if crate::pytorch::is_legacy_checkpoint(&bytes) {
+        Err(Error::Invalid(
+            "Legacy PyTorch checkpoint format is not supported; re-save it with torch.save(..., _use_new_zipfile_serialization=True)".into(),
+        ))
     } else {
         Ok((bytes, digest, "safetensors_f32".into()))
     }

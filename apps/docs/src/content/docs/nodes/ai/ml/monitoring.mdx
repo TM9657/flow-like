@@ -1,0 +1,30 @@
+---
+title: "Monitoring Node Catalog"
+description: "AI/ML/Monitoring Flow-Like node category with 2 generated node references."
+sidebar:
+  order: 0
+  label: "Monitoring"
+head:
+  - tag: meta
+    attrs:
+      name: keywords
+      content: "Monitoring nodes, AI/ML/Monitoring, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings"
+  - tag: meta
+    attrs:
+      property: article:section
+      content: "AI/ML/Monitoring"
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"CollectionPage\",\"name\":\"Monitoring Node Catalog\",\"description\":\"AI/ML/Monitoring Flow-Like node category with 2 generated node references.\",\"url\":\"https://docs.flow-like.com/nodes/ai/ml/monitoring/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"AI/ML/Monitoring\",\"keywords\":\"Monitoring nodes, AI/ML/Monitoring, Flow-Like node catalog, Flow-Like nodes, workflow automation, node reference, pins, schemas, security ratings\"}"
+---
+
+import { NodeCategoryOverview } from "../../../../../components/node-docs/NodeReference";
+import { nodesByCategory } from "../../../../../generated/catalog-nodes";
+
+<NodeCategoryOverview
+	category={"AI/ML/Monitoring"}
+	label="Monitoring"
+	nodes={nodesByCategory["AI/ML/Monitoring"] ?? []}
+	client:load
+/>
