@@ -173,9 +173,7 @@ impl NodeLogic for LearningProjectAgentNode {
         #[cfg(not(feature = "training"))]
         {
             let _ = context;
-            Err(flow_like_types::anyhow!(
-                "Learning Project Agent requires a local training build"
-            ))
+            Err(flow_like_catalog_ml::inspection::lifecycle::training_unavailable())
         }
     }
 
@@ -354,6 +352,65 @@ mod tests {
             flow_like_types::json::from_str::<flow_like_types::Value>(schema).unwrap();
         }
     }
+
+    #[cfg(not(feature = "training"))]
+    #[tokio::test]
+    async fn agents_without_a_training_build_refuse_with_the_shared_text() {
+        use ahash::AHashMap;
+        use flow_like::{
+            flow::{
+                board::ExecutionStage,
+                execution::{LogLevel, Run, internal_node::InternalNode},
+            },
+            profile::Profile,
+            state::{FlowLikeConfig, FlowLikeState},
+            utils::http::HTTPClient,
+        };
+        use flow_like_catalog_ml::inspection::lifecycle::TRAINING_UNAVAILABLE;
+        use flow_like_types::sync::{Mutex, RwLock};
+        use std::sync::{Arc, Weak};
+        let logic: Arc<dyn NodeLogic> = Arc::new(LearningProjectAgentNode);
+        let node = Arc::new(InternalNode::new(
+            logic.get_node(),
+            AHashMap::new(),
+            logic,
+            AHashMap::new(),
+        ));
+        let state = Arc::new(FlowLikeState::new(
+            FlowLikeConfig::new(),
+            HTTPClient::new_without_refetch(),
+        ));
+        let run: Weak<Mutex<Run>> = Weak::new();
+        let mut context = ExecutionContext::new(
+            Arc::new(AHashMap::from_iter([(
+                node.node_id().to_string(),
+                node.clone(),
+            )])),
+            &run,
+            &state,
+            &node,
+            &Arc::new(Mutex::new(AHashMap::new())),
+            &Arc::new(RwLock::new(AHashMap::new())),
+            LogLevel::Debug,
+            ExecutionStage::Dev,
+            Arc::new(Profile::default()),
+            None,
+            Arc::new(RwLock::new(Vec::new())),
+            None,
+            None,
+            Arc::new(AHashMap::new()),
+            None,
+        )
+        .await;
+        let agents: [Arc<dyn NodeLogic>; 2] = [
+            Arc::new(super::super::auto_training::AutoTrainAgentNode),
+            Arc::new(LearningProjectAgentNode),
+        ];
+        for agent in agents {
+            let error = agent.run(&mut context).await.unwrap_err();
+            assert_eq!(error.to_string(), TRAINING_UNAVAILABLE);
+        }
+    }
 }
 
 #[cfg(all(test, feature = "training"))]
@@ -403,6 +460,46 @@ mod agent_tests {
         .await
         .unwrap();
         flow_like_types::json::from_value(result).unwrap()
+    }
+
+    #[tokio::test]
+    async fn automatic_promotion_through_the_agent_publishes_the_champion() {
+        use flow_like_catalog_ml::inspection::published::{ChampionPointer, learning_pointer_path};
+        let fixture = fixture(1).await;
+        let request = json!({
+            "training": fixture.request.training,
+            "policy": {"minimum_new_reviews": 1, "minimum_audit_samples": 4, "cooldown_ms": 0},
+            "automatic_promotion": true
+        });
+        let created: LearningProjectResult = flow_like_types::json::from_value(
+            run_node(
+                &fixture.context,
+                Arc::new(CreateLearningProjectNode),
+                request,
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        let project_id = created.project.id;
+        let result = run_learning_agent(&fixture, &project_id).await;
+        let champion = result
+            .project
+            .project
+            .champion_artifact_id
+            .clone()
+            .expect("the agent's audited candidate is promoted automatically");
+        let path = fixture
+            .app_storage()
+            .join(learning_pointer_path(&project_id));
+        let pointer: ChampionPointer =
+            flow_like_types::json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(pointer.artifact_id.as_deref(), Some(champion.as_str()));
+        assert!(!pointer.paused);
+        assert_eq!(
+            pointer.project_generation,
+            result.project.project.generation
+        );
     }
 
     #[tokio::test]

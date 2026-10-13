@@ -74,6 +74,36 @@ pub fn predict_sam2_source(
         source_id,
         compute.memory_limit_bytes,
     )?;
+    let batch_shape = admit_prediction(&source, images, prompts, compute)?;
+    let directory = unpack_source(repository, &source, compute.memory_limit_bytes)?;
+    predict_unpacked(&directory, batch_shape, images, prompts, compute)
+}
+
+/// SAM 2 prediction from a source whose blob bytes come from outside a ledger,
+/// such as a published model folder. It never checks a project id. The bytes
+/// pass the repository blob rules before anything unpacks them.
+pub fn predict_sam2_from_parts(
+    source: &PretrainedSource,
+    bytes: &[u8],
+    images: &TensorData,
+    prompts: &[burn::Sam2Prompt],
+    compute: &ComputeConfig,
+) -> Result<burn::Sam2Prediction> {
+    compute.validate().map_err(engine_error)?;
+    check_source_format(source, compute.memory_limit_bytes)?;
+    let batch_shape = admit_prediction(source, images, prompts, compute)?;
+    verify_artifact_bytes(&source.blob, bytes, compute.memory_limit_bytes)?;
+    let directory = unpack_bundle(source, bytes, compute.memory_limit_bytes)?;
+    predict_unpacked(&directory, batch_shape, images, prompts, compute)
+}
+
+/// The input contract and memory admission of a prediction; returns its NCHW batch shape.
+fn admit_prediction(
+    source: &PretrainedSource,
+    images: &TensorData,
+    prompts: &[burn::Sam2Prompt],
+    compute: &ComputeConfig,
+) -> Result<Vec<usize>> {
     let config: burn::Sam2Config = serde_json::from_value(source.manifest["config"].clone())?;
     images.validate(64 * 1024 * 1024).map_err(engine_error)?;
     let batch_shape = image_batch_shape(&images.shape, &[3, 1024, 1024])?;
@@ -87,14 +117,23 @@ pub fn predict_sam2_source(
         prompt.validate().map_err(engine_error)?;
     }
     admit_memory(
-        &source,
+        source,
         images.values.len(),
         prompts,
         batch_shape[0],
         None,
         compute,
     )?;
-    let directory = unpack_source(repository, &source, compute.memory_limit_bytes)?;
+    Ok(batch_shape)
+}
+
+fn predict_unpacked(
+    directory: &tempfile::TempDir,
+    batch_shape: Vec<usize>,
+    images: &TensorData,
+    prompts: &[burn::Sam2Prompt],
+    compute: &ComputeConfig,
+) -> Result<burn::Sam2Prediction> {
     let predictor = burn::Sam2Predictor::load(directory.path(), burn_adapter::backend(compute)?)
         .map_err(engine_error)?;
     predictor
@@ -106,18 +145,6 @@ pub fn predict_sam2_source(
             prompts,
         )
         .map_err(engine_error)
-}
-
-/// SAM 2 prediction from a source whose blob bytes come from outside a ledger,
-/// such as a published model folder. It never checks a project id.
-pub fn predict_sam2_from_parts(
-    _source: &PretrainedSource,
-    _bytes: &[u8],
-    _images: &TensorData,
-    _prompts: &[burn::Sam2Prompt],
-    _compute: &ComputeConfig,
-) -> Result<burn::Sam2Prediction> {
-    Err(engine_error("predict_sam2_from_parts lands in L3"))
 }
 
 /// Run a separate SAM fine-tune and publish its completed weights as an immutable source.
@@ -227,6 +254,12 @@ fn authorized_source(
     if source.project_id != project {
         return Err(invalid("SAM source belongs to a different project"));
     }
+    check_source_format(&source, limit)?;
+    Ok(source)
+}
+
+/// `authorized_source`'s checks that do not depend on the owning project.
+fn check_source_format(source: &PretrainedSource, limit: u64) -> Result<()> {
     if source.manifest["engine"] != "sam2"
         || source.manifest["format_version"].as_u64() != Some(1)
         || source.manifest["input_shape"] != serde_json::json!([3, 1024, 1024])
@@ -237,7 +270,7 @@ fn authorized_source(
     }
     let config: burn::Sam2Config = serde_json::from_value(source.manifest["config"].clone())?;
     config.validate().map_err(engine_error)?;
-    Ok(source)
+    Ok(())
 }
 
 fn unpack_source(
@@ -246,8 +279,18 @@ fn unpack_source(
     limit: u64,
 ) -> Result<tempfile::TempDir> {
     let bytes = repository.read_blob_limited(&source.blob, limit)?;
+    unpack_bundle(source, &bytes, limit)
+}
+
+/// Unpacks a source's verified blob bytes, whose bundle state must describe exactly the
+/// source's manifest.
+fn unpack_bundle(
+    source: &PretrainedSource,
+    bytes: &[u8],
+    limit: u64,
+) -> Result<tempfile::TempDir> {
     let directory = tempfile::tempdir()?;
-    burn_adapter::unpack_named(&bytes, directory.path(), burn::SAM2_MANIFEST_FILE, limit)?;
+    burn_adapter::unpack_named(bytes, directory.path(), burn::SAM2_MANIFEST_FILE, limit)?;
     let state: Value =
         serde_json::from_slice(&fs::read(directory.path().join(burn::SAM2_MANIFEST_FILE))?)?;
     if source_manifest(&state)? != source.manifest {

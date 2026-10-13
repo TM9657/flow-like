@@ -17,7 +17,8 @@ use flow_like_storage::{
     object_store::{GetOptions, ObjectMeta, ObjectStore},
 };
 use flow_like_types::{
-    FromProto, Message, Result, ToProto, anyhow, bail, tokio::io::AsyncWriteExt,
+    FromProto, Message, Result, ToProto, anyhow, bail,
+    storage_paths::is_legacy_training_ledger_path, tokio::io::AsyncWriteExt,
 };
 use futures::TryStreamExt;
 use serde::Serialize;
@@ -305,6 +306,7 @@ fn included(relative: &str) -> bool {
     relative != "deployment-snapshot.json"
         && !relative.starts_with("deployment-user-data/")
         && !relative.starts_with("storage/db/")
+        && !is_legacy_training_ledger_path(relative)
         && !relative.split('/').any(|part| {
             matches!(
                 part,
@@ -1482,6 +1484,20 @@ mod tests {
         assert!(!included("storage/db/table.lance/_versions/1.manifest"));
         assert!(!included("logs/run.json"));
         Ok(())
+    }
+
+    #[test]
+    fn snapshots_ship_published_models_but_not_the_legacy_training_ledger() {
+        for ledger in [
+            "storage/inspection/jobs.sqlite",
+            "storage/inspection/jobs.sqlite-wal",
+            "storage/inspection/jobs.artifacts/x.blob",
+            "storage/inspection/.training-locks/a.lock",
+        ] {
+            assert!(!included(ledger), "{ledger}");
+        }
+        assert!(included("storage/models/artifacts/x/weights.bin"));
+        assert!(included("storage/inspection/pki/cert.der"));
     }
 
     async fn latest_project() -> Result<(Arc<FlowLikeState>, App)> {

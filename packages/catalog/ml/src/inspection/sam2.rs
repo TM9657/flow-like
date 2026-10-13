@@ -1,5 +1,7 @@
 use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
-use flow_like_types::{Result, anyhow};
+use flow_like_types::Result;
+#[cfg(feature = "inference")]
+use flow_like_types::anyhow;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -42,25 +44,14 @@ impl NodeLogic for PromptSam2Node {
         )
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        #[cfg(feature = "training")]
+        #[cfg(feature = "inference")]
         {
             context.deactivate_exec_pin("exec_out").await?;
             let request: PromptSam2Request = context.evaluate_pin("request").await?;
-            let (repo, project) = super::lifecycle::repository(context)?;
             if context.is_cancelled() {
                 return Err(anyhow!("SAM prediction cancelled"));
             }
-            let result = tokio::task::spawn_blocking(move || {
-                flow_like_ml_runtime::engines::predict_sam2_source(
-                    &repo,
-                    &project,
-                    &request.source_id,
-                    &request.images,
-                    &request.prompts,
-                    &request.compute,
-                )
-            })
-            .await??;
+            let result = sam2_prediction(context, request).await?;
             if context.is_cancelled() {
                 return Err(anyhow!("SAM prediction cancelled"));
             }
@@ -70,14 +61,47 @@ impl NodeLogic for PromptSam2Node {
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
-        #[cfg(not(feature = "training"))]
+        #[cfg(not(feature = "inference"))]
         {
             let _ = context;
-            Err(anyhow!(
-                "Native SAM prediction requires a local training build"
-            ))
+            Err(super::published::inference_unavailable())
         }
     }
+}
+
+/// Masks from the ledger that holds `request.source_id` for this run's project, else from
+/// its published fine-tuned source.
+#[cfg(feature = "inference")]
+async fn sam2_prediction(
+    context: &mut ExecutionContext,
+    request: PromptSam2Request,
+) -> Result<flow_like_ml_burn::Sam2Prediction> {
+    use super::lifecycle::{LocatedLedger, holds_pretrained_source};
+    let compute = request.compute.for_host();
+    let located = super::lifecycle::locate_repository_for_inference(context, |repo, project| {
+        holds_pretrained_source(repo, project, &request.source_id)
+    })?;
+    let Some(LocatedLedger { repo, project, .. }) = located else {
+        return super::published::published_sam2_prediction(
+            context,
+            &request.source_id,
+            &request.images,
+            &request.prompts,
+            &compute,
+        )
+        .await;
+    };
+    Ok(tokio::task::spawn_blocking(move || {
+        flow_like_ml_runtime::engines::predict_sam2_source(
+            &repo,
+            &project,
+            &request.source_id,
+            &request.images,
+            &request.prompts,
+            &compute,
+        )
+    })
+    .await??)
 }
 
 #[crate::register_node]
@@ -109,6 +133,7 @@ impl NodeLogic for FineTuneSam2Node {
                 return Err(anyhow!("SAM fine-tuning cancelled"));
             }
             let (repo, project) = super::lifecycle::repository(context)?;
+            let ledger = repo.clone();
             let token = context.get_cancellation_token();
             let result = with_burn_cancellation(token, move |cancellation| {
                 flow_like_ml_runtime::engines::fine_tune_sam2_source(
@@ -127,6 +152,15 @@ impl NodeLogic for FineTuneSam2Node {
                 .map_err(flow_like_types::Error::from)
             })
             .await?;
+            let outcome = super::publisher::publish_pretrained_source(
+                context,
+                &ledger,
+                super::lifecycle::LedgerScope::App,
+                &result.source,
+            )
+            .await;
+            let model = format!("Fine-tuned SAM 2 source {}", result.source.id);
+            super::lifecycle::warn_unpublished(context, &model, &outcome);
             context
                 .set_pin_value("result", flow_like_types::json::json!(result))
                 .await?;
@@ -135,7 +169,7 @@ impl NodeLogic for FineTuneSam2Node {
         #[cfg(not(feature = "training"))]
         {
             let _ = context;
-            Err(anyhow!("SAM fine-tuning requires a local training build"))
+            Err(super::lifecycle::training_unavailable())
         }
     }
 }
@@ -196,6 +230,115 @@ mod tests {
         .await
         .unwrap_err();
         assert_eq!(error.to_string(), "stopped by the Burn token");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "needs the official SAM 2.1 Hiera-T checkpoint in FLOW_LIKE_SAM2_WEIGHTS and minutes of CPU; L3 covers predict_sam2_from_parts"]
+    async fn fine_tuned_sources_publish_and_segment_without_a_ledger() {
+        use super::super::lifecycle::test_device::*;
+        use super::super::pretrained::{
+            ImportPretrainedVisionRequest, PretrainedImportFormat, import_pretrained_vision,
+        };
+        use super::super::published::{MANIFEST_FILE, artifact_dir};
+        use flow_like_ml_burn::{
+            BackendChoice, PretrainedWeightsMetadata, Sam2Config, Sam2Point, Sam2Prompt,
+            Sam2TrainingConfig, Sam2TrainingDataset, Sam2Variant,
+        };
+        use flow_like_types::json::{from_value, json};
+        let checkpoint = std::env::var("FLOW_LIKE_SAM2_WEIGHTS").expect("FLOW_LIKE_SAM2_WEIGHTS");
+        let device = Device::new();
+        let mut context = plain_context(device.stores()).await;
+        let weights =
+            flow_like_catalog_core::FlowPath::from_pathbuf(checkpoint.into(), &mut context)
+                .await
+                .unwrap();
+        let metadata = PretrainedWeightsMetadata {
+            source: "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_tiny.pt"
+                .into(),
+            license: Some("Apache-2.0".into()),
+            weights_license: Some("Apache-2.0".into()),
+            revision: Some("092824/sam2.1_hiera_tiny".into()),
+            expected_sha256: None,
+        };
+        let import = ImportPretrainedVisionRequest {
+            weights,
+            format: PretrainedImportFormat::Sam2,
+            metadata,
+            labels: Vec::new(),
+            maximum_bytes: default_artifact_limit(),
+        };
+        let imported = import_pretrained_vision(&mut context, import).await.unwrap();
+        let pixels: Vec<f32> = (0..3 * 1024 * 1024)
+            .map(|index| (index % 251) as f32 / 250.0)
+            .collect();
+        let prompt = Sam2Prompt {
+            points: vec![Sam2Point {
+                x: 512.0,
+                y: 512.0,
+                label: 1,
+            }],
+            ..Default::default()
+        };
+        let fine_tune = FineTuneSam2Request {
+            source_id: imported.id,
+            config: Sam2TrainingConfig {
+                model: Sam2Config {
+                    variant: Sam2Variant::HieraTiny,
+                },
+                backend: BackendChoice::Cpu,
+                epochs: 1,
+                batch_size: 1,
+                learning_rate: 1e-4,
+                seed: 7,
+                gradient_clip: 1.0,
+                freeze_image_encoder: true,
+            },
+            data: Sam2TrainingDataset {
+                images: flow_like_ml_burn::TensorData {
+                    shape: vec![1, 3, 1024, 1024],
+                    values: pixels.clone(),
+                },
+                prompts: vec![prompt.clone()],
+                masks: flow_like_ml_burn::TensorData {
+                    shape: vec![1, 1, 256, 256],
+                    values: (0..256 * 256)
+                        .map(|index| if index % 256 < 128 { 1.0 } else { 0.0 })
+                        .collect(),
+                },
+            },
+            compute: Default::default(),
+            maximum_bytes: default_artifact_limit(),
+        };
+        let tuned = run_node(FineTuneSam2Node, json!(fine_tune), device.stores())
+            .await
+            .unwrap();
+        let tuned: flow_like_ml_runtime::Sam2FineTuneResult = from_value(tuned).unwrap();
+        let folder = device
+            .root()
+            .join("apps/app/storage")
+            .join(artifact_dir(&tuned.source.id));
+        assert!(folder.join(MANIFEST_FILE).exists(), "{}", folder.display());
+        let prompt = PromptSam2Request {
+            source_id: tuned.source.id,
+            images: flow_like_ml_core::TensorData {
+                shape: vec![1, 3, 1024, 1024],
+                values: pixels,
+            },
+            prompts: vec![prompt],
+            compute: Default::default(),
+        };
+        let ledger = run_node(PromptSam2Node, json!(prompt), device.stores())
+            .await
+            .unwrap();
+        let published = published_copy(&device.app, APP_MODELS).await;
+        let files = run_node(
+            PromptSam2Node,
+            json!(prompt),
+            stores(Some(published), Some(memory_store())),
+        )
+        .await
+        .unwrap();
+        assert_eq!(files, ledger);
     }
 
     #[tokio::test]

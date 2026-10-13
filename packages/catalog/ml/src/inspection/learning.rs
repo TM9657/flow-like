@@ -8,9 +8,9 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
 };
 use flow_like_ml_runtime::learning::*;
-#[cfg(any(feature = "training", test))]
-use flow_like_types::json::json;
-use flow_like_types::{Result, anyhow};
+use flow_like_types::Result;
+#[cfg(feature = "inference")]
+use flow_like_types::{anyhow, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -145,25 +145,36 @@ pub fn project_repository(
     context: &ExecutionContext,
     id: &str,
 ) -> Result<flow_like_ml_runtime::TrainingRepository> {
-    let (repo, scope) = super::lifecycle::repository(context)?;
-    if repo.get_learning_project(id)?.request.stream.project_id != scope {
-        return Err(anyhow!(
-            "Learning project belongs to a different app or board"
-        ));
-    }
-    Ok(repo)
+    project_ledger(context, id).map(|(repo, _)| repo)
 }
 
 /// The ledger holding learning project `id` with this run's project string, and its scope.
 #[cfg(feature = "training")]
 pub(crate) fn project_ledger(
-    _context: &ExecutionContext,
-    _id: &str,
+    context: &ExecutionContext,
+    id: &str,
 ) -> Result<(
     flow_like_ml_runtime::TrainingRepository,
     super::lifecycle::LedgerScope,
 )> {
-    Err(anyhow!("project_ledger lands in L6"))
+    use super::auto_training::{existing, missing_from_ledgers};
+    let located = super::lifecycle::locate_repository(context, |repo, _| {
+        Ok(existing(repo.get_learning_project(id))?.is_some())
+    })?;
+    let Some(ledger) = located else {
+        return Err(missing_from_ledgers(
+            context,
+            &format!("Learning project {id}"),
+            &super::published::learning_pointer_path(id),
+            "Route Learning Project reads its published champion",
+        ));
+    };
+    if ledger.repo.get_learning_project(id)?.request.stream.project_id != ledger.project {
+        return Err(anyhow!(
+            "Learning project belongs to a different app or board"
+        ));
+    }
+    Ok((ledger.repo, ledger.scope))
 }
 
 #[cfg(feature = "training")]
@@ -206,12 +217,16 @@ fn result(
     })
 }
 
+/// Creates the project in the ledger its sources call for: the App ledger when every source
+/// reads the project database, otherwise the executing user's private ledger. It starts with a
+/// published Teacher pointer.
 #[cfg(feature = "training")]
 async fn create(
     context: &mut ExecutionContext,
     mut request: CreateLearningProjectRequest,
 ) -> Result<LearningProjectResult> {
-    let (repo, scope) = super::lifecycle::repository(context)?;
+    use super::lifecycle::{LEDGER_SCOPE_KEY, LedgerScope, StreamKind};
+    super::lifecycle::ensure_training_available(context)?;
     if let Some(rolling) = &request.rolling_time_split {
         rolling.apply(
             &mut request.training.dataset.split,
@@ -237,23 +252,69 @@ async fn create(
         ));
     }
     flow_like_ml_runtime::auto_training::validate_goals(spec, &goals)?;
-    let stream = super::lifecycle::InspectionContext {
-        stream_id: format!("learning:{}", uuid::Uuid::new_v4()),
-        spec: spec.clone(),
-    }
-    .key(scope)?;
     let pinned =
         super::auto_training_tables::pin_table_source(context, &request.training.dataset.source)
             .await?;
     let pinned_feature_sources =
         super::feature_engineering::pin_feature_sources(context, &request.training.feature_sources)
             .await?;
-    let project = repo.create_learning_project(LearningProjectRequest {
-        deployment_id: format!("deployment:{}",stream.stream_id), stream,
-        spec:json!(spec), source:json!({"training":request.training,"pinned_source":pinned,"pinned_feature_sources":pinned_feature_sources,"automatic_promotion":request.automatic_promotion,"rolling_time_split":request.rolling_time_split}),
-        goals, policy:request.policy, budget:request.budget,
-    }, flow_like_ml_runtime::now_ms())?;
-    result(&repo, &project.id)
+    let digests = super::auto_training_tables::scope_digests(context).await?;
+    let scope =
+        super::auto_training::source_ledger_scope(&digests, &pinned, &pinned_feature_sources);
+    if scope == LedgerScope::User {
+        super::auto_training::ensure_private_table_writes(
+            context,
+            &digests,
+            &pinned,
+            &request.training.tables,
+        )
+        .await?;
+    }
+    let (repo, project_string) = super::lifecycle::scoped_repository(context, scope)?;
+    let stream = super::lifecycle::InspectionContext {
+        stream_id: scope.new_stream_id(StreamKind::Learning),
+        spec: spec.clone(),
+    }
+    .key(project_string)?;
+    if scope == LedgerScope::User {
+        let named = request
+            .training
+            .pretrained
+            .as_ref()
+            .map(|source| source.source_id.as_str());
+        super::auto_training::adopt_pretrained_sources(
+            context,
+            &repo,
+            &stream.project_id,
+            named,
+            None,
+        )
+        .await?;
+    }
+    let mut source = json!({"training":request.training,"pinned_source":pinned,"pinned_feature_sources":pinned_feature_sources,"automatic_promotion":request.automatic_promotion,"rolling_time_split":request.rolling_time_split});
+    source[LEDGER_SCOPE_KEY] = json!(scope);
+    let project = repo.create_learning_project(
+        LearningProjectRequest {
+            deployment_id: format!("deployment:{}", stream.stream_id),
+            stream,
+            spec: json!(spec),
+            source,
+            goals,
+            policy: request.policy,
+            budget: request.budget,
+        },
+        flow_like_ml_runtime::now_ms(),
+    )?;
+    let created = result(&repo, &project.id)?;
+    published_champion(
+        context,
+        &repo,
+        scope,
+        &project.id,
+        super::publisher::PublishReason::StateChange,
+        created,
+    )
+    .await
 }
 
 #[cfg(feature = "training")]
@@ -261,10 +322,44 @@ async fn get(
     context: &mut ExecutionContext,
     request: LearningProjectId,
 ) -> Result<LearningProjectResult> {
-    result(
-        &project_repository(context, &request.project_id)?,
+    let (repo, scope) = project_ledger(context, &request.project_id)?;
+    let read = result(&repo, &request.project_id)?;
+    published_champion(
+        context,
+        &repo,
+        scope,
         &request.project_id,
+        super::publisher::PublishReason::SelfRepair,
+        read,
     )
+    .await
+}
+
+/// Publishes the project's champion pointer, and the champion when there is one, after the
+/// project changed or, with `SelfRepair`, when a read finds the files missing or stale. A
+/// failure blocks with `champion_model_not_published` and never fails the caller.
+#[cfg(feature = "training")]
+async fn published_champion(
+    context: &mut ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    scope: super::lifecycle::LedgerScope,
+    id: &str,
+    reason: super::publisher::PublishReason,
+    mut output: LearningProjectResult,
+) -> Result<LearningProjectResult> {
+    use super::publisher::{PublishOutcome, ensure_champion_published};
+    match ensure_champion_published(context, repo, scope, id, reason).await {
+        PublishOutcome::Failed { error } => output
+            .next_actions
+            .blocking
+            .push(format!("champion_model_not_published: {error}")),
+        PublishOutcome::Skipped { reason: skipped } => context.log_message(
+            &format!("The champion of learning project {id} was not published: {skipped}"),
+            LogLevel::Warn,
+        ),
+        PublishOutcome::Published(_) | PublishOutcome::Unchanged => {}
+    }
+    Ok(output)
 }
 
 #[cfg(feature = "training")]
@@ -282,11 +377,13 @@ async fn observe(
     // Canary replay rebuilds candidate traffic and window history from each raw row.
     if project.request.policy.canary_fraction > 0. {
         let mapping = training_template(&project)?.dataset.mapping;
+        let units = inference::pinned_temporal_units(&project.request.source)?;
         for observation in &request.observations {
             inference::validate_canary_sample(
                 observation,
                 &mapping,
                 &project.request.stream.stream_id,
+                &units,
             )?;
         }
     }
@@ -349,7 +446,7 @@ async fn pause(
     context: &mut ExecutionContext,
     request: LearningProjectId,
 ) -> Result<LearningProjectResult> {
-    let repo = project_repository(context, &request.project_id)?;
+    let (repo, scope) = project_ledger(context, &request.project_id)?;
     let project = repo.pause_learning_project(
         &request.project_id,
         repo.get_learning_project(&request.project_id)?.generation,
@@ -360,7 +457,16 @@ async fn pause(
             repo.cancel_experiment(&experiment_id, flow_like_ml_runtime::now_ms())?;
         }
     }
-    result(&repo, &request.project_id)
+    let paused = result(&repo, &request.project_id)?;
+    published_champion(
+        context,
+        &repo,
+        scope,
+        &request.project_id,
+        super::publisher::PublishReason::StateChange,
+        paused,
+    )
+    .await
 }
 
 #[cfg(feature = "training")]
@@ -368,22 +474,62 @@ async fn resume(
     context: &mut ExecutionContext,
     request: LearningProjectId,
 ) -> Result<LearningProjectResult> {
-    let repo = project_repository(context, &request.project_id)?;
+    let (repo, scope) = project_ledger(context, &request.project_id)?;
     repo.resume_learning_project(
         &request.project_id,
         repo.get_learning_project(&request.project_id)?.generation,
         flow_like_ml_runtime::now_ms(),
     )?;
-    result(&repo, &request.project_id)
+    let resumed = result(&repo, &request.project_id)?;
+    published_champion(
+        context,
+        &repo,
+        scope,
+        &request.project_id,
+        super::publisher::PublishReason::StateChange,
+        resumed,
+    )
+    .await
 }
 
-#[cfg(feature = "training")]
+/// The ledger decides while it holds the project under this run's project string and no
+/// champion pointer in the run's local store orders after it; otherwise the published champion
+/// pointer routes, to the champion or, while paused or without one, to the teacher.
+#[cfg(feature = "inference")]
 async fn route(
     context: &mut ExecutionContext,
     request: LearningRouteRequest,
 ) -> Result<LearningRoute> {
-    Ok(project_repository(context, &request.project_id)?
-        .learning_route(&request.project_id, &request.sample_id)?)
+    use super::published::{
+        ModelStorage, PointerKind, newer_published_generation, published_learning_route,
+    };
+    let id = &request.project_id;
+    let located = super::lifecycle::locate_repository_for_inference(context, |repo, project| {
+        Ok(super::auto_training::existing(repo.get_learning_project(id))?
+            .is_some_and(|learning| learning.request.stream.project_id == project))
+    })?;
+    let mut storage: Option<ModelStorage> = None;
+    if let Some(ledger) = located {
+        let project = ledger.repo.get_learning_project(id)?;
+        let order = (
+            deployment_generation(&ledger.repo, &project)?,
+            project.generation,
+        );
+        if !newer_published_generation(context, PointerKind::Learning, ledger.scope, id, order)
+            .await
+        {
+            return Ok(ledger.repo.learning_route(id, &request.sample_id)?);
+        }
+        storage = Some(ledger.scope.into());
+    }
+    published_learning_route(context, id, storage)
+        .await?
+        .ok_or_else(|| {
+            anyhow!(
+                "Learning project {id} is not in this device's training ledgers and has no published champion at storage/{}",
+                super::published::learning_pointer_path(id)
+            )
+        })
 }
 
 #[cfg(feature = "training")]
@@ -391,7 +537,7 @@ async fn rollback(
     context: &mut ExecutionContext,
     request: RollbackLearningModelRequest,
 ) -> Result<LearningProjectResult> {
-    let repo = project_repository(context, &request.project_id)?;
+    let (repo, scope) = project_ledger(context, &request.project_id)?;
     let at_ms = flow_like_ml_runtime::now_ms();
     match (&request.expected_artifact_id, request.expected_generation) {
         (Some(_), Some(_)) => {
@@ -411,7 +557,16 @@ async fn rollback(
             repo.rollback_learning_project_from(&request.project_id, &model, at_ms)?;
         }
     }
-    result(&repo, &request.project_id)
+    let rolled_back = result(&repo, &request.project_id)?;
+    published_champion(
+        context,
+        &repo,
+        scope,
+        &request.project_id,
+        super::publisher::PublishReason::StateChange,
+        rolled_back,
+    )
+    .await
 }
 
 /// Whichever of the deployment's active and previous model the project trained last: the active
@@ -461,7 +616,7 @@ async fn reject(
     result(&repo, &request.project_id)
 }
 
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 fn deployment_generation(
     repo: &flow_like_ml_runtime::TrainingRepository,
     project: &LearningProject,
@@ -964,15 +1119,27 @@ fn audit_reviewed_since(
         }))
 }
 
+/// Settles, compares and promotes the active cycle as far as its evidence allows, then
+/// publishes the champion the project ends with.
 #[cfg(feature = "training")]
 pub async fn finish_learning_cycle(
     context: &mut ExecutionContext,
     id: &str,
 ) -> Result<LearningProjectResult> {
-    finish_with(
+    let finished = finish_with(
         context,
         id,
         flow_like_ml_runtime::TrainingRepository::compare_learning_cycle,
+    )
+    .await?;
+    let (repo, scope) = project_ledger(context, id)?;
+    published_champion(
+        context,
+        &repo,
+        scope,
+        id,
+        super::publisher::PublishReason::StateChange,
+        finished,
     )
     .await
 }
@@ -1182,9 +1349,29 @@ async fn promote(
     context: &mut ExecutionContext,
     request: LearningProjectId,
 ) -> Result<LearningProjectResult> {
-    let repo = project_repository(context, &request.project_id)?;
-    let project = repo.get_learning_project(&request.project_id)?;
-    let cycles = repo.learning_cycles(&request.project_id)?;
+    let (repo, scope) = project_ledger(context, &request.project_id)?;
+    let promoted = promote_settled_candidate(context, &repo, &request.project_id).await?;
+    published_champion(
+        context,
+        &repo,
+        scope,
+        &request.project_id,
+        super::publisher::PublishReason::StateChange,
+        promoted,
+    )
+    .await
+}
+
+/// Audits the settled candidate against the champion on fresh evidence and promotes it when
+/// the project's policy allows.
+#[cfg(feature = "training")]
+async fn promote_settled_candidate(
+    context: &ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    id: &str,
+) -> Result<LearningProjectResult> {
+    let project = repo.get_learning_project(id)?;
+    let cycles = repo.learning_cycles(id)?;
     let cycle = cycles
         .iter()
         .rev()
@@ -1201,20 +1388,16 @@ async fn promote(
         inference::audit_canary(&work_repo, &work_project, &cancel)
     })
     .await?;
-    if repo
-        .get_learning_project(&request.project_id)?
-        .candidate_artifact_id
-        != cycle.artifact_id
-    {
-        return result(&repo, &request.project_id);
+    if repo.get_learning_project(id)?.candidate_artifact_id != cycle.artifact_id {
+        return result(repo, id);
     }
     repo.compare_learning_cycle(&cycle.id, flow_like_ml_runtime::now_ms())?;
     repo.promote_learning_cycle(
         &cycle.id,
-        deployment_generation(&repo, &project)?,
+        deployment_generation(repo, &project)?,
         flow_like_ml_runtime::now_ms(),
     )?;
-    result(&repo, &request.project_id)
+    result(repo, id)
 }
 
 macro_rules! learning_node {
@@ -1246,9 +1429,7 @@ macro_rules! learning_node {
                 #[cfg(not(feature = "training"))]
                 {
                     let _ = context;
-                    Err(anyhow!(
-                        "Continuous learning requires a local training build"
-                    ))
+                    Err(super::lifecycle::training_unavailable())
                 }
             }
         }
@@ -1438,13 +1619,36 @@ learning_node!(
     resume,
     version = 1
 );
-learning_node!(
-    RouteLearningProjectNode,
-    "ml_route_learning_project",
-    "Route Learning Project",
-    "Resolve teacher, champion, shadow or deterministic canary routing for a sample",
-    "routeLearningProject",
-    LearningRouteRequest,
-    LearningRoute,
-    route
-);
+
+/// Its own node so it runs on inference-only builds, from published files when this device has
+/// no training ledger for the project.
+#[flow_like_types::async_trait]
+impl NodeLogic for RouteLearningProjectNode {
+    fn get_node(&self) -> Node {
+        let mut node = super::operation_node::<LearningRouteRequest, LearningRoute>(
+            "ml_route_learning_project",
+            "Route Learning Project",
+            "Resolve teacher, champion, shadow or deterministic canary routing for a sample",
+            "routeLearningProject",
+            "AI/ML/Continuous Learning",
+        );
+        node.set_long_running(true);
+        node
+    }
+    async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
+        #[cfg(feature = "inference")]
+        {
+            context.deactivate_exec_pin("exec_out").await?;
+            let request: LearningRouteRequest = context.evaluate_pin("request").await?;
+            let output = route(context, request).await?;
+            context.set_pin_value("result", json!(output)).await?;
+            context.activate_exec_pin("exec_out").await?;
+            Ok(())
+        }
+        #[cfg(not(feature = "inference"))]
+        {
+            let _ = context;
+            Err(super::published::inference_unavailable())
+        }
+    }
+}

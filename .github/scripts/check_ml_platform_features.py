@@ -25,12 +25,15 @@ TARGETS = [
 ]
 
 
-def cargo_features(package, target, features, offline, depth):
+def cargo_features(package, target, features, offline, depth=None):
     command = [
         "cargo", "tree", "--locked", "--package", package,
         "--no-default-features", "--target", target, "--edges", "normal,build",
-        "--depth", str(depth), "--prefix", "none", "--format", "{p}|{f}",
+        "--prefix", "none", "--format", "{p}|{f}",
     ]
+    # Package checks omit the depth, because a package can sit deeper than any fixed --depth.
+    if depth is not None:
+        command += ["--depth", str(depth)]
     if features:
         command += ["--features", ",".join(features)]
     if offline:
@@ -39,7 +42,8 @@ def cargo_features(package, target, features, offline, depth):
     packages = {}
     for line in output.splitlines():
         dependency, _, enabled = line.partition("|")
-        packages[dependency.split(" v", 1)[0]] = set(enabled.removesuffix(" (*)").split(",")) - {""}
+        name = dependency.split(" v", 1)[0]
+        packages.setdefault(name, set()).update(set(enabled.removesuffix(" (*)").split(",")) - {""})
     return packages
 
 
@@ -48,36 +52,62 @@ def cargo_backends(target, features, offline):
     return {BACKENDS[item] for item in packages.get("burn", set()) if item in BACKENDS}
 
 
+def check_metadata_bundles(target, offline):
+    for feature in ["server-local-metadata", "executor-local-metadata", "remote-metadata"]:
+        packages = cargo_features("flow-like-catalog", target, [feature], offline)
+        enabled = packages["flow-like-catalog"]
+        expected = feature != "remote-metadata"
+        assert ("training-metadata" in enabled) == expected, f"{feature}: incorrect training metadata"
+        assert "training-auto" not in enabled and "burn" not in packages, f"{feature}: enables a training engine"
+        assert "ml-inference" not in enabled, f"{feature}: metadata enables ML inference"
+
+
+def check_inference_bundles(target, offline):
+    # Server and executor bundles keep no device-local training ledger, so they never train.
+    # They run published models on Burn CPU only.
+    for feature in ["server-local-ml", "executor-local-ml", "local-runtime-ml"]:
+        packages = cargo_features("flow-like-catalog", target, [feature], offline)
+        enabled = packages["flow-like-catalog"]
+        assert {"training-metadata", "ml-inference"} <= enabled, f"{feature}: missing training metadata or ML inference"
+        assert not enabled & {"training-auto", "training-cpu"}, f"{feature}: enables a training engine"
+        backends = {item for item in packages.get("burn", set()) if item in BACKENDS}
+        assert backends == {"flex"}, f"{feature}: Burn backends {sorted(backends)}, expected only flex"
+        assert "flow-like-ml-platform" not in packages, f"{feature}: links the automatic GPU platform"
+        catalog_ml = packages["flow-like-catalog-ml"]
+        assert "inference" in catalog_ml and "training" not in catalog_ml, f"{feature}: catalog-ml must infer without training"
+
+
+def check_bundles_without_inference(target, offline):
+    bundles = ["portable-metadata", "all-metadata", "mobile", "mobile-apple", "server", "executor", "local-runtime", "local-ml"]
+    for feature in bundles:
+        packages = cargo_features("flow-like-catalog", target, [feature], offline)
+        enabled = packages["flow-like-catalog"]
+        assert "training-auto" not in enabled, f"{feature}: unexpectedly enables automatic training"
+        assert "ml-inference" not in enabled and "burn" not in packages, f"{feature}: unexpectedly links ML inference"
+
+
+def check_training_products(target, offline):
+    packages = cargo_features("flow-like-catalog", target, ["desktop"], offline, 0)
+    assert {"training-auto", "ml-inference"} <= packages["flow-like-catalog"], "desktop: missing automatic training or ML inference"
+    for feature in ["default", "frontend", "training-auto"]:
+        packages = cargo_features("flow-like-standalone", target, [feature], offline, 1)
+        assert {"training-auto", "ml-inference"} <= packages["flow-like-catalog"], f"standalone {feature}: missing automatic training or ML inference"
+    packages = cargo_features("flow-like-standalone", target, ["training-cpu"], offline, 1)
+    assert {"training-cpu", "ml-inference"} <= packages["flow-like-catalog"], "standalone training-cpu: missing CPU training or ML inference"
+    assert "training-auto" not in packages["flow-like-catalog"]
+
+
 def check_product_features(offline):
     target = "x86_64-unknown-linux-gnu"
     native = cargo_features("flow-like-ml-burn", target, ["training-auto"], offline, 10)
     cuda = native["cudarc"]
     assert "fallback-dynamic-loading" in cuda and "fallback-latest" in cuda
     assert not cuda.intersection({"dynamic-linking", "static-linking"}), "CUDA must load drivers at runtime"
-    for feature in ["server-local-metadata", "executor-local-metadata", "remote-metadata"]:
-        packages = cargo_features("flow-like-catalog", target, [feature], offline, 3)
-        enabled = packages["flow-like-catalog"]
-        expected = feature != "remote-metadata"
-        assert ("training-metadata" in enabled) == expected, f"{feature}: incorrect training metadata"
-        assert "training-auto" not in enabled and "burn" not in packages, f"{feature}: enables a training engine"
-    packages = cargo_features("flow-like-catalog", target, ["desktop"], offline, 0)
-    assert "training-auto" in packages["flow-like-catalog"], "desktop: missing automatic training"
-    # Server and executor bundles have no durable local app storage, so training can never run there.
-    for feature in ["server-local-ml", "executor-local-ml", "local-runtime-ml"]:
-        packages = cargo_features("flow-like-catalog", target, [feature], offline, 3)
-        enabled = packages["flow-like-catalog"]
-        assert "training-metadata" in enabled, f"{feature}: missing training metadata"
-        assert "training-auto" not in enabled and "burn" not in packages, f"{feature}: enables a training engine"
-    for feature in ["mobile", "mobile-apple", "server", "executor", "local-runtime", "local-ml"]:
-        packages = cargo_features("flow-like-catalog", target, [feature], offline, 0)
-        assert "training-auto" not in packages["flow-like-catalog"], f"{feature}: unexpectedly enables automatic training"
-    for feature in ["default", "frontend", "training-auto"]:
-        packages = cargo_features("flow-like-standalone", target, [feature], offline, 1)
-        assert "training-auto" in packages["flow-like-catalog"], f"standalone {feature}: missing automatic training"
-    packages = cargo_features("flow-like-standalone", target, ["training-cpu"], offline, 1)
-    assert "training-cpu" in packages["flow-like-catalog"]
-    assert "training-auto" not in packages["flow-like-catalog"]
-    print("Product defaults, standalone CPU opt-out, and API metadata isolation passed", flush=True)
+    check_metadata_bundles(target, offline)
+    check_inference_bundles(target, offline)
+    check_bundles_without_inference(target, offline)
+    check_training_products(target, offline)
+    print("Product defaults, standalone CPU opt-out, executor CPU inference, and API metadata isolation passed", flush=True)
 
 
 def build_cfgs(executable, os_name, architecture, target_env, features):

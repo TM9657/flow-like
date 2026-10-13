@@ -90,3 +90,17 @@ After Effects `.aep` files are not supported. CADCraft's DWG support is desktop-
 upstream and is unavailable in these browser-based editors. TypeScript `.ts` files retain their
 code preview. LightCraft catalogs and EffectCraft projects depend on separate
 media libraries, so they do not open as standalone storage files.
+
+## Models and training history
+
+Trained models are published as files under `storage/models` in **Storage**,
+or under `models` in **User Storage** for models trained on your own tables.
+They sync like any other app file, ship to devices with a deployment and travel
+in app archives, so other runtimes can run them. Forks that do not copy data
+leave `storage/models` out. Model folders are written once and checked by
+sha256; a file edited by hand there stops its model from loading.
+
+The training history behind these models stays on the computer or device that
+trained them. Only **Export Training Ledger** and **Import Training Ledger**
+move it. See [Training history and published
+models](/topics/datascience/ml-auto-training/#training-history-and-published-models).

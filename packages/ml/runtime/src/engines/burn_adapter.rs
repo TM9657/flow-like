@@ -35,6 +35,12 @@ fn authorized_source(
     if source.project_id != project_id {
         return Err(invalid("pretrained source belongs to a different project"));
     }
+    check_source_format(&source, maximum_bytes)?;
+    Ok(source)
+}
+
+/// `authorized_source`'s checks that do not depend on the owning project.
+fn check_source_format(source: &PretrainedSource, maximum_bytes: u64) -> Result<()> {
     if source.manifest["engine"] != "burn"
         || source.manifest["format_version"].as_u64() != Some(1)
         || source.blob.bytes == 0
@@ -44,7 +50,7 @@ fn authorized_source(
             "pretrained source format or byte budget is incompatible",
         ));
     }
-    Ok(source)
+    Ok(())
 }
 
 /// Packed state files print f32 values in their shortest form, while manifests built with
@@ -64,9 +70,18 @@ fn unpack_source(
     source: &PretrainedSource,
     maximum_bytes: u64,
 ) -> Result<tempfile::TempDir> {
-    let directory = tempfile::tempdir()?;
     let bytes = repository.read_blob_limited(&source.blob, maximum_bytes)?;
-    unpack(&bytes, directory.path(), maximum_bytes)?;
+    unpack_source_bytes(source, &bytes, maximum_bytes)
+}
+
+/// Unpacks a source's verified blob bytes, whose packed state must match its manifest.
+fn unpack_source_bytes(
+    source: &PretrainedSource,
+    bytes: &[u8],
+    maximum_bytes: u64,
+) -> Result<tempfile::TempDir> {
+    let directory = tempfile::tempdir()?;
+    unpack(bytes, directory.path(), maximum_bytes)?;
     let state: Value =
         serde_json::from_slice(&fs::read(directory.path().join(burn::MANIFEST_FILE))?)?;
     if !same_training_config(&state["config"], &source.manifest["config"])
@@ -94,6 +109,39 @@ pub fn pretrained_source_features(
 ) -> Result<TensorData> {
     compute.validate().map_err(engine_error)?;
     let source = authorized_source(repository, project_id, source_id, source_limit(compute))?;
+    let request = admit_features(&source, input, compute)?;
+    let bytes = repository.read_blob_limited(&source.blob, source_limit(compute))?;
+    source_features(&source, &bytes, request, input, compute)
+}
+
+/// Spatial features from a pretrained source whose blob bytes come from outside
+/// a ledger, such as a published model folder. It never checks a project id. The
+/// bytes pass the repository blob rules before anything unpacks them.
+pub fn pretrained_features_from_parts(
+    source: &PretrainedSource,
+    bytes: &[u8],
+    input: &TensorData,
+    compute: &ComputeConfig,
+) -> Result<TensorData> {
+    compute.validate().map_err(engine_error)?;
+    check_source_format(source, source_limit(compute))?;
+    let request = admit_features(source, input, compute)?;
+    verify_artifact_bytes(&source.blob, bytes, source_limit(compute))?;
+    source_features(source, bytes, request, input, compute)
+}
+
+/// A feature request admitted against a source, before its weights are read.
+struct FeatureRequest {
+    batch_shape: Vec<usize>,
+    input_limit: usize,
+}
+
+/// The source's architecture and input contract, and the memory estimate of the request.
+fn admit_features(
+    source: &PretrainedSource,
+    input: &TensorData,
+    compute: &ComputeConfig,
+) -> Result<FeatureRequest> {
     let config: burn::TrainingConfig = serde_json::from_value(source.manifest["config"].clone())?;
     config.validate_stored().map_err(engine_error)?;
     if !matches!(
@@ -115,32 +163,55 @@ pub fn pretrained_source_features(
         .recipe
         .validate_shape(&batch_shape)
         .map_err(engine_error)?;
-    let workspace = match attention_workspace_bytes(&config.recipe, &expected) {
-        Some(per_image) => u64::try_from(per_image * batch_shape[0] as u128)
-            .map_err(|_| invalid("feature workspace estimate overflows"))?,
-        None => config
-            .recipe
-            .estimated_training_bytes(&expected, batch_shape[0])
-            .map_err(engine_error)?,
-    };
-    let estimate = source
-        .blob
-        .bytes
-        .checked_mul(4)
-        .and_then(|bytes| bytes.checked_add(workspace))
-        .ok_or_else(|| invalid("feature memory estimate overflows"))?;
+    let estimate = feature_memory_estimate(source, &config.recipe, &expected, batch_shape[0])?;
     if estimate > compute.memory_limit_bytes {
         return Err(invalid(format!(
             "Feature extraction needs an estimated {estimate} bytes, exceeding the configured {} byte memory limit",
             compute.memory_limit_bytes
         )));
     }
-    let directory = unpack_source(repository, &source, source_limit(compute))?;
+    Ok(FeatureRequest {
+        batch_shape,
+        input_limit,
+    })
+}
+
+/// Load-time copies of the weights plus the forward workspace of `batch` images.
+fn feature_memory_estimate(
+    source: &PretrainedSource,
+    recipe: &burn::Recipe,
+    expected: &[usize],
+    batch: usize,
+) -> Result<u64> {
+    let workspace = match attention_workspace_bytes(recipe, expected) {
+        Some(per_image) => u64::try_from(per_image * batch as u128)
+            .map_err(|_| invalid("feature workspace estimate overflows"))?,
+        None => recipe
+            .estimated_training_bytes(expected, batch)
+            .map_err(engine_error)?,
+    };
+    source
+        .blob
+        .bytes
+        .checked_mul(4)
+        .and_then(|bytes| bytes.checked_add(workspace))
+        .ok_or_else(|| invalid("feature memory estimate overflows"))
+}
+
+/// Loads the source from its verified blob bytes and computes the admitted features.
+fn source_features(
+    source: &PretrainedSource,
+    bytes: &[u8],
+    request: FeatureRequest,
+    input: &TensorData,
+    compute: &ComputeConfig,
+) -> Result<TensorData> {
+    let directory = unpack_source_bytes(source, bytes, source_limit(compute))?;
     let predictor =
         burn::Predictor::load(directory.path(), backend(compute)?).map_err(engine_error)?;
     let output = predictor
         .features(&burn::TensorData {
-            shape: batch_shape,
+            shape: request.batch_shape,
             values: input.values.clone(),
         })
         .map_err(engine_error)?;
@@ -148,19 +219,8 @@ pub fn pretrained_source_features(
         shape: output.shape,
         values: output.values,
     };
-    output.validate(input_limit).map_err(engine_error)?;
+    output.validate(request.input_limit).map_err(engine_error)?;
     Ok(output)
-}
-
-/// Spatial features from a pretrained source whose blob bytes come from outside
-/// a ledger, such as a published model folder. It never checks a project id.
-pub fn pretrained_features_from_parts(
-    _source: &PretrainedSource,
-    _bytes: &[u8],
-    _input: &TensorData,
-    _compute: &ComputeConfig,
-) -> Result<TensorData> {
-    Err(engine_error("pretrained_features_from_parts lands in L3"))
 }
 
 /// Resolve an initialization model within the owning project before admitting training.

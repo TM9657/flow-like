@@ -84,6 +84,15 @@ jobs:
           -p flow-like-catalog-ml -p flow-like-catalog-llm -p flow-like-catalog-onnx
           --no-default-features
           --features flow-like-catalog-ml/training-cpu,flow-like-catalog-ml/opcua,flow-like-catalog-ml/genicam,flow-like-catalog-ml/onnx-export,flow-like-catalog-llm/training,flow-like-catalog-onnx/execute
+      # Executors run published models without a training ledger, so catalog-ml must build with inference alone.
+      - name: Compile and lint published-model inference without training
+        run: |
+          cargo check --locked -p flow-like-catalog-ml --no-default-features --features inference
+          cargo clippy --locked -p flow-like-catalog-ml --no-default-features --features inference -- -D clippy::correctness -D clippy::suspicious
+      - name: Published models load and predict from their files
+        run: |
+          cargo test --locked -p flow-like-catalog-ml --no-default-features --features inference --lib inspection::published
+          cargo test --locked -p flow-like-ml-runtime --features native,burn --test portable_models
       - name: Table experiments, continuous learning, and consultant action schemas
         run: |
           cargo test --locked -p flow-like-catalog-ml --features training-cpu --lib inspection::

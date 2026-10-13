@@ -29,14 +29,14 @@ enum LoadedModel {
     },
 }
 
-impl LoadedArtifactPredictor {
-    pub fn load(
-        repository: &TrainingRepository,
-        artifact_id: &str,
-        compute: &ComputeConfig,
-    ) -> Result<Self> {
-        compute.validate().map_err(engine_error)?;
-        let artifact = repository.get_artifact(artifact_id)?;
+/// Manifest facts both loaders check before any blob byte is read.
+struct ArtifactContract {
+    engine: String,
+    expected: Vec<usize>,
+}
+
+impl ArtifactContract {
+    fn of(artifact: &ModelArtifact) -> Result<Self> {
         let engine = artifact.manifest["engine"]
             .as_str()
             .ok_or_else(|| invalid("model artifact has no engine"))?;
@@ -63,9 +63,54 @@ impl LoadedArtifactPredictor {
                 .unwrap_or_else(|| serde_json::json!([])),
         )?;
         flow_like_ml_core::validate_labels(&labels).map_err(engine_error)?;
-        // The envelope, decoded parameters and load-time copies share the budget.
-        let file_limit = (compute.memory_limit_bytes / 4).min(512 * 1024 * 1024);
-        let bytes = repository.read_blob_limited(&artifact.blob, file_limit)?;
+        Ok(Self {
+            engine: engine.to_owned(),
+            expected,
+        })
+    }
+}
+
+/// The envelope, decoded parameters and load-time copies share the budget.
+fn artifact_file_limit(compute: &ComputeConfig) -> u64 {
+    (compute.memory_limit_bytes / 4).min(512 * 1024 * 1024)
+}
+
+impl LoadedArtifactPredictor {
+    pub fn load(
+        repository: &TrainingRepository,
+        artifact_id: &str,
+        compute: &ComputeConfig,
+    ) -> Result<Self> {
+        compute.validate().map_err(engine_error)?;
+        let artifact = repository.get_artifact(artifact_id)?;
+        let contract = ArtifactContract::of(&artifact)?;
+        let bytes = repository.read_blob_limited(&artifact.blob, artifact_file_limit(compute))?;
+        Self::decode(artifact, contract, &bytes, compute)
+    }
+
+    /// Loads an artifact whose blob bytes come from outside a ledger, such as a
+    /// published model folder. It never checks a project id. The bytes pass the
+    /// repository blob rules within `load`'s file limit before anything decodes them.
+    pub fn from_parts(
+        artifact: ModelArtifact,
+        bytes: &[u8],
+        compute: &ComputeConfig,
+    ) -> Result<Self> {
+        compute.validate().map_err(engine_error)?;
+        let contract = ArtifactContract::of(&artifact)?;
+        verify_artifact_bytes(&artifact.blob, bytes, artifact_file_limit(compute))?;
+        Self::decode(artifact, contract, bytes, compute)
+    }
+
+    /// `bytes` are the artifact's verified blob.
+    fn decode(
+        artifact: ModelArtifact,
+        contract: ArtifactContract,
+        bytes: &[u8],
+        compute: &ComputeConfig,
+    ) -> Result<Self> {
+        let ArtifactContract { engine, expected } = contract;
+        let engine = engine.as_str();
         let reserved = artifact
             .blob
             .bytes
@@ -89,10 +134,10 @@ impl LoadedArtifactPredictor {
                 {
                     let directory = tempfile::tempdir()?;
                     burn_adapter::unpack_named(
-                        &bytes,
+                        bytes,
                         directory.path(),
                         flow_like_ml_burn::MANIFEST_FILE,
-                        file_limit,
+                        artifact_file_limit(compute),
                     )?;
                     let state: Value = serde_json::from_slice(&std::fs::read(
                         directory.path().join(flow_like_ml_burn::MANIFEST_FILE),
@@ -131,7 +176,12 @@ impl LoadedArtifactPredictor {
                 {
                     let directory = tempfile::tempdir()?;
                     let manifest = "efficient-ad-state.json";
-                    burn_adapter::unpack_named(&bytes, directory.path(), manifest, file_limit)?;
+                    burn_adapter::unpack_named(
+                        bytes,
+                        directory.path(),
+                        manifest,
+                        artifact_file_limit(compute),
+                    )?;
                     let state: Value =
                         serde_json::from_slice(&std::fs::read(directory.path().join(manifest))?)?;
                     if state["architecture"] != artifact.manifest["architecture"]
@@ -168,7 +218,7 @@ impl LoadedArtifactPredictor {
                         allow_cpu_fallback: false,
                         memory_limit_bytes: compute.memory_limit_bytes,
                     };
-                    let model: NativeModel = serde_json::from_slice(&bytes)?;
+                    let model: NativeModel = serde_json::from_slice(bytes)?;
                     let actual = match &model {
                         NativeModel::IsolationForest(_) => "isolation_forest",
                         NativeModel::HistogramGradientBoosting(_) => "histogram_gradient_boosting",
@@ -204,18 +254,6 @@ impl LoadedArtifactPredictor {
             input_limit,
             model,
         })
-    }
-
-    /// Loads an artifact whose blob bytes come from outside a ledger, such as a
-    /// published model folder. It never checks a project id.
-    pub fn from_parts(
-        _artifact: ModelArtifact,
-        _bytes: &[u8],
-        _compute: &ComputeConfig,
-    ) -> Result<Self> {
-        Err(engine_error(
-            "LoadedArtifactPredictor::from_parts lands in L3",
-        ))
     }
 
     pub fn artifact(&self) -> &ModelArtifact {
@@ -398,8 +436,9 @@ impl LoadedArtifactPredictor {
 
 /// Applies the repository blob rules (`read_blob_limited`) to bytes read from
 /// anywhere else: reference shape, size bounds, exact length and sha256.
-pub fn verify_artifact_bytes(_blob: &BlobRef, _bytes: &[u8], _maximum_bytes: u64) -> Result<()> {
-    Err(engine_error("verify_artifact_bytes lands in L3"))
+pub fn verify_artifact_bytes(blob: &BlobRef, bytes: &[u8], maximum_bytes: u64) -> Result<()> {
+    crate::repository::validate_blob_reference(blob, maximum_bytes)?;
+    crate::repository::verify_blob_content(blob, bytes)
 }
 
 /// Memory one EfficientAD image adds beyond the workspace: its f32 input and the three

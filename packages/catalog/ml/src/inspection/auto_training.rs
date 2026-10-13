@@ -273,7 +273,7 @@ macro_rules! task_node {
                 #[cfg(not(feature = "training"))]
                 {
                     let _ = context;
-                    Err(anyhow!("Auto training requires a local training build"))
+                    Err(super::lifecycle::training_unavailable())
                 }
             }
         }
@@ -327,35 +327,77 @@ pub fn experiment_repository(
     context: &ExecutionContext,
     id: &str,
 ) -> Result<flow_like_ml_runtime::TrainingRepository> {
-    let (repo, project) = super::lifecycle::repository(context)?;
-    let experiment = repo.get_experiment(id)?;
-    if experiment.request.stream.project_id != project {
-        return Err(anyhow!(
-            "The experiment belongs to a different app or board"
-        ));
-    }
-    Ok(repo)
+    experiment_ledger(context, id).map(|(repo, _)| repo)
 }
 
 /// The ledger holding experiment `id` with this run's project string, and its scope.
 #[cfg(feature = "training")]
 pub(crate) fn experiment_ledger(
-    _context: &ExecutionContext,
-    _id: &str,
+    context: &ExecutionContext,
+    id: &str,
 ) -> Result<(
     flow_like_ml_runtime::TrainingRepository,
     super::lifecycle::LedgerScope,
 )> {
-    Err(anyhow!("experiment_ledger lands in L6"))
+    let located = super::lifecycle::locate_repository(context, |repo, _| {
+        Ok(existing(repo.get_experiment(id))?.is_some())
+    })?;
+    let Some(ledger) = located else {
+        return Err(missing_from_ledgers(
+            context,
+            &format!("Experiment {id}"),
+            &super::published::experiment_pointer_path(id),
+            "Predict Auto Model reads its published winner",
+        ));
+    };
+    if ledger.repo.get_experiment(id)?.request.stream.project_id != ledger.project {
+        return Err(anyhow!(
+            "The experiment belongs to a different app or board"
+        ));
+    }
+    Ok((ledger.repo, ledger.scope))
+}
+
+/// A record that no training ledger of this app and board on this device holds. The error
+/// names both ledgers and the published file that other runtimes read instead.
+#[cfg(feature = "training")]
+pub(crate) fn missing_from_ledgers(
+    context: &ExecutionContext,
+    record: &str,
+    published: &str,
+    reader: &str,
+) -> flow_like_types::Error {
+    let (app, user) = match super::lifecycle::ledger_paths(context) {
+        Ok(paths) => (
+            paths.app.display().to_string(),
+            paths
+                .user
+                .map_or_else(|| "none".to_owned(), |path| path.display().to_string()),
+        ),
+        Err(error) => (format!("unavailable ({error})"), "none".to_owned()),
+    };
+    anyhow!(
+        "{record} is not in this app and board's training ledgers on this device (app ledger {app}, private ledger {user}); it belongs to a different app or board or was created on another device. {reader} from storage/{published}"
+    )
+}
+
+/// `Ok(None)` for a record the ledger does not hold; other ledger errors stay errors.
+#[cfg(feature = "inference")]
+pub(crate) fn existing<T>(found: flow_like_ml_runtime::Result<T>) -> Result<Option<T>> {
+    match found {
+        Ok(value) => Ok(Some(value)),
+        Err(flow_like_ml_runtime::Error::NotFound(_)) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
 /// Cancels the experiments queued or running on `ledgers` and waits until `deadline`.
 #[cfg(feature = "training")]
 pub(crate) fn drain_experiments(
-    _ledgers: &[std::path::PathBuf],
-    _deadline: std::time::Instant,
+    ledgers: &[std::path::PathBuf],
+    deadline: std::time::Instant,
 ) -> super::lifecycle::DrainReport {
-    super::lifecycle::DrainReport::default()
+    background::drain(ledgers, deadline)
 }
 
 #[cfg(feature = "training")]
@@ -521,41 +563,26 @@ pub async fn start_auto_training_scoped(
     background: bool,
     stream: Option<flow_like_ml_runtime::StreamKey>,
 ) -> Result<AutoTrainingResult> {
+    use super::lifecycle::{LEDGER_SCOPE_KEY, LedgerScope};
     use flow_like_ml_runtime::auto_training::{default_goals, validate_goals, validate_search};
     use flow_like_types::json::json;
+    super::lifecycle::ensure_training_available(context)?;
     validate_request_rules(&request)?;
-    let (repo, project) = super::lifecycle::repository(context)?;
-    let original_spec = request.dataset.spec.clone();
-    let scoped_stream = stream
-        .as_ref()
-        .map(|value| {
-            super::lifecycle::InspectionContext {
-                stream_id: value.stream_id.clone(),
-                spec: original_spec.clone(),
+    let scoped = match stream {
+        Some(stream) => Some(StartLedger::for_stream(
+            context, &request, background, stream,
+        )?),
+        None => {
+            if request.learning_cycle_id.is_some() {
+                return Err(anyhow!(if background {
+                    "Learning cycles must attach their experiment before dispatch"
+                } else {
+                    "Learning cycle does not own this training stream"
+                }));
             }
-            .key(project.clone())
-        })
-        .transpose()?;
-    if stream
-        .as_ref()
-        .is_some_and(|value| Some(value) != scoped_stream.as_ref())
-    {
-        return Err(anyhow!(
-            "Training stream belongs to another project or inspection contract"
-        ));
-    }
-    if let Some(cycle_id) = &request.learning_cycle_id {
-        if background {
-            return Err(anyhow!(
-                "Learning cycles must attach their experiment before dispatch"
-            ));
+            None
         }
-        let cycle = repo.get_learning_cycle(cycle_id)?;
-        let learning = repo.get_learning_project(&cycle.project_id)?;
-        if scoped_stream.as_ref() != Some(&learning.request.stream) {
-            return Err(anyhow!("Learning cycle does not own this training stream"));
-        }
-    }
+    };
     if background {
         background::ensure_capacity()?;
     }
@@ -577,12 +604,30 @@ pub async fn start_auto_training_scoped(
     }
     request.dataset.spec = prepared.spec.clone();
     request.dataset.source = prepared.source.database.clone();
-    let expected_stream = super::lifecycle::InspectionContext {
-        stream_id: format!("auto:{}", uuid::Uuid::new_v4()),
-        spec: prepared.spec.clone(),
+    let (scope, digests) = match &scoped {
+        Some(scoped) if scoped.scope == LedgerScope::App => (LedgerScope::App, Default::default()),
+        Some(scoped) => (
+            scoped.scope,
+            super::auto_training_tables::scope_digests(context).await?,
+        ),
+        None => {
+            let digests = super::auto_training_tables::scope_digests(context).await?;
+            let scope = source_ledger_scope(&digests, &prepared.source, &prepared.feature_sources);
+            (scope, digests)
+        }
+    };
+    if scope == LedgerScope::User {
+        ensure_private_table_writes(context, &digests, &prepared.source, &request.tables).await?;
     }
-    .key(project)?;
-    let stream = scoped_stream.unwrap_or(expected_stream);
+    let StartLedger {
+        repo,
+        stream,
+        marker,
+        ..
+    } = match scoped {
+        Some(scoped) => scoped,
+        None => StartLedger::minted(context, scope, &prepared.spec)?,
+    };
     let split = table_split_policy(&request.dataset.split)?;
     let PreparedSplit {
         prepared,
@@ -611,6 +656,19 @@ pub async fn start_auto_training_scoped(
         };
     }
     validate_search(&prepared.spec, &request.search, &request.compute)?;
+    if scope == LedgerScope::User {
+        adopt_pretrained_sources(
+            context,
+            &repo,
+            &stream.project_id,
+            request
+                .pretrained
+                .as_ref()
+                .map(|source| source.source_id.as_str()),
+            extractor.as_ref().map(|extractor| extractor.source_id.as_str()),
+        )
+        .await?;
+    }
     let (mut candidates, unchecked) =
         start_candidates(&repo, &stream.project_id, &prepared.spec, &request)?;
     record_feature_extractor(&mut candidates, extractor.as_ref())?;
@@ -630,6 +688,10 @@ pub async fn start_auto_training_scoped(
             request.budget.maximum_dataset_bytes
         ));
     }
+    let mut experiment_context = json!({"training_profile":prepared.profile,"search":request.search,"compute":request.compute,"pretrained":request.pretrained,"dataset_request":request.dataset,"table_policy":request.tables,"pinned_source":prepared.source,"ordered_target":request.ordered_target,"feature_plan":request.feature_plan,"feature_sources":prepared.feature_sources,"learning_cycle_id":request.learning_cycle_id});
+    if let Some(marker) = marker {
+        experiment_context[LEDGER_SCOPE_KEY] = marker;
+    }
     let experiment_request = flow_like_ml_runtime::experiment::ExperimentRequest {
         stream: stream.clone(),
         snapshot_id: String::new(),
@@ -647,7 +709,7 @@ pub async fn start_auto_training_scoped(
         created_tables: vec![],
         updated_table_versions: vec![],
         preprocessing_manifest: json!(prepared.preprocessing),
-        context: json!({"training_profile":prepared.profile,"search":request.search,"compute":request.compute,"pretrained":request.pretrained,"dataset_request":request.dataset,"table_policy":request.tables,"pinned_source":prepared.source,"ordered_target":request.ordered_target,"feature_plan":request.feature_plan,"feature_sources":prepared.feature_sources,"learning_cycle_id":request.learning_cycle_id}),
+        context: experiment_context,
     };
     let experiment = create_started_experiment(
         context.get_cancellation_token(),
@@ -692,6 +754,187 @@ pub async fn start_auto_training_scoped(
                 experiment.id
             )
         })
+}
+
+/// The D10 refusal of a private experiment that would write into the project database.
+#[cfg(feature = "training")]
+pub(crate) const PRIVATE_TABLE_WRITES: &str = "This experiment trains on private (user-scoped) data, so it cannot write tables into the shared project database; set tables.create_tables to false or train from a user-scoped main table.";
+
+/// Where a started experiment lives: its ledger and that ledger's scope, its stream, and the
+/// `ledger_scope` marker its context records.
+#[cfg(feature = "training")]
+struct StartLedger {
+    repo: flow_like_ml_runtime::TrainingRepository,
+    scope: super::lifecycle::LedgerScope,
+    stream: flow_like_ml_runtime::StreamKey,
+    marker: Option<Value>,
+}
+
+#[cfg(feature = "training")]
+impl StartLedger {
+    /// A learning cycle's stream, in the ledger its project string names. A cycle's experiment
+    /// copies its project's marker, which projects created before markers lack.
+    fn for_stream(
+        context: &ExecutionContext,
+        request: &AutoTrainRequest,
+        background: bool,
+        stream: flow_like_ml_runtime::StreamKey,
+    ) -> Result<Self> {
+        use super::lifecycle::{LEDGER_SCOPE_KEY, LedgerScope};
+        let scope = LedgerScope::of_project(&stream.project_id);
+        let (repo, project) = super::lifecycle::scoped_repository(context, scope)?;
+        let scoped = super::lifecycle::InspectionContext {
+            stream_id: stream.stream_id.clone(),
+            spec: request.dataset.spec.clone(),
+        }
+        .key(project)?;
+        if scoped != stream {
+            return Err(anyhow!(
+                "Training stream belongs to another project or inspection contract"
+            ));
+        }
+        let mut marker = Some(flow_like_types::json::json!(scope));
+        if let Some(cycle_id) = &request.learning_cycle_id {
+            if background {
+                return Err(anyhow!(
+                    "Learning cycles must attach their experiment before dispatch"
+                ));
+            }
+            let cycle = repo.get_learning_cycle(cycle_id)?;
+            let learning = repo.get_learning_project(&cycle.project_id)?;
+            if learning.request.stream != scoped {
+                return Err(anyhow!("Learning cycle does not own this training stream"));
+            }
+            marker = learning.request.source.get(LEDGER_SCOPE_KEY).cloned();
+        }
+        Ok(Self {
+            repo,
+            scope,
+            stream: scoped,
+            marker,
+        })
+    }
+
+    /// A new `auto` stream in the ledger of `scope`, which the experiment records as its marker.
+    fn minted(
+        context: &ExecutionContext,
+        scope: super::lifecycle::LedgerScope,
+        spec: &flow_like_ml_core::InspectionSpec,
+    ) -> Result<Self> {
+        let (repo, project) = super::lifecycle::scoped_repository(context, scope)?;
+        let stream = super::lifecycle::InspectionContext {
+            stream_id: scope.new_stream_id(super::lifecycle::StreamKind::Auto),
+            spec: spec.clone(),
+        }
+        .key(project)?;
+        Ok(Self {
+            repo,
+            scope,
+            stream,
+            marker: Some(flow_like_types::json::json!(scope)),
+        })
+    }
+}
+
+/// App only when every source reads the run's project database; any other source, including
+/// one that cannot be classified, keeps the training private.
+#[cfg(feature = "training")]
+pub(crate) fn source_ledger_scope(
+    digests: &super::auto_training_tables::ScopeDigests,
+    main: &super::auto_training_tables::PinnedTableSource,
+    sides: &[super::feature_engineering::PinnedFeatureSource],
+) -> super::lifecycle::LedgerScope {
+    use super::auto_training_tables::{SourceScope, pinned_source_locators};
+    use super::lifecycle::LedgerScope;
+    match digests.combine(&pinned_source_locators(main, sides)) {
+        SourceScope::Project => LedgerScope::App,
+        SourceScope::User | SourceScope::Unknown => LedgerScope::User,
+    }
+}
+
+/// D10: private training writes no tables into the project database, neither tables created
+/// beside a project main source nor rows merged into a project destination.
+#[cfg(feature = "training")]
+pub(crate) async fn ensure_private_table_writes(
+    context: &mut ExecutionContext,
+    digests: &super::auto_training_tables::ScopeDigests,
+    main: &super::auto_training_tables::PinnedTableSource,
+    policy: &super::auto_training_tables::TableWritePolicy,
+) -> Result<()> {
+    use super::auto_training_tables::{SourceScope, connection_scope};
+    let beside_main =
+        policy.create_tables && digests.classify(main.locator.as_ref()) == SourceScope::Project;
+    let into_destination = match &policy.allowed_destination {
+        Some(destination) => {
+            connection_scope(context, destination, digests).await? == SourceScope::Project
+        }
+        None => false,
+    };
+    if beside_main || into_destination {
+        return Err(anyhow!(PRIVATE_TABLE_WRITES));
+    }
+    Ok(())
+}
+
+/// D11: private training fine-tunes only sources of its own ledger. The source a request names
+/// must be found in the App ledger chain and is adopted; the extractor of its embeddings and the
+/// newest App `burn` sources, which the consultant may name, are adopted when present. Adoption
+/// keeps each id and blob, rewrites the project and repeats harmlessly.
+#[cfg(feature = "training")]
+pub(crate) async fn adopt_pretrained_sources(
+    context: &ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    project: &str,
+    named: Option<&str>,
+    extractor: Option<&str>,
+) -> Result<()> {
+    use super::lifecycle::{LedgerLocation, LedgerScope};
+    if let Some(source_id) = named {
+        match locate_pretrained_source(context, source_id)? {
+            Some(ledger) if ledger.scope == LedgerScope::User => {}
+            Some(ledger) => {
+                repo.adopt_pretrained_source(&ledger.repo, source_id, project)?;
+            }
+            None => {
+                return Err(anyhow!(
+                    "Pretrained source {source_id} is in neither this app's training ledger nor your private one, so private training cannot fine-tune from it"
+                ));
+            }
+        }
+    }
+    if let Some(source_id) = extractor
+        && let Some(ledger) = locate_pretrained_source(context, source_id)?
+        && ledger.scope != LedgerScope::User
+        && let Err(error) = repo.adopt_pretrained_source(&ledger.repo, source_id, project)
+    {
+        tracing::warn!(source_id, %error, "The feature extractor of private training was not adopted into its ledger");
+    }
+    let app = LedgerLocation::new(context, LedgerScope::App)?;
+    let (repo, project) = (repo.clone(), project.to_owned());
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let Some((app, app_project)) = app.open_existing()? else {
+            return Ok(());
+        };
+        for source in app.list_pretrained_sources_for_engine(&app_project, 16, "burn")? {
+            if let Err(error) = repo.adopt_pretrained_source(&app, &source.id, &project) {
+                tracing::warn!(source_id = %source.id, %error, "A pretrained source the consultant can name was not adopted into the private ledger");
+            }
+        }
+        Ok(())
+    })
+    .await?
+}
+
+/// The first ledger of the chain that holds `source_id` under its own project string.
+#[cfg(feature = "training")]
+fn locate_pretrained_source(
+    context: &ExecutionContext,
+    source_id: &str,
+) -> Result<Option<super::lifecycle::LocatedLedger>> {
+    super::lifecycle::locate_repository(context, |ledger, project| {
+        Ok(existing(ledger.get_pretrained_source(source_id))?
+            .is_some_and(|source| source.project_id == project))
+    })
 }
 
 /// Explicit, pretrained, classical and generated candidates, validated before anything is
@@ -2362,13 +2605,26 @@ pub async fn finalize_auto_training(
     Ok(repo.experiment_result(id)?.into())
 }
 
+/// Publishes an audited winner after a state change, then writes its final predictions table.
 #[cfg(feature = "training")]
 pub async fn materialize_final_predictions(
     context: &mut ExecutionContext,
     id: &str,
 ) -> Result<AutoTrainingResult> {
-    let repo = experiment_repository(context, id)?;
-    let result: AutoTrainingResult = repo.experiment_result(id)?.into();
+    materialize_with(context, id, super::publisher::PublishReason::StateChange).await
+}
+
+#[cfg(feature = "training")]
+async fn materialize_with(
+    context: &mut ExecutionContext,
+    id: &str,
+    reason: super::publisher::PublishReason,
+) -> Result<AutoTrainingResult> {
+    let (repo, scope) = experiment_ledger(context, id)?;
+    let mut result: AutoTrainingResult = repo.experiment_result(id)?.into();
+    if !result.final_test_metrics.is_empty() {
+        result = publish_winner(context, &repo, scope, id, reason).await?;
+    }
     if result.predictions_table.is_some() || result.final_test_metrics.is_empty() {
         return Ok(result);
     }
@@ -2399,6 +2655,29 @@ pub async fn materialize_final_predictions(
                 .unwrap_or(result))
         }
     }
+}
+
+/// Publishes the audited winner of a standalone experiment and returns the result read after
+/// the publication events. Publishing never fails the caller; the publisher records failures
+/// as experiment events.
+#[cfg(feature = "training")]
+async fn publish_winner(
+    context: &mut ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    scope: super::lifecycle::LedgerScope,
+    id: &str,
+    reason: super::publisher::PublishReason,
+) -> Result<AutoTrainingResult> {
+    use super::publisher::{PublishOutcome, ensure_experiment_published};
+    if let PublishOutcome::Failed { error } =
+        ensure_experiment_published(context, repo, scope, id, reason).await
+    {
+        context.log_message(
+            &format!("The winner of experiment {id} was not published: {error}"),
+            flow_like::flow::execution::LogLevel::Warn,
+        );
+    }
+    Ok(repo.experiment_result(id)?.into())
 }
 
 /// Write the final test predictions as a versioned table. Returns whether a table was written.
@@ -2471,31 +2750,42 @@ enum LifecycleAction {
     Finalize,
 }
 
+/// Get, Cancel and Resume repair a missing publication at most once per run; a step that ends
+/// the search and Finalize publish the audited winner they produced.
 #[cfg(feature = "training")]
 async fn lifecycle(
     context: &mut ExecutionContext,
     id: &str,
     action: LifecycleAction,
 ) -> Result<AutoTrainingResult> {
+    use super::publisher::PublishReason;
     if matches!(action, LifecycleAction::Step) {
-        return run_next_auto_training(context, id).await;
+        let stepped = run_next_auto_training(context, id).await?;
+        if stepped.final_test_metrics.is_empty() {
+            return Ok(stepped);
+        }
+        let (repo, scope) = experiment_ledger(context, id)?;
+        return publish_winner(context, &repo, scope, id, PublishReason::StateChange).await;
     }
     let repo = experiment_repository(context, id)?;
-    match action {
-        LifecycleAction::Status => {}
+    let reason = match action {
+        LifecycleAction::Status => PublishReason::SelfRepair,
         LifecycleAction::Step => unreachable!(),
         LifecycleAction::Cancel => {
             repo.cancel_experiment(id, flow_like_ml_runtime::now_ms())?;
+            PublishReason::SelfRepair
         }
         LifecycleAction::Resume => {
             resume_saved_experiment(&repo, id)?;
             enqueue_experiment(repo.clone(), id.to_string())?;
+            PublishReason::SelfRepair
         }
         LifecycleAction::Finalize => {
             finalize_auto_training(context, id).await?;
+            PublishReason::StateChange
         }
-    }
-    materialize_final_predictions(context, id).await
+    };
+    materialize_with(context, id, reason).await
 }
 
 macro_rules! lifecycle_node {
@@ -2533,7 +2823,7 @@ macro_rules! lifecycle_node {
                 #[cfg(not(feature = "training"))]
                 {
                     let _ = context;
-                    Err(anyhow!("Auto training requires a local training build"))
+                    Err(super::lifecycle::training_unavailable())
                 }
             }
         }
@@ -2607,7 +2897,7 @@ impl NodeLogic for PredictAutoModelNode {
         let mut node = super::operation_node::<PredictAutoModelRequest, AutoModelPredictions>(
             "ml_predict_auto_model",
             "Predict Auto Model",
-            "Apply the winning model's saved preprocessing to raw rows and load its durable weights; anomaly models also return the audited calibrated probability and decision",
+            "Apply the winning model's saved preprocessing to raw rows and load its durable weights; anomaly models also return the audited calibrated probability and decision. Without the experiment in this device's training ledger, it runs the winner published under storage/models/experiments",
             "predictAutoModel",
             "AI/ML/Auto Training",
         );
@@ -2615,23 +2905,21 @@ impl NodeLogic for PredictAutoModelNode {
         node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        #[cfg(feature = "training")]
+        #[cfg(feature = "inference")]
         {
             context.deactivate_exec_pin("exec_out").await?;
             let request: PredictAutoModelRequest = context.evaluate_pin("request").await?;
-            let result = predict_auto_model(context, request).await?;
+            let result = predict_auto_model_or_published(context, request).await?;
             context
                 .set_pin_value("result", flow_like_types::json::json!(result))
                 .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
-        #[cfg(not(feature = "training"))]
+        #[cfg(not(feature = "inference"))]
         {
             let _ = context;
-            Err(anyhow!(
-                "Auto model inference requires a local training build"
-            ))
+            Err(super::published::inference_unavailable())
         }
     }
 }
@@ -2666,25 +2954,65 @@ impl NodeLogic for ExportAutoModelNode {
         #[cfg(not(feature = "training"))]
         {
             let _ = context;
-            Err(anyhow!("Auto model export requires a local training build"))
+            Err(super::lifecycle::training_unavailable())
         }
     }
 }
 
 /// Predict raw rows with the experiment's selected model and the preprocessing of the dataset
-/// it was trained on. Anomaly scores also get the decision rule the final audit measured.
+/// it was trained on, from this device's training ledger only. Anomaly scores also get the
+/// decision rule the final audit measured.
 #[cfg(feature = "training")]
 pub async fn predict_auto_model(
     context: &ExecutionContext,
-    request: PredictAutoModelRequest,
+    mut request: PredictAutoModelRequest,
 ) -> Result<AutoModelPredictions> {
+    check_prediction_batch(&request)?;
+    request.compute = request.compute.for_host();
+    let repo = experiment_repository(context, &request.experiment_id)?;
+    predict_from_ledger(context, &repo, request).await
+}
+
+/// Predict Auto Model: the ledger when it holds the experiment under this run's project string,
+/// otherwise the winner published under `models/experiments` of the app storage or, after it,
+/// of the executing user's directory.
+#[cfg(feature = "inference")]
+pub(crate) async fn predict_auto_model_or_published(
+    context: &mut ExecutionContext,
+    mut request: PredictAutoModelRequest,
+) -> Result<AutoModelPredictions> {
+    check_prediction_batch(&request)?;
+    request.compute = request.compute.for_host();
+    let id = request.experiment_id.clone();
+    let ledger = super::lifecycle::locate_repository_for_inference(context, |repo, project| {
+        Ok(existing(repo.get_experiment(&id))?
+            .is_some_and(|experiment| experiment.request.stream.project_id == project))
+    })?;
+    match ledger {
+        Some(ledger) => predict_from_ledger(context, &ledger.repo, request).await,
+        None => predict_published(context, request).await,
+    }
+}
+
+#[cfg(feature = "inference")]
+fn check_prediction_batch(request: &PredictAutoModelRequest) -> Result<()> {
     if request.rows.len() > 100_000 {
         return Err(anyhow!(
             "Prediction batch of {} rows exceeds 100,000 rows",
             request.rows.len()
         ));
     }
-    let repo = experiment_repository(context, &request.experiment_id)?;
+    Ok(())
+}
+
+/// The experiment's selected model from the ledger that holds it.
+#[cfg(feature = "inference")]
+async fn predict_from_ledger(
+    context: &ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    request: PredictAutoModelRequest,
+) -> Result<AutoModelPredictions> {
+    use super::published::AnomalyCalibration;
     let state = repo.experiment_result(&request.experiment_id)?;
     let threshold = match state.experiment.request.goals.task {
         flow_like_ml_runtime::EvaluationTask::Anomaly { threshold } => Some(threshold),
@@ -2698,48 +3026,87 @@ pub async fn predict_auto_model(
         )
     })?;
     // The final audit calibrates with the scale measured for the selected trial.
-    let calibration = threshold.map(|threshold| {
-        let scale = result
+    let calibration = threshold.map(|threshold| AnomalyCalibration {
+        scale: result
             .validation_metrics
             .get("anomaly_scale")
             .copied()
-            .unwrap_or(1.0);
-        (scale, threshold)
+            .unwrap_or(1.0),
+        threshold,
     });
-    let predictor = cached_auto_model(context, &repo, &artifact, &request.compute).await?;
+    let predictor = cached_auto_model(context, repo, &artifact, &request.compute).await?;
     let preprocessing = result.preprocessing_manifest;
+    predict_rows(
+        predictor,
+        Some(preprocessing),
+        calibration,
+        artifact.id,
+        request,
+    )
+    .await
+}
+
+/// The winner published for the experiment, with the calibration its manifest records.
+#[cfg(feature = "inference")]
+async fn predict_published(
+    context: &mut ExecutionContext,
+    request: PredictAutoModelRequest,
+) -> Result<AutoModelPredictions> {
+    use super::published::{
+        PublishedModelSource, published_predictor, published_preprocessing, resolve_model,
+    };
+    let source = PublishedModelSource::Experiment {
+        experiment_id: request.experiment_id.clone(),
+        storage: None,
+    };
+    let model = resolve_model(context, &source).await?;
+    let predictor = published_predictor(context, &model, &request.compute).await?;
+    let preprocessing = published_preprocessing(context, &model).await?;
+    predict_rows(
+        predictor,
+        preprocessing,
+        model.manifest.calibration,
+        model.manifest.artifact_id().to_owned(),
+        request,
+    )
+    .await
+}
+
+/// Runs the shared table-row prediction off the async executor.
+#[cfg(feature = "inference")]
+async fn predict_rows(
+    predictor: super::lifecycle::CachedPredictor,
+    preprocessing: Option<Value>,
+    calibration: Option<super::published::AnomalyCalibration>,
+    model_artifact_id: String,
+    request: PredictAutoModelRequest,
+) -> Result<AutoModelPredictions> {
+    let PredictAutoModelRequest {
+        experiment_id,
+        rows,
+        stateful_features,
+        feature_state,
+        feature_extractor,
+        ..
+    } = request;
     tokio::task::spawn_blocking(move || -> Result<AutoModelPredictions> {
-        let preprocessing: super::auto_training_tables::TablePreprocessing =
-            flow_like_types::json::from_value(preprocessing)?;
-        let extractor = prediction_extractor(
-            &artifact,
-            &preprocessing,
-            &request.rows,
-            request.feature_extractor.as_ref(),
+        let output = super::published::predict_table_rows(
+            &predictor,
+            preprocessing.as_ref(),
+            calibration,
+            super::published::TableRowsInput {
+                rows,
+                feature_state,
+                stateful_features,
+                feature_extractor,
+            },
         )?;
-        let (inputs, feature_state) = super::auto_training_tables::transform_table_rows_with_state(
-            &preprocessing,
-            &request.rows,
-            32 * 1024 * 1024,
-            request.feature_state,
-            request.stateful_features,
-        )?;
-        let predictions = inputs
-            .into_iter()
-            .map(|mut input| {
-                input.shape.insert(0, 1);
-                predictor.predict_checked(&input, extractor.as_ref())
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let anomaly = calibration
-            .map(|(scale, threshold)| anomaly_decisions(&predictions, scale, threshold))
-            .transpose()?;
         Ok(AutoModelPredictions {
-            experiment_id: request.experiment_id,
-            model_artifact_id: artifact.id,
-            predictions,
-            feature_state,
-            anomaly,
+            experiment_id,
+            model_artifact_id,
+            predictions: output.predictions,
+            feature_state: output.feature_state,
+            anomaly: output.anomaly,
         })
     })
     .await?
@@ -2861,19 +3228,6 @@ fn named_extractor(
     Ok(Some(first))
 }
 
-/// The extractor prediction embeddings name, which a model that recorded one requires.
-#[cfg(feature = "training")]
-fn prediction_extractor(
-    artifact: &flow_like_ml_runtime::ModelArtifact,
-    preprocessing: &super::auto_training_tables::TablePreprocessing,
-    rows: &[Value],
-    explicit: Option<&super::lifecycle::FeatureExtractorRef>,
-) -> Result<Option<flow_like_ml_runtime::engines::FeatureExtractor>> {
-    let named = requested_extractor(preprocessing, rows, explicit)?;
-    ensure_extractor_named(&artifact.id, &artifact.manifest, named.as_ref())?;
-    Ok(named)
-}
-
 /// A model that recorded the extractor of its training embeddings cannot check embeddings that
 /// name none, so it refuses them instead of scoring a possibly different feature space.
 #[cfg(feature = "inference")]
@@ -2921,16 +3275,15 @@ fn record_feature_extractor(
     Ok(())
 }
 
-#[cfg(feature = "training")]
-type CachedAutoModel = std::sync::Arc<super::lifecycle::CatalogLoadedPredictor>;
-
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 #[derive(Clone, Default)]
 struct AutoModelCache {
-    models: std::sync::Arc<tokio::sync::Mutex<Vec<(String, CachedAutoModel, u64)>>>,
+    models: std::sync::Arc<
+        tokio::sync::Mutex<Vec<(String, super::lifecycle::CachedPredictor, u64)>>,
+    >,
 }
 
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 impl flow_like_types::Cacheable for AutoModelCache {
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -2942,13 +3295,13 @@ impl flow_like_types::Cacheable for AutoModelCache {
 
 /// Loaded models are reused within one workflow run, as Student Model Inference does, so a
 /// loop over rows does not unpack and rebuild the model on every call.
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 async fn cached_auto_model(
     context: &ExecutionContext,
     repo: &flow_like_ml_runtime::TrainingRepository,
     artifact: &flow_like_ml_runtime::ModelArtifact,
     compute: &ComputeConfig,
-) -> Result<CachedAutoModel> {
+) -> Result<super::lifecycle::CachedPredictor> {
     compute.validate()?;
     let key = flow_like_ml_core::content_digest(&flow_like_types::json::to_vec(&(
         repo.path(),
@@ -3020,36 +3373,22 @@ pub async fn export_auto_model(
             "Weights and manifest must have different destinations"
         ));
     }
-    let repo = experiment_repository(context, &request.experiment_id)?;
-    let result: AutoTrainingResult = repo.experiment_result(&request.experiment_id)?.into();
-    let artifact = result.model_bundle_ref.clone().ok_or_else(|| {
-        anyhow!(
-            "Experiment {} has no model to export",
-            request.experiment_id
-        )
-    })?;
-    let blob = artifact.blob.clone();
-    let maximum = repo
-        .get_experiment(&request.experiment_id)?
-        .request
-        .budget
-        .worker_limits
-        .maximum_artifact_bytes;
-    let bytes =
-        tokio::task::spawn_blocking(move || repo.read_blob_limited(&blob, maximum)).await??;
-    let manifest = flow_like_types::json::to_vec_pretty(&flow_like_types::json::json!({
-        "format_version":1,"artifact":artifact,"preprocessing":result.preprocessing_manifest,
-        "source_table_versions":result.source_table_versions,"validation_metrics":result.validation_metrics,
-        "final_test_metrics":result.final_test_metrics,"goal_met":result.goal_met
-    }))?;
-    request.weights.put(context, bytes, false).await?;
-    request.manifest.put(context, manifest, false).await?;
+    let (repo, scope) = experiment_ledger(context, &request.experiment_id)?;
+    let exported = super::publisher::export_auto_model_files(
+        context,
+        &repo,
+        scope,
+        &request.experiment_id,
+        &request.weights,
+        &request.manifest,
+    )
+    .await?;
     Ok(ExportAutoModelResult {
-        model_artifact_id: artifact.id,
+        model_artifact_id: exported.artifact_id,
         weights: request.weights,
         manifest: request.manifest,
-        sha256: artifact.blob.sha256,
-        bytes: artifact.blob.bytes,
+        sha256: exported.sha256,
+        bytes: exported.bytes,
     })
 }
 
@@ -3067,17 +3406,19 @@ pub fn enqueue_experiment(
 #[cfg(feature = "training")]
 mod background {
     use super::{bounded_text, controller, note_experiment};
+    use crate::inspection::lifecycle::DrainReport;
     use flow_like_ml_runtime::{
         ExperimentStatus, ExperimentTrialStatus, JobStatus, TrainingRepository,
     };
     use flow_like_types::{Result, anyhow, json::json};
     use std::{
-        collections::HashSet,
+        collections::HashMap,
+        path::{Path, PathBuf},
         sync::{
             LazyLock, Mutex, MutexGuard, PoisonError,
             mpsc::{Receiver, SyncSender, TrySendError, sync_channel},
         },
-        time::Duration,
+        time::{Duration, Instant},
     };
 
     const CAPACITY: usize = 32;
@@ -3088,6 +3429,8 @@ mod background {
         repo: TrainingRepository,
         id: String,
         pub(super) key: String,
+        /// The ledger's canonical path, which drains match by prefix.
+        ledger: PathBuf,
         attempt: u32,
     }
 
@@ -3097,24 +3440,61 @@ mod background {
                 repo.path(),
                 &id,
             ))?);
+            let ledger = repo
+                .path()
+                .canonicalize()
+                .unwrap_or_else(|_| repo.path().to_path_buf());
             Ok(Self {
                 repo,
                 id,
                 key,
+                ledger,
                 attempt,
             })
         }
     }
 
-    static QUEUED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
+    /// An experiment queued for, or being driven by, the background worker.
+    #[derive(Clone)]
+    pub(super) struct Queued {
+        repo: TrainingRepository,
+        ledger: PathBuf,
+        experiment_id: String,
+    }
+
+    impl Queued {
+        pub(super) fn of(work: &Work) -> Self {
+            Self {
+                repo: work.repo.clone(),
+                ledger: work.ledger.clone(),
+                experiment_id: work.id.clone(),
+            }
+        }
+    }
+
+    /// Queued and driven experiments by work key, and the ledger prefixes of apps being drained,
+    /// under which nothing is queued or driven.
+    #[derive(Default)]
+    pub(super) struct Queue {
+        pub(super) entries: HashMap<String, Queued>,
+        draining: Vec<PathBuf>,
+    }
+
+    impl Queue {
+        fn draining(&self, ledger: &Path) -> bool {
+            self.draining.iter().any(|prefix| ledger.starts_with(prefix))
+        }
+    }
+
+    static QUEUE: LazyLock<Mutex<Queue>> = LazyLock::new(Default::default);
     static WORKER: LazyLock<Mutex<Option<SyncSender<Work>>>> = LazyLock::new(Default::default);
 
-    pub(super) fn queued() -> MutexGuard<'static, HashSet<String>> {
-        QUEUED.lock().unwrap_or_else(PoisonError::into_inner)
+    pub(super) fn queue() -> MutexGuard<'static, Queue> {
+        QUEUE.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     pub(super) fn ensure_capacity() -> Result<()> {
-        let queued = queued().len();
+        let queued = queue().entries.len();
         if queued >= CAPACITY {
             return Err(anyhow!(
                 "The background training queue already holds {queued} experiments; wait for one to finish or start without background training"
@@ -3127,24 +3507,30 @@ mod background {
         let work = Work::new(repo.clone(), id.clone(), attempt)?;
         let key = work.key.clone();
         let ahead = {
-            let mut queued = queued();
-            if !queued.insert(key.clone()) {
+            let mut queue = queue();
+            if queue.draining(&work.ledger) {
+                return Err(anyhow!(
+                    "Experiment {id} was not queued because its app's training is being stopped for deletion"
+                ));
+            }
+            if queue.entries.contains_key(&key) {
                 return Ok(());
             }
+            queue.entries.insert(key.clone(), Queued::of(&work));
             let mut worker = WORKER.lock().unwrap_or_else(PoisonError::into_inner);
             let sent = send_or_respawn(&mut *worker, work, || {
                 // Work buffered for a stopped thread is gone; its keys must not block Resume.
-                queued.retain(|queued_key| queued_key == &key);
+                queue.entries.retain(|queued_key, _| queued_key == &key);
                 spawn_worker()
             });
             drop(worker);
             if let Err(error) = sent {
-                queued.remove(&key);
+                queue.entries.remove(&key);
                 return Err(anyhow!(
                     "Experiment {id} is saved but was not queued: {error}; Resume Auto Training can queue it again"
                 ));
             }
-            queued.len() - 1
+            queue.entries.len() - 1
         };
         if ahead > 0 {
             note_experiment(
@@ -3202,6 +3588,9 @@ mod background {
     /// while settling stops the worker, and the queue key is released however the item ends.
     pub(super) fn process(work: Work, drive: impl FnOnce(&TrainingRepository, &str) -> Driven) {
         let _queued = QueuedKey(work.key.clone());
+        if undrivable(&work) {
+            return;
+        }
         let driven =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drive(&work.repo, &work.id)))
                 .unwrap_or_else(|payload| {
@@ -3213,11 +3602,79 @@ mod background {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| settle(work, driven)));
     }
 
+    /// Work of an app being drained, which the drain cancelled already, and work whose ledger
+    /// was deleted are dropped without touching the ledger.
+    fn undrivable(work: &Work) -> bool {
+        queue().draining(&work.ledger) || !work.repo.path().try_exists().unwrap_or(true)
+    }
+
     /// Releases the queue key however the work item ends, so Resume can queue it again.
     struct QueuedKey(String);
     impl Drop for QueuedKey {
         fn drop(&mut self) {
-            queued().remove(&self.0);
+            queue().entries.remove(&self.0);
+        }
+    }
+
+    /// Cancels every experiment queued or driven on a ledger under `prefixes` and waits until
+    /// their work ends or `deadline` passes. Nothing is queued under the prefixes meanwhile.
+    pub(super) fn drain(prefixes: &[PathBuf], deadline: Instant) -> DrainReport {
+        let (_draining, targets) = begin_drain(prefixes);
+        let mut cancelled = 0;
+        for target in targets.values() {
+            match target
+                .repo
+                .cancel_experiment(&target.experiment_id, flow_like_ml_runtime::now_ms())
+            {
+                Ok(_) => cancelled += 1,
+                Err(error) => {
+                    tracing::warn!(experiment_id = %target.experiment_id, %error, "A drained experiment could not be cancelled")
+                }
+            }
+        }
+        loop {
+            let still_running = {
+                let queue = queue();
+                targets
+                    .keys()
+                    .filter(|key| queue.entries.contains_key(*key))
+                    .count()
+            };
+            let now = Instant::now();
+            if still_running == 0 || now >= deadline {
+                return DrainReport {
+                    cancelled,
+                    still_running,
+                };
+            }
+            std::thread::sleep((deadline - now).min(Duration::from_millis(50)));
+        }
+    }
+
+    /// Marks `prefixes` as draining until the returned guard drops, and returns the work queued
+    /// or driven under them.
+    pub(super) fn begin_drain(prefixes: &[PathBuf]) -> (Draining, HashMap<String, Queued>) {
+        let mut queue = queue();
+        queue.draining.extend(prefixes.iter().cloned());
+        let targets = queue
+            .entries
+            .iter()
+            .filter(|(_, entry)| prefixes.iter().any(|prefix| entry.ledger.starts_with(prefix)))
+            .map(|(key, entry)| (key.clone(), entry.clone()))
+            .collect();
+        (Draining(prefixes.to_vec()), targets)
+    }
+
+    /// Removes each prefix of its drain once, so an overlapping drain keeps its own.
+    pub(super) struct Draining(Vec<PathBuf>);
+    impl Drop for Draining {
+        fn drop(&mut self) {
+            let mut queue = queue();
+            for prefix in &self.0 {
+                if let Some(index) = queue.draining.iter().position(|kept| kept == prefix) {
+                    queue.draining.remove(index);
+                }
+            }
         }
     }
 
@@ -3437,17 +3894,53 @@ mod background {
             assert_eq!(inbox.try_recv().unwrap(), 1);
         }
 
+        /// Work for experiment `id` on a fresh ledger in `directory`.
+        fn ledger_work(directory: &std::path::Path, id: &str) -> Work {
+            let repo = TrainingRepository::open(directory.join("jobs.sqlite")).unwrap();
+            Work::new(repo, id.into(), 0).unwrap()
+        }
+
         #[test]
         fn the_queue_key_is_released_when_work_panics() {
-            let key = format!("test-{}", uuid::Uuid::new_v4());
-            queued().insert(key.clone());
+            let directory = tempfile::tempdir().unwrap();
+            let work = ledger_work(directory.path(), &format!("test-{}", uuid::Uuid::new_v4()));
+            let key = work.key.clone();
+            queue().entries.insert(key.clone(), Queued::of(&work));
             let guard = QueuedKey(key.clone());
             let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
                 let _guard = guard;
                 panic!("work failed");
             }));
             assert!(outcome.is_err());
-            assert!(!queued().contains(&key));
+            assert!(!queue().entries.contains_key(&key));
+        }
+
+        #[test]
+        fn draining_refuses_and_skips_only_work_under_its_prefixes() {
+            let (drained, kept) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+            let prefix = drained.path().canonicalize().unwrap();
+            let (inside, outside) = (
+                ledger_work(drained.path(), "inside"),
+                ledger_work(kept.path(), "outside"),
+            );
+            let (draining, targets) = begin_drain(std::slice::from_ref(&prefix));
+            assert!(targets.is_empty());
+            let error = enqueue(inside.repo.clone(), "inside".into(), 0)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("being stopped for deletion"), "{error}");
+            assert!(!queue().entries.contains_key(&inside.key));
+            assert!(undrivable(&inside));
+            assert!(!undrivable(&outside));
+            let (overlapping, _) = begin_drain(std::slice::from_ref(&prefix));
+            drop(draining);
+            assert!(undrivable(&inside), "an overlapping drain keeps its prefix");
+            drop(overlapping);
+            assert!(!undrivable(&inside));
+            let deleted = tempfile::tempdir().unwrap();
+            let gone = ledger_work(deleted.path(), "gone");
+            drop(deleted);
+            assert!(undrivable(&gone));
         }
 
         #[test]
@@ -3632,13 +4125,19 @@ mod tests {
         use crate::inspection::auto_training_tables::{
             PinnedTableSource, PreparedTableDataset, TablePreprocessing, prepare_rows,
         };
+        use crate::inspection::lifecycle::{LEDGER_SCOPE_KEY, LedgerScope, StreamKind};
+        use crate::inspection::published::{
+            AnomalyCalibration, ExperimentPointer, ModelStorage, PublishedModelManifest,
+            PublishedPreprocessing, artifact_dir, experiment_pointer_path,
+        };
         use flow_like_catalog_core::{FlowPath, NodeDBConnection};
         use flow_like_ml_runtime::{
             DatasetSnapshot, EvaluationTask, PredictionRecord, StreamKey, TrainingRepository,
             TrainingSample, now_ms,
         };
+        use flow_like_storage::files::store::FlowLikeStore;
         use flow_like_types::json::{from_slice, from_value, json};
-        use std::collections::BTreeMap;
+        use std::{collections::BTreeMap, sync::Arc};
 
         struct Scratch(std::path::PathBuf);
         impl Scratch {
@@ -3661,8 +4160,86 @@ mod tests {
             _scratch: Scratch,
         }
 
-        /// A live workflow context for board "auto-test:board" whose source table holds `rows`.
+        /// The database a harness table lives in.
+        #[derive(Clone, Copy)]
+        enum TableHome {
+            /// The board's shared project database.
+            Project,
+            /// The executing user's private database.
+            User,
+        }
+
+        impl Harness {
+            fn database(&self, home: TableHome) -> String {
+                let directory = match home {
+                    TableHome::Project => "database",
+                    TableHome::User => "user-database",
+                };
+                self._scratch
+                    .0
+                    .join(directory)
+                    .to_string_lossy()
+                    .into_owned()
+            }
+
+            /// A file under the app storage or under the executing user's directory.
+            fn stored(&self, scope: LedgerScope, relative: &str) -> std::path::PathBuf {
+                match scope {
+                    LedgerScope::App => self._scratch.0.join("board").join("storage"),
+                    LedgerScope::User => self
+                        ._scratch
+                        .0
+                        .join("user-store")
+                        .join("users")
+                        .join("tester")
+                        .join("apps")
+                        .join("auto-test"),
+                }
+                .join(relative)
+            }
+
+            /// Writes `rows` as table `name` of `home` and opens it as run connection `cache_key`.
+            async fn table(
+                &mut self,
+                home: TableHome,
+                name: &str,
+                rows: Vec<Value>,
+                cache_key: &str,
+            ) -> NodeDBConnection {
+                use flow_like_catalog_core::CachedDB;
+                use flow_like_storage::databases::vector::{
+                    VectorStore, buffered::BufferedVectorStore, lancedb::LanceDBVectorStore,
+                };
+                use flow_like_types::sync::RwLock;
+                use std::sync::Arc;
+                let connection = flow_like_storage::lancedb::connect(&self.database(home))
+                    .execute()
+                    .await
+                    .unwrap();
+                let mut store = LanceDBVectorStore::from_connection(connection, name.into()).await;
+                store.insert(rows).await.unwrap();
+                let source = NodeDBConnection {
+                    cache_key: cache_key.into(),
+                };
+                self.context.cache.write().await.insert(
+                    source.cache_key.clone(),
+                    Arc::new(CachedDB {
+                        db: Arc::new(RwLock::new(BufferedVectorStore::new(store, 0))),
+                    }),
+                );
+                source
+            }
+        }
+
+        /// A live workflow context for board "auto-test:board" whose project table holds `rows`.
         async fn harness(rows: Vec<Value>) -> Harness {
+            harness_in(rows, TableHome::Project).await
+        }
+
+        /// A live workflow context for board "auto-test:board" of user "tester" with local app
+        /// storage, a local user store, and project and user databases; `home` holds the source
+        /// table of `rows`.
+        async fn harness_in(rows: Vec<Value>, home: TableHome) -> Harness {
             use ahash::AHashMap;
             use flow_like::{
                 flow::{
@@ -3675,22 +4252,27 @@ mod tests {
                 state::{FlowLikeConfig, FlowLikeState, FlowLikeStores},
                 utils::http::HTTPClient,
             };
-            use flow_like_catalog_core::CachedDB;
             use flow_like_storage::{
-                databases::vector::{
-                    VectorStore, buffered::BufferedVectorStore, lancedb::LanceDBVectorStore,
-                },
                 files::store::{FlowLikeStore, local_store::LocalObjectStore},
                 object_store::path::Path,
             };
             use flow_like_types::sync::{Mutex, RwLock};
             use std::sync::{Arc, Weak};
             let scratch = Scratch::new("auto-model");
-            let db_location = scratch.0.join("database").to_string_lossy().into_owned();
+            let user_store = scratch.0.join("user-store");
+            std::fs::create_dir_all(&user_store).unwrap();
             let mut config = FlowLikeConfig::new();
-            let reopen = db_location.clone();
+            let project = scratch.0.join("database").to_string_lossy().into_owned();
             config.register_build_project_database(Arc::new(move |_| {
-                flow_like_storage::lancedb::connect(&reopen)
+                flow_like_storage::lancedb::connect(&project)
+            }));
+            let user = scratch
+                .0
+                .join("user-database")
+                .to_string_lossy()
+                .into_owned();
+            config.register_build_user_database(Arc::new(move |_| {
+                flow_like_storage::lancedb::connect(&user)
             }));
             let state = Arc::new(FlowLikeState::new(
                 config,
@@ -3728,6 +4310,9 @@ mod tests {
             stores.app_storage_store = Some(FlowLikeStore::Local(Arc::new(
                 LocalObjectStore::new(scratch.0.clone()).unwrap(),
             )));
+            stores.user_store = Some(FlowLikeStore::Local(Arc::new(
+                LocalObjectStore::new(user_store).unwrap(),
+            )));
             context.execution_cache = Some(ExecutionContextCache {
                 stores,
                 app_id: "auto-test".into(),
@@ -3738,27 +4323,17 @@ mod tests {
                 sub: "tester".into(),
                 shadow: false,
             });
-            let connection = flow_like_storage::lancedb::connect(&db_location)
-                .execute()
-                .await
-                .unwrap();
-            let mut store =
-                LanceDBVectorStore::from_connection(connection, "measurements".into()).await;
-            store.insert(rows).await.unwrap();
-            let source = NodeDBConnection {
-                cache_key: "auto-source".into(),
-            };
-            context.cache.write().await.insert(
-                source.cache_key.clone(),
-                Arc::new(CachedDB {
-                    db: Arc::new(RwLock::new(BufferedVectorStore::new(store, 0))),
-                }),
-            );
-            Harness {
+            let mut harness = Harness {
                 context,
-                source,
+                source: NodeDBConnection {
+                    cache_key: "auto-source".into(),
+                },
                 _scratch: scratch,
-            }
+            };
+            harness.source = harness
+                .table(home, "measurements", rows, "auto-source")
+                .await;
+            harness
         }
 
         /// One reading in four per group is anomalous, so every partition holds both classes.
@@ -4034,14 +4609,33 @@ mod tests {
             let bytes = weights.get(&mut harness.context, true).await.unwrap();
             assert_eq!(bytes.len() as u64, exported.bytes);
             assert_eq!(flow_like_ml_core::content_digest(&bytes), exported.sha256);
-            let written: Value =
+            let written: PublishedModelManifest =
                 from_slice(&manifest.get(&mut harness.context, true).await.unwrap()).unwrap();
-            assert_eq!(written["artifact"]["id"], json!(artifact));
-            assert_eq!(written["preprocessing"], result.preprocessing_manifest);
+            assert_eq!(written.format_version, 2);
+            assert_eq!(written.artifact_id(), artifact);
+            assert_eq!(written.weights.file.as_deref(), Some("model.bin"));
+            assert_eq!(written.weights.sha256, exported.sha256);
+            assert_eq!(written.final_test_metrics, result.final_test_metrics);
             assert_eq!(
-                written["final_test_metrics"],
-                json!(result.final_test_metrics)
+                written.calibration,
+                Some(AnomalyCalibration {
+                    scale: anomaly.scale,
+                    threshold: anomaly.threshold
+                })
             );
+            // The preprocessing moves beside the manifest, named after its stem.
+            assert_eq!(
+                written.preprocessing.unwrap().file,
+                "model.preprocessing.json"
+            );
+            let moved: PublishedPreprocessing = from_slice(
+                &export_path("model.preprocessing.json")
+                    .get(&mut harness.context, true)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(moved.preprocessing, Some(result.preprocessing_manifest));
         }
 
         #[tokio::test]
@@ -4834,9 +5428,11 @@ mod tests {
             let repo = experiment_repository(&harness.context, &id).unwrap();
             let work = background::Work::new(repo.clone(), id.clone(), 0).unwrap();
             let key = work.key.clone();
-            background::queued().insert(key.clone());
+            background::queue()
+                .entries
+                .insert(key.clone(), background::Queued::of(&work));
             background::process(work, |_, _| panic!("drive failed on purpose"));
-            assert!(!background::queued().contains(&key));
+            assert!(!background::queue().entries.contains_key(&key));
             let state = repo.experiment_result(&id).unwrap();
             assert_eq!(state.experiment.status, ExperimentStatus::Cancelled);
             assert!(state.events.iter().any(|event| {
@@ -4953,9 +5549,11 @@ mod tests {
                         learning::finish_learning_cycle(&mut harness.context, &project_id).await,
                     ),
                 ];
+                // Another board's ledger row has another project string; another app's ledgers
+                // do not hold the project at all.
                 for (entry, error) in refusals {
                     assert!(
-                        error.contains("Learning project belongs to a different app or board"),
+                        error.contains("belongs to a different app or board"),
                         "{entry} from {app}:{board}: {error}"
                     );
                 }
@@ -5002,10 +5600,8 @@ mod tests {
         #[tokio::test]
         async fn a_ledger_directory_linked_outside_app_storage_is_refused() {
             let harness = harness(anomaly_rows()).await;
-            let storage = harness._scratch.0.join("board").join("storage");
-            std::fs::create_dir_all(&storage).unwrap();
             let outside = Scratch::new("outside-app-storage");
-            let link = storage.join("inspection");
+            let link = harness._scratch.0.join("training-ledgers");
             std::os::unix::fs::symlink(&outside.0, &link).unwrap();
             let (_, error) = refusal(
                 "escape",
@@ -5019,7 +5615,7 @@ mod tests {
                 crate::inspection::lifecycle::repository(&harness.context),
             );
             assert!(error.contains("dangling symlink"), "{error}");
-            assert!(!outside.0.join("jobs.sqlite").exists());
+            assert!(!outside.0.join("apps").exists());
         }
 
         #[test]
@@ -5169,6 +5765,393 @@ mod tests {
                     .unwrap()
                     .is_none()
             );
+        }
+
+        /// Starts `request`, steps it until its search ends and finalizes it.
+        async fn finalized_experiment(harness: &mut Harness, request: AutoTrainRequest) -> String {
+            let id = start_auto_training(&mut harness.context, request, false)
+                .await
+                .unwrap()
+                .experiment_id;
+            for _ in 0..8 {
+                let stepped = lifecycle(&mut harness.context, &id, LifecycleAction::Step)
+                    .await
+                    .unwrap();
+                if stepped.status != ExperimentStatus::Running {
+                    break;
+                }
+            }
+            let finalized = lifecycle(&mut harness.context, &id, LifecycleAction::Finalize)
+                .await
+                .unwrap();
+            assert_eq!(
+                finalized.status,
+                ExperimentStatus::Completed,
+                "{:?}",
+                finalized.stop_reason
+            );
+            assert!(!finalized.final_test_metrics.is_empty());
+            id
+        }
+
+        fn published_events(repo: &TrainingRepository, id: &str) -> usize {
+            repo.experiment_events(id)
+                .unwrap()
+                .iter()
+                .filter(|event| event["kind"] == "model_published")
+                .count()
+        }
+
+        #[tokio::test]
+        async fn finalize_publishes_the_winner_once_and_gets_rewrite_nothing() {
+            use crate::inspection::published::WEIGHTS_FILE;
+            let mut harness = harness(anomaly_rows()).await;
+            let request = anomaly_request(&harness.source);
+            let id = finalized_experiment(&mut harness, request).await;
+            let (repo, scope) = experiment_ledger(&harness.context, &id).unwrap();
+            assert_eq!(scope, LedgerScope::App);
+            let winner = AutoTrainingResult::from(repo.experiment_result(&id).unwrap())
+                .model_bundle_ref
+                .unwrap();
+            let pointer_path = harness.stored(LedgerScope::App, &experiment_pointer_path(&id));
+            let pointer = std::fs::read(&pointer_path).unwrap();
+            let parsed: ExperimentPointer = from_slice(&pointer).unwrap();
+            assert_eq!(parsed.artifact_id, winner.id);
+            assert_eq!(parsed.sha256, winner.blob.sha256);
+            assert_eq!(parsed.storage, ModelStorage::App);
+            let weights = harness.stored(
+                LedgerScope::App,
+                &format!("{}/{WEIGHTS_FILE}", artifact_dir(&winner.id)),
+            );
+            assert_eq!(
+                flow_like_ml_core::content_digest(&std::fs::read(weights).unwrap()),
+                winner.blob.sha256
+            );
+            assert_eq!(published_events(&repo, &id), 1);
+            for _ in 0..2 {
+                lifecycle(&mut harness.context, &id, LifecycleAction::Status)
+                    .await
+                    .unwrap();
+            }
+            assert_eq!(published_events(&repo, &id), 1);
+            assert_eq!(std::fs::read(&pointer_path).unwrap(), pointer);
+        }
+
+        #[tokio::test]
+        async fn training_on_a_user_table_stays_in_the_private_ledger_and_folder() {
+            let mut harness = harness_in(anomaly_rows(), TableHome::User).await;
+            let request = anomaly_request(&harness.source);
+            let id = finalized_experiment(&mut harness, request).await;
+            let read = lifecycle(&mut harness.context, &id, LifecycleAction::Status)
+                .await
+                .unwrap();
+            assert_eq!(read.experiment_id, id);
+            let (repo, scope) = experiment_ledger(&harness.context, &id).unwrap();
+            assert_eq!(scope, LedgerScope::User);
+            let experiment = repo.get_experiment(&id).unwrap();
+            let stream = &experiment.request.stream;
+            assert!(
+                stream.stream_id.starts_with("user:auto:"),
+                "{}",
+                stream.stream_id
+            );
+            assert_eq!(
+                StreamKind::of_stream(&stream.stream_id),
+                Some(StreamKind::Auto)
+            );
+            assert_eq!(stream.project_id, "auto-test:board:user");
+            assert_eq!(experiment.request.context[LEDGER_SCOPE_KEY], "user");
+            let ledgers = crate::inspection::lifecycle::ledger_paths(&harness.context).unwrap();
+            assert!(!ledgers.app.exists(), "{}", ledgers.app.display());
+            assert!(ledgers.user.unwrap().is_file());
+            assert!(
+                harness
+                    .stored(LedgerScope::User, &experiment_pointer_path(&id))
+                    .is_file()
+            );
+            assert!(!harness.stored(LedgerScope::App, "models").exists());
+        }
+
+        #[tokio::test]
+        async fn private_training_writes_no_tables_into_the_project_database() {
+            use crate::inspection::feature_engineering::FeatureSourceInput;
+            let mut harness = harness(anomaly_rows()).await;
+            let notes = harness
+                .table(TableHome::User, "operator_notes", anomaly_rows(), "user-notes")
+                .await;
+            let mut request = anomaly_request(&harness.source);
+            request.feature_sources = vec![FeatureSourceInput {
+                alias: "notes".into(),
+                source: notes,
+                allowed_columns: vec!["id".into(), "x".into()],
+            }];
+            request.tables.create_tables = true;
+            let error = start_auto_training(&mut harness.context, request.clone(), false)
+                .await
+                .err()
+                .expect("private training cannot create tables beside a project table")
+                .to_string();
+            assert_eq!(error, PRIVATE_TABLE_WRITES);
+            let ledgers = crate::inspection::lifecycle::ledger_paths(&harness.context).unwrap();
+            let user = ledgers.user.clone().unwrap();
+            assert!(!ledgers.app.exists() && !user.exists());
+            request.tables.create_tables = false;
+            let started = start_auto_training(&mut harness.context, request, false)
+                .await
+                .unwrap();
+            let (_, scope) = experiment_ledger(&harness.context, &started.experiment_id).unwrap();
+            assert_eq!(scope, LedgerScope::User);
+            assert!(!ledgers.app.exists() && user.is_file());
+        }
+
+        #[tokio::test]
+        async fn private_training_adopts_the_app_sources_it_may_fine_tune() {
+            let mut harness = harness_in(distance_rows(), TableHome::User).await;
+            let (app, app_project) =
+                crate::inspection::lifecycle::repository(&harness.context).unwrap();
+            let config = json!({
+                "recipe": {"architecture":"mlp","input_features":2,"hidden":4,"outputs":2,"objective":"classification"},
+                "backend": {"backend":"cpu"},
+                "epochs": 1, "batch_size": 1, "learning_rate": 0.01, "seed": 7
+            });
+            let source = app
+                .register_pretrained_source(
+                    &app_project,
+                    b"pretrained weights",
+                    json!({"engine":"burn","format_version":1,"config":config,"input_shape":[2],"labels":["near","far"]}),
+                    json!({"source":"fixture"}),
+                    1024,
+                    now_ms(),
+                )
+                .unwrap();
+            let mut request = distance_request(&harness.source);
+            request.tables.create_tables = false;
+            request.pretrained = Some(
+                from_value(json!({"source_id":source.id,"replace_head":false,"freeze_backbone":false}))
+                    .unwrap(),
+            );
+            let started = start_auto_training(&mut harness.context, request, false)
+                .await
+                .unwrap();
+            let (repo, scope) = experiment_ledger(&harness.context, &started.experiment_id).unwrap();
+            assert_eq!(scope, LedgerScope::User);
+            let adopted = repo.get_pretrained_source(&source.id).unwrap();
+            assert_eq!(adopted.project_id, "auto-test:board:user");
+            assert_eq!(adopted.blob.sha256, source.blob.sha256);
+            let candidates = repo
+                .get_experiment(&started.experiment_id)
+                .unwrap()
+                .request
+                .candidates;
+            assert_eq!(candidates[0].engine, "burn");
+            assert_eq!(
+                candidates[0].recipe["pretrained"]["source_id"],
+                json!(source.id)
+            );
+            let report = consultation_context(&repo, &started.experiment_id).unwrap();
+            let listed = report["pretrained_sources"].as_array().unwrap();
+            assert!(
+                listed
+                    .iter()
+                    .any(|listed| listed["source_id"] == json!(source.id)),
+                "{report}"
+            );
+        }
+
+        #[tokio::test]
+        async fn runs_without_a_local_app_store_refuse_training_before_reading_sources() {
+            use crate::inspection::lifecycle::{TRAINING_UNAVAILABLE, is_training_unavailable};
+            let mut harness = harness(anomaly_rows()).await;
+            harness
+                .context
+                .execution_cache
+                .as_mut()
+                .unwrap()
+                .stores
+                .app_storage_store = Some(FlowLikeStore::Memory(Arc::new(
+                flow_like_storage::object_store::memory::InMemory::new(),
+            )));
+            let mut request = anomaly_request(&harness.source);
+            request.dataset.source = NodeDBConnection {
+                cache_key: "unreadable-source".into(),
+            };
+            let error = start_auto_training(&mut harness.context, request, false)
+                .await
+                .err()
+                .expect("training needs a local ledger");
+            assert!(is_training_unavailable(&error), "{error}");
+            assert_eq!(error.to_string(), TRAINING_UNAVAILABLE);
+        }
+
+        fn assert_same_predictions(expected: &AutoModelPredictions, served: &AutoModelPredictions) {
+            assert_eq!(served.model_artifact_id, expected.model_artifact_id);
+            assert_eq!(served.predictions, expected.predictions);
+            assert_eq!(json!(served.anomaly), json!(expected.anomaly));
+        }
+
+        /// Copies every file below `directory` into a new memory store, below `prefix`.
+        async fn memory_copy(
+            context: &mut ExecutionContext,
+            directory: &std::path::Path,
+            prefix: &str,
+        ) -> FlowLikeStore {
+            let store = FlowLikeStore::Memory(Arc::new(
+                flow_like_storage::object_store::memory::InMemory::new(),
+            ));
+            context
+                .cache
+                .write()
+                .await
+                .insert("published-copy".into(), Arc::new(store.clone()));
+            let mut pending = vec![directory.to_path_buf()];
+            while let Some(current) = pending.pop() {
+                for entry in std::fs::read_dir(&current).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        pending.push(path);
+                        continue;
+                    }
+                    let relative = path
+                        .strip_prefix(directory)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    FlowPath {
+                        path: format!("{prefix}/{relative}"),
+                        store_ref: "published-copy".into(),
+                        cache_store_ref: None,
+                    }
+                    .put(context, std::fs::read(&path).unwrap(), true)
+                    .await
+                    .unwrap();
+                }
+            }
+            store
+        }
+
+        #[tokio::test]
+        async fn predict_auto_model_falls_back_to_the_published_winner() {
+            let mut harness = harness(anomaly_rows()).await;
+            let request = anomaly_request(&harness.source);
+            let id = finalized_experiment(&mut harness, request).await;
+            let repo = experiment_repository(&harness.context, &id).unwrap();
+            let snapshot_id = repo.get_experiment(&id).unwrap().request.snapshot_id;
+            let test = repo.get_snapshot(&snapshot_id).unwrap().test;
+            let ledger = predict_auto_model(&harness.context, raw_rows_request(&id, &test))
+                .await
+                .unwrap();
+            assert!(ledger.anomaly.is_some());
+            // Another board's runs see the ledger row under a foreign project string, which
+            // counts as missing, so they read the published files.
+            enter_scope(&mut harness, "auto-test", "other-board");
+            let foreign = predict_auto_model_or_published(
+                &mut harness.context,
+                raw_rows_request(&id, &test),
+            )
+            .await
+            .unwrap();
+            assert_same_predictions(&ledger, &foreign);
+            // A runtime without a local ledger reads the same files from its own app store.
+            enter_scope(&mut harness, "auto-test", "board");
+            let models = harness.stored(LedgerScope::App, "models");
+            let copy = memory_copy(&mut harness.context, &models, "board/storage/models").await;
+            harness.context.cache.write().await.clear();
+            harness
+                .context
+                .execution_cache
+                .as_mut()
+                .unwrap()
+                .stores
+                .app_storage_store = Some(copy);
+            let served = predict_auto_model_or_published(
+                &mut harness.context,
+                raw_rows_request(&id, &test),
+            )
+            .await
+            .unwrap();
+            assert_same_predictions(&ledger, &served);
+        }
+
+        #[tokio::test]
+        async fn unmarked_app_experiments_on_user_tables_resume_and_publish_privately() {
+            let mut harness = harness_in(anomaly_rows(), TableHome::User).await;
+            let (repo, project) =
+                crate::inspection::lifecycle::repository(&harness.context).unwrap();
+            let mut request = anomaly_request(&harness.source);
+            request.dataset.stream_id = LedgerScope::App.new_stream_id(StreamKind::Auto);
+            let prepared = crate::inspection::auto_training_tables::prepare_table_dataset(
+                &mut harness.context,
+                &request.dataset,
+            )
+            .await
+            .unwrap();
+            // Created before markers existed: an App-ledger record without `ledger_scope`.
+            let unmarked = create_experiment(
+                &repo,
+                &project,
+                &request,
+                &prepared,
+                json!({
+                    "search":request.search,"compute":request.compute,"dataset_request":request.dataset,
+                    "pinned_source":prepared.source,"table_policy":request.tables,
+                }),
+            );
+            assert!(unmarked.request.context.get(LEDGER_SCOPE_KEY).is_none());
+            repo.cancel_experiment(&unmarked.id, now_ms()).unwrap();
+            let resumed = lifecycle(&mut harness.context, &unmarked.id, LifecycleAction::Resume)
+                .await
+                .unwrap();
+            assert_ne!(resumed.status, ExperimentStatus::Cancelled);
+            eventually(|| {
+                (repo.get_experiment(&unmarked.id).unwrap().status == ExperimentStatus::Completed)
+                    .then_some(())
+            })
+            .await;
+            lifecycle(&mut harness.context, &unmarked.id, LifecycleAction::Status)
+                .await
+                .unwrap();
+            assert!(
+                harness
+                    .stored(LedgerScope::User, &experiment_pointer_path(&unmarked.id))
+                    .is_file()
+            );
+            assert!(!harness.stored(LedgerScope::App, "models").exists());
+        }
+
+        #[test]
+        fn draining_cancels_only_the_experiments_under_its_prefix() {
+            let (drained, kept) = (Scratch::new("drained-ledger"), Scratch::new("kept-ledger"));
+            let (request, prepared) = distance_dataset();
+            let queued = [&drained, &kept].map(|scratch| {
+                let repo = TrainingRepository::open(scratch.0.join("jobs.sqlite")).unwrap();
+                let experiment =
+                    create_experiment(&repo, "project", &request, &prepared, json!({}));
+                let work = background::Work::new(repo.clone(), experiment.id.clone(), 0).unwrap();
+                background::queue()
+                    .entries
+                    .insert(work.key.clone(), background::Queued::of(&work));
+                (repo, experiment.id, work.key)
+            });
+            let report = drain_experiments(
+                &[drained.0.canonicalize().unwrap()],
+                std::time::Instant::now() + std::time::Duration::from_millis(100),
+            );
+            for (_, _, key) in &queued {
+                background::queue().entries.remove(key);
+            }
+            // Nothing drives these entries, so the drained one is still queued at the deadline.
+            assert_eq!(
+                report,
+                crate::inspection::lifecycle::DrainReport {
+                    cancelled: 1,
+                    still_running: 1
+                }
+            );
+            let status = |(repo, id, _): &(TrainingRepository, String, String)| {
+                repo.get_experiment(id).unwrap().status
+            };
+            assert_eq!(status(&queued[0]), ExperimentStatus::Cancelled);
+            assert_eq!(status(&queued[1]), ExperimentStatus::Running);
         }
     }
 }

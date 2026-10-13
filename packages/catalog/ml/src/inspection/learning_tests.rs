@@ -1,5 +1,12 @@
+use super::super::lifecycle::{
+    LEDGER_SCOPE_KEY, LedgerScope, TRAINING_UNAVAILABLE, is_training_unavailable,
+};
+use super::super::published::{
+    ChampionPointer, ModelStorage, POINTER_FORMAT_VERSION, experiment_pointer_path,
+    learning_pointer_path,
+};
 use super::*;
-use flow_like_catalog_core::NodeDBConnection;
+use flow_like_catalog_core::{FlowPath, NodeDBConnection};
 use flow_like_types::{Value, tokio_util::sync::CancellationToken};
 
 #[test]
@@ -199,8 +206,14 @@ fn source_rows(range: std::ops::Range<usize>) -> Vec<Value> {
     range.map(|i|json!({"id":i.to_string(),"group":(i/2).to_string(),"time":i as i64+1,"measurement":(i%2) as f64*100.+i as f64/1000.,"target":if i%2==0{"pass"}else{"fail"}})).collect()
 }
 
-/// A board context whose local app storage holds `rows` source rows of two-row groups.
+/// A board context whose project database holds `rows` source rows of two-row groups.
 async fn learning_harness(rows: usize) -> Harness {
+    learning_harness_in(rows, false).await
+}
+
+/// A board context of user "tester" with local app storage, a local user store, and project and
+/// user databases; the source rows live in the user's database when `private` is set.
+async fn learning_harness_in(rows: usize, private: bool) -> Harness {
     use ahash::AHashMap;
     use flow_like::{
         flow::{
@@ -227,13 +240,28 @@ async fn learning_harness(rows: usize) -> Harness {
         "flow-like-learning-project-{}",
         uuid::Uuid::new_v4()
     )));
-    std::fs::create_dir_all(&directory.0).unwrap();
-    let db_location = directory.0.join("database").to_string_lossy().into_owned();
+    let user_store = directory.0.join("user-store");
+    std::fs::create_dir_all(&user_store).unwrap();
+    let project_location = directory.0.join("database").to_string_lossy().into_owned();
+    let user_location = directory
+        .0
+        .join("user-database")
+        .to_string_lossy()
+        .into_owned();
     let mut config = FlowLikeConfig::new();
-    let reopen = db_location.clone();
+    let reopen = project_location.clone();
     config.register_build_project_database(Arc::new(move |_| {
         flow_like_storage::lancedb::connect(&reopen)
     }));
+    let reopen = user_location.clone();
+    config.register_build_user_database(Arc::new(move |_| {
+        flow_like_storage::lancedb::connect(&reopen)
+    }));
+    let db_location = if private {
+        user_location
+    } else {
+        project_location
+    };
     let state = Arc::new(FlowLikeState::new(
         config,
         HTTPClient::new_without_refetch(),
@@ -269,6 +297,9 @@ async fn learning_harness(rows: usize) -> Harness {
     let mut stores = FlowLikeStores::default();
     stores.app_storage_store = Some(FlowLikeStore::Local(Arc::new(
         LocalObjectStore::new(directory.0.clone()).unwrap(),
+    )));
+    stores.user_store = Some(FlowLikeStore::Local(Arc::new(
+        LocalObjectStore::new(user_store).unwrap(),
     )));
     context.execution_cache = Some(ExecutionContextCache {
         stores,
@@ -327,6 +358,212 @@ async fn create_project(harness: &mut Harness, request: Value) -> Result<Learnin
         flow_like_types::json::from_value(request)?,
     )
     .await
+}
+
+/// The champion pointer published for project `id` in the harness's app storage.
+fn champion_pointer(directory: &Directory, id: &str) -> ChampionPointer {
+    let path = directory
+        .0
+        .join("board")
+        .join("storage")
+        .join(learning_pointer_path(id));
+    let bytes = std::fs::read(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    flow_like_types::json::from_slice(&bytes).unwrap()
+}
+
+fn experiment_published(directory: &Directory, id: &str) -> bool {
+    directory
+        .0
+        .join("board")
+        .join("storage")
+        .join(experiment_pointer_path(id))
+        .exists()
+}
+
+/// A champion pointer of `order`; without `artifact_id` the teacher decides.
+fn champion(
+    project_id: &str,
+    artifact_id: Option<&str>,
+    paused: bool,
+    order: (i64, i64),
+) -> ChampionPointer {
+    ChampionPointer {
+        format_version: POINTER_FORMAT_VERSION,
+        project_id: project_id.into(),
+        deployment_id: format!("deployment:{project_id}"),
+        deployment_generation: order.0,
+        project_generation: order.1,
+        artifact_id: artifact_id.map(str::to_owned),
+        sha256: artifact_id.map(|_| "a".repeat(64)),
+        paused,
+        cycle_id: None,
+        retained: Vec::new(),
+        storage: ModelStorage::App,
+        published_at_ms: 0,
+    }
+}
+
+/// Writes `pointer` where the app storage keeps its project's champion and drops the run's
+/// cached pointer probes, so the next route reads it.
+async fn publish_pointer(context: &mut ExecutionContext, pointer: &ChampionPointer) {
+    let root = FlowPath::from_storage_dir(context, false).await.unwrap();
+    FlowPath {
+        path: format!("{}/{}", root.path, learning_pointer_path(&pointer.project_id)),
+        store_ref: root.store_ref,
+        cache_store_ref: None,
+    }
+    .put(context, flow_like_types::json::to_vec(pointer).unwrap(), true)
+    .await
+    .unwrap();
+    context.cache.write().await.clear();
+}
+
+#[tokio::test]
+async fn learning_projects_on_user_tables_live_in_the_private_ledger() {
+    let mut harness = learning_harness_in(240, true).await;
+    let request = project_request(&harness.source);
+    let created = create_project(&mut harness, request).await.unwrap();
+    let id = created.project.id.clone();
+    let stream = &created.project.request.stream;
+    assert!(
+        stream.stream_id.starts_with("user:learning:"),
+        "{}",
+        stream.stream_id
+    );
+    assert_eq!(stream.project_id, "learning-test:board:user");
+    assert_eq!(
+        created.project.request.deployment_id,
+        format!("deployment:{}", stream.stream_id)
+    );
+    assert!(
+        created
+            .project
+            .request
+            .deployment_id
+            .starts_with("deployment:user:learning:")
+    );
+    assert_eq!(created.project.request.source[LEDGER_SCOPE_KEY], "user");
+    let project_id = || LearningProjectId {
+        project_id: id.clone(),
+    };
+    let read = get(&mut harness.context, project_id()).await.unwrap();
+    assert_eq!(read.project.id, id);
+    let stepped = step(&mut harness.context, project_id()).await.unwrap();
+    assert_eq!(stepped.project.usage.cycles_started, 1);
+    let (repo, scope) = project_ledger(&harness.context, &id).unwrap();
+    assert_eq!(scope, LedgerScope::User);
+    let cycle = repo
+        .get_experiment(&stepped.experiment.unwrap().experiment_id)
+        .unwrap();
+    assert_eq!(cycle.request.stream, created.project.request.stream);
+    assert_eq!(cycle.request.context[LEDGER_SCOPE_KEY], "user");
+    let ledgers = super::super::lifecycle::ledger_paths(&harness.context).unwrap();
+    assert!(!ledgers.app.exists(), "{}", ledgers.app.display());
+}
+
+#[tokio::test]
+async fn learning_projects_need_a_local_training_ledger() {
+    let mut harness = learning_harness(4).await;
+    harness
+        .context
+        .execution_cache
+        .as_mut()
+        .unwrap()
+        .stores
+        .app_storage_store = Some(flow_like_storage::files::store::FlowLikeStore::Memory(
+        std::sync::Arc::new(flow_like_storage::object_store::memory::InMemory::new()),
+    ));
+    let mut request = project_request(&harness.source);
+    request["training"]["dataset"]["source"] = json!({"cache_key":"unreadable-source"});
+    let error = create_project(&mut harness, request)
+        .await
+        .err()
+        .expect("learning projects need a local ledger");
+    assert!(is_training_unavailable(&error), "{error}");
+    assert_eq!(error.to_string(), TRAINING_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn routing_without_a_ledger_follows_the_published_champion() {
+    let mut harness = learning_harness(4).await;
+    harness
+        .context
+        .execution_cache
+        .as_mut()
+        .unwrap()
+        .stores
+        .app_storage_store = Some(flow_like_storage::files::store::FlowLikeStore::Memory(
+        std::sync::Arc::new(flow_like_storage::object_store::memory::InMemory::new()),
+    ));
+    let route_to = |project_id: &str| LearningRouteRequest {
+        project_id: project_id.into(),
+        sample_id: "part-1".into(),
+    };
+    let published = champion("published", Some("champion-artifact"), false, (1, 1));
+    publish_pointer(&mut harness.context, &published).await;
+    match route(&mut harness.context, route_to("published"))
+        .await
+        .unwrap()
+    {
+        LearningRoute::Champion { artifact_id } => assert_eq!(artifact_id, "champion-artifact"),
+        other => panic!("expected the published champion, got {}", json!(other)),
+    }
+    let paused = champion("published", Some("champion-artifact"), true, (1, 2));
+    publish_pointer(&mut harness.context, &paused).await;
+    assert!(matches!(
+        route(&mut harness.context, route_to("published"))
+            .await
+            .unwrap(),
+        LearningRoute::Teacher
+    ));
+    publish_pointer(&mut harness.context, &champion("collecting", None, false, (0, 1))).await;
+    assert!(matches!(
+        route(&mut harness.context, route_to("collecting"))
+            .await
+            .unwrap(),
+        LearningRoute::Teacher
+    ));
+    let error = route(&mut harness.context, route_to("unpublished"))
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains(&learning_pointer_path("unpublished")),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn a_newer_local_champion_pointer_routes_before_the_ledger() {
+    let mut harness = learning_harness(4).await;
+    let mut request = project_request(&harness.source);
+    request["automatic_promotion"] = json!(false);
+    let created = create_project(&mut harness, request).await.unwrap();
+    let id = created.project.id.clone();
+    let route_request = || LearningRouteRequest {
+        project_id: id.clone(),
+        sample_id: "part-1".into(),
+    };
+    assert!(matches!(
+        route(&mut harness.context, route_request()).await.unwrap(),
+        LearningRoute::Teacher
+    ));
+    let generation = created.project.generation;
+    let equal = champion(&id, Some("equal-order"), false, (0, generation));
+    publish_pointer(&mut harness.context, &equal).await;
+    assert!(
+        matches!(
+            route(&mut harness.context, route_request()).await.unwrap(),
+            LearningRoute::Teacher
+        ),
+        "a pointer of equal order leaves the ledger in charge"
+    );
+    let newer = champion(&id, Some("newer-champion"), false, (1, generation));
+    publish_pointer(&mut harness.context, &newer).await;
+    match route(&mut harness.context, route_request()).await.unwrap() {
+        LearningRoute::Champion { artifact_id } => assert_eq!(artifact_id, "newer-champion"),
+        other => panic!("expected the newer published champion, got {}", json!(other)),
+    }
 }
 
 #[tokio::test]
@@ -733,6 +970,9 @@ async fn run_learning_project(scenario: CanaryReviewScenario) {
         flow_like_types::json::from_value(project_request(&source)).unwrap();
     let project = create(&mut context, request).await.unwrap();
     let id = project.project.id;
+    let teacher = champion_pointer(&_directory, &id);
+    assert_eq!(teacher.project_id, id);
+    assert!(teacher.artifact_id.is_none() && !teacher.paused);
     let prepared = prepare_learning_cycle(&mut context, &id).await.unwrap();
     let experiment_id = prepared.experiment.unwrap().experiment_id;
     super::super::auto_training::run_next_auto_training(&context, &experiment_id)
@@ -762,6 +1002,12 @@ async fn run_learning_project(scenario: CanaryReviewScenario) {
     assert_eq!(first.project.state, LearningState::Active);
     assert!(first.comparison.as_ref().unwrap().eligible);
     let champion = first.project.champion_artifact_id.clone().unwrap();
+    assert_eq!(
+        champion_pointer(&_directory, &id).artifact_id.as_deref(),
+        Some(champion.as_str())
+    );
+    // Only the champion is published, never a learning cycle's experiment.
+    assert!(!experiment_published(&_directory, &experiment_id));
     let original_audit = first.cycles[0].audit_group_ids.clone();
     let cached = source.load(&mut context).await.unwrap();
     cached
@@ -1000,6 +1246,10 @@ async fn run_learning_project(scenario: CanaryReviewScenario) {
             .unwrap(),
             _ => finish_learning_cycle(&mut context, &id).await.unwrap(),
         };
+        // A promotion the corrected review turned down still republishes the champion.
+        let pointer = champion_pointer(&_directory, &id);
+        assert_eq!(pointer.artifact_id.as_deref(), Some(champion.as_str()));
+        assert_eq!(pointer.project_generation, rejected.project.generation);
         assert_eq!(rejected.project.state, LearningState::Active);
         assert_eq!(rejected.project.champion_artifact_id, Some(champion));
         assert!(rejected.project.candidate_artifact_id.is_none());
@@ -1023,6 +1273,10 @@ async fn run_learning_project(scenario: CanaryReviewScenario) {
         promoted.project.champion_artifact_id,
         Some(candidate.clone())
     );
+    assert_eq!(
+        champion_pointer(&_directory, &id).artifact_id,
+        Some(candidate.clone())
+    );
     let deployment = repo
         .get_deployment(&second.project.request.deployment_id)
         .unwrap();
@@ -1032,6 +1286,9 @@ async fn run_learning_project(scenario: CanaryReviewScenario) {
         flow_like_types::json::from_value(json!({"project_id": id})).unwrap();
     let rolled = rollback(&mut context, legacy.clone()).await.unwrap();
     assert_eq!(rolled.project.champion_artifact_id, Some(champion.clone()));
+    let pointer = champion_pointer(&_directory, &id);
+    assert_eq!(pointer.artifact_id.as_deref(), Some(champion.as_str()));
+    assert_eq!(pointer.retained.first(), Some(&candidate));
     // Retried rollbacks must not restore the model they rolled back.
     let retried = rollback(&mut context, legacy).await.unwrap();
     assert_eq!(retried.project.champion_artifact_id, Some(champion.clone()));
@@ -1085,12 +1342,19 @@ async fn run_learning_project(scenario: CanaryReviewScenario) {
         repo.learning_route(&id, "part-1").unwrap(),
         LearningRoute::Teacher
     ));
-    assert_eq!(
-        resume(&mut context, LearningProjectId { project_id: id })
-            .await
-            .unwrap()
-            .project
-            .state,
-        LearningState::Active
-    );
+    let pointer = champion_pointer(&_directory, &id);
+    assert!(pointer.paused);
+    assert_eq!(pointer.project_generation, paused.project.generation);
+    let resumed = resume(
+        &mut context,
+        LearningProjectId {
+            project_id: id.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(resumed.project.state, LearningState::Active);
+    let pointer = champion_pointer(&_directory, &id);
+    assert!(!pointer.paused);
+    assert_eq!(pointer.artifact_id.as_deref(), Some(champion.as_str()));
 }

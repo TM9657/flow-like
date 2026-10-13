@@ -211,9 +211,7 @@ impl NodeLogic for AutoTrainAgentNode {
         #[cfg(not(feature = "training"))]
         {
             let _ = context;
-            Err(flow_like_types::anyhow!(
-                "The Auto Train Agent requires a local training build"
-            ))
+            Err(flow_like_catalog_ml::inspection::lifecycle::training_unavailable())
         }
     }
 
@@ -528,7 +526,7 @@ async fn consult(
     };
     let reply = tokio::time::timeout(
         reservation.timeout,
-        super::llm_extractor_history::extract_structured_history(
+        super::llm_extractor_history::extract_structured_history_with_usage(
             context,
             model.clone(),
             messages,
@@ -692,27 +690,43 @@ fn reserve_consultation(
     }
 }
 
+/// A consultant reply, or why there is none, with the provider usage of a rejected reply.
+#[cfg(feature = "training")]
+type ConsultantReply = std::result::Result<
+    (flow_like_types::Value, LLMUsageStats),
+    super::llm_extractor_history::ExtractionFailure,
+>;
+
 /// Settles the charged call with its reported usage and records the decision. A reply that is
-/// missing or unusable is recorded as a failure, and deterministic search continues.
+/// missing or unusable is recorded as a failure, and deterministic search continues. A reply the
+/// extractor rejected still settles with its usage; a call that timed out or never reached the
+/// provider keeps its reservation.
 #[cfg(feature = "training")]
 fn conclude_consultation(
     repo: &flow_like_ml_runtime::TrainingRepository,
     experiment_id: &str,
     limits: &ConsultationLimits,
     reservation: &ConsultationReservation,
-    reply: Option<Result<(flow_like_types::Value, LLMUsageStats)>>,
+    reply: Option<ConsultantReply>,
     agent: &mut AutoTrainerAgentResult,
 ) -> Result<Option<AutoTrainerDecision>> {
     let (value, stats) = match reply {
         Some(Ok(reply)) => reply,
-        Some(Err(error)) => {
+        Some(Err(failure)) => {
+            if let Some(stats) = &failure.usage {
+                settle_consultation(repo, experiment_id, limits, reservation, stats, agent);
+            }
             record_consultation_failure(
                 repo,
                 experiment_id,
-                format!("Consultation failed; deterministic search continues: {error}"),
-                None,
+                format!(
+                    "Consultation failed; deterministic search continues: {}",
+                    failure.error
+                ),
+                failure.usage.as_ref(),
                 agent,
             )?;
+            agent.usage.extend(failure.usage);
             return Ok(None);
         }
         None => {
@@ -1056,6 +1070,13 @@ pub(crate) mod test_support {
         pub(crate) context: ExecutionContext,
         pub(crate) request: AutoTrainerAgentRequest,
         _directory: Directory,
+    }
+
+    impl Fixture {
+        /// The board's app storage directory on disk.
+        pub(crate) fn app_storage(&self) -> std::path::PathBuf {
+            self._directory.0.join("board").join("storage")
+        }
     }
 
     pub(crate) async fn fixture(maximum_trials: usize) -> Fixture {
@@ -1568,11 +1589,15 @@ mod agent_tests {
         );
         assert_eq!(llm_tokens(&repo, &id), 3_200 + 2 * reserved);
 
+        // The extractor rejects a reply outside the decision schema; the usage the provider
+        // reported for it still replaces the reservation.
         let invalid = reserve_consultation(&repo, &id, &limits, 10_000, &mut agent).unwrap();
-        let reply = Some(Ok((
-            json!({"reason":"x","next":{"action":"delete_rows"}}),
-            usage(400, 100, 500),
-        )));
+        let reply = Some(Err(super::super::llm_extractor_history::ExtractionFailure {
+            error: flow_like_types::anyhow!(
+                "Extracted data does not match the schema: 'delete_rows' is not a known action"
+            ),
+            usage: Some(usage(400, 100, 500)),
+        }));
         assert!(
             conclude_consultation(&repo, &id, &limits, &invalid, reply, &mut agent)
                 .unwrap()
@@ -1584,7 +1609,7 @@ mod agent_tests {
         assert_eq!(agent.usage.len(), 3);
         assert_eq!(agent.consultation_errors.len(), 3);
         assert!(agent.consultation_errors[0].contains("timed out"));
-        assert!(agent.consultation_errors[1].contains("Invalid consultant decision"));
+        assert!(agent.consultation_errors[1].contains("does not match the schema"));
         assert!(agent.consultation_errors[2].starts_with("Consultation skipped"));
         assert_eq!(events(&repo, &id, "consultation_reserved"), 4);
         assert_eq!(events(&repo, &id, "consultation_settled"), 2);

@@ -14,11 +14,16 @@ use flow_like::{
         board::{Board, ExecutionMode, ExecutionStage},
         execution::LogLevel,
     },
-    flow_like_storage::{Path, object_store::ObjectStore},
+    flow_like_storage::{
+        Path,
+        object_store::{self, ObjectStore},
+    },
     state::FlowLikeState,
 };
+use flow_like_catalog::ml::inspection::lifecycle::drain_app_training;
 use flow_like_types::anyhow;
 use flow_like_types::create_id;
+use flow_like_types::storage_paths::training_ledger_app_dir;
 use futures::{StreamExt, TryStreamExt};
 use image::ImageReader;
 use serde::Deserialize;
@@ -636,6 +641,26 @@ pub async fn get_app_size(
     Ok(size)
 }
 
+/// How long deleting an app waits for its background training to stop. Training that is
+/// still running afterwards keeps the app's training ledgers.
+pub(crate) const TRAINING_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Deletes every object under `prefix` and returns how many were removed. An object that
+/// disappears between listing and deletion counts as already deleted.
+async fn delete_prefix(store: &dyn ObjectStore, prefix: &Path) -> object_store::Result<usize> {
+    let locations = store.list(Some(prefix)).map_ok(|meta| meta.location).boxed();
+    let mut results = store.delete_stream(locations);
+    let mut deleted = 0;
+    while let Some(result) = results.next().await {
+        match result {
+            Ok(_) => deleted += 1,
+            Err(object_store::Error::NotFound { .. }) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(deleted)
+}
+
 #[tauri::command(async)]
 pub async fn delete_app(app_handle: AppHandle, app_id: String) -> Result<(), TauriFunctionError> {
     if app_id.is_empty() {
@@ -652,15 +677,33 @@ pub async fn delete_app(app_handle: AppHandle, app_id: String) -> Result<(), Tau
         }
     }
     settings.serialize();
+    let project_dir = settings.project_dir.clone();
     drop(settings);
 
-    let path = Path::from("apps").join(app_id);
-    let locations = store.list(Some(&path)).map_ok(|m| m.location).boxed();
-    store
-        .delete_stream(locations)
-        .try_collect::<Vec<Path>>()
+    let drain = drain_app_training(&project_dir, &app_id, TRAINING_DRAIN_TIMEOUT).await;
+
+    delete_prefix(store.as_ref(), &Path::from("apps").join(app_id.as_str()))
         .await
-        .map_err(|_| TauriFunctionError::new("Failed to delete app"))?;
+        .map_err(|error| {
+            TauriFunctionError::new(&format!("Failed to delete app {app_id}: {error}"))
+        })?;
+
+    if drain.still_running > 0 {
+        tracing::warn!(
+            app_id = %app_id,
+            still_running = drain.still_running,
+            "Training of the deleted app did not stop in time; keeping its training ledgers"
+        );
+        return Ok(());
+    }
+    let ledgers = Path::from(training_ledger_app_dir(&app_id));
+    if let Err(error) = delete_prefix(store.as_ref(), &ledgers).await {
+        tracing::warn!(
+            app_id = %app_id,
+            %error,
+            "Failed to delete the training ledgers of the deleted app"
+        );
+    }
 
     Ok(())
 }
@@ -938,4 +981,56 @@ pub async fn app_list_packages(
     let flow_like_state = TauriFlowLikeState::construct(&app_handle).await?;
     let app = App::load(app_id, flow_like_state).await?;
     Ok(app.packages)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flow_like::flow_like_storage::files::store::local_store::LocalObjectStore;
+
+    #[tokio::test]
+    async fn delete_prefix_removes_an_app_and_its_training_ledgers_but_no_other_app() {
+        let root = std::env::temp_dir().join(format!(
+            "flow-like-delete-app-{}",
+            SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let on_disk = |path: &str| {
+            path.split('/')
+                .fold(root.clone(), |joined, part| joined.join(part))
+        };
+        let store = LocalObjectStore::new(root.clone()).unwrap();
+        let ledgers = training_ledger_app_dir("doomed");
+        let doomed = [
+            "apps/doomed/manifest.app".to_string(),
+            "apps/doomed/storage/models/artifacts/model/weights.bin".to_string(),
+            format!("{ledgers}/project/jobs.sqlite"),
+            format!("{ledgers}/project/jobs.artifacts/blob.blob"),
+            format!("{ledgers}/project/.training-locks/job.lock"),
+            format!("{ledgers}/users/user/jobs.sqlite"),
+        ];
+        let kept = [
+            "apps/doomed-sibling/manifest.app".to_string(),
+            "apps/kept/manifest.app".to_string(),
+            format!("{}/project/jobs.sqlite", training_ledger_app_dir("kept")),
+        ];
+        for path in doomed.iter().chain(&kept) {
+            let path = Path::from(path.as_str());
+            store.put(&path, "data".into()).await.unwrap();
+        }
+
+        let app = Path::from("apps").join("doomed");
+        assert_eq!(delete_prefix(&store, &app).await.unwrap(), 2);
+        let ledger_prefix = Path::from(ledgers.as_str());
+        assert_eq!(delete_prefix(&store, &ledger_prefix).await.unwrap(), 4);
+        assert_eq!(delete_prefix(&store, &ledger_prefix).await.unwrap(), 0);
+        assert!(!on_disk("apps/doomed").exists());
+        assert!(!on_disk(ledgers.as_str()).exists());
+        for path in &kept {
+            assert!(on_disk(path.as_str()).is_file(), "{path} must survive");
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

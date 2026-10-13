@@ -1,13 +1,19 @@
+#[cfg(feature = "training")]
+use super::publisher::{PublishOutcome, PublishReason};
 use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
 use flow_like_ml_core::{ComputeConfig, InspectionSpec, Sample, TensorData};
 #[cfg(feature = "inference")]
 use flow_like_ml_runtime as runtime;
 use flow_like_ml_runtime::*;
-#[cfg(feature = "training")]
+#[cfg(any(feature = "inference", test))]
+use flow_like_types::anyhow;
+#[cfg(feature = "inference")]
 use flow_like_types::json::json;
-use flow_like_types::{Result, Value, anyhow};
+use flow_like_types::{Result, Value};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "training")]
+use std::path::{Path, PathBuf};
 
 /// Which device-local ledger holds a record: the app's shared ledger or the executing
 /// user's private ledger. The serde form is the `ledger_scope` marker value.
@@ -158,6 +164,18 @@ impl InspectionContext {
     }
 }
 
+/// Where a ledger database lives in the Local app-storage store.
+#[cfg(feature = "training")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LedgerSite {
+    /// `training-ledgers/apps/{app}/project`
+    App,
+    /// `apps/{app}/storage/inspection`, used in place while no App ledger exists (D16)
+    LegacyApp,
+    /// `training-ledgers/apps/{app}/users/{sub}`
+    User,
+}
+
 /// An app-storage location taken from the execution context. Resolving it touches the
 /// filesystem, so it can move to a blocking thread.
 #[cfg(feature = "training")]
@@ -167,8 +185,10 @@ pub(crate) struct LocalStorageTarget {
 }
 #[cfg(feature = "training")]
 impl LocalStorageTarget {
-    pub(crate) fn new(context: &ExecutionContext, suffix: &str) -> Result<Self> {
+    /// Shadow runs and app stores that are not Local cannot hold a ledger.
+    pub(crate) fn new(context: &ExecutionContext, site: LedgerSite) -> Result<Self> {
         use flow_like_storage::files::store::FlowLikeStore;
+        use flow_like_types::storage_paths::training_ledger_dir;
         let cache = context
             .execution_cache
             .as_ref()
@@ -179,13 +199,21 @@ impl LocalStorageTarget {
             ));
         }
         let Some(FlowLikeStore::Local(store)) = &cache.stores.app_storage_store else {
-            return Err(anyhow!(
-                "Persistent training requires local durable app storage on this executor"
-            ));
+            return Err(training_unavailable());
+        };
+        let directory = match site {
+            LedgerSite::App => {
+                flow_like_storage::Path::from(training_ledger_dir(&cache.app_id, None))
+            }
+            LedgerSite::LegacyApp => cache.get_storage(false)?.join("inspection"),
+            LedgerSite::User => flow_like_storage::Path::from(training_ledger_dir(
+                &cache.app_id,
+                Some(cache.sub.as_str()),
+            )),
         };
         Ok(Self {
             store: store.clone(),
-            location: cache.get_storage(false)?.join("inspection").join(suffix),
+            location: directory.join(LEDGER_DATABASE_FILE),
         })
     }
 
@@ -215,24 +243,29 @@ impl LocalStorageTarget {
 #[cfg(feature = "training")]
 pub(crate) struct LedgerLocation {
     target: LocalStorageTarget,
+    /// App scope only: the legacy ledger, used in place while `target` does not exist (D16).
+    legacy: Option<LocalStorageTarget>,
     project: String,
     scope: LedgerScope,
 }
 #[cfg(feature = "training")]
 impl LedgerLocation {
+    /// Captures the locations without touching the filesystem.
     pub(crate) fn new(context: &ExecutionContext, scope: LedgerScope) -> Result<Self> {
-        if scope == LedgerScope::User {
-            return Err(anyhow!(
-                "LedgerLocation::new for LedgerScope::User lands in L5"
-            ));
-        }
-        let target = LocalStorageTarget::new(context, "jobs.sqlite")?;
+        let (target, legacy) = match scope {
+            LedgerScope::App => (
+                LocalStorageTarget::new(context, LedgerSite::App)?,
+                Some(LocalStorageTarget::new(context, LedgerSite::LegacyApp)?),
+            ),
+            LedgerScope::User => (LocalStorageTarget::new(context, LedgerSite::User)?, None),
+        };
         let cache = context
             .execution_cache
             .as_ref()
             .ok_or_else(|| anyhow!("Execution storage context is unavailable"))?;
         Ok(Self {
             target,
+            legacy,
             project: scope.project_id(&cache.app_id, &cache.board_id),
             scope,
         })
@@ -251,9 +284,18 @@ impl LedgerLocation {
         &self.project
     }
 
-    /// Resolves and checks the database path; creates nothing.
-    pub(crate) fn database_path(&self) -> Result<std::path::PathBuf> {
-        self.target.resolve()
+    /// Resolves and checks the database path; creates nothing. The App scope takes the App
+    /// ledger when it exists, else the legacy ledger when that exists, else the App ledger.
+    pub(crate) fn database_path(&self) -> Result<PathBuf> {
+        let path = self.target.resolve()?;
+        let Some(legacy) = &self.legacy else {
+            return Ok(path);
+        };
+        if path.try_exists()? {
+            return Ok(path);
+        }
+        let legacy = legacy.resolve()?;
+        Ok(if legacy.try_exists()? { legacy } else { path })
     }
 
     /// The directory of the database, its blob directory and its locks; creates nothing.
@@ -277,7 +319,7 @@ impl LedgerLocation {
     /// Blocks on the filesystem and, the first time this process opens the ledger, on SQLite.
     /// Creates the ledger when it is missing.
     pub(crate) fn open(self) -> Result<(TrainingRepository, String)> {
-        Ok((open_ledger(self.target.resolve()?)?, self.project))
+        Ok((open_ledger(self.database_path()?)?, self.project))
     }
 
     /// Opens the ledger only when its database exists; creates nothing otherwise.
@@ -308,8 +350,9 @@ pub(crate) fn scoped_repository(
 
 /// Refuses shadow runs and runs without a Local app store before any data is read.
 #[cfg(feature = "training")]
-pub(crate) fn ensure_training_available(_context: &ExecutionContext) -> Result<()> {
-    Err(anyhow!("ensure_training_available lands in L5"))
+pub(crate) fn ensure_training_available(context: &ExecutionContext) -> Result<()> {
+    LocalStorageTarget::new(context, LedgerSite::App)?;
+    Ok(())
 }
 
 /// Database paths of this run's App ledger and of the executing user's private ledger,
@@ -330,8 +373,10 @@ pub(crate) fn ledger_paths(context: &ExecutionContext) -> Result<LedgerPaths> {
     Ok(LedgerPaths { app, user })
 }
 
-/// A ledger that holds a looked-up record, with the project string of its records.
+/// A ledger that holds a looked-up record, with the project string of its records. Only the
+/// training feature finds ledgers.
 #[cfg(feature = "inference")]
+#[cfg_attr(not(feature = "training"), allow(dead_code))]
 pub(crate) struct LocatedLedger {
     pub(crate) repo: TrainingRepository,
     pub(crate) project: String,
@@ -343,20 +388,175 @@ pub(crate) struct LocatedLedger {
 /// exists. Nothing is created.
 #[cfg(feature = "training")]
 pub(crate) fn locate_repository(
-    _context: &ExecutionContext,
-    _holds: impl Fn(&TrainingRepository, &str) -> Result<bool>,
+    context: &ExecutionContext,
+    holds: impl Fn(&TrainingRepository, &str) -> Result<bool>,
 ) -> Result<Option<LocatedLedger>> {
-    Err(anyhow!("locate_repository lands in L5"))
+    let chain = LedgerChain::new(context)?;
+    blocking(|| chain.locate(holds))
 }
 
 /// `locate_repository` for inference paths. None without the training feature, in shadow
 /// runs, for non-Local app stores and when no ledger holds the record.
 #[cfg(feature = "inference")]
 pub(crate) fn locate_repository_for_inference(
-    _context: &ExecutionContext,
-    _holds: impl Fn(&TrainingRepository, &str) -> Result<bool>,
+    context: &ExecutionContext,
+    holds: impl Fn(&TrainingRepository, &str) -> Result<bool>,
 ) -> Result<Option<LocatedLedger>> {
-    Ok(None)
+    #[cfg(feature = "training")]
+    {
+        match inference_location(context, LedgerChain::new)? {
+            Some(chain) => blocking(|| chain.locate(holds)),
+            None => Ok(None),
+        }
+    }
+    #[cfg(not(feature = "training"))]
+    {
+        let _ = (context, holds);
+        Ok(None)
+    }
+}
+
+/// The routed ledger of an inspection stream when it exists, for inference nodes. None where
+/// `locate_repository_for_inference` gives None; nothing is created.
+#[cfg(feature = "training")]
+fn routed_ledger_for_inference(
+    context: &ExecutionContext,
+    stream_id: &str,
+) -> Result<Option<LocatedLedger>> {
+    let Some(ledger) = inference_location(context, |context| {
+        LedgerLocation::for_stream(context, stream_id)
+    })?
+    else {
+        return Ok(None);
+    };
+    let scope = ledger.scope();
+    Ok(blocking(|| ledger.open_existing())?
+        .map(|(repo, project)| LocatedLedger {
+            repo,
+            project,
+            scope,
+        }))
+}
+
+/// A ledger location for an inference read: None in shadow runs and without a Local app store.
+#[cfg(feature = "training")]
+fn inference_location<T>(
+    context: &ExecutionContext,
+    locate: impl FnOnce(&ExecutionContext) -> Result<T>,
+) -> Result<Option<T>> {
+    if context
+        .execution_cache
+        .as_ref()
+        .is_some_and(|cache| cache.shadow)
+    {
+        return Ok(None);
+    }
+    match locate(context) {
+        Ok(location) => Ok(Some(location)),
+        Err(error) if is_training_unavailable(&error) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// The ledgers a record looked up by id may live in.
+#[cfg(feature = "training")]
+struct LedgerChain {
+    app: LedgerLocation,
+    user: LedgerLocation,
+}
+#[cfg(feature = "training")]
+impl LedgerChain {
+    fn new(context: &ExecutionContext) -> Result<Self> {
+        Ok(Self {
+            app: LedgerLocation::new(context, LedgerScope::App)?,
+            user: LedgerLocation::new(context, LedgerScope::User)?,
+        })
+    }
+
+    /// The database paths that exist, in lookup order, with the ledger each belongs to.
+    fn lookup_ledgers(&self) -> Result<Vec<(PathBuf, &LedgerLocation)>> {
+        let app = self.app.database_path()?;
+        let mut candidates = vec![(app.clone(), &self.app)];
+        if let Some(legacy) = &self.app.legacy {
+            let legacy = legacy.resolve()?;
+            if legacy != app {
+                candidates.push((legacy, &self.app));
+            }
+        }
+        candidates.push((self.user.database_path()?, &self.user));
+        let mut existing = Vec::with_capacity(candidates.len());
+        for (path, ledger) in candidates {
+            if path.try_exists()? {
+                existing.push((path, ledger));
+            }
+        }
+        Ok(existing)
+    }
+
+    fn locate(
+        &self,
+        holds: impl Fn(&TrainingRepository, &str) -> Result<bool>,
+    ) -> Result<Option<LocatedLedger>> {
+        for (path, ledger) in self.lookup_ledgers()? {
+            let repo = open_ledger(path.clone()).map_err(|error| {
+                error.context(format!("Opening training ledger {}", path.display()))
+            })?;
+            if holds(&repo, ledger.project())? {
+                return Ok(Some(LocatedLedger {
+                    repo,
+                    project: ledger.project.clone(),
+                    scope: ledger.scope,
+                }));
+            }
+        }
+        Ok(None)
+    }
+}
+
+/// Whether a ledger holds model artifact `id` of its own project; another project's row
+/// counts as missing.
+#[cfg(feature = "inference")]
+pub(crate) fn holds_artifact(repo: &TrainingRepository, project: &str, id: &str) -> Result<bool> {
+    match repo.get_artifact(id) {
+        Ok(artifact) => Ok(artifact.stream.project_id == project),
+        Err(runtime::Error::NotFound(_)) => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Whether a ledger holds pretrained source `id` of its own project; another project's
+/// source counts as missing.
+#[cfg(feature = "inference")]
+pub(crate) fn holds_pretrained_source(
+    repo: &TrainingRepository,
+    project: &str,
+    id: &str,
+) -> Result<bool> {
+    match repo.get_pretrained_source(id) {
+        Ok(source) => Ok(source.project_id == project),
+        Err(runtime::Error::NotFound(_)) => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Logs a publish that did not happen; publishing never fails the calling node.
+#[cfg(feature = "training")]
+pub(crate) fn warn_unpublished(
+    context: &mut ExecutionContext,
+    model: &str,
+    outcome: &PublishOutcome,
+) {
+    let message = match outcome {
+        PublishOutcome::Failed { error } => {
+            format!("{model} could not be published as model files: {error}")
+        }
+        PublishOutcome::Skipped { reason } => {
+            format!("{model} was not published as model files: {reason}")
+        }
+        PublishOutcome::Published(_) | PublishOutcome::Unchanged => return,
+    };
+    tracing::warn!("{message}");
+    context.log_message(&message, flow_like::flow::execution::LogLevel::Warn);
 }
 
 /// Training of one app that a drain cancelled, and what was still running at its deadline.
@@ -367,24 +567,284 @@ pub struct DrainReport {
 }
 
 /// Stops accepting new training for `app_id`, cancels its queued and running jobs and
-/// experiments in `{project_root}/training-ledgers/apps/{app}` and the legacy ledger, and
-/// waits for them up to `timeout`. A no-op without the training feature.
+/// experiments in its ledgers under `project_root` (`training_ledger_app_dir(app_id)` and the
+/// legacy `apps/{app_id}/storage/inspection/jobs.sqlite`), and waits for them up to
+/// `timeout`. A no-op without the training feature.
 pub async fn drain_app_training(
     project_root: &std::path::Path,
     app_id: &str,
     timeout: std::time::Duration,
 ) -> DrainReport {
-    let _ = (project_root, app_id, timeout);
-    DrainReport::default()
+    #[cfg(feature = "training")]
+    {
+        const LONGEST_DRAIN: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+        let prefixes = drain_prefixes(project_root, app_id);
+        let deadline = std::time::Instant::now() + timeout.min(LONGEST_DRAIN);
+        let _closed = JOBS.close(&prefixes);
+        let jobs = tokio::task::spawn_blocking({
+            let prefixes = prefixes.clone();
+            move || drain_jobs(&prefixes, deadline)
+        });
+        let experiments = tokio::task::spawn_blocking(move || {
+            super::auto_training::drain_experiments(&prefixes, deadline)
+        });
+        let (jobs, experiments) = tokio::join!(jobs, experiments);
+        [jobs, experiments]
+            .into_iter()
+            .map(|drained| {
+                drained.unwrap_or_else(|error| {
+                    tracing::warn!(app_id, %error, "Draining the app's training stopped unexpectedly");
+                    DrainReport {
+                        cancelled: 0,
+                        still_running: 1,
+                    }
+                })
+            })
+            .fold(DrainReport::default(), |total, report| DrainReport {
+                cancelled: total.cancelled + report.cancelled,
+                still_running: total.still_running + report.still_running,
+            })
+    }
+    #[cfg(not(feature = "training"))]
+    {
+        let _ = (project_root, app_id, timeout);
+        DrainReport::default()
+    }
 }
 
 /// Cancels the lifecycle jobs queued or running on `ledgers` and waits until `deadline`.
+/// `ledgers` are canonical prefixes: a ledger directory tree or a ledger database file.
+/// Waiting jobs are withdrawn from the worker, and no job starts under them meanwhile.
 #[cfg(feature = "training")]
-pub(crate) fn drain_jobs(
-    _ledgers: &[std::path::PathBuf],
-    _deadline: std::time::Instant,
-) -> DrainReport {
-    DrainReport::default()
+pub(crate) fn drain_jobs(ledgers: &[PathBuf], deadline: std::time::Instant) -> DrainReport {
+    let _closed = JOBS.close(ledgers);
+    JOBS.drain(ledgers, deadline)
+}
+
+/// The canonical prefixes of an app's ledgers under `project_root`: its directory under
+/// `training-ledgers` and its legacy ledger file.
+#[cfg(feature = "training")]
+fn drain_prefixes(project_root: &Path, app_id: &str) -> Vec<PathBuf> {
+    let ledgers = flow_like_types::storage_paths::training_ledger_app_dir(app_id)
+        .split('/')
+        .fold(project_root.to_path_buf(), |path, part| path.join(part));
+    let mut prefixes = vec![canonical_prefix(&ledgers)];
+    let mut parts = Path::new(app_id).components();
+    if matches!(
+        (parts.next(), parts.next()),
+        (Some(std::path::Component::Normal(_)), None)
+    ) {
+        let legacy = project_root
+            .join("apps")
+            .join(app_id)
+            .join("storage")
+            .join("inspection")
+            .join(LEDGER_DATABASE_FILE);
+        prefixes.push(canonical_prefix(&legacy));
+    }
+    prefixes
+}
+
+/// `path` with its deepest existing ancestor canonicalized, so it compares equal to the
+/// canonical paths of ledgers created below it later.
+#[cfg(feature = "training")]
+fn canonical_prefix(path: &Path) -> PathBuf {
+    let mut missing = Vec::new();
+    let mut existing = path;
+    loop {
+        if let Ok(canonical) = existing.canonicalize() {
+            return missing
+                .iter()
+                .rev()
+                .fold(canonical, |path, part| path.join(part));
+        }
+        match (existing.parent(), existing.file_name()) {
+            (Some(parent), Some(name)) => {
+                missing.push(name);
+                existing = parent;
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
+}
+
+/// A job dispatched to this process's training worker.
+#[cfg(feature = "training")]
+struct QueuedJob {
+    /// Canonical path of the ledger database, compared with drain prefixes.
+    ledger: PathBuf,
+    repo: TrainingRepository,
+    job_id: String,
+}
+
+/// Jobs dispatched to the training worker by queue key, the ones it runs, and the ledger
+/// prefixes a drain closed to new jobs.
+#[cfg(feature = "training")]
+#[derive(Default)]
+struct JobQueue {
+    state: std::sync::Mutex<QueueState>,
+    changed: std::sync::Condvar,
+}
+
+#[cfg(feature = "training")]
+#[derive(Default)]
+struct QueueState {
+    admitted: std::collections::HashMap<String, QueuedJob>,
+    running: std::collections::HashSet<String>,
+    draining: std::collections::HashMap<PathBuf, usize>,
+}
+
+#[cfg(feature = "training")]
+static JOBS: std::sync::LazyLock<JobQueue> = std::sync::LazyLock::new(JobQueue::default);
+
+/// Keeps ledger prefixes closed to new jobs while it lives.
+#[cfg(feature = "training")]
+struct ClosedPrefixes<'a> {
+    queue: &'a JobQueue,
+    prefixes: Vec<PathBuf>,
+}
+
+#[cfg(feature = "training")]
+impl Drop for ClosedPrefixes<'_> {
+    fn drop(&mut self) {
+        let mut state = self.queue.state();
+        for prefix in &self.prefixes {
+            if let Some(holders) = state.draining.get_mut(prefix) {
+                *holders -= 1;
+                if *holders == 0 {
+                    state.draining.remove(prefix);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "training")]
+impl JobQueue {
+    fn state(&self) -> std::sync::MutexGuard<'_, QueueState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// False when the job already waits or runs; refused under a closed prefix.
+    fn admit(&self, key: &str, job: QueuedJob) -> Result<bool> {
+        let mut state = self.state();
+        if let Some(prefix) = state
+            .draining
+            .keys()
+            .find(|prefix| job.ledger.starts_with(prefix))
+        {
+            return Err(anyhow!(
+                "Training job {} was not started because the app's training under {} is being stopped before its data is deleted",
+                job.job_id,
+                prefix.display()
+            ));
+        }
+        if state.admitted.contains_key(key) {
+            return Ok(false);
+        }
+        state.admitted.insert(key.to_owned(), job);
+        Ok(true)
+    }
+
+    /// Whether the worker runs the job; a drain withdraws the jobs that still wait.
+    fn start(&self, key: &str) -> bool {
+        let mut state = self.state();
+        state.admitted.contains_key(key) && state.running.insert(key.to_owned())
+    }
+
+    fn finish(&self, key: &str) {
+        let mut state = self.state();
+        state.admitted.remove(key);
+        state.running.remove(key);
+        drop(state);
+        self.changed.notify_all();
+    }
+
+    fn close(&self, prefixes: &[PathBuf]) -> ClosedPrefixes<'_> {
+        let mut state = self.state();
+        for prefix in prefixes {
+            *state.draining.entry(prefix.clone()).or_default() += 1;
+        }
+        ClosedPrefixes {
+            queue: self,
+            prefixes: prefixes.to_vec(),
+        }
+    }
+
+    /// Withdraws the waiting jobs under `prefixes`, cancels them and the running ones, and
+    /// waits until the running ones finish or `deadline` passes.
+    fn drain(&self, prefixes: &[PathBuf], deadline: std::time::Instant) -> DrainReport {
+        let mut drained = Vec::new();
+        {
+            let mut state = self.state();
+            let keys: Vec<String> = state
+                .admitted
+                .iter()
+                .filter(|(_, job)| prefixes.iter().any(|prefix| job.ledger.starts_with(prefix)))
+                .map(|(key, _)| key.clone())
+                .collect();
+            for key in keys {
+                let job = if state.running.contains(&key) {
+                    state
+                        .admitted
+                        .get(&key)
+                        .map(|job| (job.repo.clone(), job.job_id.clone()))
+                } else {
+                    state.admitted.remove(&key).map(|job| (job.repo, job.job_id))
+                };
+                drained.extend(job.map(|(repo, job_id)| (key, repo, job_id)));
+            }
+        }
+        let cancelled = drained
+            .iter()
+            .filter(|(_, repo, job_id)| cancel_dispatched(repo, job_id))
+            .count();
+        let mut state = self.state();
+        loop {
+            let still_running = drained
+                .iter()
+                .filter(|(key, ..)| state.admitted.contains_key(key))
+                .count();
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if still_running == 0 || remaining.is_zero() {
+                return DrainReport {
+                    cancelled,
+                    still_running,
+                };
+            }
+            state = self
+                .changed
+                .wait_timeout(state, remaining)
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .0;
+        }
+    }
+}
+
+/// Cancels a dispatched job that has not finished; false when it had or the cancel failed.
+#[cfg(feature = "training")]
+fn cancel_dispatched(repo: &TrainingRepository, job_id: &str) -> bool {
+    let cancel = || -> runtime::Result<bool> {
+        if repo.get_job(job_id)?.status.is_terminal() {
+            return Ok(false);
+        }
+        let job = repo.request_cancel(job_id, runtime::now_ms())?;
+        Ok(matches!(
+            job.status,
+            JobStatus::Cancelled | JobStatus::CancelRequested
+        ))
+    };
+    cancel().unwrap_or_else(|error| {
+        tracing::warn!(
+            job_id,
+            ledger = %repo.path().display(),
+            %error,
+            "Draining could not cancel a training job"
+        );
+        false
+    })
 }
 
 /// Runs blocking work called from async code. On a multi-threaded runtime the executor moves
@@ -456,7 +916,7 @@ fn ledger_identity(path: &std::path::Path) -> Option<LedgerIdentity> {
     Some(LedgerIdentity { file, born })
 }
 
-#[cfg(any(feature = "training", test))]
+#[cfg(any(feature = "inference", test))]
 fn check_stream(expected: &StreamKey, actual: &StreamKey) -> Result<()> {
     if expected != actual {
         return Err(anyhow!(
@@ -1005,12 +1465,10 @@ fn train_burn(
 #[cfg(feature = "training")]
 fn enqueue(repo: &TrainingRepository, job_id: &str, limits: &WorkerLimits) -> Result<()> {
     use std::sync::{
-        LazyLock, Mutex,
+        LazyLock,
         mpsc::{SyncSender, sync_channel},
     };
     type Work = (TrainingRepository, String, WorkerLimits, String);
-    static QUEUED: LazyLock<Mutex<std::collections::HashSet<String>>> =
-        LazyLock::new(|| Mutex::new(std::collections::HashSet::new()));
     // One worker limits aggregate CPU/GPU memory use; SQLite remains the durable queue.
     static WORKER: LazyLock<std::result::Result<SyncSender<Work>, String>> = LazyLock::new(|| {
         let (sender, receiver) = sync_channel::<Work>(32);
@@ -1018,9 +1476,9 @@ fn enqueue(repo: &TrainingRepository, job_id: &str, limits: &WorkerLimits) -> Re
             .name("inspection-training".into())
             .spawn(move || {
                 while let Ok((repo, id, limits, key)) = receiver.recv() {
-                    attempt(&repo, &id, &limits, &key);
-                    if let Ok(mut queued) = QUEUED.lock() {
-                        queued.remove(&key);
+                    if JOBS.start(&key) {
+                        attempt(&repo, &id, &limits, &key);
+                        JOBS.finish(&key);
                     }
                 }
             })
@@ -1031,16 +1489,24 @@ fn enqueue(repo: &TrainingRepository, job_id: &str, limits: &WorkerLimits) -> Re
         .as_ref()
         .map_err(|e| anyhow!("Cannot start training worker: {e}"))?;
     let key = queue_key(repo, job_id)?;
-    let mut queued = QUEUED
-        .lock()
-        .map_err(|_| anyhow!("Training queue lock is poisoned"))?;
-    if !queued.insert(key.clone()) {
+    let ledger = repo.path().canonicalize().map_err(|error| {
+        anyhow!(
+            "Training job {job_id} is saved, but its ledger {} cannot be resolved: {error}",
+            repo.path().display()
+        )
+    })?;
+    let job = QueuedJob {
+        ledger,
+        repo: repo.clone(),
+        job_id: job_id.to_owned(),
+    };
+    if !JOBS.admit(&key, job)? {
         return Ok(());
     }
     if let Err(error) =
         sender.try_send((repo.clone(), job_id.to_owned(), limits.clone(), key.clone()))
     {
-        queued.remove(&key);
+        JOBS.finish(&key);
         return Err(anyhow!(
             "Training job {job_id} is saved, but the worker queue is unavailable. Recover Training Jobs can retry it: {error}"
         ));
@@ -1243,7 +1709,7 @@ pub struct ArtifactRequest {
     pub inspection: InspectionContext,
     pub artifact_id: String,
 }
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 fn artifact(
     repo: TrainingRepository,
     project: String,
@@ -1413,22 +1879,24 @@ pub struct InspectionRoute {
     pub candidate_artifact_id: Option<String>,
     pub deployment_generation: Option<i64>,
 }
+/// The stream's deployment in this ledger and the route the ledger gives.
 #[cfg(feature = "training")]
 fn routing(
     repo: TrainingRepository,
     project: String,
     input: DeploymentRequest,
-) -> Result<InspectionRoute> {
+) -> Result<(Option<Deployment>, InspectionRoute)> {
     let key = input.inspection.key(project.clone())?;
     let deployment = deployment(repo.clone(), project, input)?;
     if let Some(active) = &deployment {
         if !active.paused {
-            return Ok(InspectionRoute {
+            let route = InspectionRoute {
                 mode: InspectionMode::StudentOnly,
                 active_artifact_id: Some(active.active_artifact_id.clone()),
                 candidate_artifact_id: None,
                 deployment_generation: Some(active.generation),
-            });
+            };
+            return Ok((deployment, route));
         }
     }
     let candidate = repo
@@ -1437,7 +1905,7 @@ fn routing(
         .filter(|j| j.status == JobStatus::Succeeded)
         .max_by_key(|j| j.updated_at_ms)
         .and_then(|j| j.artifact_id);
-    Ok(InspectionRoute {
+    let route = InspectionRoute {
         mode: if candidate.is_some() {
             InspectionMode::Shadow
         } else {
@@ -1445,8 +1913,194 @@ fn routing(
         },
         active_artifact_id: None,
         candidate_artifact_id: candidate,
-        deployment_generation: deployment.map(|d| d.generation),
-    })
+        deployment_generation: deployment.as_ref().map(|d| d.generation),
+    };
+    Ok((deployment, route))
+}
+
+/// The route of a published pointer: the student unless the pointer is paused or missing.
+/// Without a ledger there are no shadow candidates.
+#[cfg(feature = "inference")]
+fn published_route(pointer: Option<&super::published::DeploymentPointer>) -> InspectionRoute {
+    let active = pointer.filter(|pointer| !pointer.paused);
+    InspectionRoute {
+        mode: if active.is_some() {
+            InspectionMode::StudentOnly
+        } else {
+            InspectionMode::TeacherOnly
+        },
+        active_artifact_id: active.map(|pointer| pointer.active_artifact_id.clone()),
+        candidate_artifact_id: None,
+        deployment_generation: pointer.map(|pointer| pointer.generation),
+    }
+}
+
+/// The model root of a stream's published models, or None for both roots, App first. Records
+/// of streams minted in the App ledger without a scope marker publish to the executing user's
+/// directory when they trained on private data.
+#[cfg(feature = "inference")]
+fn published_storage(stream_id: &str) -> Option<super::published::ModelStorage> {
+    use super::published::ModelStorage;
+    match LedgerScope::of_stream(stream_id) {
+        LedgerScope::User => Some(ModelStorage::User),
+        LedgerScope::App if StreamKind::of_stream(stream_id).is_some() => None,
+        LedgerScope::App => Some(ModelStorage::App),
+    }
+}
+
+/// The published pointer of the request's deployment when it serves the request's stream
+/// and specification.
+#[cfg(feature = "inference")]
+async fn published_pointer(
+    context: &mut ExecutionContext,
+    input: &DeploymentRequest,
+) -> Result<Option<super::published::DeploymentPointer>> {
+    use super::published::ModelStorage;
+    let version = input.inspection.inspection_version()?;
+    let storages = match published_storage(&input.inspection.stream_id) {
+        Some(storage) => vec![storage],
+        None => vec![ModelStorage::App, ModelStorage::User],
+    };
+    for storage in storages {
+        let pointer =
+            super::published::published_deployment(context, &input.deployment_id, storage)
+                .await?
+                .filter(|pointer| {
+                    pointer.stream.stream_id == input.inspection.stream_id
+                        && pointer.stream.inspection_version == version
+                });
+        if pointer.is_some() {
+            return Ok(pointer);
+        }
+    }
+    Ok(None)
+}
+
+/// A published pointer that replaces the ledger's answer: one of a strictly greater
+/// generation than the deployment the ledger holds, which a pointer in the Local store must
+/// show first, or any pointer of this stream when the ledger holds none. Read failures keep
+/// the ledger's answer.
+#[cfg(feature = "training")]
+async fn superseding_pointer(
+    context: &mut ExecutionContext,
+    input: &DeploymentRequest,
+    held: Option<&Deployment>,
+) -> Option<super::published::DeploymentPointer> {
+    let generation = held.map_or(0, |deployment| deployment.generation);
+    if held.is_some() {
+        let scope = LedgerScope::of_stream(&input.inspection.stream_id);
+        let newer = super::published::newer_published_generation(
+            context,
+            super::published::PointerKind::Deployment,
+            scope,
+            &input.deployment_id,
+            (generation, 0),
+        )
+        .await;
+        if !newer {
+            return None;
+        }
+    }
+    match published_pointer(context, input).await {
+        Ok(pointer) => pointer.filter(|pointer| pointer.generation > generation),
+        Err(error) => {
+            let message = format!(
+                "Published deployment {} of stream {} could not be read, so the training ledger decides: {error}",
+                input.deployment_id, input.inspection.stream_id
+            );
+            tracing::warn!("{message}");
+            context.log_message(&message, flow_like::flow::execution::LogLevel::Warn);
+            None
+        }
+    }
+}
+
+/// Get Active Student: the routed ledger's deployment of this stream unless a published
+/// pointer supersedes it, else the published pointer's deployment.
+#[cfg(feature = "inference")]
+async fn active_deployment(
+    context: &mut ExecutionContext,
+    input: &DeploymentRequest,
+) -> Result<Option<Deployment>> {
+    #[cfg(feature = "training")]
+    if let Some(ledger) = routed_ledger_for_inference(context, &input.inspection.stream_id)? {
+        let held = {
+            let (repo, project) = (ledger.repo.clone(), ledger.project.clone());
+            let input = input.clone();
+            tokio::task::spawn_blocking(move || deployment(repo, project, input)).await??
+        };
+        if let Some(pointer) = superseding_pointer(context, input, held.as_ref()).await {
+            return Ok(Some(pointer.deployment));
+        }
+        if let Some(deployment) = &held {
+            publish_deployment(
+                context,
+                &ledger.repo,
+                ledger.scope,
+                deployment,
+                PublishReason::SelfRepair,
+            )
+            .await;
+        }
+        return Ok(held);
+    }
+    Ok(published_pointer(context, input)
+        .await?
+        .map(|pointer| pointer.deployment))
+}
+
+/// Route Inspection: the routed ledger's route unless a published pointer supersedes its
+/// deployment, else the published pointer's route.
+#[cfg(feature = "inference")]
+async fn inspection_route(
+    context: &mut ExecutionContext,
+    input: &DeploymentRequest,
+) -> Result<InspectionRoute> {
+    #[cfg(feature = "training")]
+    if let Some(ledger) = routed_ledger_for_inference(context, &input.inspection.stream_id)? {
+        let (held, route) = {
+            let LocatedLedger { repo, project, .. } = ledger;
+            let input = input.clone();
+            tokio::task::spawn_blocking(move || routing(repo, project, input)).await??
+        };
+        return Ok(match superseding_pointer(context, input, held.as_ref()).await {
+            Some(pointer) => published_route(Some(&pointer)),
+            None => route,
+        });
+    }
+    Ok(published_route(published_pointer(context, input).await?.as_ref()))
+}
+
+/// Publishes a deployment's pointer and active model; a failure is a warning.
+#[cfg(feature = "training")]
+async fn publish_deployment(
+    context: &mut ExecutionContext,
+    repo: &TrainingRepository,
+    scope: LedgerScope,
+    deployment: &Deployment,
+    reason: PublishReason,
+) {
+    let outcome =
+        super::publisher::ensure_deployment_published(context, repo, scope, deployment, reason)
+            .await;
+    let model = format!(
+        "Deployment {} of stream {}",
+        deployment.id, deployment.stream.stream_id
+    );
+    warn_unpublished(context, &model, &outcome);
+}
+
+/// The publish arm of lifecycle nodes that change a deployment.
+#[cfg(feature = "training")]
+async fn publish_changed_deployment(context: &mut ExecutionContext, routed: &Routed<Deployment>) {
+    publish_deployment(
+        context,
+        &routed.repo,
+        routed.scope,
+        &routed.output,
+        PublishReason::StateChange,
+    )
+    .await;
 }
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -1528,8 +2182,88 @@ fn rollback(
     )?)
 }
 
+/// Requests of nodes with an inspection context, which run on the ledger of their stream.
+#[cfg(feature = "training")]
+trait LedgerRouted {
+    fn stream_id(&self) -> &str;
+}
+
+#[cfg(feature = "training")]
+macro_rules! ledger_routed {
+    ($($request:ty),+ $(,)?) => {
+        $(
+            impl LedgerRouted for $request {
+                fn stream_id(&self) -> &str {
+                    &self.inspection.stream_id
+                }
+            }
+        )+
+    };
+}
+
+#[cfg(feature = "training")]
+ledger_routed!(
+    RecordSampleRequest,
+    ScheduleTrainingRequest,
+    TrainBurnRequest,
+    JobRequest,
+    TrainEfficientAdRequest,
+    ResumeRequest,
+    RecoverRequest,
+    ArtifactRequest,
+    PredictRequest,
+    StudentInferenceRequest,
+    RecordPredictionRequest,
+    PromoteRequest,
+    EvaluateTaskRequest,
+    PromoteMetricsRequest,
+    DeploymentRequest,
+    PauseDeploymentRequest,
+    RollbackRequest,
+);
+
+#[cfg(feature = "training")]
+impl LedgerRouted for ExportOnnxRequest {
+    fn stream_id(&self) -> &str {
+        &self.prediction.inspection.stream_id
+    }
+}
+
+/// A lifecycle handler's output and the ledger it ran on.
+#[cfg(feature = "training")]
+struct Routed<O> {
+    output: O,
+    repo: TrainingRepository,
+    scope: LedgerScope,
+}
+
+/// Runs `handler` on the ledger of the request's stream, creating the ledger when missing.
+#[cfg(feature = "training")]
+async fn run_routed<I, O>(
+    context: &ExecutionContext,
+    input: I,
+    handler: fn(TrainingRepository, String, I) -> Result<O>,
+) -> Result<Routed<O>>
+where
+    I: LedgerRouted + Send + 'static,
+    O: Send + 'static,
+{
+    let ledger = LedgerLocation::for_stream(context, input.stream_id())?;
+    let scope = ledger.scope();
+    tokio::task::spawn_blocking(move || {
+        let (repo, project) = ledger.open()?;
+        let output = handler(repo.clone(), project, input)?;
+        Ok(Routed {
+            output,
+            repo,
+            scope,
+        })
+    })
+    .await?
+}
+
 macro_rules! lifecycle_node {
-    ($node:ident, $id:literal, $name:literal, $description:literal, $function:literal, $input:ty, $output:ty, $handler:path $(, version = $version:literal)?) => {
+    ($node:ident, $id:literal, $name:literal, $description:literal, $function:literal, $input:ty, $output:ty, $handler:path $(, version = $version:literal)? $(, publish = $publish:path)?) => {
         #[flow_like_types::async_trait]
         impl NodeLogic for $node {
             fn get_node(&self) -> flow_like::flow::node::Node {
@@ -1551,20 +2285,16 @@ macro_rules! lifecycle_node {
                 {
                     context.deactivate_exec_pin("exec_out").await?;
                     let input: $input = context.evaluate_pin("request").await?;
-                    let ledger = LedgerLocation::new(context, LedgerScope::App)?;
-                    let result: $output = tokio::task::spawn_blocking(move || {
-                        let (repo, project) = ledger.open()?;
-                        $handler(repo, project, input)
-                    })
-                    .await??;
-                    context.set_pin_value("result", json!(result)).await?;
+                    let routed = run_routed::<$input, $output>(context, input, $handler).await?;
+                    $($publish(context, &routed).await;)?
+                    context.set_pin_value("result", json!(routed.output)).await?;
                     context.activate_exec_pin("exec_out").await?;
                     Ok(())
                 }
                 #[cfg(not(feature = "training"))]
                 {
                     let _ = context;
-                    Err(anyhow!("This executor needs the ML training feature"))
+                    Err(training_unavailable())
                 }
             }
         }
@@ -1722,11 +2452,22 @@ impl CatalogLoadedPredictor {
     /// Loads an artifact whose blob bytes come from outside a ledger, such as a published
     /// model folder. It never checks a project id.
     pub(crate) fn from_parts(
-        _artifact: ModelArtifact,
-        _bytes: &[u8],
-        _compute: &ComputeConfig,
+        artifact: ModelArtifact,
+        bytes: &[u8],
+        compute: &ComputeConfig,
     ) -> Result<Self> {
-        Err(anyhow!("CatalogLoadedPredictor::from_parts lands in L5"))
+        if artifact.manifest["engine"] == "legacy_classical" {
+            let predictor =
+                super::auto_training_legacy::LegacyPredictor::from_parts(&artifact, bytes, compute)?;
+            Ok(Self::Classical {
+                artifact,
+                predictor: std::sync::Mutex::new(predictor),
+            })
+        } else {
+            Ok(Self::Builtin(
+                runtime::engines::LoadedArtifactPredictor::from_parts(artifact, bytes, compute)?,
+            ))
+        }
     }
     pub(crate) fn artifact(&self) -> &ModelArtifact {
         match self {
@@ -1831,21 +2572,49 @@ impl flow_like_types::Cacheable for PredictionCache {
         self
     }
 }
-#[cfg(feature = "training")]
+/// The model of `artifact_id` from the ledger that holds it for this run's project, else
+/// from its published folder in the stream's model root.
+#[cfg(feature = "inference")]
 async fn cached_predictor(
     context: &mut ExecutionContext,
     inspection: &InspectionContext,
     artifact_id: &str,
     compute: &ComputeConfig,
 ) -> Result<CachedPredictor> {
+    let compute = compute.for_host();
     compute.validate()?;
-    let ledger = LedgerLocation::new(context, LedgerScope::App)?;
+    if let Some(predictor) = ledger_predictor(context, inspection, artifact_id, &compute).await? {
+        return Ok(predictor);
+    }
+    let source = super::published::PublishedModelSource::Artifact {
+        artifact_id: artifact_id.to_owned(),
+        storage: published_storage(&inspection.stream_id),
+    };
+    let model = super::published::resolve_model(context, &source).await?;
+    super::published::check_stream(&model.manifest, inspection)?;
+    super::published::published_predictor(context, &model, &compute).await
+}
+
+/// The ledger path of `cached_predictor`, reused within the run. None when no ledger holds
+/// the artifact for this run's project.
+#[cfg(feature = "inference")]
+async fn ledger_predictor(
+    context: &mut ExecutionContext,
+    inspection: &InspectionContext,
+    artifact_id: &str,
+    compute: &ComputeConfig,
+) -> Result<Option<CachedPredictor>> {
+    let located = locate_repository_for_inference(context, |repo, project| {
+        holds_artifact(repo, project, artifact_id)
+    })?;
+    let Some(LocatedLedger { repo, project, .. }) = located else {
+        return Ok(None);
+    };
     let request = ArtifactRequest {
         inspection: inspection.clone(),
         artifact_id: artifact_id.to_owned(),
     };
     let (repo, model) = tokio::task::spawn_blocking(move || -> Result<_> {
-        let (repo, project) = ledger.open()?;
         let model = artifact(repo.clone(), project, request)?;
         Ok((repo, model))
     })
@@ -1873,7 +2642,7 @@ async fn cached_predictor(
         let predictor = entry.1.clone();
         trim_prediction_cache(&mut models, entry.2, compute.memory_limit_bytes);
         models.push(entry);
-        return Ok(predictor);
+        return Ok(Some(predictor));
     }
     let reserved = model
         .blob
@@ -1894,7 +2663,7 @@ async fn cached_predictor(
         .await??,
     );
     models.push((key, predictor.clone(), reserved));
-    Ok(predictor)
+    Ok(Some(predictor))
 }
 
 #[flow_like_types::async_trait]
@@ -1911,7 +2680,7 @@ impl NodeLogic for StudentInferenceNode {
         node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        #[cfg(feature = "training")]
+        #[cfg(feature = "inference")]
         {
             context.deactivate_exec_pin("exec_out").await?;
             let mut input: StudentInferenceRequest = context.evaluate_pin("request").await?;
@@ -1942,10 +2711,10 @@ impl NodeLogic for StudentInferenceNode {
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
-        #[cfg(not(feature = "training"))]
+        #[cfg(not(feature = "inference"))]
         {
             let _ = context;
-            Err(anyhow!("Student inference requires the training feature"))
+            Err(super::published::inference_unavailable())
         }
     }
 }
@@ -1989,22 +2758,41 @@ lifecycle_node!(
     "promoteStudent",
     PromoteRequest,
     Deployment,
-    promote
+    promote,
+    publish = publish_changed_deployment
 );
 
 #[crate::register_node]
 #[derive(Default)]
 pub struct GetDeploymentNode;
-lifecycle_node!(
-    GetDeploymentNode,
-    "ml_get_deployment",
-    "Get Active Student",
-    "Resolve the promoted artifact; an empty result means the teacher still owns decisions",
-    "deployment",
-    DeploymentRequest,
-    Option<Deployment>,
-    deployment
-);
+#[flow_like_types::async_trait]
+impl NodeLogic for GetDeploymentNode {
+    fn get_node(&self) -> flow_like::flow::node::Node {
+        super::operation_node::<DeploymentRequest, Option<Deployment>>(
+            "ml_get_deployment",
+            "Get Active Student",
+            "Resolve the promoted artifact; an empty result means the teacher still owns decisions",
+            "deployment",
+            "AI/ML/Lifecycle",
+        )
+    }
+    async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
+        #[cfg(feature = "inference")]
+        {
+            context.deactivate_exec_pin("exec_out").await?;
+            let input: DeploymentRequest = context.evaluate_pin("request").await?;
+            let active = active_deployment(context, &input).await?;
+            context.set_pin_value("result", json!(active)).await?;
+            context.activate_exec_pin("exec_out").await?;
+            Ok(())
+        }
+        #[cfg(not(feature = "inference"))]
+        {
+            let _ = context;
+            Err(super::published::inference_unavailable())
+        }
+    }
+}
 
 #[crate::register_node]
 #[derive(Default)]
@@ -2017,7 +2805,8 @@ lifecycle_node!(
     "rollbackStudent",
     RollbackRequest,
     Deployment,
-    rollback
+    rollback,
+    publish = publish_changed_deployment
 );
 
 #[crate::register_node]
@@ -2044,7 +2833,8 @@ lifecycle_node!(
     "promoteByMetrics",
     PromoteMetricsRequest,
     Deployment,
-    promote_metrics
+    promote_metrics,
+    publish = publish_changed_deployment
 );
 
 #[crate::register_node]
@@ -2072,7 +2862,7 @@ impl NodeLogic for ExtractPatchFeaturesNode {
         node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        #[cfg(feature = "training")]
+        #[cfg(feature = "inference")]
         {
             context.deactivate_exec_pin("exec_out").await?;
             let mut input: PredictRequest = context.evaluate_pin("request").await?;
@@ -2098,12 +2888,10 @@ impl NodeLogic for ExtractPatchFeaturesNode {
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
-        #[cfg(not(feature = "training"))]
+        #[cfg(not(feature = "inference"))]
         {
             let _ = context;
-            Err(anyhow!(
-                "Image feature extraction requires the training feature"
-            ))
+            Err(super::published::inference_unavailable())
         }
     }
 }
@@ -2141,13 +2929,19 @@ impl NodeLogic for ExportStudentOnnxNode {
         {
             context.deactivate_exec_pin("exec_out").await?;
             let input: ExportOnnxRequest = context.evaluate_pin("request").await?;
-            let ledger = LedgerLocation::new(context, LedgerScope::App)?;
+            let ledger = LedgerLocation::for_stream(context, input.stream_id())?;
             let mut prediction = input.prediction;
             if prediction.input.shape == prediction.inspection.spec.input_shape {
                 prediction.input.shape.insert(0, 1);
             }
             let (bytes, report) = tokio::task::spawn_blocking(move || -> Result<_> {
-                let (repo, project) = ledger.open()?;
+                let Some((repo, project)) = ledger.open_existing()? else {
+                    return Err(anyhow!(
+                        "Artifact {} cannot be exported: stream {} has no training ledger on this device",
+                        prediction.artifact_id,
+                        prediction.inspection.stream_id
+                    ));
+                };
                 artifact(
                     repo.clone(),
                     project,
@@ -2177,10 +2971,15 @@ impl NodeLogic for ExportStudentOnnxNode {
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
-        #[cfg(not(feature = "onnx-export"))]
+        #[cfg(all(feature = "training", not(feature = "onnx-export")))]
         {
             let _ = context;
             Err(anyhow!("This executor needs the onnx-export feature"))
+        }
+        #[cfg(not(feature = "training"))]
+        {
+            let _ = context;
+            Err(training_unavailable())
         }
     }
 }
@@ -2751,7 +3550,8 @@ lifecycle_node!(
     "pauseStudent",
     PauseDeploymentRequest,
     Deployment,
-    pause_deployment
+    pause_deployment,
+    publish = publish_changed_deployment
 );
 
 #[crate::register_node]
@@ -2789,18 +3589,13 @@ impl NodeLogic for RouteInspectionNode {
         node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        #[cfg(feature = "training")]
+        #[cfg(feature = "inference")]
         {
             for pin in ["teacher", "student", "shadow", "exec_out"] {
                 context.deactivate_exec_pin(pin).await?;
             }
             let input: DeploymentRequest = context.evaluate_pin("request").await?;
-            let ledger = LedgerLocation::new(context, LedgerScope::App)?;
-            let route = tokio::task::spawn_blocking(move || {
-                let (repo, project) = ledger.open()?;
-                routing(repo, project, input)
-            })
-            .await??;
+            let route = inspection_route(context, &input).await?;
             context.set_pin_value("result", json!(route)).await?;
             match route.mode {
                 InspectionMode::StudentOnly => context.activate_exec_pin("student").await?,
@@ -2813,10 +3608,10 @@ impl NodeLogic for RouteInspectionNode {
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
-        #[cfg(not(feature = "training"))]
+        #[cfg(not(feature = "inference"))]
         {
             let _ = context;
-            Err(anyhow!("Inspection routing requires the training feature"))
+            Err(super::published::inference_unavailable())
         }
     }
 }
@@ -2890,18 +3685,19 @@ mod scope_tests {
                 LedgerScope::App
             );
         }
-        for manual in [
-            "user:camera",
-            "user:auto:not-a-uuid",
-            &format!("user:auto:{}", UUID.to_uppercase()),
-            &format!("user:auto:{UUID}-extra"),
-            &format!("user:auto:{}", UUID.replace('-', "")),
-            &format!("user:other:{UUID}"),
-            &format!("user:user:auto:{UUID}"),
-            "camera-1",
-            "",
-        ] {
-            assert_eq!(LedgerScope::of_stream(manual), LedgerScope::App, "{manual}");
+        let manual = [
+            "user:camera".to_string(),
+            "user:auto:not-a-uuid".to_string(),
+            format!("user:auto:{}", UUID.to_uppercase()),
+            format!("user:auto:{UUID}-extra"),
+            format!("user:auto:{}", UUID.replace('-', "")),
+            format!("user:other:{UUID}"),
+            format!("user:user:auto:{UUID}"),
+            "camera-1".to_string(),
+            String::new(),
+        ];
+        for stream in &manual {
+            assert_eq!(LedgerScope::of_stream(stream), LedgerScope::App, "{stream}");
         }
         assert_eq!(
             StreamKind::of_stream(&format!("auto:{UUID}")),
@@ -2972,11 +3768,338 @@ mod scope_tests {
     }
 }
 
+/// Node runs on a device whose Local app and user stores live in one temporary directory.
+/// Runs belong to app `app`, board `board` and user `user-1`, so App records carry the
+/// project `app:board`.
+#[cfg(all(test, feature = "training"))]
+pub(crate) mod test_device {
+    use super::*;
+    use ahash::AHashMap;
+    use flow_like::{
+        flow::{
+            board::ExecutionStage,
+            execution::{
+                LogLevel, Run, context::ExecutionContextCache, internal_node::InternalNode,
+                internal_pin::InternalPin,
+            },
+        },
+        profile::Profile,
+        state::{FlowLikeConfig, FlowLikeState, FlowLikeStores},
+        utils::http::HTTPClient,
+    };
+    use flow_like_ml_core::{Annotation, LabelProvenance, TaskKind};
+    use flow_like_storage::{
+        files::store::{FlowLikeStore, local_store::LocalObjectStore},
+        object_store::{ObjectStoreExt, memory::InMemory},
+    };
+    use flow_like_types::{
+        Cacheable,
+        sync::{Mutex, RwLock},
+    };
+    use std::sync::{Arc, Weak};
+
+    pub(crate) const BOARD: &str = "board";
+    /// App-scope models, relative to the app store.
+    pub(crate) const APP_MODELS: &str = "apps/app/storage/models";
+    /// The executing user's models, relative to the user store.
+    pub(crate) const USER_MODELS: &str = "users/user-1/apps/app/models";
+
+    /// The cache of one run; contexts that share it belong to the same run.
+    pub(crate) type RunCache = Arc<RwLock<AHashMap<String, Arc<dyn Cacheable>>>>;
+
+    pub(crate) struct Device {
+        directory: tempfile::TempDir,
+        pub(crate) app: FlowLikeStore,
+        pub(crate) user: FlowLikeStore,
+    }
+
+    impl Device {
+        pub(crate) fn new() -> Self {
+            let directory = tempfile::tempdir().unwrap();
+            let local = |name: &str| {
+                let store = LocalObjectStore::new(directory.path().join(name)).unwrap();
+                FlowLikeStore::Local(Arc::new(store))
+            };
+            let (app, user) = (local("store"), local("user"));
+            Self {
+                directory,
+                app,
+                user,
+            }
+        }
+
+        /// The canonical root of the app store.
+        pub(crate) fn root(&self) -> PathBuf {
+            self.directory.path().join("store").canonicalize().unwrap()
+        }
+
+        /// A directory outside both stores.
+        pub(crate) fn scratch(&self, name: &str) -> PathBuf {
+            self.directory.path().join(name)
+        }
+
+        pub(crate) fn stores(&self) -> FlowLikeStores {
+            stores(Some(self.app.clone()), Some(self.user.clone()))
+        }
+    }
+
+    pub(crate) fn stores(app: Option<FlowLikeStore>, user: Option<FlowLikeStore>) -> FlowLikeStores {
+        let mut stores = FlowLikeStores::default();
+        stores.app_storage_store = app;
+        stores.user_store = user;
+        stores
+    }
+
+    pub(crate) fn memory_store() -> FlowLikeStore {
+        FlowLikeStore::Memory(Arc::new(InMemory::new()))
+    }
+
+    /// A Memory store with the objects under `prefix` of `store`, as a runtime without a
+    /// ledger reads published files.
+    pub(crate) async fn published_copy(store: &FlowLikeStore, prefix: &str) -> FlowLikeStore {
+        use futures::TryStreamExt;
+        let source = store.as_generic();
+        let copy = Arc::new(InMemory::new());
+        let objects: Vec<_> = source
+            .list(Some(&flow_like_storage::Path::from(prefix)))
+            .try_collect()
+            .await
+            .unwrap();
+        assert!(!objects.is_empty(), "nothing is published under {prefix}");
+        for object in objects {
+            let bytes = source.get(&object.location).await.unwrap().bytes().await;
+            copy.put(&object.location, bytes.unwrap().into())
+                .await
+                .unwrap();
+        }
+        FlowLikeStore::Memory(copy)
+    }
+
+    /// A context of a run on `board` that runs `logic` with `request` on its request pin.
+    pub(crate) async fn node_context(
+        logic: Arc<dyn NodeLogic>,
+        request: Value,
+        stores: FlowLikeStores,
+        run: &RunCache,
+        board: &str,
+    ) -> ExecutionContext {
+        let node = logic.get_node();
+        let pins = node
+            .pins
+            .values()
+            .map(|pin| (pin.id.clone(), Arc::new(InternalPin::new(pin, false))))
+            .collect();
+        let node = Arc::new(InternalNode::new(node, pins, logic, AHashMap::new()));
+        if let Ok(pin) = node.get_pin_by_name("request").await {
+            pin.set_value(request).await;
+        }
+        let state = Arc::new(FlowLikeState::new(
+            FlowLikeConfig::new(),
+            HTTPClient::new_without_refetch(),
+        ));
+        let detached: Weak<Mutex<Run>> = Weak::new();
+        let mut context = ExecutionContext::new(
+            Arc::new(AHashMap::from_iter([(
+                node.node_id().to_string(),
+                node.clone(),
+            )])),
+            &detached,
+            &state,
+            &node,
+            &Arc::new(Mutex::new(AHashMap::new())),
+            run,
+            LogLevel::Debug,
+            ExecutionStage::Dev,
+            Arc::new(Profile::default()),
+            None,
+            Arc::new(RwLock::new(Vec::new())),
+            None,
+            None,
+            Arc::new(AHashMap::new()),
+            None,
+        )
+        .await;
+        context.execution_cache = Some(ExecutionContextCache {
+            stores,
+            app_id: "app".into(),
+            model_usage_app_id: None,
+            board_dir: flow_like_storage::Path::from("apps").join("app"),
+            board_id: board.into(),
+            node_id: node.shared_node_id(),
+            sub: "user-1".into(),
+            shadow: false,
+        });
+        context
+    }
+
+    /// A context of a new run on `board` that runs no node.
+    pub(crate) async fn plain_context(stores: FlowLikeStores) -> ExecutionContext {
+        let logic: Arc<dyn NodeLogic> = Arc::new(GetModelArtifactNode);
+        node_context(logic, Value::Null, stores, &RunCache::default(), BOARD).await
+    }
+
+    /// Runs `logic` like a run on `board` would and returns its context for the outputs.
+    pub(crate) async fn run_on(
+        logic: impl NodeLogic + 'static,
+        request: Value,
+        stores: FlowLikeStores,
+        run: &RunCache,
+        board: &str,
+    ) -> Result<ExecutionContext> {
+        let logic: Arc<dyn NodeLogic> = Arc::new(logic);
+        let mut context = node_context(logic.clone(), request, stores, run, board).await;
+        logic.run(&mut context).await?;
+        Ok(context)
+    }
+
+    pub(crate) async fn output(context: &ExecutionContext, pin: &str) -> Value {
+        let pin = context.get_pin_by_name(pin).await.unwrap();
+        pin.get_raw_value().await.unwrap_or(Value::Null)
+    }
+
+    /// The result of `logic` run in a new run on board `board`.
+    pub(crate) async fn run_node(
+        logic: impl NodeLogic + 'static,
+        request: Value,
+        stores: FlowLikeStores,
+    ) -> Result<Value> {
+        let context = run_on(logic, request, stores, &RunCache::default(), BOARD).await?;
+        Ok(output(&context, "result").await)
+    }
+
+    /// Exports the artifact's folder to `models/artifacts/{id}` of the app storage, where the
+    /// App scope resolves it.
+    pub(crate) async fn publish_artifact_folder(
+        context: &mut ExecutionContext,
+        repo: &TrainingRepository,
+        artifact_id: &str,
+    ) {
+        let root = flow_like_catalog_core::FlowPath::from_storage_dir(context, false)
+            .await
+            .unwrap();
+        let destination = flow_like_catalog_core::FlowPath {
+            path: format!(
+                "{}/{}",
+                root.path,
+                super::super::published::artifact_dir(artifact_id)
+            ),
+            ..root
+        };
+        let model = super::super::publisher::LedgerModel::Artifact {
+            artifact_id: artifact_id.into(),
+        };
+        super::super::publisher::export_model_folder(
+            context,
+            repo,
+            LedgerScope::App,
+            &model,
+            &destination,
+        )
+        .await
+        .unwrap();
+    }
+
+    /// A ResNet-18 image classifier of stream `stream_id`, small enough for unit tests and
+    /// able to extract spatial features.
+    pub(crate) fn tiny_resnet(
+        repo: &TrainingRepository,
+        project: &str,
+        stream_id: &str,
+    ) -> (InspectionContext, ModelArtifact) {
+        let labels = vec!["good".to_owned(), "bad".to_owned()];
+        let inspection = InspectionContext {
+            stream_id: stream_id.into(),
+            spec: InspectionSpec {
+                id: "tiny".into(),
+                description: "Tiny image classifier".into(),
+                task: TaskKind::ImageClassification,
+                labels: labels.clone(),
+                input_shape: vec![1, 8, 8],
+                prediction_horizon_ms: None,
+                minimum_examples: 1,
+                minimum_examples_per_class: 0,
+            },
+        };
+        for index in 0..12 {
+            let time = 1_000 + index;
+            let sample = Sample {
+                id: format!("{stream_id}-{index}"),
+                group_id: format!("{stream_id}-group-{index}"),
+                stream_id: stream_id.into(),
+                timestamp_ms: time,
+                window_start_ms: time,
+                window_end_ms: time,
+                input: TensorData {
+                    shape: vec![1, 8, 8],
+                    values: vec![index as f32 / 12.0; 64],
+                },
+                annotation: Annotation::Class {
+                    class_id: (index % 2) as u32,
+                },
+                provenance: LabelProvenance::Reviewed {
+                    reviewer: "fixture".into(),
+                    reviewed_at_ms: 2_000,
+                },
+                outcome: None,
+            };
+            let request = RecordSampleRequest {
+                inspection: inspection.clone(),
+                sample,
+                annotation_revision: 1,
+                accepted: true,
+                label_available_at_ms: 2_000,
+            };
+            record_sample(repo.clone(), project.into(), request).unwrap();
+        }
+        let config = flow_like_ml_burn::TrainingConfig {
+            recipe: flow_like_ml_burn::Recipe::ResNet18 {
+                input_channels: 1,
+                classes: 2,
+                base_channels: 2,
+            },
+            backend: flow_like_ml_burn::BackendChoice::Cpu,
+            epochs: 1,
+            batch_size: 2,
+            learning_rate: 0.001,
+            seed: 17,
+            gradient_clip: 0.1,
+        };
+        let request = ScheduleTrainingRequest {
+            inspection: inspection.clone(),
+            after_new_samples: 12,
+            training: TrainingRequest {
+                engine: "burn".into(),
+                recipe: json!({
+                    "config": config, "labels": labels, "preprocessing": [], "pretrained": null
+                }),
+                compute: json!({"backend": "cpu"}),
+            },
+            split: SplitPolicy::Group {
+                train_fraction: 0.5,
+                validation_fraction: 0.25,
+                seed: 7,
+            },
+            worker_limits: WorkerLimits::default(),
+            feature_extractor: None,
+        };
+        let ignore = |_: &TrainingRepository, _: &str, _: &WorkerLimits| -> Result<()> { Ok(()) };
+        let job = schedule_with(repo.clone(), project.into(), request, ignore)
+            .unwrap()
+            .unwrap();
+        run_training_job(repo, &job.id, &WorkerLimits::default()).unwrap();
+        let artifact_id = repo.get_job(&job.id).unwrap().artifact_id.unwrap();
+        (inspection, repo.get_artifact(&artifact_id).unwrap())
+    }
+}
+
 #[cfg(all(test, feature = "training"))]
 mod lifecycle_tests {
+    use super::test_device::*;
     use super::*;
     use flow_like_ml_core::{Annotation, LabelProvenance, Outcome, TaskKind};
+    use flow_like_types::json::{from_slice, from_value};
     use std::cell::RefCell;
+    use std::time::{Duration, Instant};
 
     const PROJECT: &str = "app:board";
 
@@ -3917,7 +5040,7 @@ mod lifecycle_tests {
             active.map(|found| found.generation),
             Some(promoted.generation)
         );
-        let route = routing(repo.clone(), PROJECT.into(), request(&inspection)).unwrap();
+        let (_, route) = routing(repo.clone(), PROJECT.into(), request(&inspection)).unwrap();
         assert!(matches!(route.mode, InspectionMode::StudentOnly));
 
         let mut edited = inspection.clone();
@@ -3927,7 +5050,7 @@ mod lifecycle_tests {
                 .unwrap()
                 .is_none()
         );
-        let route = routing(repo.clone(), PROJECT.into(), request(&edited)).unwrap();
+        let (_, route) = routing(repo.clone(), PROJECT.into(), request(&edited)).unwrap();
         assert!(matches!(route.mode, InspectionMode::TeacherOnly));
         assert_eq!(route.deployment_generation, None);
         let pause_request = PauseDeploymentRequest {
@@ -3949,5 +5072,547 @@ mod lifecycle_tests {
         let edited_key = edited.key(PROJECT.into()).unwrap();
         assert!(check_deployment_scope(&repo, &edited_key, "main").is_err());
         check_deployment_scope(&repo, &edited_key, "edited").unwrap();
+    }
+
+    const APP_LEDGER: &str = "training-ledgers/apps/app/project/jobs.sqlite";
+    const LEGACY_LEDGER: &str = "apps/app/storage/inspection/jobs.sqlite";
+    const USER_LEDGER: &str = "training-ledgers/apps/app/users/user-1/jobs.sqlite";
+
+    #[tokio::test]
+    async fn app_ledgers_use_the_new_path_then_a_legacy_ledger_in_place() {
+        let device = Device::new();
+        let context = plain_context(device.stores()).await;
+        let (new, legacy) = (device.root().join(APP_LEDGER), device.root().join(LEGACY_LEDGER));
+        let app = || LedgerLocation::new(&context, LedgerScope::App).unwrap();
+        assert_eq!(app().database_path().unwrap(), new);
+        assert!(!app().exists().unwrap());
+        TrainingRepository::open(&legacy).unwrap();
+        assert_eq!(app().database_path().unwrap(), legacy);
+        assert_eq!(app().directory().unwrap(), legacy.parent().unwrap());
+        assert_eq!(app().open().unwrap().0.path(), legacy);
+        TrainingRepository::open(&new).unwrap();
+        assert_eq!(app().database_path().unwrap(), new);
+        assert_eq!(app().project(), PROJECT);
+        let user = LedgerLocation::new(&context, LedgerScope::User).unwrap();
+        let private = device.root().join(USER_LEDGER);
+        assert_eq!(user.database_path().unwrap(), private);
+        assert_eq!(
+            (user.scope(), user.project()),
+            (LedgerScope::User, "app:board:user")
+        );
+        let paths = ledger_paths(&context).unwrap();
+        assert_eq!((paths.app, paths.user), (new, Some(private)));
+    }
+
+    #[tokio::test]
+    async fn training_needs_a_live_run_with_a_local_app_store() {
+        let context = plain_context(stores(Some(memory_store()), None)).await;
+        let refusal = LedgerLocation::new(&context, LedgerScope::App).err().unwrap();
+        assert!(is_training_unavailable(&refusal), "{refusal}");
+        let refusal = ensure_training_available(&context).unwrap_err();
+        assert!(is_training_unavailable(&refusal), "{refusal}");
+        let found = locate_repository_for_inference(&context, |_, _| Ok(true)).unwrap();
+        assert!(found.is_none());
+        let device = Device::new();
+        let mut shadow = plain_context(device.stores()).await;
+        shadow.execution_cache.as_mut().unwrap().shadow = true;
+        let refusal = ensure_training_available(&shadow).unwrap_err();
+        assert!(!is_training_unavailable(&refusal));
+        assert!(
+            refusal
+                .to_string()
+                .starts_with("Training lifecycle operations require a live workflow"),
+            "{refusal}"
+        );
+        let found = locate_repository_for_inference(&shadow, |_, _| Ok(true)).unwrap();
+        assert!(found.is_none());
+        assert!(!device.root().join("training-ledgers").exists());
+    }
+
+    #[tokio::test]
+    async fn lookups_create_no_ledger() {
+        let device = Device::new();
+        let context = plain_context(device.stores()).await;
+        assert!(
+            locate_repository(&context, |_, _| Ok(true))
+                .unwrap()
+                .is_none()
+        );
+        let found = locate_repository_for_inference(&context, |_, _| Ok(true)).unwrap();
+        assert!(found.is_none());
+        for scope in [LedgerScope::App, LedgerScope::User] {
+            let ledger = LedgerLocation::new(&context, scope).unwrap();
+            ledger.directory().unwrap();
+            assert!(!ledger.exists().unwrap());
+            assert!(ledger.open_existing().unwrap().is_none());
+        }
+        assert!(ledger_paths(&context).unwrap().user.is_some());
+        assert!(!device.root().join("training-ledgers").exists());
+        assert!(!device.root().join("apps").exists());
+    }
+
+    fn register_source(repo: &TrainingRepository, project: &str) -> String {
+        let manifest = json!({
+            "engine": "burn", "format_version": 1, "config": {}, "input_shape": [1]
+        });
+        repo.register_pretrained_source(
+            project,
+            b"weights",
+            manifest,
+            json!({"source": "fixture"}),
+            1024,
+            runtime::now_ms(),
+        )
+        .unwrap()
+        .id
+    }
+
+    #[tokio::test]
+    async fn lookups_walk_the_app_legacy_and_private_ledgers_in_order() {
+        let device = Device::new();
+        let context = plain_context(device.stores()).await;
+        let legacy = open_ledger(device.root().join(LEGACY_LEDGER)).unwrap();
+        let in_legacy = register_source(&legacy, PROJECT);
+        let app = open_ledger(device.root().join(APP_LEDGER)).unwrap();
+        let in_app = register_source(&app, PROJECT);
+        let other_board = register_source(&app, "app:other-board");
+        let (user, user_project) = scoped_repository(&context, LedgerScope::User).unwrap();
+        let in_user = register_source(&user, &user_project);
+        let locate = |id: &str| {
+            locate_repository(&context, |repo, project| {
+                holds_pretrained_source(repo, project, id)
+            })
+            .unwrap()
+            .map(|found| (found.repo.path().to_path_buf(), found.scope, found.project))
+        };
+        let app_hit = (app.path().to_path_buf(), LedgerScope::App, PROJECT.to_owned());
+        assert_eq!(locate(&in_app), Some(app_hit));
+        let legacy_hit = (legacy.path().to_path_buf(), LedgerScope::App, PROJECT.to_owned());
+        assert_eq!(locate(&in_legacy), Some(legacy_hit));
+        let user_hit = (user.path().to_path_buf(), LedgerScope::User, user_project);
+        assert_eq!(locate(&in_user), Some(user_hit));
+        assert_eq!(locate(&other_board), None);
+        assert_eq!(locate("pretrained:missing"), None);
+    }
+
+    #[tokio::test]
+    async fn minted_user_streams_record_into_the_private_ledger() {
+        let device = Device::new();
+        let (app_ledger, user_ledger) = (
+            device.root().join(APP_LEDGER),
+            device.root().join(USER_LEDGER),
+        );
+        let recording = |stream: &str| {
+            let inspection = inspection_context(stream, TaskKind::SensorAnomaly, &[], &[2]);
+            let normal = Annotation::Anomaly { is_anomaly: false };
+            let request = json!({
+                "inspection": inspection, "sample": sample(&inspection, 0, normal, reviewed()),
+                "annotation_revision": 1, "accepted": true, "label_available_at_ms": 2_000
+            });
+            (inspection, request)
+        };
+        let counted = |repo: &TrainingRepository, inspection: &InspectionContext, project| {
+            let key = inspection.key(project).unwrap();
+            repo.count_new_training_samples(&key, runtime::now_ms())
+                .unwrap()
+        };
+        let minted = LedgerScope::User.new_stream_id(StreamKind::Auto);
+        let (private, request) = recording(&minted);
+        run_node(RecordTrainingSampleNode, request, device.stores())
+            .await
+            .unwrap();
+        assert!(user_ledger.exists() && !app_ledger.exists());
+        let context = plain_context(device.stores()).await;
+        let (repo, project) = scoped_repository(&context, LedgerScope::User).unwrap();
+        assert_eq!(counted(&repo, &private, project), 1);
+        let (manual, request) = recording("user:camera");
+        run_node(RecordTrainingSampleNode, request, device.stores())
+            .await
+            .unwrap();
+        let (repo, project) = repository(&context).unwrap();
+        assert_eq!(repo.path(), app_ledger);
+        assert_eq!(counted(&repo, &manual, project), 1);
+    }
+
+    /// Admits a queued job to the training worker's queue as dispatch would.
+    fn admit(repo: &TrainingRepository, job: &TrainingJob) -> String {
+        let key = queue_key(repo, &job.id).unwrap();
+        let queued = QueuedJob {
+            ledger: repo.path().canonicalize().unwrap(),
+            repo: repo.clone(),
+            job_id: job.id.clone(),
+        };
+        assert!(JOBS.admit(&key, queued).unwrap());
+        key
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn draining_an_app_cancels_its_jobs_and_keeps_other_apps_jobs() {
+        use flow_like_types::storage_paths::training_ledger_dir;
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let ledger_of = |app: &str| {
+            let directory = root.join(training_ledger_dir(app, None));
+            open_ledger(directory.join(LEDGER_DATABASE_FILE)).unwrap()
+        };
+        let (a, b) = (ledger_of("app-a"), ledger_of("app-b"));
+        let (_, running) = queued_job(&a, "running");
+        let (_, waiting) = queued_job(&a, "waiting");
+        let (_, other) = queued_job(&b, "other");
+        let (running_key, waiting_key, other_key) =
+            (admit(&a, &running), admit(&a, &waiting), admit(&b, &other));
+        assert!(JOBS.start(&running_key));
+        let lease = a
+            .claim_job(&running.id, "worker", 60_000, runtime::now_ms())
+            .unwrap();
+        let worker = {
+            let (a, job_id, key) = (a.clone(), running.id.clone(), running_key.clone());
+            std::thread::spawn(move || {
+                let deadline = Instant::now() + Duration::from_secs(30);
+                while a.get_job(&job_id).unwrap().status != JobStatus::CancelRequested {
+                    assert!(Instant::now() < deadline, "the drain never cancelled {job_id}");
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                a.acknowledge_cancel(&lease, runtime::now_ms()).unwrap();
+                JOBS.finish(&key);
+            })
+        };
+        let report = drain_app_training(&root, "app-a", Duration::from_secs(30)).await;
+        worker.join().unwrap();
+        assert_eq!(
+            report,
+            DrainReport {
+                cancelled: 2,
+                still_running: 0
+            }
+        );
+        for job in [&running, &waiting] {
+            assert_eq!(a.get_job(&job.id).unwrap().status, JobStatus::Cancelled);
+        }
+        assert!(!JOBS.start(&waiting_key));
+        assert_eq!(b.get_job(&other.id).unwrap().status, JobStatus::Queued);
+        assert!(JOBS.start(&other_key));
+        JOBS.finish(&other_key);
+
+        let prefixes = drain_prefixes(&root, "app-a");
+        assert_eq!(
+            prefixes,
+            [
+                root.join("training-ledgers/apps/app-a"),
+                root.join("apps/app-a/storage/inspection/jobs.sqlite")
+            ]
+        );
+        assert_eq!(drain_prefixes(&root, "../escape").len(), 1);
+        let (_, later) = queued_job(&a, "later");
+        let closed = JOBS.close(&prefixes);
+        let key = queue_key(&a, &later.id).unwrap();
+        let queued = || QueuedJob {
+            ledger: a.path().canonicalize().unwrap(),
+            repo: a.clone(),
+            job_id: later.id.clone(),
+        };
+        assert!(JOBS.admit(&key, queued()).is_err());
+        drop(closed);
+        assert!(JOBS.admit(&key, queued()).unwrap());
+        JOBS.finish(&key);
+    }
+
+    /// An Isolation Forest artifact of stream `stream_id` in `repo`.
+    fn forest_artifact(repo: &TrainingRepository, stream_id: &str) -> (InspectionContext, String) {
+        let inspection = inspection_context(stream_id, TaskKind::SensorAnomaly, &[], &[2]);
+        record_normal(repo, &inspection, 0..12);
+        let mut request = forest_request(&inspection, json!({"backend": "cpu"}));
+        request.training.recipe =
+            json!({"labels": [], "config": {"trees": 16, "sample_size": 8, "seed": 5}});
+        let ignore = |_: &TrainingRepository, _: &str, _: &WorkerLimits| -> Result<()> { Ok(()) };
+        let job = schedule_with(repo.clone(), PROJECT.into(), request, ignore)
+            .unwrap()
+            .unwrap();
+        run_training_job(repo, &job.id, &WorkerLimits::default()).unwrap();
+        (inspection, repo.get_job(&job.id).unwrap().artifact_id.unwrap())
+    }
+
+    /// The stores of a runtime without a ledger that reads the app's published models.
+    async fn without_ledger(device: &Device) -> flow_like::state::FlowLikeStores {
+        let published = published_copy(&device.app, APP_MODELS).await;
+        stores(Some(published), Some(memory_store()))
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn student_inference_serves_published_files_without_a_ledger() {
+        let device = Device::new();
+        let mut context = plain_context(device.stores()).await;
+        let (repo, _) = repository(&context).unwrap();
+        let (inspection, artifact_id) = forest_artifact(&repo, "camera");
+        let request = json!({
+            "inspection": inspection, "artifact_id": artifact_id,
+            "input": {"shape": [3, 2], "values": [0.0, 1.0, 2.0, 3.0, 40.0, -50.0]}
+        });
+        let ledger = run_node(StudentInferenceNode, request.clone(), device.stores())
+            .await
+            .unwrap();
+        publish_artifact_folder(&mut context, &repo, &artifact_id).await;
+        let files = run_node(
+            StudentInferenceNode,
+            request.clone(),
+            without_ledger(&device).await,
+        )
+        .await
+        .unwrap();
+        assert_eq!(files, ledger);
+        let run = RunCache::default();
+        let elsewhere = run_on(
+            StudentInferenceNode,
+            request.clone(),
+            device.stores(),
+            &run,
+            "other-board",
+        )
+        .await
+        .unwrap();
+        assert_eq!(output(&elsewhere, "result").await, ledger);
+        let mut renamed = request;
+        renamed["inspection"]["stream_id"] = json!("camera-2");
+        let refused =
+            run_node(StudentInferenceNode, renamed, without_ledger(&device).await).await;
+        assert!(refused.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn extracted_image_features_name_the_same_extractor_without_a_ledger() {
+        let device = Device::new();
+        let mut context = plain_context(device.stores()).await;
+        let (repo, project) = repository(&context).unwrap();
+        let (inspection, artifact) = tiny_resnet(&repo, &project, "camera");
+        let request = json!({
+            "inspection": inspection, "artifact_id": artifact.id,
+            "input": {"shape": [1, 8, 8], "values": vec![0.25f32; 64]}
+        });
+        let run = RunCache::default();
+        let ledger = run_on(
+            ExtractPatchFeaturesNode,
+            request.clone(),
+            device.stores(),
+            &run,
+            BOARD,
+        )
+        .await
+        .unwrap();
+        publish_artifact_folder(&mut context, &repo, &artifact.id).await;
+        let files = run_on(
+            ExtractPatchFeaturesNode,
+            request,
+            without_ledger(&device).await,
+            &RunCache::default(),
+            BOARD,
+        )
+        .await
+        .unwrap();
+        for pin in ["extractor", "result"] {
+            assert_eq!(output(&files, pin).await, output(&ledger, pin).await, "{pin}");
+        }
+    }
+
+    /// A fixture model of stream `camera` with an audited evaluation that passes `policy()`.
+    fn evaluated_fixture(
+        repo: &TrainingRepository,
+    ) -> (InspectionContext, ModelArtifact, EvaluationReport) {
+        let labels = ["good", "bad"];
+        let inspection =
+            inspection_context("camera", TaskKind::SensorClassification, &labels, &[2]);
+        for index in 0..3 {
+            let class = Annotation::Class {
+                class_id: (index % 2) as u32,
+            };
+            let labelled = sample(&inspection, index, class, reviewed());
+            record(repo, &inspection, labelled, 2_000).unwrap();
+        }
+        let now = runtime::now_ms();
+        let key = inspection.key(PROJECT.into()).unwrap();
+        let job = repo
+            .trigger_after_n(&key, 3, fixture_request(), split(), now)
+            .unwrap()
+            .unwrap();
+        let lease = repo.claim_job(&job.id, "worker", 60_000, now).unwrap();
+        let manifest = json!({"engine": "fixture", "labels": labels});
+        let model = repo
+            .finish_training(&lease, b"model", manifest, now)
+            .unwrap();
+        let audited = repo
+            .get_snapshot(&model.snapshot_id)
+            .unwrap()
+            .test
+            .remove(0);
+        let label = audited.payload["label"].as_str().map(str::to_owned);
+        let comparison = RecordPredictionRequest {
+            inspection: inspection.clone(),
+            prediction: PredictionRecord {
+                sample_id: audited.id.clone(),
+                artifact_id: model.id.clone(),
+                predicted_label: label.clone(),
+                teacher_label: None,
+                actual_label: label,
+                actual_source: Some(LabelSource::Reviewed),
+                latency_ms: 1.0,
+                failed: false,
+                recorded_at_ms: model.created_at_ms,
+                details: json!({}),
+            },
+        };
+        record_prediction(repo.clone(), PROJECT.into(), comparison).unwrap();
+        let report = repo
+            .evaluate_classification(&model.id, runtime::now_ms())
+            .unwrap();
+        (inspection, model, report)
+    }
+
+    fn policy() -> Value {
+        json!({"minimum_audited_samples": 1, "minimum_accuracy": 0.5, "minimum_class_recall": {},
+            "maximum_mean_latency_ms": 10.0, "maximum_failure_rate": 0.0})
+    }
+
+    fn pointer_file(device: &Device) -> PathBuf {
+        let pointer = super::super::published::deployment_pointer_path("main");
+        device.root().join("apps/app/storage").join(pointer)
+    }
+
+    fn read_pointer(device: &Device) -> super::super::published::DeploymentPointer {
+        from_slice(&std::fs::read(pointer_file(device)).unwrap()).unwrap()
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn deployment_pointers_follow_the_ledger_and_serve_runtimes_without_one() {
+        let device = Device::new();
+        let context = plain_context(device.stores()).await;
+        let (repo, _) = repository(&context).unwrap();
+        let (inspection, model, report) = evaluated_fixture(&repo);
+        let promote = json!({
+            "inspection": inspection, "deployment_id": "main", "expected_generation": 0,
+            "evaluation_id": report.id, "policy": policy()
+        });
+        let promoted = run_node(PromoteStudentNode, promote, device.stores())
+            .await
+            .unwrap();
+        let promoted: Deployment = from_value(promoted).unwrap();
+        let pointer = read_pointer(&device);
+        assert_eq!(
+            (pointer.active_artifact_id, pointer.generation, pointer.paused),
+            (model.id.clone(), promoted.generation, false)
+        );
+        let pausing = |generation: i64, paused: bool| {
+            json!({"inspection": inspection, "deployment_id": "main",
+                "expected_generation": generation, "paused": paused})
+        };
+        let paused = run_node(
+            PauseStudentNode,
+            pausing(promoted.generation, true),
+            device.stores(),
+        )
+        .await
+        .unwrap();
+        let paused: Deployment = from_value(paused).unwrap();
+        let pointer = read_pointer(&device);
+        assert!(pointer.paused);
+        assert_eq!(pointer.generation, promoted.generation + 1);
+
+        let lookup = json!({"inspection": inspection, "deployment_id": "main"});
+        let active = run_node(GetDeploymentNode, lookup.clone(), without_ledger(&device).await)
+            .await
+            .unwrap();
+        assert_eq!(
+            from_value::<Option<Deployment>>(active).unwrap(),
+            Some(paused.clone())
+        );
+        let route = run_node(
+            RouteInspectionNode,
+            lookup.clone(),
+            without_ledger(&device).await,
+        )
+        .await
+        .unwrap();
+        let route: InspectionRoute = from_value(route).unwrap();
+        assert!(matches!(route.mode, InspectionMode::TeacherOnly));
+        assert_eq!(route.deployment_generation, Some(paused.generation));
+
+        let resumed = run_node(
+            PauseStudentNode,
+            pausing(paused.generation, false),
+            device.stores(),
+        )
+        .await
+        .unwrap();
+        let resumed: Deployment = from_value(resumed).unwrap();
+        let route = run_node(
+            RouteInspectionNode,
+            lookup.clone(),
+            without_ledger(&device).await,
+        )
+        .await
+        .unwrap();
+        let route: InspectionRoute = from_value(route).unwrap();
+        assert!(matches!(route.mode, InspectionMode::StudentOnly));
+        assert_eq!(route.active_artifact_id, Some(model.id.clone()));
+        assert_eq!(route.deployment_generation, Some(resumed.generation));
+
+        std::fs::remove_file(pointer_file(&device)).unwrap();
+        let active = run_node(GetDeploymentNode, lookup.clone(), device.stores())
+            .await
+            .unwrap();
+        assert_eq!(
+            from_value::<Option<Deployment>>(active).unwrap(),
+            Some(resumed.clone())
+        );
+        assert_eq!(read_pointer(&device).generation, resumed.generation);
+
+        let mut newer: Value = from_slice(&std::fs::read(pointer_file(&device)).unwrap()).unwrap();
+        let generation = resumed.generation + 5;
+        newer["generation"] = json!(generation);
+        newer["deployment"]["generation"] = json!(generation);
+        std::fs::write(pointer_file(&device), newer.to_string()).unwrap();
+        let active = run_node(GetDeploymentNode, lookup.clone(), device.stores())
+            .await
+            .unwrap();
+        let active: Option<Deployment> = from_value(active).unwrap();
+        assert_eq!(active.map(|found| found.generation), Some(generation));
+        let route = run_node(RouteInspectionNode, lookup, device.stores())
+            .await
+            .unwrap();
+        let route: InspectionRoute = from_value(route).unwrap();
+        assert!(matches!(route.mode, InspectionMode::StudentOnly));
+        assert_eq!(route.deployment_generation, Some(generation));
+        assert_eq!(read_pointer(&device).generation, generation);
+    }
+
+    #[test]
+    fn published_pointers_route_to_the_student_unless_paused_or_missing() {
+        let pointer = |paused: bool| -> super::super::published::DeploymentPointer {
+            let stream = json!({
+                "project_id": PROJECT, "stream_id": "camera", "inspection_version": "v1"
+            });
+            from_value(json!({
+                "format_version": 1, "deployment_id": "main", "generation": 4,
+                "active_artifact_id": "model-4", "paused": paused, "stream": stream,
+                "sha256": "a".repeat(64), "storage": "app", "published_at_ms": 0,
+                "deployment": {
+                    "id": "main", "stream": stream, "generation": 4,
+                    "active_artifact_id": "model-4", "paused": paused,
+                    "previous_artifact_id": null, "evaluation_id": "evaluation-4",
+                    "policy": null, "metric_policy": null, "updated_at_ms": 0
+                }
+            }))
+            .unwrap()
+        };
+        let active = published_route(Some(&pointer(false)));
+        assert!(matches!(active.mode, InspectionMode::StudentOnly));
+        assert_eq!(active.active_artifact_id.as_deref(), Some("model-4"));
+        assert_eq!(active.deployment_generation, Some(4));
+        let paused = published_route(Some(&pointer(true)));
+        assert!(matches!(paused.mode, InspectionMode::TeacherOnly));
+        assert_eq!(paused.active_artifact_id, None);
+        assert_eq!(paused.deployment_generation, Some(4));
+        let missing = published_route(None);
+        assert!(matches!(missing.mode, InspectionMode::TeacherOnly));
+        assert_eq!(missing.deployment_generation, None);
+        assert!(missing.candidate_artifact_id.is_none());
     }
 }

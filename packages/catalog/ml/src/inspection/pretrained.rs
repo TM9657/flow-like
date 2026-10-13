@@ -1,6 +1,8 @@
 use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
 use flow_like_catalog_core::FlowPath;
-use flow_like_types::{Result, anyhow};
+use flow_like_types::Result;
+#[cfg(feature = "inference")]
+use flow_like_types::anyhow;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -61,11 +63,12 @@ pub struct PretrainedFeaturesRequest {
     pub preprocessing: Vec<flow_like_ml_core::PreprocessingStep>,
 }
 
-/// The extractor of features computed from `source` on `input` after `preprocessing`.
-#[cfg(feature = "training")]
+/// The extractor of features computed from `source` on an input of `input_shape` after
+/// `preprocessing`.
+#[cfg(feature = "inference")]
 fn applied_extractor(
     source: &flow_like_ml_runtime::PretrainedSource,
-    input: &flow_like_ml_core::TensorData,
+    input_shape: &[usize],
     preprocessing: &[flow_like_ml_core::PreprocessingStep],
 ) -> Result<super::lifecycle::FeatureExtractorRef> {
     let mut extractor = flow_like_ml_runtime::engines::FeatureExtractor::from_source(source)?;
@@ -77,18 +80,115 @@ fn applied_extractor(
         _ => None,
     });
     if let Some(size) = resized
-        && (input.shape.len() < 2 || input.shape[input.shape.len() - 2..] != size)
+        && (input_shape.len() < 2 || input_shape[input_shape.len() - 2..] != size)
     {
         return Err(anyhow!(
             "Declared preprocessing resizes images to {}x{} (width x height), but the input has shape {:?}",
             size[1],
             size[0],
-            input.shape
+            input_shape
         ));
     }
     flow_like_ml_runtime::engines::validate_burn_pretrained_preprocessing(source, preprocessing)?;
     extractor.image_steps = preprocessing.to_vec();
     Ok(extractor.into())
+}
+
+/// Features from the ledger that holds `source_id` for this run's project, else from its
+/// published folder.
+#[cfg(feature = "inference")]
+async fn pretrained_features(
+    context: &mut ExecutionContext,
+    request: PretrainedFeaturesRequest,
+) -> Result<(
+    flow_like_ml_core::TensorData,
+    super::lifecycle::FeatureExtractorRef,
+)> {
+    use super::lifecycle::{LocatedLedger, holds_pretrained_source};
+    let compute = request.compute.for_host();
+    let located = super::lifecycle::locate_repository_for_inference(context, |repo, project| {
+        holds_pretrained_source(repo, project, &request.source_id)
+    })?;
+    let Some(LocatedLedger { repo, project, .. }) = located else {
+        return published_pretrained_features(context, request, &compute).await;
+    };
+    tokio::task::spawn_blocking(move || -> Result<_> {
+        let features = flow_like_ml_runtime::engines::pretrained_source_features(
+            &repo,
+            &project,
+            &request.source_id,
+            &request.input,
+            &compute,
+        )?;
+        let source = repo.get_pretrained_source(&request.source_id)?;
+        let extractor = applied_extractor(&source, &request.input.shape, &request.preprocessing)?;
+        Ok((features, extractor))
+    })
+    .await?
+}
+
+/// Features from the published folder of `request.source_id`: a pretrained source or a Burn
+/// model, in the app storage or the executing user's directory.
+#[cfg(feature = "inference")]
+async fn published_pretrained_features(
+    context: &mut ExecutionContext,
+    request: PretrainedFeaturesRequest,
+    compute: &flow_like_ml_core::ComputeConfig,
+) -> Result<(
+    flow_like_ml_core::TensorData,
+    super::lifecycle::FeatureExtractorRef,
+)> {
+    let model = super::published::PublishedModelSource::Artifact {
+        artifact_id: request.source_id.clone(),
+        storage: None,
+    };
+    let shape = request.input.shape.clone();
+    let mut input = request.input;
+    if input.shape.len() == 3 {
+        input.shape.insert(0, 1);
+    }
+    let (features, extractor) =
+        super::published::published_features(context, &model, input, compute).await?;
+    if request.preprocessing.is_empty() {
+        return Ok((features, extractor));
+    }
+    let published = super::published::resolve_model(context, &model).await?;
+    let source = published_source(&published.manifest)?;
+    Ok((
+        features,
+        applied_extractor(&source, &shape, &request.preprocessing)?,
+    ))
+}
+
+/// The pretrained source a published folder holds; a model artifact counts as a training
+/// artifact source, as in the ledger.
+#[cfg(feature = "inference")]
+fn published_source(
+    manifest: &super::published::PublishedModelManifest,
+) -> Result<flow_like_ml_runtime::PretrainedSource> {
+    if let Some(source) = &manifest.pretrained_source {
+        return Ok(source.clone());
+    }
+    let artifact = manifest.artifact.as_ref().ok_or_else(|| {
+        anyhow!(
+            "Published model manifest for {} holds neither a model artifact nor a pretrained source",
+            manifest.artifact_id()
+        )
+    })?;
+    Ok(flow_like_ml_runtime::PretrainedSource {
+        id: artifact.id.clone(),
+        project_id: artifact.stream.project_id.clone(),
+        source_kind: flow_like_ml_runtime::PretrainedSourceKind::TrainingArtifact,
+        blob: artifact.blob.clone(),
+        manifest: artifact.manifest.clone(),
+        origin: flow_like_types::json::json!({
+            "stream": artifact.stream,
+            "job_id": artifact.job_id,
+            "snapshot_id": artifact.snapshot_id,
+            "dataset_digest": artifact.dataset_digest,
+        }),
+        created_at_ms: artifact.created_at_ms,
+    })
 }
 
 #[crate::register_node]
@@ -119,27 +219,14 @@ impl NodeLogic for ExtractPretrainedFeaturesNode {
         node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        #[cfg(feature = "training")]
+        #[cfg(feature = "inference")]
         {
             context.deactivate_exec_pin("exec_out").await?;
             let request: PretrainedFeaturesRequest = context.evaluate_pin("request").await?;
-            let (repo, project) = super::lifecycle::repository(context)?;
             if context.is_cancelled() {
                 return Err(anyhow!("Pretrained feature extraction cancelled"));
             }
-            let (result, extractor) = tokio::task::spawn_blocking(move || -> Result<_> {
-                let features = flow_like_ml_runtime::engines::pretrained_source_features(
-                    &repo,
-                    &project,
-                    &request.source_id,
-                    &request.input,
-                    &request.compute,
-                )?;
-                let source = repo.get_pretrained_source(&request.source_id)?;
-                let extractor = applied_extractor(&source, &request.input, &request.preprocessing)?;
-                Ok((features, extractor))
-            })
-            .await??;
+            let (result, extractor) = pretrained_features(context, request).await?;
             if context.is_cancelled() {
                 return Err(anyhow!("Pretrained feature extraction cancelled"));
             }
@@ -152,12 +239,10 @@ impl NodeLogic for ExtractPretrainedFeaturesNode {
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
-        #[cfg(not(feature = "training"))]
+        #[cfg(not(feature = "inference"))]
         {
             let _ = context;
-            Err(anyhow!(
-                "Pretrained feature extraction requires a local training build"
-            ))
+            Err(super::published::inference_unavailable())
         }
     }
 }
@@ -308,9 +393,7 @@ impl NodeLogic for ImportPretrainedVisionNode {
         #[cfg(not(feature = "training"))]
         {
             let _ = context;
-            Err(anyhow!(
-                "Pretrained weight import requires a local training build"
-            ))
+            Err(super::lifecycle::training_unavailable())
         }
     }
 }
@@ -349,9 +432,7 @@ impl NodeLogic for ListPretrainedVisionNode {
         #[cfg(not(feature = "training"))]
         {
             let _ = context;
-            Err(anyhow!(
-                "Pretrained weight listing requires a local training build"
-            ))
+            Err(super::lifecycle::training_unavailable())
         }
     }
 }
@@ -398,9 +479,97 @@ mod tests {
     }
 
     #[cfg(feature = "training")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pretrained_features_find_adopted_sources_and_published_folders() {
+        use super::super::lifecycle::{LedgerScope, scoped_repository, test_device::*};
+        use super::super::publisher::{PublishOutcome, publish_pretrained_source};
+        let device = Device::new();
+        let donor_path = device.scratch("donor").join("jobs.sqlite");
+        let donor = flow_like_ml_runtime::TrainingRepository::open(donor_path).unwrap();
+        let (_, artifact) = tiny_resnet(&donor, "donor:board", "camera");
+        let mut context = plain_context(device.stores()).await;
+        let (user, project) = scoped_repository(&context, LedgerScope::User).unwrap();
+        let source = user
+            .adopt_pretrained_source(&donor, &artifact.id, &project)
+            .unwrap();
+        assert_eq!(source.project_id, "app:board:user");
+        let request = flow_like_types::json::json!({
+            "source_id": artifact.id,
+            "input": {"shape": [1, 8, 8], "values": vec![0.5f32; 64]}
+        });
+        let run = RunCache::default();
+        let ledger = run_on(
+            ExtractPretrainedFeaturesNode,
+            request.clone(),
+            device.stores(),
+            &run,
+            BOARD,
+        )
+        .await
+        .unwrap();
+        let published =
+            publish_pretrained_source(&mut context, &user, LedgerScope::User, &source).await;
+        assert!(
+            matches!(published, PublishOutcome::Published(_)),
+            "{published:?}"
+        );
+        let user_models = published_copy(&device.user, USER_MODELS).await;
+        let files = run_on(
+            ExtractPretrainedFeaturesNode,
+            request,
+            stores(Some(memory_store()), Some(user_models)),
+            &RunCache::default(),
+            BOARD,
+        )
+        .await
+        .unwrap();
+        for pin in ["result", "extractor"] {
+            assert_eq!(output(&files, pin).await, output(&ledger, pin).await, "{pin}");
+        }
+    }
+
+    #[cfg(feature = "inference")]
+    #[test]
+    fn published_artifacts_extract_as_training_artifact_sources() {
+        use flow_like_types::json::{from_value, json};
+        let sha = "b".repeat(64);
+        let manifest: super::super::published::PublishedModelManifest = from_value(json!({
+            "format_version": 2,
+            "artifact": {
+                "id": "resnet-artifact", "job_id": "job", "snapshot_id": "snapshot",
+                "stream": {"project_id": "app:board", "stream_id": "camera", "inspection_version": "1"},
+                "dataset_digest": sha,
+                "blob": {"sha256": sha, "bytes": 3, "path": format!("{sha}.blob")},
+                "manifest": {"engine": "burn", "preprocessing": [{"kind": "resize", "width": 8, "height": 8}]},
+                "created_at_ms": 5
+            },
+            "weights": {"file": "weights.bin", "sha256": sha, "bytes": 3}
+        }))
+        .unwrap();
+        let source = published_source(&manifest).unwrap();
+        assert_eq!(
+            source.source_kind,
+            flow_like_ml_runtime::PretrainedSourceKind::TrainingArtifact
+        );
+        assert_eq!(source.project_id, "app:board");
+        let artifact = manifest.artifact.as_ref().unwrap();
+        let from_artifact =
+            flow_like_ml_runtime::engines::FeatureExtractor::from_artifact(artifact).unwrap();
+        assert_eq!(
+            applied_extractor(&source, &[1usize, 8, 8], &[]).unwrap(),
+            super::super::lifecycle::FeatureExtractorRef::from(from_artifact)
+        );
+        let empty: super::super::published::PublishedModelManifest = from_value(json!({
+            "format_version": 2, "weights": {"file": "weights.bin", "sha256": sha, "bytes": 3}
+        }))
+        .unwrap();
+        assert!(published_source(&empty).is_err());
+    }
+
+    #[cfg(feature = "inference")]
     #[test]
     fn declared_preprocessing_becomes_the_extractor_image_steps() {
-        use flow_like_ml_core::{PreprocessingStep, TensorData};
+        use flow_like_ml_core::PreprocessingStep;
         use flow_like_types::json::{from_value, json};
         let source: flow_like_ml_runtime::PretrainedSource = from_value(json!({
             "id": "pretrained:resnet",
@@ -415,10 +584,7 @@ mod tests {
             "created_at_ms": 0
         }))
         .unwrap();
-        let input = TensorData {
-            shape: vec![3, 4, 4],
-            values: vec![0.0; 48],
-        };
+        let input = [3usize, 4, 4];
         let recommended = applied_extractor(&source, &input, &[]).unwrap();
         assert_eq!(recommended.image_steps.len(), 2);
         let resize = PreprocessingStep::Resize {

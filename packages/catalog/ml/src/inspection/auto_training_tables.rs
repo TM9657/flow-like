@@ -49,6 +49,21 @@ impl TemporalUnit {
         }
     }
 }
+
+/// A cell of `column` in epoch milliseconds, converted from the storage unit `units` records
+/// for it; columns without a unit already hold milliseconds.
+pub(crate) fn epoch_milliseconds(
+    column: &str,
+    value: i64,
+    units: &BTreeMap<String, TemporalUnit>,
+) -> Result<i64> {
+    match units.get(column) {
+        None => Ok(value),
+        Some(unit) => unit.to_milliseconds(value).ok_or_else(|| {
+            anyhow!("Timestamp '{column}' value {value} in {unit:?} overflows epoch milliseconds")
+        }),
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TableLocator {
     pub app_id: String,
@@ -76,9 +91,13 @@ pub struct ScopeDigests {
 
 impl ScopeDigests {
     pub fn classify(&self, locator: Option<&TableLocator>) -> SourceScope {
-        let Some(digest) = locator.map(|locator| locator.connection_digest.as_str()) else {
-            return SourceScope::Unknown;
-        };
+        locator.map_or(SourceScope::Unknown, |locator| {
+            self.classify_digest(&locator.connection_digest)
+        })
+    }
+
+    /// The scope of a database by the digest of its connection URI.
+    pub fn classify_digest(&self, digest: &str) -> SourceScope {
         if self.project.as_deref() == Some(digest) {
             SourceScope::Project
         } else if self.user.as_deref() == Some(digest) {
@@ -110,14 +129,51 @@ impl ScopeDigests {
 
 /// Locators of an experiment's sources from its `request.context`: the pinned main source,
 /// then each feature side. A source without a locator is None.
-pub fn experiment_source_locators(_context: &Value) -> Vec<Option<TableLocator>> {
-    Vec::new()
+pub fn experiment_source_locators(context: &Value) -> Vec<Option<TableLocator>> {
+    recorded_source_locators(context.get("pinned_source"), context.get("feature_sources"))
 }
 
 /// Locators of a learning project's sources from its `request.source`: the pinned main
 /// source, then each pinned feature side. A source without a locator is None.
-pub fn learning_source_locators(_source: &Value) -> Vec<Option<TableLocator>> {
-    Vec::new()
+pub fn learning_source_locators(source: &Value) -> Vec<Option<TableLocator>> {
+    recorded_source_locators(
+        source.get("pinned_source"),
+        source.get("pinned_feature_sources"),
+    )
+}
+
+/// The main entry is always present, so a record without a pinned source classifies as
+/// Unknown. Unreadable locators are None.
+fn recorded_source_locators(
+    main: Option<&Value>,
+    sides: Option<&Value>,
+) -> Vec<Option<TableLocator>> {
+    let locator = |pinned: Option<&Value>| {
+        pinned
+            .and_then(|pinned| pinned.get("locator"))
+            .filter(|locator| !locator.is_null())
+            .and_then(|locator| {
+                flow_like_types::json::from_value::<TableLocator>(locator.clone()).ok()
+            })
+    };
+    let sides = sides
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    std::iter::once(locator(main))
+        .chain(sides.iter().map(|side| locator(side.get("source"))))
+        .collect()
+}
+
+/// Locators of a pinned main source and its pinned feature sides, main first.
+#[cfg(feature = "training")]
+pub(crate) fn pinned_source_locators(
+    main: &PinnedTableSource,
+    sides: &[super::feature_engineering::PinnedFeatureSource],
+) -> Vec<Option<TableLocator>> {
+    std::iter::once(main.locator.clone())
+        .chain(sides.iter().map(|side| side.source.locator.clone()))
+        .collect()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
@@ -378,12 +434,7 @@ fn timestamp(
     let value = field(row, column)?.as_i64().ok_or_else(|| {
         anyhow!("Timestamp '{column}' must be integer epoch milliseconds or a timestamp column")
     })?;
-    match units.get(column) {
-        None => Ok(value),
-        Some(unit) => unit.to_milliseconds(value).ok_or_else(|| {
-            anyhow!("Timestamp '{column}' value {value} in {unit:?} overflows epoch milliseconds")
-        }),
-    }
+    epoch_milliseconds(column, value, units)
 }
 fn finite(value: &Value) -> Result<f64> {
     value
@@ -1199,19 +1250,14 @@ pub(crate) fn row_in_milliseconds(
 ) -> Result<Value> {
     let mut converted = row.clone();
     if let Some(cells) = converted.as_object_mut() {
-        for (column, unit) in units {
+        for column in units.keys() {
             let Some(cell) = cells.get_mut(column) else {
                 continue;
             };
             let Some(value) = cell.as_i64() else {
                 continue;
             };
-            let milliseconds = unit.to_milliseconds(value).ok_or_else(|| {
-                anyhow!(
-                    "Timestamp '{column}' value {value} in {unit:?} overflows epoch milliseconds"
-                )
-            })?;
-            *cell = json!(milliseconds);
+            *cell = json!(epoch_milliseconds(column, value, units)?);
         }
     }
     Ok(converted)
@@ -1804,9 +1850,81 @@ mod table_io {
         }
     }
     /// URI digests of the run's project and executing-user databases, built the way
-    /// `locate_source_connection` builds the connections it matches.
-    pub async fn scope_digests(_context: &ExecutionContext) -> Result<ScopeDigests> {
-        Err(anyhow!("scope_digests lands in L6"))
+    /// `locate_source_connection` builds the connections it matches. A database that cannot
+    /// be opened has no digest, so its sources classify as Unknown.
+    pub async fn scope_digests(context: &ExecutionContext) -> Result<ScopeDigests> {
+        let scope = context
+            .execution_cache
+            .as_ref()
+            .ok_or_else(|| anyhow!("Execution storage scope is unavailable"))?
+            .clone();
+        let mut digests = ScopeDigests::default();
+        for user_scoped in [false, true] {
+            let digest = match database_connection(context, &scope, user_scoped).await {
+                Ok(connection) => {
+                    connection.map(|connection| content_digest(connection.uri().as_bytes()))
+                }
+                Err(error) => {
+                    tracing::warn!(user_scoped, %error, "A database for classifying training sources could not be opened");
+                    None
+                }
+            };
+            if user_scoped {
+                digests.user = digest;
+            } else {
+                digests.project = digest;
+            }
+        }
+        Ok(digests)
+    }
+    /// The scope of the database behind a connection this run opened, such as a write
+    /// destination.
+    pub async fn connection_scope(
+        context: &mut ExecutionContext,
+        database: &NodeDBConnection,
+        digests: &ScopeDigests,
+    ) -> Result<SourceScope> {
+        let cached = database.load(context).await?;
+        let uri = cached.db.read().await.inner().connection()?.uri().to_owned();
+        Ok(digests.classify_digest(&content_digest(uri.as_bytes())))
+    }
+    /// The run's project database, or with `user_scoped` the executing user's database, built
+    /// the way Open Database builds it. None when the host registers no builder for it.
+    async fn database_connection(
+        context: &ExecutionContext,
+        scope: &ExecutionContextCache,
+        user_scoped: bool,
+    ) -> Result<Option<Connection>> {
+        let path = if user_scoped {
+            scope.get_user_dir(false)?
+        } else {
+            scope.get_storage(false)?
+        }
+        .join("db");
+        let builder = if let Some(credentials) = &context.credentials {
+            if user_scoped {
+                credentials.to_db_scoped(&scope.sub, &scope.app_id).await?
+            } else {
+                credentials.to_db(&scope.app_id).await?
+            }
+        } else {
+            let callbacks = context.app_state.config.read().await.callbacks.clone();
+            let build = if user_scoped {
+                callbacks.build_user_database
+            } else {
+                callbacks.build_project_database
+            };
+            match build {
+                Some(build) => build(path),
+                None => return Ok(None),
+            }
+        };
+        let connection = context
+            .app_state
+            .with_lance_session(builder)
+            .execute()
+            .await?;
+        Ok(Some(connection))
     }
     /// Finds the project or user database whose URI digest the durable locator recorded.
     async fn locate_source_connection(
@@ -1814,53 +1932,18 @@ mod table_io {
         scope: &ExecutionContextCache,
         locator: &TableLocator,
     ) -> Result<Connection> {
-        let callbacks = context.app_state.config.read().await.callbacks.clone();
-        let mut matched = None;
         for user_scoped in [false, true] {
-            let path = if user_scoped {
-                scope.get_user_dir(false)?
-            } else {
-                scope.get_storage(false)?
-            }
-            .join("db");
-            let builder = if let Some(credentials) = &context.credentials {
-                if user_scoped {
-                    credentials.to_db_scoped(&scope.sub, &scope.app_id).await
-                } else {
-                    credentials.to_db(&scope.app_id).await
-                }
-            } else {
-                match if user_scoped {
-                    callbacks.build_user_database.as_ref()
-                } else {
-                    callbacks.build_project_database.as_ref()
-                } {
-                    Some(build) => Ok(build(path)),
-                    None => continue,
-                }
-            };
-            let Ok(builder) = builder else {
-                continue;
-            };
-            let Ok(connection) = context
-                .app_state
-                .with_lance_session(builder)
-                .execute()
-                .await
+            let Ok(Some(connection)) = database_connection(context, scope, user_scoped).await
             else {
                 continue;
             };
-            if content_digest(connection.uri().as_bytes()) != locator.connection_digest {
-                continue;
+            if content_digest(connection.uri().as_bytes()) == locator.connection_digest {
+                return Ok(connection);
             }
-            matched = Some(connection);
-            break;
         }
-        matched.ok_or_else(|| {
-            anyhow!(
-                "The source connection is not available in the current authorized workspace; reconnect the original database"
-            )
-        })
+        Err(anyhow!(
+            "The source connection is not available in the current authorized workspace; reconnect the original database"
+        ))
     }
     /// Opens the head of the pinned table's branch without opening the pinned version,
     /// which version cleanup may have removed. Pinning the result keeps `source`'s temporal
@@ -2307,9 +2390,9 @@ mod table_io {
 }
 #[cfg(feature = "execute")]
 pub use table_io::{
-    clone_experiment_table, inspect_table_schema, materialize_prepared_tables, pin_table_source,
-    prepare_table_dataset, read_columns, read_rows, reopen_latest_source, reopen_pinned_source,
-    scope_digests, write_experiment_rows,
+    clone_experiment_table, connection_scope, inspect_table_schema, materialize_prepared_tables,
+    pin_table_source, prepare_table_dataset, read_columns, read_rows, reopen_latest_source,
+    reopen_pinned_source, scope_digests, write_experiment_rows,
 };
 
 #[cfg(test)]
@@ -2360,6 +2443,55 @@ mod tests {
             SourceScope::Unknown
         );
         assert_eq!(digests.combine(&[]), SourceScope::Unknown);
+        assert_eq!(digests.classify_digest("user-digest"), SourceScope::User);
+        assert_eq!(digests.classify_digest(""), SourceScope::Unknown);
+    }
+
+    #[test]
+    fn recorded_sources_list_the_main_locator_then_every_side() {
+        let locator = |digest: &str| json!({"app_id":"app","board_id":"board","connection_digest":digest});
+        let pinned = |locator: Value| json!({"database":{"cache_key":"source"},"reference":{"table":"t","branch":"main","version":1,"read_only":true,"pinned":true},"locator":locator});
+        let digests = |locators: Vec<Option<TableLocator>>| -> Vec<Option<String>> {
+            locators
+                .into_iter()
+                .map(|locator| locator.map(|locator| locator.connection_digest))
+                .collect()
+        };
+        let experiment = json!({
+            "pinned_source": pinned(locator("main")),
+            "feature_sources": [
+                {"alias":"left","source":pinned(locator("side")),"allowed_columns":[]},
+                {"alias":"legacy","source":pinned(Value::Null),"allowed_columns":[]}
+            ]
+        });
+        let named = |digest: &str| Some(digest.to_owned());
+        assert_eq!(
+            digests(experiment_source_locators(&experiment)),
+            [named("main"), named("side"), None]
+        );
+        let project = json!({
+            "pinned_source": pinned(locator("main")),
+            "pinned_feature_sources": [{"alias":"left","source":pinned(locator("side")),"allowed_columns":[]}]
+        });
+        assert_eq!(
+            digests(learning_source_locators(&project)),
+            [named("main"), named("side")]
+        );
+        assert_eq!(digests(experiment_source_locators(&json!({}))), [None]);
+        let malformed = json!({"pinned_source": pinned(json!({"app_id":"app"}))});
+        assert_eq!(digests(experiment_source_locators(&malformed)), [None]);
+        let both = ScopeDigests {
+            project: Some("main".into()),
+            user: Some("side".into()),
+        };
+        assert_eq!(
+            both.combine(&learning_source_locators(&project)),
+            SourceScope::User
+        );
+        assert_eq!(
+            both.combine(&experiment_source_locators(&experiment)),
+            SourceScope::Unknown
+        );
     }
 
     fn fixture() -> (PinnedTableSource, TableDatasetRequest, Vec<Value>) {
@@ -3259,6 +3391,67 @@ mod tests {
             }),
         );
         database
+    }
+
+    #[cfg(feature = "execute")]
+    #[tokio::test]
+    async fn scope_digests_tell_project_user_and_other_databases_apart() {
+        let (directory, mut context, project) = table_context().await;
+        let user_location = directory
+            .0
+            .join("user-database")
+            .to_string_lossy()
+            .into_owned();
+        let reopen_user = user_location.clone();
+        context
+            .app_state
+            .config
+            .write()
+            .await
+            .register_build_user_database(Arc::new(move |_| {
+                flow_like_storage::lancedb::connect(&reopen_user)
+            }));
+        let digests = scope_digests(&context).await.unwrap();
+        let connect = |location: String| async move {
+            flow_like_storage::lancedb::connect(&location)
+                .execute()
+                .await
+                .unwrap()
+        };
+        let user = connect(user_location).await;
+        let other = connect(directory.0.join("other").to_string_lossy().into_owned()).await;
+        assert_eq!(
+            digests.project,
+            Some(content_digest(project.uri().as_bytes()))
+        );
+        assert_eq!(digests.user, Some(content_digest(user.uri().as_bytes())));
+        let (_, _, rows) = fixture();
+        let tables = [
+            (project, "project_rows", SourceScope::Project),
+            (user, "user_rows", SourceScope::User),
+            (other, "other_rows", SourceScope::Unknown),
+        ];
+        let mut pinned_user = None;
+        for (connection, name, expected) in tables {
+            let table = cached_table(&mut context, connection, name, rows.clone()).await;
+            assert_eq!(
+                connection_scope(&mut context, &table, &digests)
+                    .await
+                    .unwrap(),
+                expected,
+                "{name}"
+            );
+            let pinned = pin_table_source(&mut context, &table).await.unwrap();
+            assert_eq!(digests.classify(pinned.locator.as_ref()), expected, "{name}");
+            if expected == SourceScope::User {
+                pinned_user = Some(pinned);
+            }
+        }
+        // Without the run's cached view, reopening finds the user database by its digest.
+        let pinned = pinned_user.unwrap();
+        context.cache.write().await.remove(&pinned.database.cache_key);
+        let reopened = reopen_pinned_source(&mut context, &pinned).await.unwrap();
+        assert_ne!(reopened.cache_key, pinned.database.cache_key);
     }
 
     #[cfg(feature = "execute")]

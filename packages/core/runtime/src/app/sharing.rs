@@ -10,12 +10,13 @@ use chacha20poly1305::{
     },
 };
 use flow_like_storage::{
-    Path, blake3, join_object_path,
+    Path, blake3, join_object_path, normalize_object_path,
     object_store::{ObjectStore, ObjectStoreExt, PutPayload},
 };
 use flow_like_types::{
     Bytes, anyhow, bail,
     rand::{TryRngCore, rngs::OsRng},
+    storage_paths::is_legacy_training_ledger_path,
     tokio::{
         sync::{OwnedSemaphorePermit, Semaphore, mpsc},
         task,
@@ -1137,6 +1138,8 @@ async fn list_store_files(
     Ok(out)
 }
 
+/// The legacy training ledger is device-local and never listed, so export,
+/// preflight and Replace cleanup all leave it where it is.
 async fn list_app_files(
     meta: &Arc<dyn ObjectStore>,
     storage: &Arc<dyn ObjectStore>,
@@ -1148,6 +1151,9 @@ async fn list_app_files(
         for (path, size) in list_store_files(store, base).await? {
             let full = path.to_string();
             let rel = full.strip_prefix(&prefix).unwrap_or(&full).to_string();
+            if is_legacy_training_ledger_path(&rel) {
+                continue;
+            }
             merged.insert(
                 rel.clone(),
                 ListedFile {
@@ -1733,6 +1739,25 @@ async fn existing_matches(
     }
 }
 
+/// Archives from before device-local ledgers can carry the legacy training
+/// ledger; restoring it would plant another device's training state. The
+/// check runs on the normalized path, which is the key restore writes to.
+fn drop_legacy_training_ledger(manifest: &mut ExportManifest) {
+    let is_ledger = |entry: &ManifestEntry| {
+        is_legacy_training_ledger_path(normalize_object_path(&entry.rel_path).as_ref())
+    };
+    let before = manifest.prio.len() + manifest.secondary.len();
+    manifest.prio.retain(|_, entry| !is_ledger(entry));
+    manifest.secondary.retain(|_, entry| !is_ledger(entry));
+    let skipped = before - manifest.prio.len() - manifest.secondary.len();
+    if skipped > 0 {
+        tracing::warn!(
+            app_id = %manifest.app_id,
+            "skipped {skipped} legacy training-ledger entries; restore training history with Import Training Ledger"
+        );
+    }
+}
+
 fn split_manifest(manifest: ExportManifest, legacy: bool) -> (PlannedEntries, EntriesByRel) {
     let prio = manifest
         .prio
@@ -1966,9 +1991,10 @@ impl ImportSession {
         app_state: Arc<FlowLikeState>,
         reporter: Reporter,
         mode: ImportMode,
-        manifest: ExportManifest,
+        mut manifest: ExportManifest,
         legacy: bool,
     ) -> flow_like_types::Result<Self> {
+        drop_legacy_training_ledger(&mut manifest);
         let app_id = manifest.app_id.clone();
         let targets = restore_targets(&app_state, &app_id).await?;
         let local = local_app_snapshot(&app_state, &app_id).await;
@@ -4819,5 +4845,235 @@ mod tests {
         assert!(matches!(imported.visibility, AppVisibility::Public));
         let reloaded = App::load(app_id.to_string(), state).await.unwrap();
         assert!(matches!(reloaded.visibility, AppVisibility::Public));
+    }
+
+    // ---------- Legacy training ledger ----------
+
+    const LEGACY_LEDGER: [&str; 4] = [
+        "storage/inspection/jobs.sqlite",
+        "storage/inspection/jobs.sqlite-wal",
+        "storage/inspection/jobs.artifacts/x.blob",
+        "storage/inspection/.training-locks/a.lock",
+    ];
+    const TRAVELLING: [&str; 2] = [
+        "storage/inspection/pki/cert.der",
+        "storage/models/artifacts/a/weights.bin",
+    ];
+
+    async fn seed_app_files(store: &Arc<InMemory>, app_id: &str, rels: &[&str]) {
+        for rel in rels {
+            store
+                .put(
+                    &join_object_path(&app_base(app_id), rel),
+                    PutPayload::from_bytes(Bytes::copy_from_slice(rel.as_bytes())),
+                )
+                .await
+                .expect("seed app file");
+        }
+    }
+
+    async fn has_app_file(store: &Arc<InMemory>, app_id: &str, rel: &str) -> bool {
+        store
+            .head(&join_object_path(&app_base(app_id), rel))
+            .await
+            .is_ok()
+    }
+
+    async fn app_with_legacy_ledger(app_id: &str) -> (Arc<InMemory>, Arc<InMemory>, App) {
+        let (_state, meta, storage, app) = seeded_app(app_id).await;
+        seed_app_files(&storage, app_id, &LEGACY_LEDGER).await;
+        seed_app_files(&storage, app_id, &TRAVELLING).await;
+        (meta, storage, app)
+    }
+
+    /// Imports `archive` into a fresh state; the ledger must stay out while
+    /// every other file arrives.
+    async fn import_without_ledger(archive: PathBuf, app_id: &str) -> Arc<InMemory> {
+        let (state, _, storage) = setup_state();
+        App::import_archive(state, archive, None).await.expect("import");
+        for rel in LEGACY_LEDGER {
+            assert!(!has_app_file(&storage, app_id, rel).await, "restored {rel}");
+        }
+        for rel in TRAVELLING {
+            assert!(has_app_file(&storage, app_id, rel).await, "lost {rel}");
+        }
+        storage
+    }
+
+    async fn archive_rels(archive: PathBuf) -> HashSet<String> {
+        let (source, layout) = open_v2(archive).await.expect("open archive");
+        let reporter = ProgressReporter::new(ArchiveObserver::default());
+        let manifest = read_v2_manifest(source, &layout, None, reporter)
+            .await
+            .expect("archive manifest");
+        manifest
+            .prio
+            .into_values()
+            .chain(manifest.secondary.into_values())
+            .map(|entry| entry.rel_path)
+            .collect()
+    }
+
+    /// Every object under the app, the legacy ledger included, as builds
+    /// before device-local ledgers listed it.
+    async fn unfiltered_listing(
+        app_id: &str,
+        meta: &Arc<InMemory>,
+        storage: &Arc<InMemory>,
+    ) -> Vec<ListedFile> {
+        let base = app_base(app_id);
+        let prefix = format!("{base}/");
+        let mut files = Vec::new();
+        for (kind, store) in [(StoreKind::Meta, meta), (StoreKind::Storage, storage)] {
+            let store: Arc<dyn ObjectStore> = store.clone();
+            for (path, size) in list_store_files(&store, &base).await.expect("list") {
+                let rel = path
+                    .as_ref()
+                    .strip_prefix(prefix.as_str())
+                    .expect("listed under the app")
+                    .to_string();
+                files.push(ListedFile {
+                    store: kind,
+                    path,
+                    rel,
+                    size,
+                });
+            }
+        }
+        files
+    }
+
+    /// Packs `files` into a plain v2 archive exactly as listed.
+    async fn pack_v2(
+        app_id: &str,
+        meta: &Arc<InMemory>,
+        storage: &Arc<InMemory>,
+        files: Vec<ListedFile>,
+        target: PathBuf,
+    ) -> PathBuf {
+        let reporter = ProgressReporter::new(ArchiveObserver::default());
+        let collected = collect_blobs(
+            app_id,
+            meta.clone(),
+            storage.clone(),
+            files,
+            1,
+            reporter.clone(),
+        )
+        .await
+        .expect("pack blobs");
+        let manifest = write_manifest_zip(&collected.manifest).expect("manifest segment");
+        let mut sources = vec![SegmentSource {
+            kind: SEGMENT_KIND_MANIFEST,
+            plain_len: manifest.metadata().unwrap().len(),
+            file: manifest,
+        }];
+        for file in collected.shards {
+            sources.push(SegmentSource {
+                kind: SEGMENT_KIND_BLOBS,
+                plain_len: file.metadata().unwrap().len(),
+                file,
+            });
+        }
+        let header = HeaderV2 {
+            chunk_size: CHUNK_SIZE,
+            kdf: None,
+        };
+        assemble_archive(target.clone(), header, sources, None, 1, reporter)
+            .await
+            .expect("assemble archive");
+        target
+    }
+
+    #[tokio::test]
+    async fn export_leaves_the_legacy_training_ledger_on_the_device() {
+        let app_id = "app_ledger_export";
+        let (_meta, _storage, app) = app_with_legacy_ledger(app_id).await;
+        let tempdir = tempfile::tempdir().expect("tmpdir");
+
+        let report = app
+            .export_archive_with(
+                ExportOptions::default(),
+                tempdir.path().join("ledger"),
+                ArchiveObserver::default(),
+            )
+            .await
+            .expect("export");
+        let rels = archive_rels(report.path.clone()).await;
+        for rel in LEGACY_LEDGER {
+            assert!(!rels.contains(rel), "{rel} must stay on the device");
+        }
+        for rel in TRAVELLING {
+            assert!(rels.contains(rel), "{rel} must travel");
+        }
+        assert_eq!(report.file_count, rels.len() as u64);
+        let preflight = app.export_preflight().await.expect("preflight");
+        assert_eq!(preflight.file_count, report.file_count);
+    }
+
+    #[tokio::test]
+    async fn replace_import_keeps_the_local_legacy_training_ledger() {
+        let app_id = "app_ledger_replace";
+        let (_dir, exported) = exported_fixture(app_id, None).await;
+        let (state, _meta, storage) = setup_state();
+        let stale = "storage/inspection/stale.txt";
+        seed_app_files(&storage, app_id, &LEGACY_LEDGER).await;
+        seed_app_files(&storage, app_id, &[stale]).await;
+
+        let replaced = App::import_archive_with(
+            state,
+            exported,
+            ImportOptions {
+                password: None,
+                mode: ImportMode::Replace,
+            },
+            ArchiveObserver::default(),
+        )
+        .await
+        .expect("replace import");
+        assert_eq!(replaced.deleted_files, 1);
+        assert!(!has_app_file(&storage, app_id, stale).await);
+        for rel in LEGACY_LEDGER {
+            assert!(has_app_file(&storage, app_id, rel).await, "Replace deleted {rel}");
+        }
+    }
+
+    #[tokio::test]
+    async fn v1_import_never_restores_a_legacy_training_ledger() {
+        let app_id = "app_ledger_v1";
+        let (_meta, _storage, app) = app_with_legacy_ledger(app_id).await;
+        let tempdir = tempfile::tempdir().expect("tmpdir");
+        let archive = legacy_v1::export_archive(&app, None, tempdir.path().join("v1"))
+            .await
+            .expect("v1 export");
+        import_without_ledger(archive, app_id).await;
+    }
+
+    #[tokio::test]
+    async fn v2_import_never_restores_a_legacy_training_ledger() {
+        let app_id = "app_ledger_v2";
+        let (meta, storage, _app) = app_with_legacy_ledger(app_id).await;
+        let mut files = unfiltered_listing(app_id, &meta, &storage).await;
+        let ledger = files
+            .iter()
+            .find(|file| file.rel == LEGACY_LEDGER[0])
+            .cloned()
+            .expect("the ledger is listed");
+        // Restore decodes and re-joins segments, so this lands on jobs.sqlite-shm.
+        let disguised = "storage//inspection/jobs%2Esqlite-shm";
+        files.push(ListedFile {
+            rel: disguised.to_string(),
+            ..ledger
+        });
+        let tempdir = tempfile::tempdir().expect("tmpdir");
+        let target = tempdir.path().join("v2.flow-app");
+        let archive = pack_v2(app_id, &meta, &storage, files, target).await;
+        let packed = archive_rels(archive.clone()).await;
+        assert!(LEGACY_LEDGER.iter().all(|rel| packed.contains(*rel)));
+        assert!(packed.contains(disguised));
+
+        let restored = import_without_ledger(archive, app_id).await;
+        let shm = "storage/inspection/jobs.sqlite-shm";
+        assert!(!has_app_file(&restored, app_id, shm).await);
     }
 }

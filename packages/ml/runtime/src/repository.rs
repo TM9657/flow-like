@@ -1,11 +1,12 @@
 use crate::worker::LocalRunLock;
 use crate::*;
 use rusqlite::{
-    Connection, OptionalExtension, Transaction, TransactionBehavior, config::DbConfig, params,
+    Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior, config::DbConfig,
+    params,
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
-    io::Write,
+    io::{ErrorKind, Write},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -1093,14 +1094,8 @@ impl TrainingRepository {
     }
 
     pub fn get_pretrained_source(&self, source_id: &str) -> Result<PretrainedSource> {
-        if source_id.starts_with("pretrained:") {
-            return read_json(
-                &self.connection()?,
-                "SELECT body FROM pretrained_sources WHERE id=?",
-                source_id,
-            );
-        }
-        Ok(pretrained_artifact(self.get_artifact(source_id)?))
+        find_pretrained_source(&self.connection()?, source_id)?
+            .ok_or_else(|| Error::NotFound(source_id.into()))
     }
 
     pub fn list_pretrained_sources(
@@ -1164,28 +1159,24 @@ impl TrainingRepository {
 
     pub fn read_blob_limited(&self, blob: &BlobRef, maximum_bytes: u64) -> Result<Vec<u8>> {
         use std::io::Read;
-        if blob.path != format!("{}.blob", blob.sha256)
-            || blob.sha256.len() != 64
-            || !blob.sha256.bytes().all(|b| b.is_ascii_hexdigit())
-        {
-            return Err(invalid("invalid repository blob reference"));
-        }
-        if blob.bytes == 0 || blob.bytes > maximum_bytes || blob.bytes >= usize::MAX as u64 {
-            return Err(invalid("artifact exceeds the configured byte limit"));
-        }
+        validate_blob_reference(blob, maximum_bytes)?;
         let path = self.blob_dir.join(&blob.path);
         if !std::fs::symlink_metadata(&path)?.file_type().is_file() {
             return Err(invalid("artifact must be a regular repository file"));
         }
-        let file = std::fs::File::open(path)?;
-        if file.metadata()?.len() != blob.bytes {
-            return Err(invalid("artifact digest or size mismatch"));
+        let file = std::fs::File::open(&path)?;
+        let stored = file.metadata()?.len();
+        if stored != blob.bytes {
+            return Err(invalid(format!(
+                "artifact digest or size mismatch: blob {} records {} bytes, but {} holds {stored}",
+                blob.sha256,
+                blob.bytes,
+                path.display()
+            )));
         }
         let mut bytes = Vec::with_capacity((blob.bytes as usize).min(16 * 1024 * 1024));
         file.take(blob.bytes + 1).read_to_end(&mut bytes)?;
-        if bytes.len() as u64 != blob.bytes || digest(&bytes) != blob.sha256 {
-            return Err(invalid("artifact digest or size mismatch"));
-        }
+        verify_blob_content(blob, &bytes)?;
         Ok(bytes)
     }
 
@@ -1810,40 +1801,227 @@ impl TrainingRepository {
         Ok(deployment)
     }
 
-    /// Writes a consistent single-file copy of the ledger and its referenced blobs
-    /// into the empty `directory`.
-    pub fn snapshot_to(&self, _directory: &Path) -> Result<LedgerSnapshot> {
-        Err(invalid("TrainingRepository::snapshot_to lands in L3"))
+    /// Writes a consistent single-file copy of the ledger and every blob it references into
+    /// `directory`, which must be empty and is created when missing. The blob store stays
+    /// shared from the copy until the last blob is linked, so the collector cannot remove a
+    /// blob the copy references. Blob files are hard links to the ledger's own blobs where the
+    /// file system allows it, so the folder is read-only: remove it, never write into it.
+    pub fn snapshot_to(&self, directory: &Path) -> Result<LedgerSnapshot> {
+        self.snapshot_while_locked(directory, || Ok(()))
     }
 
-    /// Checks a snapshot folder read-only: schema, integrity and every referenced blob,
-    /// with all files together at most `maximum_bytes`.
-    pub fn verify_snapshot(_directory: &Path, _maximum_bytes: u64) -> Result<LedgerSnapshot> {
-        Err(invalid("TrainingRepository::verify_snapshot lands in L3"))
+    /// `locked` runs while the blob store is still shared, after the last blob was linked.
+    fn snapshot_while_locked(
+        &self,
+        directory: &Path,
+        locked: impl FnOnce() -> Result<()>,
+    ) -> Result<LedgerSnapshot> {
+        let directory = empty_directory(directory)?;
+        let partial = PartialSnapshot::new(&directory);
+        {
+            let _shared = LocalRunLock::shared(self, BLOB_STORE_LOCK)?;
+            self.copy_into(&partial)?;
+            locked()?;
+        }
+        partial.sync(&directory)?;
+        let snapshot = Self::verify_snapshot(&directory, u64::MAX)?;
+        partial.keep();
+        Ok(snapshot)
     }
 
-    /// Installs a verified snapshot as the ledger at `destination` without replacing
-    /// anything; `Error::Conflict` when the ledger or its blob directory exists.
-    pub fn install_snapshot(_directory: &Path, _destination: &Path) -> Result<()> {
-        Err(invalid("TrainingRepository::install_snapshot lands in L3"))
+    /// The database copy and every blob it references. The caller holds the blob store
+    /// shared, so no referenced blob disappears before it is linked.
+    fn copy_into(&self, partial: &PartialSnapshot) -> Result<()> {
+        self.vacuum_into(&partial.database)?;
+        let referenced = single_file_database(&partial.database)?;
+        verify_storage_entry(&self.root, &self.blob_dir, true)?;
+        std::fs::create_dir(&partial.blob_dir)?;
+        for name in &referenced {
+            link_or_copy(&self.blob_dir.join(name), &partial.blob_dir.join(name))?;
+        }
+        Ok(())
     }
 
-    /// Distinct project ids named anywhere in the ledger.
+    /// `VACUUM INTO` on a dedicated read-only connection runs in one read transaction, so the
+    /// copy is consistent and includes commits that are still only in the WAL.
+    fn vacuum_into(&self, target: &Path) -> Result<()> {
+        let target = target.to_str().ok_or_else(|| {
+            invalid(format!(
+                "ledger snapshot path {} is not valid UTF-8",
+                target.display()
+            ))
+        })?;
+        let connection = Connection::open_with_flags(
+            &self.path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        connection.busy_timeout(Duration::from_secs(15))?;
+        connection.execute("VACUUM INTO ?1", [target])?;
+        Ok(())
+    }
+
+    /// Checks a snapshot folder without writing to it: a single-file database at version 1 of
+    /// this runtime's schema that passes `PRAGMA quick_check`, every blob it references present,
+    /// every blob matching its sha256 name, and all files together at most `maximum_bytes`.
+    pub fn verify_snapshot(directory: &Path, maximum_bytes: u64) -> Result<LedgerSnapshot> {
+        let database = directory.join(LEDGER_DATABASE_FILE);
+        let blob_dir = directory.join(LEDGER_BLOB_DIR);
+        let (database_bytes, blobs) = snapshot_listing(&database, &blob_dir, maximum_bytes)?;
+        let (referenced, project_ids) = inspect_snapshot_database(&database)?;
+        if let Some(missing) = missing_blob(&referenced, &blobs) {
+            return Err(invalid(format!(
+                "ledger snapshot {} references blob {missing:?}, which it does not contain",
+                directory.display()
+            )));
+        }
+        Ok(LedgerSnapshot {
+            database: hashed_file(&database, LEDGER_DATABASE_FILE.into(), database_bytes)?,
+            blobs: hashed_blobs(&blob_dir, blobs)?,
+            project_ids,
+        })
+    }
+
+    /// Installs a snapshot that `verify_snapshot` accepted as the ledger at `destination`,
+    /// creating the destination's directory when missing. The blobs go into a newly created
+    /// blob directory first; the database is copied beside them and hard-linked last, so
+    /// nothing is ever replaced, an opener never sees a partial ledger and the ledger shares no
+    /// database file with the snapshot. `Error::Conflict` when the ledger, its journal files
+    /// or its blob directory exist, or another install of `destination` runs. A failed install
+    /// removes only what it created; an error from the final directory sync leaves the
+    /// installed ledger in place. Installed blobs are hard links to the snapshot's blob files
+    /// where the file system allows it, so remove the snapshot folder afterwards rather than
+    /// writing into it.
+    pub fn install_snapshot(directory: &Path, destination: &Path) -> Result<()> {
+        let (root, destination) = install_target(destination)?;
+        let _installing = install_lock(&root, &destination)?;
+        let database = directory.join(LEDGER_DATABASE_FILE);
+        regular_file(&database)?;
+        let source_blobs = directory.join(LEDGER_BLOB_DIR);
+        let blobs = snapshot_blobs(&source_blobs)?;
+        let mut installation = Installation::begin(destination)?;
+        installation.link_blobs(&source_blobs, &blobs)?;
+        publish_database(
+            &database,
+            &installation.blob_dir,
+            &installation.destination,
+        )?;
+        installation.finish(&root)
+    }
+
+    /// Distinct project ids of the ledger's sample streams, experiments, learning projects,
+    /// jobs, artifacts, pretrained sources and deployments.
     pub fn project_ids(&self) -> Result<BTreeSet<String>> {
-        Err(invalid("TrainingRepository::project_ids lands in L3"))
+        project_ids_of(&self.connection()?)
     }
 
-    /// Copies a pretrained source from another ledger under the same id with
-    /// `project_id` rewritten; idempotent for an equal blob, `Error::Conflict` otherwise.
+    /// Copies a pretrained source of `from` into this ledger under the same id and kind, with
+    /// `project_id` rewritten. Both blob stores stay shared until the reference commits, so
+    /// neither collector removes the blob, which is hard-linked where the file system allows
+    /// it and copied otherwise. Adopting again returns the stored record when its blob is the
+    /// same; another blob under that id is `Error::Conflict`.
     pub fn adopt_pretrained_source(
         &self,
-        _from: &TrainingRepository,
-        _source_id: &str,
-        _project_id: &str,
+        from: &TrainingRepository,
+        source_id: &str,
+        project_id: &str,
     ) -> Result<PretrainedSource> {
-        Err(invalid(
-            "TrainingRepository::adopt_pretrained_source lands in L3",
-        ))
+        self.writable()?;
+        if project_id.trim().is_empty() {
+            return Err(invalid(format!(
+                "adopting pretrained source {source_id} needs a target project"
+            )));
+        }
+        let source = from.get_pretrained_source(source_id)?;
+        if let Some(existing) = self.adopted(&source)? {
+            return Ok(existing);
+        }
+        let _shared = self.receive_blob(from, &source.blob)?;
+        self.insert_adopted(PretrainedSource {
+            project_id: project_id.into(),
+            ..source
+        })
+    }
+
+    /// This ledger's record under `source.id` when it holds the same blob.
+    fn adopted(&self, source: &PretrainedSource) -> Result<Option<PretrainedSource>> {
+        reuse_adoption(
+            find_pretrained_source(&self.connection()?, &source.id)?,
+            source,
+        )
+    }
+
+    /// Stores a blob of `from` here and returns both blob store locks, which the caller
+    /// keeps until the blob's reference commits.
+    fn receive_blob(
+        &self,
+        from: &TrainingRepository,
+        blob: &BlobRef,
+    ) -> Result<[LocalRunLock; 2]> {
+        validate_blob_reference(blob, u64::MAX)?;
+        let locks = [self.blob_writer()?, from.blob_writer()?];
+        verify_storage_entry(&from.root, &from.blob_dir, true)?;
+        verify_storage_entry(&self.root, &self.blob_dir, true)?;
+        self.store_blob_from(&from.blob_dir.join(&blob.path), blob)?;
+        Ok(locks)
+    }
+
+    /// Inserts an adopted source; a concurrent adoption of the same id that committed first
+    /// is returned instead when it holds the same blob.
+    fn insert_adopted(&self, adopted: PretrainedSource) -> Result<PretrainedSource> {
+        let body = serde_json::to_string(&adopted)?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let stored = find_pretrained_source(&tx, &adopted.id)?;
+        let Some(existing) = reuse_adoption(stored, &adopted)? else {
+            tx.execute(
+                "INSERT INTO pretrained_sources(id,project_id,body) VALUES(?,?,?)",
+                params![adopted.id, adopted.project_id, body],
+            )?;
+            tx.commit()?;
+            return Ok(adopted);
+        };
+        Ok(existing)
+    }
+
+    /// Stores another ledger's blob file here: hard-linked, or copied through a staging file
+    /// where linking fails. A blob stored already is kept. The stored blob is then verified.
+    fn store_blob_from(&self, source: &Path, blob: &BlobRef) -> Result<()> {
+        regular_file(source)?;
+        let destination = self.blob_dir.join(&blob.path);
+        let created = match std::fs::hard_link(source, &destination) {
+            Ok(()) => true,
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => false,
+            Err(_) => {
+                let staging = StagingFile(self.blob_dir.join(format!("{}.part", id())));
+                copy_new(source, &staging.0)?;
+                std::fs::rename(&staging.0, &destination)?;
+                true
+            }
+        };
+        if let Err(error) = self.verify_stored_blob(blob) {
+            if created {
+                let _ = std::fs::remove_file(&destination);
+            }
+            return Err(error);
+        }
+        sync_directory(&self.blob_dir)
+    }
+
+    /// `read_blob`'s checks, streaming the file instead of loading it.
+    fn verify_stored_blob(&self, blob: &BlobRef) -> Result<()> {
+        validate_blob_reference(blob, u64::MAX)?;
+        let path = self.blob_dir.join(&blob.path);
+        let stored = regular_file(&path)?.len();
+        let (read, sha256) = file_sha256(&path, blob.bytes)?;
+        if stored != blob.bytes || read != blob.bytes || sha256 != blob.sha256 {
+            return Err(invalid(format!(
+                "artifact digest or size mismatch: {} holds {read} bytes with sha256 {sha256}, but blob {} records {} bytes",
+                path.display(),
+                blob.sha256,
+                blob.bytes
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -2277,6 +2455,52 @@ fn pretrained_artifact(artifact: ModelArtifact) -> PretrainedSource {
         created_at_ms: artifact.created_at_ms,
     }
 }
+
+/// An id without the `pretrained:` prefix names a training artifact, or a source another
+/// ledger adopted under that artifact's id.
+fn find_pretrained_source(
+    connection: &Connection,
+    source_id: &str,
+) -> Result<Option<PretrainedSource>> {
+    if !source_id.starts_with("pretrained:") {
+        let artifact: Option<String> = connection
+            .query_row(
+                "SELECT body FROM artifacts WHERE id=?",
+                [source_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(body) = artifact {
+            return Ok(Some(pretrained_artifact(serde_json::from_str(&body)?)));
+        }
+    }
+    let body: Option<String> = connection
+        .query_row(
+            "SELECT body FROM pretrained_sources WHERE id=?",
+            [source_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(match body {
+        Some(body) => Some(serde_json::from_str(&body)?),
+        None => None,
+    })
+}
+
+/// A ledger already holding the adopted id keeps its record when the blob is the same.
+fn reuse_adoption(
+    stored: Option<PretrainedSource>,
+    source: &PretrainedSource,
+) -> Result<Option<PretrainedSource>> {
+    match stored {
+        Some(stored) if stored.blob.sha256 == source.blob.sha256 => Ok(Some(stored)),
+        Some(stored) => Err(Error::Conflict(format!(
+            "pretrained source {} already holds blob {} in this ledger, not {}",
+            source.id, stored.blob.sha256, source.blob.sha256
+        ))),
+        None => Ok(None),
+    }
+}
 fn save_job(tx: &Connection, job: &TrainingJob) -> Result<()> {
     tx.execute(
         "UPDATE jobs SET status=?,body=? WHERE id=?",
@@ -2371,6 +2595,60 @@ impl Drop for StagingFile {
 fn is_blob_name(name: &str) -> bool {
     name.strip_suffix(".blob")
         .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// Rules every blob read applies before touching bytes: the reference names its own sha256
+/// as `{sha}.blob`, and its size is positive, within `maximum_bytes` and addressable.
+pub(crate) fn validate_blob_reference(blob: &BlobRef, maximum_bytes: u64) -> Result<()> {
+    if blob.path != format!("{}.blob", blob.sha256)
+        || blob.sha256.len() != 64
+        || !blob.sha256.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        return Err(invalid(format!(
+            "invalid repository blob reference {:?} for sha256 {:?}",
+            blob.path, blob.sha256
+        )));
+    }
+    if blob.bytes == 0 {
+        return Err(invalid(format!(
+            "artifact blob {} records no bytes",
+            blob.sha256
+        )));
+    }
+    if blob.bytes > maximum_bytes || blob.bytes >= usize::MAX as u64 {
+        return Err(invalid(format!(
+            "artifact exceeds the configured byte limit: blob {} has {} bytes, above the {maximum_bytes} byte limit",
+            blob.sha256, blob.bytes
+        )));
+    }
+    Ok(())
+}
+
+/// `bytes` must be exactly the referenced blob.
+pub(crate) fn verify_blob_content(blob: &BlobRef, bytes: &[u8]) -> Result<()> {
+    if bytes.len() as u64 != blob.bytes {
+        return Err(invalid(format!(
+            "artifact digest or size mismatch: blob {} records {} bytes, but {} were given",
+            blob.sha256,
+            blob.bytes,
+            bytes.len()
+        )));
+    }
+    let actual = digest(bytes);
+    if actual != blob.sha256 {
+        return Err(invalid(format!(
+            "artifact digest or size mismatch: blob {} holds bytes with sha256 {actual}",
+            blob.sha256
+        )));
+    }
+    Ok(())
+}
+
+/// A blob name as `put_blob` writes it: lowercase sha256 hex followed by `.blob`.
+fn is_snapshot_blob_name(name: &str) -> bool {
+    name.strip_suffix(".blob").is_some_and(|hash| {
+        hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+    })
 }
 
 fn referenced_blobs(conn: &Connection) -> Result<HashSet<String>> {
@@ -2492,6 +2770,515 @@ fn expected_schema_objects() -> Result<&'static BTreeSet<(String, String)>> {
         })?
         .collect::<rusqlite::Result<BTreeSet<_>>>()?;
     Ok(OBJECTS.get_or_init(|| objects))
+}
+
+/// Project ids read from the record bodies the runtime authorizes on, plus the column that
+/// pretrained source listings filter by.
+const PROJECT_IDS: &str = "SELECT json_extract(scope,'$.project_id') FROM streams UNION SELECT json_extract(body,'$.request.stream.project_id') FROM experiments UNION SELECT json_extract(body,'$.request.stream.project_id') FROM learning_projects UNION SELECT json_extract(body,'$.stream.project_id') FROM jobs UNION SELECT json_extract(body,'$.stream.project_id') FROM artifacts UNION SELECT project_id FROM pretrained_sources UNION SELECT json_extract(body,'$.project_id') FROM pretrained_sources UNION SELECT json_extract(body,'$.stream.project_id') FROM deployments";
+
+fn project_ids_of(connection: &Connection) -> Result<BTreeSet<String>> {
+    let mut statement = connection.prepare(PROJECT_IDS)?;
+    let ids = statement
+        .query_map([], |row| row.get::<_, Option<String>>(0))?
+        .filter_map(|row| row.transpose())
+        .collect::<rusqlite::Result<BTreeSet<_>>>()?;
+    Ok(ids)
+}
+
+/// `directory`, created when missing, as a real and empty directory.
+fn empty_directory(directory: &Path) -> Result<PathBuf> {
+    std::fs::create_dir_all(directory)?;
+    if !std::fs::symlink_metadata(directory)?.is_dir() {
+        return Err(invalid(format!(
+            "ledger snapshot target {} must be a real directory",
+            directory.display()
+        )));
+    }
+    if std::fs::read_dir(directory)?.next().is_some() {
+        return Err(Error::Conflict(format!(
+            "ledger snapshot target {} is not empty",
+            directory.display()
+        )));
+    }
+    Ok(directory.canonicalize()?)
+}
+
+/// Removes what a failed snapshot wrote into its empty directory.
+struct PartialSnapshot {
+    database: PathBuf,
+    blob_dir: PathBuf,
+    kept: bool,
+}
+
+impl PartialSnapshot {
+    fn new(directory: &Path) -> Self {
+        Self {
+            database: directory.join(LEDGER_DATABASE_FILE),
+            blob_dir: directory.join(LEDGER_BLOB_DIR),
+            kept: false,
+        }
+    }
+
+    fn sync(&self, directory: &Path) -> Result<()> {
+        sync_file(&self.database)?;
+        sync_directory(&self.blob_dir)?;
+        sync_directory(directory)
+    }
+
+    fn keep(mut self) {
+        self.kept = true;
+    }
+}
+
+impl Drop for PartialSnapshot {
+    fn drop(&mut self) {
+        if self.kept {
+            return;
+        }
+        for file in database_files(&self.database) {
+            let _ = std::fs::remove_file(file);
+        }
+        let _ = std::fs::remove_dir_all(&self.blob_dir);
+    }
+}
+
+/// A database file followed by the journal files SQLite keeps beside it.
+fn database_files(database: &Path) -> [PathBuf; 4] {
+    ["", "-journal", "-wal", "-shm"].map(|suffix| {
+        let mut path = database.as_os_str().to_owned();
+        path.push(suffix);
+        PathBuf::from(path)
+    })
+}
+
+/// Metadata of `path`, which must be a regular file rather than a symlink or directory.
+fn regular_file(path: &Path) -> Result<std::fs::Metadata> {
+    match present(std::fs::symlink_metadata(path))? {
+        Some(metadata) if metadata.is_file() => Ok(metadata),
+        Some(_) => Err(invalid(format!(
+            "{} must be a regular file",
+            path.display()
+        ))),
+        None => Err(Error::NotFound(path.display().to_string())),
+    }
+}
+
+/// Puts a `VACUUM INTO` copy in rollback-journal mode, so it is one file, and lists the blobs
+/// it references.
+fn single_file_database(database: &Path) -> Result<Vec<String>> {
+    let connection = Connection::open_with_flags(
+        database,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    let mode: String =
+        connection.pragma_update_and_check(None, "journal_mode", "DELETE", |row| row.get(0))?;
+    if !mode.eq_ignore_ascii_case("delete") {
+        return Err(invalid(format!(
+            "ledger snapshot {} stayed in journal mode {mode}",
+            database.display()
+        )));
+    }
+    let mut referenced: Vec<String> = referenced_blobs(&connection)?.into_iter().collect();
+    referenced.sort();
+    if let Some(name) = referenced.iter().find(|name| !is_blob_name(name)) {
+        return Err(invalid(format!(
+            "training ledger references blob {name:?}, which is not a sha256 blob name"
+        )));
+    }
+    Ok(referenced)
+}
+
+/// The database size and the blobs of a snapshot folder. Journal files beside the database,
+/// and files above `maximum_bytes` together, are refused before anything is opened.
+fn snapshot_listing(
+    database: &Path,
+    blob_dir: &Path,
+    maximum_bytes: u64,
+) -> Result<(u64, Vec<(String, u64)>)> {
+    if let Some(journal) = database_files(database)[1..]
+        .iter()
+        .find(|journal| std::fs::symlink_metadata(journal).is_ok())
+    {
+        return Err(invalid(format!(
+            "ledger snapshot {} must be a single-file database, but {} exists",
+            database.display(),
+            journal.display()
+        )));
+    }
+    let database_bytes = regular_file(database)?.len();
+    let blobs = snapshot_blobs(blob_dir)?;
+    let total = u128::from(database_bytes)
+        + blobs
+            .iter()
+            .map(|(_, bytes)| u128::from(*bytes))
+            .sum::<u128>();
+    if total > u128::from(maximum_bytes) {
+        return Err(invalid(format!(
+            "ledger snapshot {} holds {total} bytes, above the {maximum_bytes} byte limit",
+            database.parent().unwrap_or(database).display()
+        )));
+    }
+    Ok((database_bytes, blobs))
+}
+
+/// The blob references and project ids of a snapshot database that passed the format,
+/// schema and integrity checks, read without writing anything beside it.
+fn inspect_snapshot_database(database: &Path) -> Result<(HashSet<String>, BTreeSet<String>)> {
+    ensure_single_file_format(database)?;
+    let connection = open_snapshot_database(database)?;
+    check_snapshot_schema(&connection)?;
+    Ok((referenced_blobs(&connection)?, project_ids_of(&connection)?))
+}
+
+/// The smallest referenced blob name the snapshot does not hold.
+fn missing_blob(referenced: &HashSet<String>, blobs: &[(String, u64)]) -> Option<String> {
+    let present: HashSet<&str> = blobs.iter().map(|(name, _)| name.as_str()).collect();
+    referenced
+        .iter()
+        .filter(|name| !present.contains(name.as_str()))
+        .min()
+        .cloned()
+}
+
+/// Streams every blob's sha256, which must be the name the blob is stored under.
+fn hashed_blobs(blob_dir: &Path, blobs: Vec<(String, u64)>) -> Result<Vec<LedgerSnapshotFile>> {
+    blobs
+        .into_iter()
+        .map(|(name, bytes)| {
+            let file = hashed_file(
+                &blob_dir.join(&name),
+                format!("{LEDGER_BLOB_DIR}/{name}"),
+                bytes,
+            )?;
+            if name != format!("{}.blob", file.sha256) {
+                return Err(invalid(format!(
+                    "ledger snapshot blob {name} has sha256 {}",
+                    file.sha256
+                )));
+            }
+            Ok(file)
+        })
+        .collect()
+}
+
+/// The header must announce a rollback-journal database, so a read-only open neither looks
+/// for nor creates WAL files.
+fn ensure_single_file_format(database: &Path) -> Result<()> {
+    use std::io::Read;
+    let mut header = [0u8; 100];
+    let read = std::fs::File::open(database)?.read_exact(&mut header);
+    let single_file = match read {
+        Ok(()) => &header[..16] == b"SQLite format 3\0" && header[18] == 1 && header[19] == 1,
+        Err(error) if error.kind() == ErrorKind::UnexpectedEof => false,
+        Err(error) => return Err(error.into()),
+    };
+    if !single_file {
+        return Err(invalid(format!(
+            "ledger snapshot {} is not a single-file SQLite database with journal_mode DELETE",
+            database.display()
+        )));
+    }
+    Ok(())
+}
+
+/// A read-only connection that distrusts the received schema. The caller checked that the
+/// database file itself is no symlink; SQLite's NOFOLLOW would also refuse symlinked parent
+/// directories, such as macOS's /var.
+fn open_snapshot_database(database: &Path) -> Result<Connection> {
+    let connection = Connection::open_with_flags(
+        database,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    connection.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
+    connection.set_db_config(DbConfig::SQLITE_DBCONFIG_TRUSTED_SCHEMA, false)?;
+    Ok(connection)
+}
+
+/// Version 1 of this runtime's schema, without foreign objects, and structurally intact.
+fn check_snapshot_schema(connection: &Connection) -> Result<()> {
+    let versions: Vec<i64> = column_values(connection, "SELECT version FROM ml_meta")?;
+    if versions != [1] {
+        return Err(invalid(format!(
+            "ledger snapshot has training ledger versions {versions:?}; this runtime reads version 1"
+        )));
+    }
+    verify_schema_objects(connection)?;
+    let problems: Vec<String> = column_values(connection, "PRAGMA quick_check")?;
+    if problems != ["ok"] {
+        return Err(invalid(format!(
+            "ledger snapshot failed its integrity check: {}",
+            problems.join("; ")
+        )));
+    }
+    Ok(())
+}
+
+/// The first column of every row `sql` returns.
+fn column_values<T: rusqlite::types::FromSql>(
+    connection: &Connection,
+    sql: &str,
+) -> Result<Vec<T>> {
+    let mut statement = connection.prepare(sql)?;
+    let values = statement
+        .query_map([], |row| row.get::<_, T>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(values)
+}
+
+/// Names and sizes of the blobs in a snapshot's blob directory, sorted by name. A missing
+/// directory holds no blobs; any entry other than a regular blob file is refused.
+fn snapshot_blobs(blob_dir: &Path) -> Result<Vec<(String, u64)>> {
+    let Some(metadata) = present(std::fs::symlink_metadata(blob_dir))? else {
+        return Ok(Vec::new());
+    };
+    if !metadata.is_dir() {
+        return Err(invalid(format!(
+            "ledger snapshot blob directory {} must be a real directory",
+            blob_dir.display()
+        )));
+    }
+    let mut blobs = std::fs::read_dir(blob_dir)?
+        .map(|entry| snapshot_blob(blob_dir, entry?))
+        .collect::<Result<Vec<_>>>()?;
+    blobs.sort();
+    Ok(blobs)
+}
+
+/// A regular `{sha}.blob` file of a snapshot's blob directory, with its size.
+fn snapshot_blob(blob_dir: &Path, entry: std::fs::DirEntry) -> Result<(String, u64)> {
+    let metadata = entry.metadata()?;
+    match entry.file_name().into_string() {
+        Ok(name) if is_snapshot_blob_name(&name) && metadata.is_file() => {
+            Ok((name, metadata.len()))
+        }
+        _ => Err(invalid(format!(
+            "ledger snapshot blob directory {} holds unexpected entry {:?}",
+            blob_dir.display(),
+            entry.file_name()
+        ))),
+    }
+}
+
+/// The streamed sha256 of a snapshot file, which must still hold the `bytes` it was listed with.
+fn hashed_file(path: &Path, file: String, bytes: u64) -> Result<LedgerSnapshotFile> {
+    let (read, sha256) = file_sha256(path, bytes)?;
+    if read != bytes {
+        return Err(invalid(format!(
+            "ledger snapshot file {} changed from {bytes} to {read} bytes while it was verified",
+            path.display()
+        )));
+    }
+    Ok(LedgerSnapshotFile {
+        file,
+        sha256,
+        bytes,
+    })
+}
+
+/// The number of bytes read and their sha256, over at most `maximum_bytes + 1` bytes of the
+/// file, so a caller sees when the file is longer than expected.
+fn file_sha256(path: &Path, maximum_bytes: u64) -> Result<(u64, String)> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    struct Hashing(Sha256, u64);
+    impl Write for Hashing {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.update(bytes);
+            self.1 += bytes.len() as u64;
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut hashing = Hashing(Sha256::new(), 0);
+    std::io::copy(
+        &mut std::fs::File::open(path)?.take(maximum_bytes.saturating_add(1)),
+        &mut hashing,
+    )?;
+    let Hashing(hasher, read) = hashing;
+    Ok((read, format!("{:x}", hasher.finalize())))
+}
+
+/// Hard-links `source` to `target`, or copies it with a sync where linking fails, such as
+/// across file systems. `target` is never replaced.
+fn link_or_copy(source: &Path, target: &Path) -> Result<()> {
+    regular_file(source)?;
+    match std::fs::hard_link(source, target) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => Err(error.into()),
+        Err(_) => copy_new(source, target),
+    }
+}
+
+/// Copies `source` into a file that must not exist yet, and syncs it.
+fn copy_new(source: &Path, target: &Path) -> Result<()> {
+    let mut output = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(target)?;
+    std::io::copy(&mut std::fs::File::open(source)?, &mut output)?;
+    output.sync_all()?;
+    Ok(())
+}
+
+fn sync_file(path: &Path) -> Result<()> {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)?
+        .sync_all()?;
+    Ok(())
+}
+
+/// Makes the entries created in `directory` durable; Windows offers no directory sync.
+fn sync_directory(directory: &Path) -> Result<()> {
+    #[cfg(unix)]
+    std::fs::File::open(directory)?.sync_all()?;
+    #[cfg(not(unix))]
+    let _ = directory;
+    Ok(())
+}
+
+/// Exclusive lock of one install destination, beside the ledger's other locks.
+fn install_lock(root: &Path, destination: &Path) -> Result<std::fs::File> {
+    let directory = root.join(".training-locks");
+    std::fs::create_dir_all(&directory)?;
+    if !std::fs::symlink_metadata(&directory)?.is_dir() {
+        return Err(invalid(format!(
+            "training lock directory {} must be a real directory",
+            directory.display()
+        )));
+    }
+    let path = directory.join(format!(
+        "install-{}.lock",
+        digest(destination.as_os_str().as_encoded_bytes())
+    ));
+    if std::fs::symlink_metadata(&path).is_ok_and(|metadata| !metadata.is_file()) {
+        return Err(invalid(format!(
+            "training lock {} must be a regular file",
+            path.display()
+        )));
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(std::fs::TryLockError::WouldBlock) => Err(Error::Conflict(format!(
+            "another import is installing training ledger {}",
+            destination.display()
+        ))),
+        Err(std::fs::TryLockError::Error(error)) => Err(error.into()),
+    }
+}
+
+/// The canonical directory of an install destination, created when missing, and the
+/// destination inside it.
+fn install_target(destination: &Path) -> Result<(PathBuf, PathBuf)> {
+    let name = destination.file_name().ok_or_else(|| {
+        invalid(format!(
+            "ledger destination {} names no file",
+            destination.display()
+        ))
+    })?;
+    let parent = destination
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let root = parent.canonicalize()?;
+    let destination = root.join(name);
+    Ok((root, destination))
+}
+
+fn ledger_exists(destination: &Path, entry: &Path) -> Error {
+    Error::Conflict(format!(
+        "training ledger {} already exists: {} is present",
+        destination.display(),
+        entry.display()
+    ))
+}
+
+/// Copies the snapshot database into `staging_dir` and hard-links the synced copy to
+/// `destination`. A hard link never replaces a file, and the installed ledger shares no
+/// database file with the snapshot, which SQLite would otherwise write through. A staging
+/// file left by a crash is swept like any other staged blob.
+fn publish_database(source: &Path, staging_dir: &Path, destination: &Path) -> Result<()> {
+    let staging = StagingFile(staging_dir.join(format!("{}.part", id())));
+    copy_new(source, &staging.0)?;
+    std::fs::hard_link(&staging.0, destination).map_err(|error| {
+        if error.kind() == ErrorKind::AlreadyExists {
+            ledger_exists(destination, destination)
+        } else {
+            error.into()
+        }
+    })
+}
+
+/// A ledger being installed. Dropped unfinished, it removes the blob links it made, then its
+/// blob directory unless a ledger appeared at the destination meanwhile and uses it.
+struct Installation {
+    destination: PathBuf,
+    blob_dir: PathBuf,
+    blobs: Vec<PathBuf>,
+    installed: bool,
+}
+
+impl Installation {
+    /// Claims an absent ledger by creating its blob directory exclusively.
+    fn begin(destination: PathBuf) -> Result<Self> {
+        let blob_dir = destination.with_extension("artifacts");
+        for entry in database_files(&destination).iter().chain([&blob_dir]) {
+            if present(std::fs::symlink_metadata(entry))?.is_some() {
+                return Err(ledger_exists(&destination, entry));
+            }
+        }
+        std::fs::create_dir(&blob_dir).map_err(|error| {
+            if error.kind() == ErrorKind::AlreadyExists {
+                ledger_exists(&destination, &blob_dir)
+            } else {
+                error.into()
+            }
+        })?;
+        Ok(Self {
+            destination,
+            blob_dir,
+            blobs: Vec::new(),
+            installed: false,
+        })
+    }
+
+    fn link_blobs(&mut self, source_dir: &Path, blobs: &[(String, u64)]) -> Result<()> {
+        for (name, _) in blobs {
+            let target = self.blob_dir.join(name);
+            link_or_copy(&source_dir.join(name), &target)?;
+            self.blobs.push(target);
+        }
+        sync_directory(&self.blob_dir)
+    }
+
+    /// The database is published, so a failed sync of `root` no longer undoes anything.
+    fn finish(mut self, root: &Path) -> Result<()> {
+        self.installed = true;
+        sync_directory(root)
+    }
+}
+
+impl Drop for Installation {
+    fn drop(&mut self) {
+        if self.installed {
+            return;
+        }
+        for blob in &self.blobs {
+            let _ = std::fs::remove_file(blob);
+        }
+        if std::fs::symlink_metadata(&self.destination).is_err() {
+            let _ = std::fs::remove_dir(&self.blob_dir);
+        }
+    }
 }
 
 fn count_new_samples(conn: &Connection, scope: &str, at_ms: i64) -> Result<usize> {
@@ -3227,5 +4014,84 @@ mod truth_digest_tests {
         relabelled.payload["label"] = json!("defect");
         repo.record_sample(&stream, &relabelled).unwrap();
         assert!(!verifies(Some(sealed.as_str())));
+    }
+}
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn blob_collection_waits_while_a_snapshot_links_its_blobs() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join(LEDGER_DATABASE_FILE)).unwrap();
+        let source = repo
+            .register_pretrained_source(
+                "app:board",
+                b"weights",
+                json!({"engine":"burn","format_version":1,"config":{},"input_shape":[1]}),
+                json!({}),
+                1024,
+                now_ms(),
+            )
+            .unwrap();
+        let orphan_bytes = b"unreferenced";
+        let orphan = repo.blob_dir.join(format!("{}.blob", "e".repeat(64)));
+        std::fs::write(&orphan, orphan_bytes).unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let snapshot = repo
+            .snapshot_while_locked(target.path(), || {
+                assert_eq!(repo.collect_unreferenced_blobs()?, 0);
+                assert!(orphan.exists());
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            snapshot
+                .blobs
+                .iter()
+                .map(|blob| blob.file.clone())
+                .collect::<Vec<_>>(),
+            vec![format!("{LEDGER_BLOB_DIR}/{}", source.blob.path)]
+        );
+        assert_eq!(
+            repo.collect_unreferenced_blobs().unwrap(),
+            orphan_bytes.len() as u64
+        );
+        assert!(!orphan.exists());
+        assert!(
+            target
+                .path()
+                .join(LEDGER_BLOB_DIR)
+                .join(&source.blob.path)
+                .exists()
+        );
+    }
+
+    #[test]
+    fn a_failed_snapshot_leaves_its_target_empty_for_a_retry() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join(LEDGER_DATABASE_FILE)).unwrap();
+        let source = repo
+            .register_pretrained_source(
+                "app:board",
+                b"weights",
+                json!({"engine":"burn","format_version":1,"config":{},"input_shape":[1]}),
+                json!({}),
+                1024,
+                now_ms(),
+            )
+            .unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let failed = repo.snapshot_while_locked(target.path(), || Err(Error::Cancelled));
+        assert!(matches!(failed, Err(Error::Cancelled)), "{failed:?}");
+        assert!(
+            std::fs::read_dir(target.path()).unwrap().next().is_none(),
+            "the partial snapshot was removed"
+        );
+        assert!(repo.blob_dir.join(&source.blob.path).exists());
+        let snapshot = repo.snapshot_to(target.path()).unwrap();
+        assert_eq!(snapshot.blobs.len(), 1);
     }
 }

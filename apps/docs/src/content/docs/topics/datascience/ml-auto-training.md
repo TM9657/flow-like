@@ -23,7 +23,7 @@ Run an Auto node to choose the family, connect its `Best Model Type` to the matc
 
 ## Durable table experiments
 
-The task nodes share one experiment controller and return an `experiment_id` immediately. Training continues in local app storage. **Get Auto Training Result** reads the current leaderboard and outputs; **Cancel Auto Training** and **Resume Auto Training** preserve the experiment's remaining budget and saved work.
+The task nodes share one experiment controller and return an `experiment_id` immediately. Training continues in the [training ledger](#device-local-training-ledgers) of the machine that runs the workflow. **Get Auto Training Result** reads the current leaderboard and outputs; **Cancel Auto Training** and **Resume Auto Training** preserve the experiment's remaining budget and saved work.
 
 | Node | Task |
 |---|---|
@@ -76,9 +76,9 @@ The controller measures predictions itself. Validation and final-test labels mus
 
 **Auto Train Agent** receives the training profile, allowed feature columns, and measured validation results. Its typed actions are `run_next`, `train_burn`, `select_features`, `engineer_features`, and `finish`. Feature proposals can combine the authorized operations below. The agent cannot edit labels, provenance, splits, budgets, or scores. Failed or rejected consultations leave deterministic search available. Calls reserve a conservative token allowance before invocation. Cost reservations use the operator's `token_price_ceiling_micros`; set that ceiling for the provider's billing currency and pricing. Provider-reported usage is returned separately from these reservations.
 
-Results include the best trial and model artifact IDs, native weights reference, fitted preprocessing, source versions, created or updated tables, dataset snapshots, validation leaderboard, final-test metrics, and budget use. Final prediction evidence can be materialized as a separate table when the Agent finishes or **Get Auto Training Result** retrieves a completed background run. **Predict Auto Model** accepts raw rows, applies the selected trial's saved preprocessing, and loads its artifact. **Export Auto Model** writes native weights and a separate JSON manifest to the supplied paths.
+Results include the best trial and model artifact IDs, native weights reference, fitted preprocessing, source versions, created or updated tables, dataset snapshots, validation leaderboard, final-test metrics, and budget use. Final prediction evidence can be materialized as a separate table when the Agent finishes or **Get Auto Training Result** retrieves a completed background run. The winner is then [published](#published-models) as files that runtimes without the ledger can run. **Predict Auto Model** accepts raw rows, applies the selected trial's saved preprocessing, and loads its artifact from the ledger, or from the published files where no ledger holds the experiment. **Export Auto Model** writes native weights and a version 2 manifest to the supplied paths; for a manifest named `model.json`, the fitted preprocessing goes to `model.preprocessing.json` beside it.
 
-Local storage must survive executor restarts. A process supervisor can continue an experiment with `flow-like-auto-trainer --repository PATH --experiment ID`; add `--resume` for cancelled work, `--step` for one trial, or `--result` to read its artifacts. Build the binary with `flow-like-catalog-ml/training-auto` for automatic GPU selection or `training-cpu` for CPU execution. The node's optional `experiment_id` continues Agent consultation against the same saved experiment.
+Experiments train only where a [training ledger](#device-local-training-ledgers) exists: in the desktop app and on offline device placements. A process supervisor on that machine can continue an experiment with `flow-like-auto-trainer --repository PATH --experiment ID`, where `PATH` is the ledger's `jobs.sqlite`; add `--resume` for cancelled work, `--step` for one trial, or `--result` to read its artifacts. Build the binary with `flow-like-catalog-ml/training-auto` for automatic GPU selection or `training-cpu` for CPU execution. The node's optional `experiment_id` continues Agent consultation against the same saved experiment.
 
 ### Feature engineering
 
@@ -118,7 +118,7 @@ Set explicit quality bounds before enabling `automatic_promotion`. **Promote Lea
 
 Revising a review after its canary predictions were recorded invalidates that audit evidence. On the next audit or promotion attempt, the project rejects the candidate, retains the champion, and records the reason. Later training cycles can continue with fresh evidence.
 
-**Get Learning Project** exposes state, blocking reasons, cycles, and spending. Reservations, experiments, and completed predictions survive executor restarts when local app storage persists; later ticks resume saved work. **Pause Learning Project** suspends training and routes decisions to the teacher, **Resume Learning Project** continues the saved project, and **Rollback Learning Model** restores the prior deployment. Aggregate cycle, training, consultation, storage, and observation budgets bound the loop.
+**Get Learning Project** exposes state, blocking reasons, cycles, and spending. Reservations, experiments, and completed predictions are kept in the training ledger and survive restarts; later ticks resume saved work. Only the champion is [published](#published-models); the experiments of a learning cycle are not. **Pause Learning Project** suspends training and routes decisions to the teacher, **Resume Learning Project** continues the saved project, and **Rollback Learning Model** restores the prior deployment. Aggregate cycle, training, consultation, storage, and observation budgets bound the loop.
 
 ## The four tuning nodes
 
@@ -268,13 +268,13 @@ An inspection can use a teacher model while it collects labelled examples, train
 
 Automatic device selection tries **CUDA, ROCm, WGPU, then CPU**. It skips backends absent from the installed build and tests a forward calculation and its gradient before selecting a device. Missing drivers or a failed probe advance to the next backend. WGPU uses the platform's graphics API, including Metal on macOS. Native classical models run on CPU.
 
-Use `training-auto` to include the backends supported by the build target. Native desktop builds, local ML executor bundles, and standalone releases enable it by default. `training-cpu` supports smaller custom builds that omit those automatic product bundles; `training-wgpu`, `training-cuda`, and `training-rocm` select individual GPU features. Feature selection happens when building the application. Runtime selection uses the hardware and drivers on the machine running it. Selecting CPU in a standard desktop build leaves its compiled GPU support available for other workflows.
+Use `training-auto` to include the backends supported by the build target. Native desktop builds and standalone releases enable it by default; executors do not train (see [Build features](#build-features)). `training-cpu` supports smaller custom builds that omit those automatic product bundles; `training-wgpu`, `training-cuda`, and `training-rocm` select individual GPU features. Feature selection happens when building the application. Runtime selection uses the hardware and drivers on the machine running it. Selecting CPU in a standard desktop build leaves its compiled GPU support available for other workflows.
 
 The standard Windows MSVC and Linux GNU x86_64 builds include all four backends. macOS and ARM64 Windows/Linux builds include WGPU and CPU, as do Windows GNU and Linux musl builds. Other targets keep CPU support. Automatic selection skips WGPU software adapters so machines without a usable GPU use the native CPU backend.
 
 Compute configuration defaults to `backend: "auto"`, device index `0`, and CPU fallback enabled. **Probe Training Device** accepts `{"backend":"auto"}` and reports the concrete backend selected. To pin a device, supply its backend and set `allow_cpu_fallback: false`. With fallback enabled, an explicit GPU request tries that backend, then the remaining lower-priority backends, ending with CPU. Saved configurations that explicitly select CPU continue using CPU.
 
-Lifecycle nodes use a SQLite ledger and immutable model blobs in the executor's local app storage. Keep that storage on a persistent volume. These nodes return an error when the app store is remote-only. The standalone `flow-like-ml-worker` binary can run saved jobs under a process supervisor; its `--repository` argument selects the same ledger. Board shadow/replay execution cannot mutate that ledger. Use the explicit comparison branch of a live inspection workflow to record candidate predictions.
+Lifecycle nodes keep their samples, jobs, immutable model blobs and deployments in the same [training ledger](#device-local-training-ledgers) as the experiments. Training nodes return an error on runtimes without a ledger; promoted students still run there from their [published files](#published-models). The standalone `flow-like-ml-worker` binary can run saved jobs under a process supervisor; pass the ledger's `jobs.sqlite` as `--repository`. Board shadow/replay execution cannot mutate that ledger. Use the explicit comparison branch of a live inspection workflow to record candidate predictions.
 
 ### Build the inspection loop
 
@@ -389,8 +389,224 @@ The ONNX catalog includes GroundingDINO detection, a SAM image encoder, and SAM 
 
 ### Persistence and export
 
-A model artifact records its dataset digest, architecture, label order and preprocessing. Native checkpoints also retain optimizer and sampler state for resume. Training jobs use leases, cancellation and resource reservations; model promotion uses an expected deployment generation to reject competing updates.
+A model artifact records its dataset digest, architecture, label order and preprocessing. Native checkpoints also retain optimizer and sampler state for resume. Training jobs use leases, cancellation and resource reservations; model promotion uses an expected deployment generation to reject competing updates. Promotion, rollback and routing changes also [publish](#published-models) the active model, and **Export Model** writes any ledger model to a folder of your choice.
 
 Enable `training-onnx-export` for **Export Student to ONNX**. Export uses fixed input dimensions and reports output semantics. Unsupported graphs fail explicitly. Native inference remains available for them. ONNX export parity is covered for MLP, ResNet-18 and U-Net; temporal and proposal-based models need exporter support for their operators.
 
 The cross-platform CI job exercises CPU learning, checkpoint resume, lifecycle races and protocol emulators on Linux, Windows and macOS. Physical camera/PLC interoperability and application accuracy still depend on the installed equipment and the inspection dataset.
+
+## Training history and published models
+
+Training keeps its state in a **training ledger**: a SQLite database, `jobs.sqlite`, with immutable model blobs in `jobs.artifacts/` and lock files in `.training-locks/`. The ledger stays on the machine that trains. Models that other runtimes should run are **published** as ordinary files under the app's `storage/models` folder, which syncs, ships to devices and travels in archives like any other app file.
+
+### Device-local training ledgers
+
+Every app has a shared ledger and one private ledger per user. They live in the app storage of the machine that trains, next to the apps rather than inside them:
+
+| Runtime | Shared ledger | A user's private ledger |
+|---|---|---|
+| Desktop | `<projects>/training-ledgers/apps/<app>/project/jobs.sqlite` | `<projects>/training-ledgers/apps/<app>/users/<user>/jobs.sqlite` |
+| Offline device placement | `<store>/training-ledgers/apps/<project>/project/jobs.sqlite` | `<store>/training-ledgers/apps/<project>/users/<user>/jobs.sqlite` |
+
+`<projects>` is the desktop's project folder, by default `flow-like/projects` in the system data folder, for example `~/Library/Application Support/flow-like/projects` on macOS. `<store>` is `placement-data/<placement>/current/store` in the device agent's state folder; it survives new revisions and is removed with the placement. `<app>` and `<user>` are the app ID and the user's account ID. Characters other than letters, digits, `.`, `-` and `_` are replaced, and a short hash is appended.
+
+Apps that trained before this layout keep their shared ledger at `apps/<app>/storage/inspection/jobs.sqlite` and go on using it in place. The shared scope uses the new `project/jobs.sqlite` when it exists, otherwise that older ledger when it exists, and otherwise the new path. The older ledger is never moved or deleted. Device placements set up before this change may hold a copy of it, which they also keep using in place.
+
+Looking up a record never creates a ledger; only training and lifecycle writes do. The ledger is never synced, archived, forked or copied to a device. To move it, use [Export Training Ledger and Import Training Ledger](#move-models-and-training-history).
+
+The command-line tools take the ledger's database, for example `flow-like-auto-trainer --repository "<projects>/training-ledgers/apps/<app>/project/jobs.sqlite" --experiment <id>`. Pass the `users/<user>` ledger for a private experiment, and `<projects>/apps/<app>/storage/inspection/jobs.sqlite` for an app that still uses its older ledger.
+
+Deleting an app in the desktop app, including from **Settings › Local storage**, first stops the app's background training for up to 30 seconds and then removes its ledgers. **Local storage** counts the ledgers in the app's size. When training does not stop in time, the ledgers stay and a warning is logged.
+
+### Private ledgers
+
+A workflow that trains on a user's own tables trains in that user's private ledger. An experiment or learning project uses the shared ledger only when its main source and every feature source are tables of the project database. A table from the executing user's database, or a source that matches neither database, selects the private ledger, so unclear sources stay private. A learning cycle that runs on an existing stream keeps its project's ledger.
+
+Private records have their own IDs. Experiment streams start with `user:auto:` and learning streams with `user:learning:`, followed by a UUID, and their project is `<app>:<board>:user`. New experiments record the choice in `request.context.ledger_scope` and new learning projects in `request.source.ledger_scope` (`app` or `user`). Inspection nodes route only these generated IDs to the private ledger; a hand-written stream such as `user:camera` stays shared. Nodes that take an experiment, project, source or artifact ID search the shared ledger, then an older in-place ledger, then the executing user's private ledger.
+
+A private experiment cannot write into the shared project database. It refuses `tables.create_tables` when its main source is a project table, and any `allowed_destination` in the project database, with this error:
+
+> This experiment trains on private (user-scoped) data, so it cannot write tables into the shared project database; set tables.create_tables to false or train from a user-scoped main table.
+
+When a private experiment or learning cycle starts, it copies the pretrained sources it can use from the shared ledger into the private one, under the same IDs: the requested `pretrained.source_id`, the source of the rows' feature extractor, and the app's 16 most recent Burn sources, which the LLM consultant may name. A different blob under an existing ID is a conflict.
+
+### Published models
+
+The training machine publishes these models:
+
+| Model | Published when | Pointer |
+|---|---|---|
+| The winner of an Auto Train experiment, also when it missed its goals | Its final test is evaluated: by **Get Auto Training Result**, **Cancel Auto Training**, **Resume Auto Training**, **Finalize Auto Training** or **Auto Train Agent**, and by **Step Auto Training** once final-test metrics exist | `models/experiments/<experiment>.json` |
+| A learning project's champion | **Create Learning Project**, **Get Learning Project**, **Step Learning Project**, **Learning Project Agent**, **Promote Learning Model**, **Rollback Learning Model**, **Pause Learning Project** and **Resume Learning Project** | `models/learning/<project>.json` |
+| A lifecycle deployment's active student | **Promote Student**, **Promote by Audited Metrics**, **Rollback Student** and **Pause/Resume Student Routing**; **Get Active Student** repairs it | `models/deployments/<deployment>.json` |
+| A fine-tuned SAM 2 source | **Fine-tune SAM 2** succeeds | None; always app storage |
+| The feature extractor a model's embeddings came from | Together with that model | None |
+
+Each model gets a folder, `models/artifacts/<id>/`, and a pointer names the current model of its experiment, project or deployment. A champion pointer without a model, or a paused one, routes to the teacher.
+
+Models of the shared ledger go to the app's `storage/models`. Models of a private ledger go to `models/` in the user's **User Storage** of the app, which other members cannot read. A lifecycle deployment of an experiment's or learning project's stream follows that record's scope. Records created before this change carry no scope; they are classified when first published. A model goes to app storage when every source is in the project database, and to the executing user's storage when any source is in that user's database and none is unknown. Otherwise nothing is written, and an experiment records `model_publish_skipped` with `source_scope_unclassifiable`.
+
+Each publish writes the weights, then `preprocessing.json`, then the extractor's folder, then `manifest.json`, then the pointer. It confirms each upload's size, and its ETag where the store reports one, before writing the next file, and readers verify every sha256. Publishing never fails the node that triggered it:
+
+- An experiment records a `model_published`, `model_publish_failed` or `model_publish_skipped` event.
+- A learning project adds `champion_model_not_published: <error>` to `next_actions.blocking`.
+- Deployments and SAM 2 sources log a warning.
+
+Weights above 512 MiB are not published (`weights_exceed_serving_cap`), and neither are manifests above 1 MiB or preprocessing files above their cap.
+
+Promotions, rollbacks, pauses, resumes, finished cycles and finalized experiments always publish their new state. **Get Auto Training Result**, **Get Learning Project**, **Get Active Student** and the prediction fallbacks below check the published copy once per run and rewrite whatever is missing or differs from the ledger. An experiment that the background worker finishes is published by the next node that reads it, because the worker runs outside any workflow; read the result before taking a device snapshot.
+
+Desktop runs of online apps write published models directly to cloud storage and then keep a local copy. These writes never enter the offline queue: without a connection they fail, and the next read node that runs online repairs them. **Export Model** and **Export Auto Model** also fail while offline.
+
+### File formats and retention
+
+A model root holds:
+
+```text
+storage/models/
+├── artifacts/<id>/weights.bin          written once
+├── artifacts/<id>/preprocessing.json   written once, optional
+├── artifacts/<id>/manifest.json        written once, last
+├── experiments/<experiment>.json
+├── learning/<project>.json
+└── deployments/<deployment>.json
+```
+
+IDs become folder and file names the same way app and user IDs do in ledger paths. Artifact folders also hold pretrained sources: extractor dependencies and fine-tuned SAM 2 models.
+
+`manifest.json` describes one model and is at most 1 MiB. Exactly one of `artifact` and `pretrained_source` is set, and `weights.sha256` equals that record's blob digest:
+
+```json
+{
+  "format_version": 2,
+  "artifact": {
+    "id": "…",
+    "stream": { "project_id": "…", "stream_id": "…", "inspection_version": "…" },
+    "blob": { "sha256": "…", "bytes": 1, "path": "….blob" },
+    "manifest": { "engine": "…", "preprocessing_manifest": { "$published": "preprocessing.json" } }
+  },
+  "pretrained_source": null,
+  "weights": { "file": "weights.bin", "sha256": "<hex64>", "bytes": 1 },
+  "preprocessing": { "file": "preprocessing.json", "sha256": "<hex64>", "bytes": 1, "maximum_bytes": 67108864 },
+  "task": { "kind": "anomaly", "threshold": 0.5 },
+  "calibration": { "scale": 0.8, "threshold": 0.5 },
+  "goal_met": false,
+  "validation_metrics": {},
+  "final_test_metrics": {},
+  "source_table_versions": [],
+  "dependencies": { "feature_extractor": { "source_id": "pretrained:…", "blob_sha256": "<hex64>" } },
+  "provenance": {
+    "publisher": "auto",
+    "ledger": "app",
+    "storage": "app",
+    "experiment_id": "…",
+    "selected_trial_id": "…",
+    "learning_project_id": null,
+    "cycle_id": null,
+    "deployment_id": null,
+    "deployment_generation": null,
+    "published_at_ms": 0
+  }
+}
+```
+
+- `weights.file` and `preprocessing.file` are plain file names in the manifest's folder. `weights.file` is null only when **Export Auto Model** wrote the weights into another folder.
+- `calibration` is set for anomaly models: `scale` is the selected trial's `anomaly_scale` and `threshold` is the task's threshold.
+- The artifact's preprocessing manifest moves to `preprocessing.json` and leaves the marker `{"$published": "preprocessing.json"}`; loaders restore it.
+- `provenance.publisher` is `auto` for automatic publication and `export` for **Export Model**. A training artifact published as another model's extractor also has `"dependency": true`.
+- Version 1 manifests, written by **Export Auto Model** before this change, still load through a `files` source.
+
+`preprocessing.json` holds the fitted table preprocessing and the artifact's preprocessing manifest:
+
+```json
+{ "format_version": 1, "preprocessing": { "kind": "tabular" }, "artifact_preprocessing_manifest": null }
+```
+
+Its cap is twice the feature pipeline's `limits.maximum_bytes` plus 1 MiB; the limit, 64 MiB unless an engineered pipeline sets another, is recorded as `maximum_bytes`. At load time the file must also fit in a quarter of the memory limit.
+
+Pointers are at most 64 KiB. An experiment pointer names the winner:
+
+```json
+{ "format_version": 1, "experiment_id": "…", "artifact_id": "…", "sha256": "…", "bytes": 1, "goal_met": true, "storage": "app", "published_at_ms": 0 }
+```
+
+A champion pointer is ordered by `(deployment_generation, project_generation)`:
+
+```json
+{ "format_version": 1, "project_id": "…", "deployment_id": "deployment:learning:…", "deployment_generation": 3, "project_generation": 12, "artifact_id": "…", "sha256": "…", "paused": false, "cycle_id": "…", "retained": ["older-1", "older-2"], "storage": "app", "published_at_ms": 0 }
+```
+
+A deployment pointer is ordered by `generation` and carries the full deployment:
+
+```json
+{ "format_version": 1, "deployment_id": "…", "generation": 5, "active_artifact_id": "…", "paused": false, "stream": { "project_id": "…", "stream_id": "…", "inspection_version": "…" }, "sha256": "…", "deployment": {}, "retained": ["…"], "storage": "app", "published_at_ms": 0 }
+```
+
+Only a pointer of strictly greater order replaces another; repairing a pointer from its ledger may also rewrite one of equal order.
+
+Champion and deployment pointers list up to three previous models in `retained`, newest first. When a pointer changes, a model that is neither current nor retained is deleted from that root if automatic publication wrote it and no other pointer or kept manifest names it. Its manifest goes first, then its other files, then its dependencies under the same rule. Roots with more than 1,000 pointer files skip this cleanup with a warning. Experiment winners, **Export Model** folders and models refreshed onto devices are never deleted. Rolling back to a deleted model publishes it again from the ledger.
+
+### Run models without a ledger
+
+Prediction nodes use the ledger when it holds the record for the expected project; a record of another project counts as missing. For learning projects and lifecycle deployments, a pointer in local app storage with a strictly greater order wins over the ledger, so a device follows a newer champion it received. Without a ledger or record, the nodes read the published files:
+
+| Node | Without a ledger |
+|---|---|
+| **Predict Auto Model** | The experiment pointer in app storage, then in the user's storage. Anomaly calibration comes from the manifest; version 1 exports have none |
+| **Student Model Inference**, **Extract Image Features** | `models/artifacts/<artifact>/` in the stream's scope. The manifest's stream ID and inspection version must match |
+| **Extract Pretrained Image Features** | `models/artifacts/<source>/`: a pretrained source, a Burn artifact or another model's extractor |
+| **Route Learning Project** | The champion pointer: Champion, or Teacher when it is paused or has no model. No canary or shadow candidate |
+| **Route Inspection** | The deployment pointer: StudentOnly, or TeacherOnly when it is paused or missing. No shadow candidate |
+| **Get Active Student** | The deployment pointer's deployment when its stream matches |
+| **Segment with SAM 2** | The published fine-tuned source |
+
+A loader checks each file's size before downloading it and its sha256 afterwards. The weights must fit in a quarter of `compute.memory_limit_bytes` and in 512 MiB. A model's feature extractor resolves from `models/artifacts/<source>/` of the same root, or from `dependencies/<source>/` beside an exported manifest, and its ID and blob digest must match. Loaded models are cached per process; a cached model still answers only callers whose own copy of its weights is readable and unchanged.
+
+Six nodes work with published models and moved history:
+
+| Node | FlowScript | Purpose |
+|---|---|---|
+| **Predict Published Model** | `inspection.predictPublishedModel` | Runs a published model. With preprocessing in its manifest, rows are raw table rows as for **Predict Auto Model**; otherwise each row is a TensorData, and a batch dimension is added when its shape equals the input shape |
+| **Extract Published Image Features** | `inspection.publishedImageFeatures` | Computes feature maps with the model's extractor, the pretrained source itself or a Burn classifier's backbone, and outputs the `extractor` for PatchCore and PaDiM |
+| **Export Model** | `inspection.exportModel` | Writes an experiment winner, champion, artifact or pretrained source from the ledger as a version 2 folder with `dependencies/<id>/` to any FlowPath, including app storage for a private model |
+| **Import Model** | `inspection.importModel` | Registers a published `burn` or `sam2` model as a pretrained source in the shared ledger, or the private one with `private: true` |
+| **Export Training Ledger** | `inspection.exportTrainingLedger` | Writes a consistent snapshot of the shared ledger, or the private one with `private: true`, to a folder |
+| **Import Training Ledger** | `inspection.importTrainingLedger` | Installs such a snapshot into an empty ledger of the same app |
+
+The two prediction nodes take a `model` source with a `kind`: `files` with a `manifest` path, or `experiment`, `learning_champion`, `deployment` or `artifact` with its ID. Without `storage`, they search app storage and then the user's storage, and an error lists every path tried. The four export and import nodes need a training build.
+
+### Move models and training history
+
+`storage/models` is ordinary app storage. It syncs for online apps, travels in app archives and device snapshots, and is copied by forks that include data. Forks without data drop it, because published models derive from data; such a fork retrains or imports its models. The training ledger, including an older one under `storage/inspection`, is left out of archives, duplicates, device snapshots and forks. Importing an archive made before this change skips its ledger entries and logs a warning.
+
+**Export Training Ledger** writes `jobs.sqlite`, the blobs as `jobs.artifacts/<sha256>.blob` and, last, `ledger.json`:
+
+```json
+{ "format_version": 1, "scope": "app", "app_id": "…", "project_ids": ["app:board"], "database": { "file": "jobs.sqlite", "sha256": "…", "bytes": 1 }, "blobs": [{ "file": "jobs.artifacts/<sha256>.blob", "sha256": "…", "bytes": 1 }], "exported_at_ms": 0 }
+```
+
+**Import Training Ledger** reads such a folder up to `maximum_bytes`, 2 GiB by default. Every project in it must belong to this app and to the chosen scope: a private snapshot holds only `…:user` projects and a shared one none. The import checks every size and sha256 and the database's integrity, then installs it without replacing anything. It refuses when the target ledger exists, including an empty one that a lifecycle node created, and, for the shared scope, when the app still has an older in-place ledger. Import before training on a new machine.
+
+**Import Model** moves a single model instead. It registers a published `burn` or `sam2` model, for example one exported from another app, as a pretrained source for fine-tuning, feature extraction and SAM 2. Other engines are refused.
+
+Offline device placements receive `storage/models`, and the selected user's models in `users/local`, when they are first set up. Each later revision adds the model folders and experiment pointers the device lacks. It replaces a learning or deployment pointer only with one of strictly greater order, so models the device trained itself stay in charge. Folders are verified against their manifests first, a pointer is applied only when its model is on the device, and nothing is deleted. Online device placements read models through their cloud access and cache the files of model folders as immutable.
+
+### Where each runtime trains and predicts
+
+| Runtime | Trains | Publishes to | Predicts from |
+|---|---|---|---|
+| Desktop, offline app | Yes | App and user storage on this computer | The ledger, otherwise published files |
+| Desktop, online app with a hub connection | Yes, with the ledgers on this computer | Cloud storage, then a local copy | The ledger, otherwise published files |
+| Desktop, online app without a hub connection | No | – | Published files in the local cache |
+| Offline device placement | Yes | The placement's storage | The ledger, otherwise published files |
+| Online device placement | No | – | Published files through the placement's cloud access |
+| AWS Lambda and ECS, Kubernetes, local and Docker Compose executors | No | – | Published files, with Burn on the CPU |
+| Azure and GCP executors, mobile apps | No | – | Nothing in this version; the nodes are hidden |
+
+Training nodes need a live run with local app storage; shadow and replay runs never write a ledger. Elsewhere they fail with a message that names the runtimes that train and the nodes that still run published models. Prediction nodes in a build without ML inference fail with a message that names the builds that include it.
+
+Executors serve models within their container's memory. Inference clamps `compute.memory_limit_bytes` to three quarters of the limit detected from cgroup v2 `memory.max`, cgroup v1 `memory.limit_in_bytes` or, on AWS Lambda, `AWS_LAMBDA_FUNCTION_MEMORY_SIZE`. A process caches at most eight loaded models, reserving four times each model's size within half the detected memory, or 4 GiB when no limit is detected. Burn, EfficientAD and SAM 2 unpack model files into `/tmp`, which is 512 MB on Lambda by default, so give functions that run models above about 200 MB more ephemeral storage. SAM 2 is slow on executor CPUs.
+
+### Build features
+
+`flow-like-catalog-ml` has two features for this. `inference` loads published models with Burn on the CPU and needs no ledger. `training` adds the ledger, training and publication, and includes `inference`. In `flow-like-catalog`, `ml-inference` enables `inference` together with the node metadata, and `training-cpu` and `training-auto` include it. The `server-local-ml`, `executor-local-ml` and `local-runtime-ml` bundles use `ml-inference` without GPU crates, so the AWS, Kubernetes, local and Docker Compose executors predict but never train. The `server` bundle of the Azure and GCP executors and the mobile bundles include neither. Desktop builds and standalone releases include `training-auto`. The **AI/ML/Inference** and **AI/ML/Export** node categories appear wherever the training metadata does.

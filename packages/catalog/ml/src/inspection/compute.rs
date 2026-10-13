@@ -1,8 +1,6 @@
 use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
 use flow_like_ml_burn::{BackendChoice, BackendProbe};
 use flow_like_types::Result;
-#[cfg(not(feature = "training"))]
-use flow_like_types::anyhow;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -35,7 +33,7 @@ impl NodeLogic for ProbeTrainingDeviceNode {
         #[cfg(not(feature = "training"))]
         {
             let _ = context;
-            Err(anyhow!("Device probing requires the training feature"))
+            Err(super::lifecycle::training_unavailable())
         }
     }
 }

@@ -15,10 +15,15 @@
 //! data.
 
 use crate::entity::app;
+use flow_like_types::storage_paths::{
+    LEGACY_TRAINING_LEDGER_PREFIXES, PUBLISHED_MODELS_DIR, is_legacy_training_ledger_path,
+};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-/// How the project LanceDB (`apps/{id}/storage/db/**`) is handled.
+/// How the project LanceDB (`apps/{id}/storage/db/**`) is handled. Published
+/// models (`apps/{id}/storage/models/**`) are derived from its data, so they
+/// travel only when the data does.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ForkDatabaseMode {
@@ -112,32 +117,48 @@ pub fn lance_table_of(relative_under_storage: &str) -> Option<&str> {
 /// destination.
 pub type SkipPredicate = Box<dyn Fn(&str) -> bool + Send + Sync>;
 
-/// Skip predicate for the `apps/{id}/storage` mirror. `None` copies
-/// everything.
+/// Skip predicate for the `apps/{id}/storage` mirror. Always `Some`: the
+/// legacy training ledger is device-local and never travels, whatever the
+/// policy. Published models (`models/`) follow the database data.
 ///
 /// Exclusion is whole-table: a LanceDB table is only openable with its
 /// `data/`, `_versions/`, `_transactions/` and `_indices/` subtrees intact,
 /// so the predicate never splits a `{table}.lance/` directory.
 pub fn storage_skip(policy: &ForkPolicy) -> Option<SkipPredicate> {
-    match policy.databases {
-        ForkDatabaseMode::WithData => None,
-        ForkDatabaseMode::None => Some(Box::new(|relative: &str| relative.starts_with("db/"))),
-        ForkDatabaseMode::SchemaOnly => Some(Box::new(|relative: &str| {
-            if !relative.starts_with("db/") {
-                return false;
-            }
-            match lance_table_of(relative) {
-                Some(table) => !flow_like_catalog_core::is_reserved_table(table),
-                // Loose objects directly under `db/` that aren't a `.lance`
-                // directory carry no schema — they go with the data.
-                None => true,
-            }
-        })),
+    let databases = policy.databases;
+    Some(Box::new(move |relative: &str| {
+        is_legacy_training_ledger_path(&format!("storage/{relative}"))
+            || (databases != ForkDatabaseMode::WithData && is_published_model(relative))
+            || skips_database_object(databases, relative)
+    }))
+}
+
+fn is_published_model(relative_under_storage: &str) -> bool {
+    relative_under_storage
+        .strip_prefix(PUBLISHED_MODELS_DIR)
+        .is_some_and(|rest| rest.starts_with('/'))
+}
+
+fn skips_database_object(databases: ForkDatabaseMode, relative_under_storage: &str) -> bool {
+    if !relative_under_storage.starts_with("db/") {
+        return false;
+    }
+    match databases {
+        ForkDatabaseMode::WithData => false,
+        ForkDatabaseMode::None => true,
+        ForkDatabaseMode::SchemaOnly => match lance_table_of(relative_under_storage) {
+            Some(table) => !flow_like_catalog_core::is_reserved_table(table),
+            // Loose objects directly under `db/` that aren't a `.lance`
+            // directory carry no schema — they go with the data.
+            None => true,
+        },
     }
 }
 
 /// Content-store prefixes (relative to `apps/{src_app_id}/`) the desktop
-/// must not mirror on an offline fork.
+/// must not mirror on an offline fork. The legacy training ledger prefixes
+/// are always listed, `storage/models/` whenever the database data stays
+/// behind.
 ///
 /// Advisory: the caller already holds `ReadFiles` on the source, so this is
 /// hygiene rather than a boundary. `skip_tables` are the source's
@@ -160,12 +181,16 @@ pub fn offline_content_exclude_prefixes(
             }
         }
     }
+    if policy.databases != ForkDatabaseMode::WithData {
+        prefixes.push(format!("storage/{PUBLISHED_MODELS_DIR}/"));
+    }
     if !policy.widgets {
         prefixes.push("metadata/widgets/".to_string());
     }
     if !policy.templates {
         prefixes.push("metadata/templates/".to_string());
     }
+    prefixes.extend(LEGACY_TRAINING_LEDGER_PREFIXES.map(String::from));
     prefixes
 }
 
@@ -252,6 +277,9 @@ mod tests {
         assert!(skip("db/tables.lance/_versions/1.manifest"));
         assert!(!skip("db/__graph_overlays__.lance/data/0.lance"));
         assert!(!skip("db/__saved_queries_manifest__.lance/data/0.lance"));
+        assert!(skip("models/x"));
+        assert!(skip("inspection/jobs.sqlite"));
+        assert!(!skip("modelsx/y"));
         assert!(!skip("notes.txt"));
         assert!(!skip("node_scratch/out.json"));
     }
@@ -265,19 +293,46 @@ mod tests {
         let skip = storage_skip(&policy).expect("none must filter");
         assert!(skip("db/tables.lance/data/0.lance"));
         assert!(skip("db/__graph_overlays__.lance/data/0.lance"));
+        assert!(skip("models/x"));
+        assert!(skip("inspection/jobs.artifacts/x.blob"));
         assert!(!skip("notes.txt"));
     }
 
     #[test]
-    fn with_data_never_filters() {
-        assert!(storage_skip(&ForkPolicy::default()).is_none());
+    fn with_data_skips_only_the_legacy_training_ledger() {
+        let skip =
+            storage_skip(&ForkPolicy::default()).expect("the legacy ledger is always skipped");
+        assert!(skip("inspection/jobs.sqlite"));
+        assert!(skip("inspection/jobs.sqlite-wal"));
+        assert!(skip("inspection/jobs.artifacts/x.blob"));
+        assert!(skip("inspection/.training-locks/a.lock"));
+        assert!(!skip("inspection/pki/cert.der"));
+        assert!(!skip("models/x"));
+        assert!(!skip("db/t.lance/data/a.lance"));
+        assert!(!skip("notes.txt"));
+    }
+
+    fn with_ledger(prefixes: &[&str]) -> Vec<String> {
+        prefixes
+            .iter()
+            .chain(&LEGACY_TRAINING_LEDGER_PREFIXES)
+            .copied()
+            .map(String::from)
+            .collect()
     }
 
     #[test]
     fn excluded_content_prefixes_match_the_policy() {
         let tables = vec!["tables".to_string(), "notes".to_string()];
 
-        assert!(offline_content_exclude_prefixes(&ForkPolicy::default(), &tables).is_empty());
+        assert_eq!(
+            offline_content_exclude_prefixes(&ForkPolicy::default(), &tables),
+            vec![
+                "storage/inspection/jobs.sqlite".to_string(),
+                "storage/inspection/jobs.artifacts/".to_string(),
+                "storage/inspection/.training-locks/".to_string(),
+            ]
+        );
 
         let no_files = ForkPolicy {
             files: false,
@@ -285,7 +340,7 @@ mod tests {
         };
         assert_eq!(
             offline_content_exclude_prefixes(&no_files, &tables),
-            vec!["upload/".to_string()]
+            with_ledger(&["upload/"])
         );
 
         let no_db = ForkPolicy {
@@ -294,7 +349,7 @@ mod tests {
         };
         assert_eq!(
             offline_content_exclude_prefixes(&no_db, &tables),
-            vec!["storage/db/".to_string()]
+            with_ledger(&["storage/db/", "storage/models/"])
         );
 
         let schema_only = ForkPolicy {
@@ -303,10 +358,11 @@ mod tests {
         };
         assert_eq!(
             offline_content_exclude_prefixes(&schema_only, &tables),
-            vec![
-                "storage/db/tables.lance/".to_string(),
-                "storage/db/notes.lance/".to_string(),
-            ]
+            with_ledger(&[
+                "storage/db/tables.lance/",
+                "storage/db/notes.lance/",
+                "storage/models/",
+            ])
         );
 
         let bare = ForkPolicy {
@@ -316,10 +372,7 @@ mod tests {
         };
         assert_eq!(
             offline_content_exclude_prefixes(&bare, &tables),
-            vec![
-                "metadata/widgets/".to_string(),
-                "metadata/templates/".to_string(),
-            ]
+            with_ledger(&["metadata/widgets/", "metadata/templates/"])
         );
     }
 }
