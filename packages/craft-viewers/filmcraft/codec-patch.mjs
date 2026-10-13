@@ -30,6 +30,36 @@ export default function prepareBrowserCodecs({
 		"browser export compositor dependencies",
 	);
 	write("apps/filmcraft-web/Cargo.toml", webCargo);
+	let mux = original("crates/isobmff/src/mux.rs");
+	mux = replaceOnce(
+		mux,
+		'    let tb = &t.t;\n    let m = b.start_full(b"stts", 0, 0);',
+		`    let tb = &t.t;
+    // Apple readers need roll groups to interpret AAC edits as explicit priming.
+    // https://developer.apple.com/documentation/quicktime-file-format/using_track_structures_to_represent_encode_delay_explictly
+    if matches!(&t.cfg.entry.codec, CodecConfig::Aac(config) if config.object_type == 2)
+        && !edits.is_empty()
+        && tb.sample_count > 0
+    {
+        let sample_count = u32::try_from(tb.sample_count)
+            .map_err(|_| Error::Mux("AAC sample count exceeds roll group capacity".into()))?;
+        let group = b.start_full(b"sgpd", 1, 0);
+        b.bytes(b"roll");
+        b.u32(2);
+        b.u32(1);
+        b.i16(-1);
+        b.end(group);
+        let mapping = b.start_full(b"sbgp", 0, 0);
+        b.bytes(b"roll");
+        b.u32(1);
+        b.u32(sample_count);
+        b.u32(1);
+        b.end(mapping);
+    }
+    let m = b.start_full(b"stts", 0, 0);`,
+		"explicit AAC priming sample groups",
+	);
+	write("crates/isobmff/src/mux.rs", mux);
 	// The replacement registry has no decoder implementation dependencies.
 	write("crates/codecs/src/lib.rs", local("browser-registry.rs"));
 	let codecsCargo = original("crates/codecs/Cargo.toml");

@@ -14,6 +14,85 @@ interface CraftEvent {
 	error?: string;
 	dirty?: boolean;
 }
+
+function assertExplicitAacPriming(bytes: Uint8Array) {
+	const data = Buffer.from(bytes);
+	type Box = { type: string; payload: number; end: number };
+	const children = (start: number, end: number): Box[] => {
+		const boxes: Box[] = [];
+		let offset = start;
+		while (offset < end) {
+			assert.ok(offset + 8 <= end, "MP4 box header must fit inside its parent");
+			let size = data.readUInt32BE(offset);
+			let header = 8;
+			if (size === 1) {
+				assert.ok(offset + 16 <= end);
+				size = Number(data.readBigUInt64BE(offset + 8));
+				header = 16;
+			} else if (size === 0) size = end - offset;
+			assert.ok(
+				Number.isSafeInteger(size) && size >= header && offset + size <= end,
+				"MP4 box must fit inside its parent",
+			);
+			boxes.push({
+				type: data.toString("ascii", offset + 4, offset + 8),
+				payload: offset + header,
+				end: offset + size,
+			});
+			offset += size;
+		}
+		return boxes;
+	};
+	const one = (boxes: Box[], type: string) => {
+		const found = boxes.filter((box) => box.type === type);
+		assert.equal(found.length, 1, `Expected one ${type} box`);
+		return found[0];
+	};
+	const within = (parent: Box) => children(parent.payload, parent.end);
+	const moov = one(children(0, data.length), "moov");
+	const audio = within(moov)
+		.filter((box) => box.type === "trak")
+		.map((track) => one(within(track), "mdia"))
+		.filter((media) => {
+			const handler = one(within(media), "hdlr");
+			assert.ok(handler.payload + 12 <= handler.end);
+			return (
+				data.toString("ascii", handler.payload + 8, handler.payload + 12) ===
+				"soun"
+			);
+		});
+	assert.equal(audio.length, 1, "Saved MP4 must contain one audio track");
+	const stbl = one(within(one(within(audio[0]), "minf")), "stbl");
+	const table = within(stbl);
+	const stsd = one(table, "stsd");
+	assert.ok(stsd.payload + 8 <= stsd.end);
+	one(children(stsd.payload + 8, stsd.end), "mp4a");
+	const stsz = one(table, "stsz");
+	assert.ok(stsz.payload + 12 <= stsz.end);
+	const samples = data.readUInt32BE(stsz.payload + 8);
+	assert.ok(samples > 0);
+	const sgpd = one(table, "sgpd");
+	assert.equal(sgpd.end - sgpd.payload, 18);
+	assert.equal(data.readUInt32BE(sgpd.payload), 0x01000000);
+	assert.equal(
+		data.toString("ascii", sgpd.payload + 4, sgpd.payload + 8),
+		"roll",
+	);
+	assert.equal(data.readUInt32BE(sgpd.payload + 8), 2);
+	assert.equal(data.readUInt32BE(sgpd.payload + 12), 1);
+	assert.equal(data.readInt16BE(sgpd.payload + 16), -1);
+	const sbgp = one(table, "sbgp");
+	assert.equal(sbgp.end - sbgp.payload, 20);
+	assert.equal(data.readUInt32BE(sbgp.payload), 0);
+	assert.equal(
+		data.toString("ascii", sbgp.payload + 4, sbgp.payload + 8),
+		"roll",
+	);
+	assert.equal(data.readUInt32BE(sbgp.payload + 8), 1);
+	assert.equal(data.readUInt32BE(sbgp.payload + 12), samples);
+	assert.equal(data.readUInt32BE(sbgp.payload + 16), 1);
+}
+
 declare global {
 	interface Window {
 		events: CraftEvent[];
@@ -22,6 +101,10 @@ declare global {
 			videoLoads: number;
 			videoEncodes: number;
 			audioEncodes: number;
+			audioEncoderFrames: number[][];
+			audioPacketDecodes: number;
+			calibrationDecodeFailures: number;
+			failCalibrationDecode: boolean;
 		};
 		audioProbe?: {
 			contexts: AudioContext[];
@@ -118,11 +201,21 @@ try {
 					videoLoads: 0,
 					videoEncodes: 0,
 					audioEncodes: 0,
+					audioEncoderFrames: [] as number[][],
+					audioPacketDecodes: 0,
+					calibrationDecodeFailures: 0,
+					failCalibrationDecode: false,
 				};
 				window.codecProbe = probe;
 				const decode = BaseAudioContext.prototype.decodeAudioData;
 				BaseAudioContext.prototype.decodeAudioData = function (...args) {
 					probe.audioDecodes++;
+					if (probe.failCalibrationDecode) {
+						probe.calibrationDecodeFailures++;
+						return Promise.reject(
+							new DOMException("Decoding failed", "EncodingError"),
+						);
+					}
 					return decode.apply(this, args);
 				};
 				const load = HTMLMediaElement.prototype.load;
@@ -139,9 +232,24 @@ try {
 				}
 				if (typeof AudioEncoder !== "undefined") {
 					const encode = AudioEncoder.prototype.encode;
+					const inputs = new WeakMap<AudioEncoder, number[]>();
 					AudioEncoder.prototype.encode = function (...args) {
 						probe.audioEncodes++;
+						let frames = inputs.get(this);
+						if (!frames) {
+							frames = [];
+							inputs.set(this, frames);
+							probe.audioEncoderFrames.push(frames);
+						}
+						frames.push(args[0].numberOfFrames);
 						return encode.apply(this, args);
+					};
+				}
+				if (typeof AudioDecoder !== "undefined") {
+					const decode = AudioDecoder.prototype.decode;
+					AudioDecoder.prototype.decode = function (...args) {
+						probe.audioPacketDecodes++;
+						return decode.apply(this, args);
 					};
 				}
 			});
@@ -400,6 +508,9 @@ try {
 					}, originalSupport);
 					await originalSupport.dispose();
 				}
+				await frame.evaluate(() => {
+					if (window.codecProbe) window.codecProbe.failCalibrationDecode = true;
+				});
 			}
 			await send({ type: "export", requestId: "save", format });
 			const exported = await waitEvent("exported", "save");
@@ -487,6 +598,7 @@ try {
 				}
 			}
 			if (runtime === "filmcraft") {
+				assertExplicitAacPriming(output);
 				const outputPath = join(directory, "exported.mp4");
 				await writeFile(outputPath, output);
 				const probe = JSON.parse(
@@ -665,6 +777,7 @@ try {
 					"filmcraft: saved MP4 burns subtitle pixels at their timeline times",
 				);
 				output = Uint8Array.from(subtitled.bytes);
+				assertExplicitAacPriming(output);
 			}
 			if (runtime === "soundcraft" || runtime === "filmcraft") {
 				const frame = await (await page.$("iframe"))?.contentFrame();
@@ -674,6 +787,23 @@ try {
 				if (runtime === "filmcraft") {
 					assert.ok(codecs.videoLoads > 0);
 					assert.ok(codecs.videoEncodes > 0 && codecs.audioEncodes > 0);
+					assert.ok(codecs.calibrationDecodeFailures > 0);
+					assert.ok(
+						codecs.audioPacketDecodes > 0,
+						"AAC packet decoding must recover when MP4 calibration decoding fails",
+					);
+					for (const frames of codecs.audioEncoderFrames) {
+						assert.ok(
+							frames.slice(0, -1).every((count) => count % 1024 === 0),
+							"AAC inputs must stay on 1024-sample boundaries until the final tail",
+						);
+					}
+					assert.ok(
+						codecs.audioEncoderFrames.some(
+							(frames) => (frames.at(-1) ?? 0) % 1024 !== 0,
+						),
+						"The final audio tail must retain the exact edited sample count",
+					);
 				}
 			}
 			await closeAudio();

@@ -17,6 +17,144 @@ export function setCalibrationMuxer(callback) {
 	audioCalibrations.clear();
 }
 
+function aacAudioSpecificConfig(bytes) {
+	const invalid = () =>
+		new Error("The browser returned an invalid AAC configuration.");
+	const descriptor = (start, end) => {
+		let offset = start;
+		if (offset >= end) throw invalid();
+		const tag = bytes[offset++];
+		let length = 0;
+		for (let index = 0; index < 4; index++) {
+			if (offset >= end) throw invalid();
+			const byte = bytes[offset++];
+			length = length * 128 + (byte & 0x7f);
+			if (!(byte & 0x80)) {
+				if (offset + length > end) throw invalid();
+				return { tag, start: offset, end: offset + length };
+			}
+		}
+		throw invalid();
+	};
+	let specific = bytes;
+	// WebKit can return an ES_Descriptor; the MP4 writer requires its bare AAC config.
+	if (bytes[0] === 0x03 || bytes[0] === 0x04) {
+		let current = descriptor(0, bytes.length);
+		if (current.end !== bytes.length) throw invalid();
+		if (current.tag === 0x03) {
+			let offset = current.start + 3;
+			if (offset > current.end) throw invalid();
+			const flags = bytes[current.start + 2];
+			if (flags & 0x80) offset += 2;
+			if (flags & 0x40) {
+				if (offset >= current.end) throw invalid();
+				offset += 1 + bytes[offset];
+			}
+			if (flags & 0x20) offset += 2;
+			current = descriptor(offset, current.end);
+		}
+		if (
+			current.tag !== 0x04 ||
+			current.start + 13 > current.end ||
+			bytes[current.start] !== 0x40 ||
+			bytes[current.start + 1] >> 2 !== 5
+		)
+			throw invalid();
+		let offset = current.start + 13;
+		specific = null;
+		while (offset < current.end) {
+			const child = descriptor(offset, current.end);
+			if (child.tag === 0x05) {
+				if (specific) throw invalid();
+				specific = bytes.slice(child.start, child.end);
+			}
+			offset = child.end;
+		}
+	}
+	if (!specific || specific.length < 2 || specific[0] >> 3 !== 2)
+		throw invalid();
+	return specific;
+}
+
+async function decodeCalibrationPackets(packets, config, description) {
+	if (!globalThis.AudioDecoder || !globalThis.EncodedAudioChunk)
+		throw new Error("This browser does not provide AAC packet decoding.");
+	const decoderConfig = {
+		codec: config.codec,
+		sampleRate: config.sampleRate,
+		numberOfChannels: config.numberOfChannels,
+		description,
+	};
+	if (!(await AudioDecoder.isConfigSupported(decoderConfig)).supported)
+		throw new Error(
+			"This browser cannot decode the AAC synchronization check.",
+		);
+	const parts = [];
+	let length = 0;
+	let failure;
+	const decoder = new AudioDecoder({
+		output(data) {
+			try {
+				if (failure) return;
+				if (
+					data.sampleRate !== config.sampleRate ||
+					data.numberOfChannels !== config.numberOfChannels ||
+					!Number.isSafeInteger(data.numberOfFrames) ||
+					data.numberOfFrames <= 0 ||
+					length + data.numberOfFrames > 65536
+				)
+					throw new Error(
+						"The browser returned invalid AAC calibration samples.",
+					);
+				const samples = new Float32Array(data.numberOfFrames);
+				data.copyTo(samples, { planeIndex: 0, format: "f32-planar" });
+				parts.push(samples);
+				length += samples.length;
+			} catch (error) {
+				failure = error;
+			} finally {
+				data.close();
+			}
+		},
+		error(error) {
+			failure = error;
+		},
+	});
+	try {
+		decoder.configure(decoderConfig);
+		for (const packet of packets) {
+			if (failure) throw failure;
+			decoder.decode(
+				new EncodedAudioChunk({
+					type: "key",
+					timestamp: packet.timestamp,
+					...(packet.duration == null ? {} : { duration: packet.duration }),
+					data: packet.data,
+				}),
+			);
+		}
+		await deadline(
+			decoder.flush(),
+			"The browser timed out decoding the AAC synchronization check.",
+			10000,
+		);
+		if (failure) throw failure;
+		const samples = new Float32Array(length);
+		let offset = 0;
+		for (const part of parts) {
+			samples.set(part, offset);
+			offset += part.length;
+		}
+		return {
+			sampleRate: config.sampleRate,
+			length,
+			getChannelData: () => samples,
+		};
+	} finally {
+		if (decoder.state !== "closed") decoder.close();
+	}
+}
+
 async function measureAudioPriming(config, expectedDescription) {
 	const key = JSON.stringify([config, [...expectedDescription]]);
 	if (audioCalibrations.has(key)) return audioCalibrations.get(key);
@@ -25,10 +163,6 @@ async function measureAudioPriming(config, expectedDescription) {
 			"Audio synchronization is unavailable. Reload the video editor and try saving again.",
 		);
 	const AudioContext = globalThis.AudioContext || globalThis.webkitAudioContext;
-	if (!AudioContext)
-		throw new Error(
-			"This browser cannot verify audio synchronization for MP4 saving.",
-		);
 	const reference = new Float32Array(8192);
 	let seed = 0x13579bdf;
 	let filtered = 0;
@@ -55,16 +189,26 @@ async function measureAudioPriming(config, expectedDescription) {
 			}
 			const data = new Uint8Array(chunk.byteLength);
 			chunk.copyTo(data);
-			packets.push({ data, duration: chunk.duration });
+			packets.push({
+				data,
+				timestamp: chunk.timestamp,
+				duration: chunk.duration,
+			});
 			const value = metadata?.decoderConfig?.description;
-			if (value)
-				description = ArrayBuffer.isView(value)
+			if (value) {
+				const nativeDescription = ArrayBuffer.isView(value)
 					? new Uint8Array(
 							value.buffer,
 							value.byteOffset,
 							value.byteLength,
 						).slice()
 					: new Uint8Array(value.slice(0));
+				try {
+					description = aacAudioSpecificConfig(nativeDescription);
+				} catch (error) {
+					failure = error;
+				}
+			}
 		},
 		error(error) {
 			failure = error;
@@ -123,12 +267,33 @@ async function measureAudioPriming(config, expectedDescription) {
 					? bytes
 					: "Audio synchronization could not be measured.",
 			);
-		context = new AudioContext({ sampleRate: config.sampleRate });
-		const decoded = await deadline(
-			context.decodeAudioData(bytes.slice().buffer),
-			"The browser timed out checking MP4 audio synchronization.",
-			10000,
-		);
+		let decoded;
+		try {
+			if (!AudioContext)
+				throw new Error("This browser does not provide MP4 audio decoding.");
+			context = new AudioContext({ sampleRate: config.sampleRate });
+			decoded = await deadline(
+				context.decodeAudioData(bytes.slice().buffer),
+				"The browser timed out checking MP4 audio synchronization.",
+				10000,
+			);
+			if (
+				decoded.sampleRate !== config.sampleRate ||
+				Math.abs(decoded.length - encodedSamples) > 1
+			)
+				throw new Error(
+					"The MP4 decoder trims audio calibration samples internally.",
+				);
+		} catch (containerError) {
+			// Packet decoding also avoids automatic MP4 trimming that conceals encoder delay.
+			try {
+				decoded = await decodeCalibrationPackets(packets, config, description);
+			} catch (packetError) {
+				throw new Error(
+					`The browser could not verify AAC audio synchronization. The video was not saved. MP4 decoder: ${reason(containerError)} AAC decoder: ${reason(packetError)}`,
+				);
+			}
+		}
 		// Reject implicit decoder trimming. The explicit MP4 edit must account for every sample.
 		if (
 			decoded.sampleRate !== config.sampleRate ||
@@ -178,7 +343,13 @@ async function measureAudioPriming(config, expectedDescription) {
 		return priming;
 	} finally {
 		if (encoder.state !== "closed") encoder.close();
-		if (context) await context.close();
+		if (context) {
+			try {
+				await context.close();
+			} catch {
+				// Releasing the probe must not replace its synchronization result.
+			}
+		}
 	}
 }
 
@@ -509,14 +680,23 @@ export async function createEncoder(
 			key: chunk.type === "key",
 		});
 		const config = metadata?.decoderConfig?.description;
-		if (config)
-			state[description] = ArrayBuffer.isView(config)
+		if (config) {
+			const bytes = ArrayBuffer.isView(config)
 				? new Uint8Array(
 						config.buffer,
 						config.byteOffset,
 						config.byteLength,
 					).slice()
 				: new Uint8Array(config.slice(0));
+			try {
+				state[description] =
+					description === "audioDescription"
+						? aacAudioSpecificConfig(bytes)
+						: bytes;
+			} catch (error) {
+				state.error = error;
+			}
+		}
 	};
 	state.venc = new VideoEncoder({
 		output: output("video", "description"),

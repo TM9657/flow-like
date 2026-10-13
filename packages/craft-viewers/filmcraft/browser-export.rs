@@ -231,7 +231,12 @@ async fn export(
         .await
         .map_err(error)?;
         if channels > 0 {
-            let audio_end = end.to_units_floor(sample_rate as i64);
+            let mut audio_end = end.to_units_floor(sample_rate as i64);
+            // Safari resets AAC packet timestamps at unaligned input boundaries.
+            // Keep complete AAC frames together, then send the remaining samples once.
+            if index + 1 < total {
+                audio_end -= audio_end % 1024;
+            }
             while audio_start < audio_end {
                 let count = (audio_end - audio_start).min(4096) as usize;
                 filmcraft_media::pending::take();
