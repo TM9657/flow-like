@@ -56,6 +56,70 @@ pub struct TableLocator {
     pub connection_digest: String,
 }
 
+/// Which database a table source reads, by the URI digest its locator recorded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SourceScope {
+    /// The run's shared project database.
+    Project,
+    /// The executing user's private database.
+    User,
+    /// Any other database, or a source without a locator.
+    Unknown,
+}
+
+/// URI digests of the run's project database and the executing user's database.
+#[derive(Clone, Debug, Default)]
+pub struct ScopeDigests {
+    pub project: Option<String>,
+    pub user: Option<String>,
+}
+
+impl ScopeDigests {
+    pub fn classify(&self, locator: Option<&TableLocator>) -> SourceScope {
+        let Some(digest) = locator.map(|locator| locator.connection_digest.as_str()) else {
+            return SourceScope::Unknown;
+        };
+        if self.project.as_deref() == Some(digest) {
+            SourceScope::Project
+        } else if self.user.as_deref() == Some(digest) {
+            SourceScope::User
+        } else {
+            SourceScope::Unknown
+        }
+    }
+
+    /// Unknown when any source is Unknown or has no locator, else User when any is User,
+    /// else Project. No sources at all is Unknown, so classification fails closed.
+    pub fn combine(&self, locators: &[Option<TableLocator>]) -> SourceScope {
+        if locators.is_empty() {
+            return SourceScope::Unknown;
+        }
+        let scopes = locators
+            .iter()
+            .map(|locator| self.classify(locator.as_ref()))
+            .collect::<Vec<_>>();
+        if scopes.contains(&SourceScope::Unknown) {
+            SourceScope::Unknown
+        } else if scopes.contains(&SourceScope::User) {
+            SourceScope::User
+        } else {
+            SourceScope::Project
+        }
+    }
+}
+
+/// Locators of an experiment's sources from its `request.context`: the pinned main source,
+/// then each feature side. A source without a locator is None.
+pub fn experiment_source_locators(_context: &Value) -> Vec<Option<TableLocator>> {
+    Vec::new()
+}
+
+/// Locators of a learning project's sources from its `request.source`: the pinned main
+/// source, then each pinned feature side. A source without a locator is None.
+pub fn learning_source_locators(_source: &Value) -> Vec<Option<TableLocator>> {
+    Vec::new()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct TableBudget {
@@ -1739,6 +1803,11 @@ mod table_io {
             _ => error,
         }
     }
+    /// URI digests of the run's project and executing-user databases, built the way
+    /// `locate_source_connection` builds the connections it matches.
+    pub async fn scope_digests(_context: &ExecutionContext) -> Result<ScopeDigests> {
+        Err(anyhow!("scope_digests lands in L6"))
+    }
     /// Finds the project or user database whose URI digest the durable locator recorded.
     async fn locate_source_connection(
         context: &ExecutionContext,
@@ -2240,13 +2309,59 @@ mod table_io {
 pub use table_io::{
     clone_experiment_table, inspect_table_schema, materialize_prepared_tables, pin_table_source,
     prepare_table_dataset, read_columns, read_rows, reopen_latest_source, reopen_pinned_source,
-    write_experiment_rows,
+    scope_digests, write_experiment_rows,
 };
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use flow_like_ml_native::preprocessing::Imputation;
+
+    #[test]
+    fn source_scopes_fail_closed_on_unknown_or_missing_locators() {
+        let digests = ScopeDigests {
+            project: Some("project-digest".into()),
+            user: Some("user-digest".into()),
+        };
+        let locator = |digest: &str| {
+            Some(TableLocator {
+                app_id: "app".into(),
+                board_id: "board".into(),
+                connection_digest: digest.into(),
+            })
+        };
+        let (project, user, other) = (
+            locator("project-digest"),
+            locator("user-digest"),
+            locator("other-digest"),
+        );
+        assert_eq!(digests.classify(project.as_ref()), SourceScope::Project);
+        assert_eq!(digests.classify(user.as_ref()), SourceScope::User);
+        assert_eq!(digests.classify(other.as_ref()), SourceScope::Unknown);
+        assert_eq!(digests.classify(None), SourceScope::Unknown);
+        assert_eq!(
+            ScopeDigests::default().classify(project.as_ref()),
+            SourceScope::Unknown
+        );
+        assert_eq!(
+            digests.combine(&[project.clone(), project.clone()]),
+            SourceScope::Project
+        );
+        assert_eq!(
+            digests.combine(&[project.clone(), user.clone()]),
+            SourceScope::User
+        );
+        assert_eq!(
+            digests.combine(&[user.clone(), other.clone()]),
+            SourceScope::Unknown
+        );
+        assert_eq!(
+            digests.combine(&[project.clone(), None]),
+            SourceScope::Unknown
+        );
+        assert_eq!(digests.combine(&[]), SourceScope::Unknown);
+    }
+
     fn fixture() -> (PinnedTableSource, TableDatasetRequest, Vec<Value>) {
         let source = PinnedTableSource {
             database: NodeDBConnection {

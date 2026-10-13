@@ -337,6 +337,27 @@ pub fn experiment_repository(
     Ok(repo)
 }
 
+/// The ledger holding experiment `id` with this run's project string, and its scope.
+#[cfg(feature = "training")]
+pub(crate) fn experiment_ledger(
+    _context: &ExecutionContext,
+    _id: &str,
+) -> Result<(
+    flow_like_ml_runtime::TrainingRepository,
+    super::lifecycle::LedgerScope,
+)> {
+    Err(anyhow!("experiment_ledger lands in L6"))
+}
+
+/// Cancels the experiments queued or running on `ledgers` and waits until `deadline`.
+#[cfg(feature = "training")]
+pub(crate) fn drain_experiments(
+    _ledgers: &[std::path::PathBuf],
+    _deadline: std::time::Instant,
+) -> super::lifecycle::DrainReport {
+    super::lifecycle::DrainReport::default()
+}
+
 #[cfg(feature = "training")]
 pub fn controller(
     repo: flow_like_ml_runtime::TrainingRepository,
@@ -2726,8 +2747,8 @@ pub async fn predict_auto_model(
 
 /// The final audit's anomaly rule: probability = score / (score + scale), an anomaly at or
 /// above the threshold.
-#[cfg(feature = "training")]
-fn anomaly_decisions(
+#[cfg(feature = "inference")]
+pub(crate) fn anomaly_decisions(
     predictions: &[Value],
     scale: f64,
     threshold: f64,
@@ -2772,8 +2793,8 @@ fn anomaly_decisions(
 }
 
 /// The extractor that prediction embeddings name; every named extractor must be the same one.
-#[cfg(feature = "training")]
-fn requested_extractor(
+#[cfg(feature = "inference")]
+pub(crate) fn requested_extractor(
     preprocessing: &super::auto_training_tables::TablePreprocessing,
     rows: &[Value],
     explicit: Option<&super::lifecycle::FeatureExtractorRef>,
@@ -2801,7 +2822,7 @@ fn training_extractor(
 
 /// Embeddings name their extractor on the request or as `feature_extractor` inside each row's
 /// tensor value. `mixed` describes two different extractors by their source IDs.
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 fn named_extractor(
     preprocessing: &super::auto_training_tables::TablePreprocessing,
     rows: &[Value],
@@ -2855,8 +2876,8 @@ fn prediction_extractor(
 
 /// A model that recorded the extractor of its training embeddings cannot check embeddings that
 /// name none, so it refuses them instead of scoring a possibly different feature space.
-#[cfg(feature = "training")]
-fn ensure_extractor_named(
+#[cfg(feature = "inference")]
+pub(crate) fn ensure_extractor_named(
     artifact_id: &str,
     manifest: &Value,
     named: Option<&flow_like_ml_runtime::engines::FeatureExtractor>,

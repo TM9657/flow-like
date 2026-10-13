@@ -95,14 +95,14 @@ pub fn training_ledger_dir(app_id: &str, user_sub: Option<&str>) -> String {
 /// directory prefixes match the directory and everything below it.
 pub fn is_legacy_training_ledger_path(app_relative: &str) -> bool {
     let path = app_relative.trim_start_matches('/');
-    LEGACY_TRAINING_LEDGER_PREFIXES.iter().any(|prefix| {
-        match prefix.strip_suffix('/') {
+    LEGACY_TRAINING_LEDGER_PREFIXES
+        .iter()
+        .any(|prefix| match prefix.strip_suffix('/') {
             Some(directory) => path == directory || path.starts_with(prefix),
             None => path
                 .strip_prefix(prefix)
                 .is_some_and(|rest| LEGACY_LEDGER_DATABASE_SUFFIXES.contains(&rest)),
-        }
-    })
+        })
 }
 
 #[cfg(test)]
@@ -131,7 +131,10 @@ mod tests {
         assert!(digest.chars().all(|ch| ch.is_ascii_hexdigit()));
         assert_eq!(
             training_ledger_app_dir("../escape"),
-            format!("training-ledgers/apps/{}", storage_path_segment("../escape", "app"))
+            format!(
+                "training-ledgers/apps/{}",
+                storage_path_segment("../escape", "app")
+            )
         );
         assert!(!training_ledger_app_dir("../escape").contains(".."));
     }
@@ -160,7 +163,10 @@ mod tests {
             "inspection/jobs.sqlite",
             "",
         ] {
-            assert!(!is_legacy_training_ledger_path(path), "{path} should not match");
+            assert!(
+                !is_legacy_training_ledger_path(path),
+                "{path} should not match"
+            );
         }
     }
 }

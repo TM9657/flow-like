@@ -1,6 +1,6 @@
 use flow_like::flow::{execution::context::ExecutionContext, node::NodeLogic};
 use flow_like_ml_core::{ComputeConfig, InspectionSpec, Sample, TensorData};
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 use flow_like_ml_runtime as runtime;
 use flow_like_ml_runtime::*;
 #[cfg(feature = "training")]
@@ -9,26 +9,152 @@ use flow_like_types::{Result, Value, anyhow};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Which device-local ledger holds a record: the app's shared ledger or the executing
+/// user's private ledger. The serde form is the `ledger_scope` marker value.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LedgerScope {
+    #[default]
+    App,
+    User,
+}
+
+/// Streams minted by Auto Train (`auto:{uuid}`) and learning projects (`learning:{uuid}`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StreamKind {
+    Auto,
+    Learning,
+}
+
+/// Marker key at experiment `request.context` and learning project `request.source`.
+pub const LEDGER_SCOPE_KEY: &str = "ledger_scope";
+
+const USER_STREAM_PREFIX: &str = "user:";
+const DEPLOYMENT_PREFIX: &str = "deployment:";
+const USER_PROJECT_SUFFIX: &str = ":user";
+
+impl LedgerScope {
+    /// Only canonical minted user streams (`user:auto:{uuid}`, `user:learning:{uuid}`) are
+    /// private; manual streams such as `user:camera` stay in the App ledger.
+    pub fn of_stream(stream_id: &str) -> Self {
+        match stream_id.strip_prefix(USER_STREAM_PREFIX) {
+            Some(minted) if StreamKind::of_minted(minted).is_some() => Self::User,
+            _ => Self::App,
+        }
+    }
+
+    pub fn of_deployment(deployment_id: &str) -> Self {
+        deployment_id
+            .strip_prefix(DEPLOYMENT_PREFIX)
+            .map_or(Self::App, Self::of_stream)
+    }
+
+    pub fn of_project(project_id: &str) -> Self {
+        match project_id.strip_suffix(USER_PROJECT_SUFFIX) {
+            Some(app_and_board) if app_and_board.contains(':') => Self::User,
+            _ => Self::App,
+        }
+    }
+
+    pub fn project_id(self, app_id: &str, board_id: &str) -> String {
+        match self {
+            Self::App => format!("{app_id}:{board_id}"),
+            Self::User => format!("{app_id}:{board_id}{USER_PROJECT_SUFFIX}"),
+        }
+    }
+
+    pub fn new_stream_id(self, kind: StreamKind) -> String {
+        let scope = match self {
+            Self::App => "",
+            Self::User => USER_STREAM_PREFIX,
+        };
+        format!("{scope}{}{}", kind.prefix(), uuid::Uuid::new_v4())
+    }
+}
+
+impl StreamKind {
+    /// The kind of a minted stream id in either scope; manual streams have none.
+    pub fn of_stream(stream_id: &str) -> Option<Self> {
+        Self::of_minted(
+            stream_id
+                .strip_prefix(USER_STREAM_PREFIX)
+                .unwrap_or(stream_id),
+        )
+    }
+
+    fn of_minted(stream_id: &str) -> Option<Self> {
+        [Self::Auto, Self::Learning].into_iter().find(|kind| {
+            stream_id
+                .strip_prefix(kind.prefix())
+                .is_some_and(is_canonical_uuid)
+        })
+    }
+
+    fn prefix(self) -> &'static str {
+        match self {
+            Self::Auto => "auto:",
+            Self::Learning => "learning:",
+        }
+    }
+}
+
+fn is_canonical_uuid(value: &str) -> bool {
+    value.len() == 36
+        && value.bytes().enumerate().all(|(index, byte)| match index {
+            8 | 13 | 18 | 23 => byte == b'-',
+            _ => matches!(byte, b'0'..=b'9' | b'a'..=b'f'),
+        })
+}
+
+pub const TRAINING_UNAVAILABLE: &str = "Training needs a device-local training ledger, which only the desktop app and offline device placements keep. Server executors, online device placements and desktop runs of online apps without a hub connection cannot train. Models already published under storage/models still run here through Predict Auto Model, Predict Published Model, Student Model Inference, Extract Image Features, Extract Pretrained Image Features, Extract Published Image Features, Route Learning Project, Route Inspection, Get Active Student and Segment with SAM 2.";
+
+/// The refusal of every training operation on a runtime without a device-local ledger.
+#[derive(Debug)]
+pub struct TrainingUnavailable;
+
+impl std::fmt::Display for TrainingUnavailable {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(TRAINING_UNAVAILABLE)
+    }
+}
+
+impl std::error::Error for TrainingUnavailable {}
+
+pub fn training_unavailable() -> flow_like_types::Error {
+    flow_like_types::Error::new(TrainingUnavailable)
+}
+
+pub fn is_training_unavailable(error: &flow_like_types::Error) -> bool {
+    error.downcast_ref::<TrainingUnavailable>().is_some()
+}
+
 /// A changed specification creates a new training stream, including changed label order.
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct InspectionContext {
     pub stream_id: String,
     pub spec: InspectionSpec,
 }
-#[cfg(any(feature = "training", test))]
 impl InspectionContext {
+    #[cfg(any(feature = "inference", test))]
     pub(crate) fn key(&self, project_id: String) -> Result<StreamKey> {
-        self.spec.validate()?;
+        let inspection_version = self.inspection_version()?;
         if self.stream_id.trim().is_empty() {
             return Err(anyhow!("Inspection stream ID is required"));
         }
         Ok(StreamKey {
             project_id,
             stream_id: self.stream_id.clone(),
-            inspection_version: flow_like_ml_core::content_digest(&flow_like_types::json::to_vec(
-                &self.spec,
-            )?),
+            inspection_version,
         })
+    }
+
+    /// Digest of the validated specification; equal specifications share a version.
+    #[cfg_attr(not(any(feature = "inference", test)), allow(dead_code))]
+    pub(crate) fn inspection_version(&self) -> Result<String> {
+        self.spec.validate()?;
+        Ok(flow_like_ml_core::content_digest(
+            &flow_like_types::json::to_vec(&self.spec)?,
+        ))
     }
 }
 
@@ -90,10 +216,16 @@ impl LocalStorageTarget {
 pub(crate) struct LedgerLocation {
     target: LocalStorageTarget,
     project: String,
+    scope: LedgerScope,
 }
 #[cfg(feature = "training")]
 impl LedgerLocation {
-    pub(crate) fn new(context: &ExecutionContext) -> Result<Self> {
+    pub(crate) fn new(context: &ExecutionContext, scope: LedgerScope) -> Result<Self> {
+        if scope == LedgerScope::User {
+            return Err(anyhow!(
+                "LedgerLocation::new for LedgerScope::User lands in L5"
+            ));
+        }
         let target = LocalStorageTarget::new(context, "jobs.sqlite")?;
         let cache = context
             .execution_cache
@@ -101,22 +233,158 @@ impl LedgerLocation {
             .ok_or_else(|| anyhow!("Execution storage context is unavailable"))?;
         Ok(Self {
             target,
-            project: format!("{}:{}", cache.app_id, cache.board_id),
+            project: scope.project_id(&cache.app_id, &cache.board_id),
+            scope,
         })
     }
 
+    /// The ledger a lifecycle stream routes to.
+    pub(crate) fn for_stream(context: &ExecutionContext, stream_id: &str) -> Result<Self> {
+        Self::new(context, LedgerScope::of_stream(stream_id))
+    }
+
+    pub(crate) fn scope(&self) -> LedgerScope {
+        self.scope
+    }
+
+    pub(crate) fn project(&self) -> &str {
+        &self.project
+    }
+
+    /// Resolves and checks the database path; creates nothing.
+    pub(crate) fn database_path(&self) -> Result<std::path::PathBuf> {
+        self.target.resolve()
+    }
+
+    /// The directory of the database, its blob directory and its locks; creates nothing.
+    pub(crate) fn directory(&self) -> Result<std::path::PathBuf> {
+        let database = self.database_path()?;
+        database
+            .parent()
+            .map(std::path::Path::to_path_buf)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Training ledger path {} has no parent directory",
+                    database.display()
+                )
+            })
+    }
+
+    pub(crate) fn exists(&self) -> Result<bool> {
+        Ok(self.database_path()?.try_exists()?)
+    }
+
     /// Blocks on the filesystem and, the first time this process opens the ledger, on SQLite.
+    /// Creates the ledger when it is missing.
     pub(crate) fn open(self) -> Result<(TrainingRepository, String)> {
         Ok((open_ledger(self.target.resolve()?)?, self.project))
     }
+
+    /// Opens the ledger only when its database exists; creates nothing otherwise.
+    pub(crate) fn open_existing(self) -> Result<Option<(TrainingRepository, String)>> {
+        if !self.exists()? {
+            return Ok(None);
+        }
+        self.open().map(Some)
+    }
 }
 
-/// Opens the workflow's ledger from async code. The first open of a ledger in a process waits
-/// on SQLite, so this executor thread hands its other tasks on while it waits.
+/// Opens the workflow's App ledger from async code. The first open of a ledger in a process
+/// waits on SQLite, so this executor thread hands its other tasks on while it waits.
 #[cfg(feature = "training")]
 pub(crate) fn repository(context: &ExecutionContext) -> Result<(TrainingRepository, String)> {
-    let ledger = LedgerLocation::new(context)?;
+    scoped_repository(context, LedgerScope::App)
+}
+
+/// Opens the ledger of `scope` from async code, creating it when missing.
+#[cfg(feature = "training")]
+pub(crate) fn scoped_repository(
+    context: &ExecutionContext,
+    scope: LedgerScope,
+) -> Result<(TrainingRepository, String)> {
+    let ledger = LedgerLocation::new(context, scope)?;
     blocking(|| ledger.open())
+}
+
+/// Refuses shadow runs and runs without a Local app store before any data is read.
+#[cfg(feature = "training")]
+pub(crate) fn ensure_training_available(_context: &ExecutionContext) -> Result<()> {
+    Err(anyhow!("ensure_training_available lands in L5"))
+}
+
+/// Database paths of this run's App ledger and of the executing user's private ledger,
+/// for diagnostics. `user` is None when the private ledger cannot be resolved.
+#[cfg(feature = "training")]
+pub(crate) struct LedgerPaths {
+    pub(crate) app: std::path::PathBuf,
+    pub(crate) user: Option<std::path::PathBuf>,
+}
+
+/// Resolves both ledger paths without creating anything.
+#[cfg(feature = "training")]
+pub(crate) fn ledger_paths(context: &ExecutionContext) -> Result<LedgerPaths> {
+    let app = LedgerLocation::new(context, LedgerScope::App)?.database_path()?;
+    let user = LedgerLocation::new(context, LedgerScope::User)
+        .and_then(|ledger| ledger.database_path())
+        .ok();
+    Ok(LedgerPaths { app, user })
+}
+
+/// A ledger that holds a looked-up record, with the project string of its records.
+#[cfg(feature = "inference")]
+pub(crate) struct LocatedLedger {
+    pub(crate) repo: TrainingRepository,
+    pub(crate) project: String,
+    pub(crate) scope: LedgerScope,
+}
+
+/// The first existing ledger whose `holds(repo, project)` is true: the resolved App ledger,
+/// then the legacy App ledger when it exists and differs, then the private ledger when it
+/// exists. Nothing is created.
+#[cfg(feature = "training")]
+pub(crate) fn locate_repository(
+    _context: &ExecutionContext,
+    _holds: impl Fn(&TrainingRepository, &str) -> Result<bool>,
+) -> Result<Option<LocatedLedger>> {
+    Err(anyhow!("locate_repository lands in L5"))
+}
+
+/// `locate_repository` for inference paths. None without the training feature, in shadow
+/// runs, for non-Local app stores and when no ledger holds the record.
+#[cfg(feature = "inference")]
+pub(crate) fn locate_repository_for_inference(
+    _context: &ExecutionContext,
+    _holds: impl Fn(&TrainingRepository, &str) -> Result<bool>,
+) -> Result<Option<LocatedLedger>> {
+    Ok(None)
+}
+
+/// Training of one app that a drain cancelled, and what was still running at its deadline.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DrainReport {
+    pub cancelled: usize,
+    pub still_running: usize,
+}
+
+/// Stops accepting new training for `app_id`, cancels its queued and running jobs and
+/// experiments in `{project_root}/training-ledgers/apps/{app}` and the legacy ledger, and
+/// waits for them up to `timeout`. A no-op without the training feature.
+pub async fn drain_app_training(
+    project_root: &std::path::Path,
+    app_id: &str,
+    timeout: std::time::Duration,
+) -> DrainReport {
+    let _ = (project_root, app_id, timeout);
+    DrainReport::default()
+}
+
+/// Cancels the lifecycle jobs queued or running on `ledgers` and waits until `deadline`.
+#[cfg(feature = "training")]
+pub(crate) fn drain_jobs(
+    _ledgers: &[std::path::PathBuf],
+    _deadline: std::time::Instant,
+) -> DrainReport {
+    DrainReport::default()
 }
 
 /// Runs blocking work called from async code. On a multi-threaded runtime the executor moves
@@ -288,7 +556,7 @@ pub struct FeatureExtractorRef {
     #[serde(default)]
     pub image_steps: Vec<flow_like_ml_core::PreprocessingStep>,
 }
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 impl FeatureExtractorRef {
     /// Fails unless the extractor names a source and a SHA-256 weights digest.
     pub(crate) fn to_runtime(&self) -> Result<runtime::engines::FeatureExtractor> {
@@ -301,7 +569,7 @@ impl FeatureExtractorRef {
         Ok(extractor)
     }
 }
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 impl From<runtime::engines::FeatureExtractor> for FeatureExtractorRef {
     fn from(extractor: runtime::engines::FeatureExtractor) -> Self {
         Self {
@@ -312,7 +580,7 @@ impl From<runtime::engines::FeatureExtractor> for FeatureExtractorRef {
     }
 }
 /// Parses an extractor carried as JSON, such as in a recipe or inside a tensor value.
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 pub(crate) fn runtime_extractor(value: &Value) -> Result<runtime::engines::FeatureExtractor> {
     flow_like_types::json::from_value::<FeatureExtractorRef>(value.clone())
         .map_err(|error| anyhow!("Invalid feature extractor: {error}"))?
@@ -1283,7 +1551,7 @@ macro_rules! lifecycle_node {
                 {
                     context.deactivate_exec_pin("exec_out").await?;
                     let input: $input = context.evaluate_pin("request").await?;
-                    let ledger = LedgerLocation::new(context)?;
+                    let ledger = LedgerLocation::new(context, LedgerScope::App)?;
                     let result: $output = tokio::task::spawn_blocking(move || {
                         let (repo, project) = ledger.open()?;
                         $handler(repo, project, input)
@@ -1420,9 +1688,9 @@ lifecycle_node!(
 #[derive(Default)]
 pub struct StudentInferenceNode;
 
-#[cfg(feature = "training")]
-type CachedPredictor = std::sync::Arc<CatalogLoadedPredictor>;
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
+pub(crate) type CachedPredictor = std::sync::Arc<CatalogLoadedPredictor>;
+#[cfg(feature = "inference")]
 pub(crate) enum CatalogLoadedPredictor {
     Builtin(runtime::engines::LoadedArtifactPredictor),
     Classical {
@@ -1430,7 +1698,7 @@ pub(crate) enum CatalogLoadedPredictor {
         predictor: std::sync::Mutex<super::auto_training_legacy::LegacyPredictor>,
     },
 }
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 impl CatalogLoadedPredictor {
     pub(crate) fn load(
         repo: &TrainingRepository,
@@ -1451,7 +1719,16 @@ impl CatalogLoadedPredictor {
             ))
         }
     }
-    fn artifact(&self) -> &ModelArtifact {
+    /// Loads an artifact whose blob bytes come from outside a ledger, such as a published
+    /// model folder. It never checks a project id.
+    pub(crate) fn from_parts(
+        _artifact: ModelArtifact,
+        _bytes: &[u8],
+        _compute: &ComputeConfig,
+    ) -> Result<Self> {
+        Err(anyhow!("CatalogLoadedPredictor::from_parts lands in L5"))
+    }
+    pub(crate) fn artifact(&self) -> &ModelArtifact {
         match self {
             Self::Builtin(predictor) => predictor.artifact(),
             Self::Classical { artifact, .. } => artifact,
@@ -1496,7 +1773,7 @@ impl CatalogLoadedPredictor {
             }
         }
     }
-    fn feature_extractor(&self) -> Result<FeatureExtractorRef> {
+    pub(crate) fn feature_extractor(&self) -> Result<FeatureExtractorRef> {
         match self {
             Self::Builtin(predictor) => Ok(predictor.feature_extractor()?.into()),
             Self::Classical { .. } => {
@@ -1507,7 +1784,7 @@ impl CatalogLoadedPredictor {
 }
 /// Embeddings that name no extractor cannot be checked against the one a PatchCore or PaDiM
 /// model recorded, and another extractor's embeddings give arbitrary anomaly scores.
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 fn refuse_unnamed_embeddings(model: &ModelArtifact) -> Result<()> {
     let Some(recorded) = model
         .manifest
@@ -1524,12 +1801,12 @@ fn refuse_unnamed_embeddings(model: &ModelArtifact) -> Result<()> {
         recorded.blob_sha256
     ))
 }
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 #[derive(Clone, Default)]
 struct PredictionCache {
     models: std::sync::Arc<tokio::sync::Mutex<Vec<(String, CachedPredictor, u64)>>>,
 }
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 fn trim_prediction_cache(
     models: &mut Vec<(String, CachedPredictor, u64)>,
     incoming: u64,
@@ -1545,7 +1822,7 @@ fn trim_prediction_cache(
         models.remove(0);
     }
 }
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 impl flow_like_types::Cacheable for PredictionCache {
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -1562,7 +1839,7 @@ async fn cached_predictor(
     compute: &ComputeConfig,
 ) -> Result<CachedPredictor> {
     compute.validate()?;
-    let ledger = LedgerLocation::new(context)?;
+    let ledger = LedgerLocation::new(context, LedgerScope::App)?;
     let request = ArtifactRequest {
         inspection: inspection.clone(),
         artifact_id: artifact_id.to_owned(),
@@ -1864,7 +2141,7 @@ impl NodeLogic for ExportStudentOnnxNode {
         {
             context.deactivate_exec_pin("exec_out").await?;
             let input: ExportOnnxRequest = context.evaluate_pin("request").await?;
-            let ledger = LedgerLocation::new(context)?;
+            let ledger = LedgerLocation::new(context, LedgerScope::App)?;
             let mut prediction = input.prediction;
             if prediction.input.shape == prediction.inspection.spec.input_shape {
                 prediction.input.shape.insert(0, 1);
@@ -2518,7 +2795,7 @@ impl NodeLogic for RouteInspectionNode {
                 context.deactivate_exec_pin(pin).await?;
             }
             let input: DeploymentRequest = context.evaluate_pin("request").await?;
-            let ledger = LedgerLocation::new(context)?;
+            let ledger = LedgerLocation::new(context, LedgerScope::App)?;
             let route = tokio::task::spawn_blocking(move || {
                 let (repo, project) = ledger.open()?;
                 routing(repo, project, input)
@@ -2597,6 +2874,101 @@ mod scope_tests {
             validate_native_schedule_compute(engine, &compute).unwrap();
             validate_native_schedule_compute(engine, &ComputeConfig::default()).unwrap();
         }
+    }
+
+    const UUID: &str = "0f8e5c1a-3b2d-4c6e-9a7f-1d2e3f4a5b6c";
+
+    #[test]
+    fn only_canonical_minted_user_streams_route_to_the_private_ledger() {
+        for kind in ["auto", "learning"] {
+            assert_eq!(
+                LedgerScope::of_stream(&format!("user:{kind}:{UUID}")),
+                LedgerScope::User
+            );
+            assert_eq!(
+                LedgerScope::of_stream(&format!("{kind}:{UUID}")),
+                LedgerScope::App
+            );
+        }
+        for manual in [
+            "user:camera",
+            "user:auto:not-a-uuid",
+            &format!("user:auto:{}", UUID.to_uppercase()),
+            &format!("user:auto:{UUID}-extra"),
+            &format!("user:auto:{}", UUID.replace('-', "")),
+            &format!("user:other:{UUID}"),
+            &format!("user:user:auto:{UUID}"),
+            "camera-1",
+            "",
+        ] {
+            assert_eq!(LedgerScope::of_stream(manual), LedgerScope::App, "{manual}");
+        }
+        assert_eq!(
+            StreamKind::of_stream(&format!("auto:{UUID}")),
+            Some(StreamKind::Auto)
+        );
+        assert_eq!(
+            StreamKind::of_stream(&format!("user:learning:{UUID}")),
+            Some(StreamKind::Learning)
+        );
+        assert_eq!(StreamKind::of_stream("auto:camera"), None);
+        assert_eq!(StreamKind::of_stream("user:camera"), None);
+    }
+
+    #[test]
+    fn deployment_and_project_ids_carry_the_ledger_scope() {
+        assert_eq!(
+            LedgerScope::of_deployment(&format!("deployment:user:learning:{UUID}")),
+            LedgerScope::User
+        );
+        assert_eq!(
+            LedgerScope::of_deployment(&format!("deployment:learning:{UUID}")),
+            LedgerScope::App
+        );
+        assert_eq!(
+            LedgerScope::of_deployment(&format!("user:learning:{UUID}")),
+            LedgerScope::App
+        );
+        assert_eq!(LedgerScope::of_deployment("line-3"), LedgerScope::App);
+        for scope in [LedgerScope::App, LedgerScope::User] {
+            let project = scope.project_id("app-1", "board-1");
+            assert_eq!(LedgerScope::of_project(&project), scope, "{project}");
+        }
+        assert_eq!(LedgerScope::User.project_id("a", "b"), "a:b:user");
+        assert_eq!(LedgerScope::App.project_id("a", "b"), "a:b");
+        assert_eq!(LedgerScope::of_project("app:user"), LedgerScope::App);
+        assert_eq!(LedgerScope::of_project(":user"), LedgerScope::App);
+    }
+
+    #[test]
+    fn minted_stream_ids_are_recognized_in_their_scope() {
+        for scope in [LedgerScope::App, LedgerScope::User] {
+            for kind in [StreamKind::Auto, StreamKind::Learning] {
+                let stream = scope.new_stream_id(kind);
+                assert_eq!(LedgerScope::of_stream(&stream), scope, "{stream}");
+                assert_eq!(StreamKind::of_stream(&stream), Some(kind), "{stream}");
+                assert_eq!(
+                    LedgerScope::of_deployment(&format!("deployment:{stream}")),
+                    scope
+                );
+            }
+        }
+        assert_eq!(
+            flow_like_types::json::to_value(LedgerScope::User).unwrap(),
+            flow_like_types::json::json!("user")
+        );
+        assert_eq!(LedgerScope::default(), LedgerScope::App);
+    }
+
+    #[test]
+    fn training_refusals_are_recognizable_after_wrapping() {
+        let error = training_unavailable();
+        assert_eq!(error.to_string(), TRAINING_UNAVAILABLE);
+        assert!(is_training_unavailable(&error));
+        assert!(is_training_unavailable(
+            &error.context("Auto Train Tabular")
+        ));
+        assert!(!is_training_unavailable(&anyhow!(TRAINING_UNAVAILABLE)));
     }
 }
 

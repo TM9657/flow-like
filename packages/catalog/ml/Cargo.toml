@@ -6,7 +6,9 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
-training = ["execute", "flow-like-ml-runtime/execution", "flow-like-ml-runtime/native", "flow-like-ml-runtime/burn", "flow-like-ml-burn/engine", "dep:tempfile"]
+# Runs published models (Burn CPU, no GPU crates); training adds the device-local ledger.
+inference = ["execute", "flow-like-ml-runtime/execution", "flow-like-ml-runtime/native", "flow-like-ml-runtime/burn", "flow-like-ml-burn/engine", "flow-like-ml-burn/cpu"]
+training = ["inference", "dep:tempfile"]
 training-cpu = ["training", "flow-like-ml-burn/cpu"]
 training-auto = ["training-cpu", "flow-like-ml-runtime/training-auto"]
 training-wgpu = ["training-cpu", "flow-like-ml-burn/wgpu"]
@@ -93,6 +95,9 @@ flow-like-ordinal = { workspace = true, optional = true, features = ["serde"] }
 fory = { version = "0.14.1", optional = true }
 fory-core = { version = "0.14.1", optional = true }
 rmp-serde = { version = "1.3", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
 
 [build-dependencies]
 flow-like-catalog-build-helper.workspace = true

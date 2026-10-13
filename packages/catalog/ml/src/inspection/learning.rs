@@ -154,6 +154,18 @@ pub fn project_repository(
     Ok(repo)
 }
 
+/// The ledger holding learning project `id` with this run's project string, and its scope.
+#[cfg(feature = "training")]
+pub(crate) fn project_ledger(
+    _context: &ExecutionContext,
+    _id: &str,
+) -> Result<(
+    flow_like_ml_runtime::TrainingRepository,
+    super::lifecycle::LedgerScope,
+)> {
+    Err(anyhow!("project_ledger lands in L6"))
+}
+
 #[cfg(feature = "training")]
 pub fn training_template(project: &LearningProject) -> Result<AutoTrainRequest> {
     Ok(flow_like_types::json::from_value(

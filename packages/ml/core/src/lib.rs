@@ -1272,7 +1272,10 @@ mod tests {
     fn cgroup_memory_limits_parse_only_finite_values() {
         assert_eq!(parse_cgroup_memory_limit("max"), None);
         assert_eq!(parse_cgroup_memory_limit("max\n"), None);
-        assert_eq!(parse_cgroup_memory_limit("536870912\n"), Some(512 * MEBIBYTE));
+        assert_eq!(
+            parse_cgroup_memory_limit("536870912\n"),
+            Some(512 * MEBIBYTE)
+        );
         assert_eq!(parse_cgroup_memory_limit("0"), None);
         assert_eq!(parse_cgroup_memory_limit("garbage"), None);
         assert_eq!(parse_cgroup_memory_limit(&(1u64 << 60).to_string()), None);
@@ -1300,7 +1303,10 @@ mod tests {
             detect_container_memory_limit(|_| None, Some("512".into())),
             Some(512 * MEBIBYTE)
         );
-        assert_eq!(detect_container_memory_limit(|_| None, Some("0".into())), None);
+        assert_eq!(
+            detect_container_memory_limit(|_| None, Some("0".into())),
+            None
+        );
         assert_eq!(detect_container_memory_limit(|_| None, None), None);
     }
 

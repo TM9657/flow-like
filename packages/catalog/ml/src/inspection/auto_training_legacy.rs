@@ -17,7 +17,7 @@ pub struct LegacyRecipe {
     pub labels: Vec<String>,
 }
 
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 mod execution {
     use super::*;
     use crate::ml::{MLModel, ModelWithMeta};
@@ -512,6 +512,16 @@ mod execution {
                 maximum_elements: maximum_elements.min(32 * 1024 * 1024) as usize,
             })
         }
+
+        /// Loads a classical artifact whose blob bytes come from outside a ledger, such as
+        /// a published model folder. It never checks a project id.
+        pub fn from_parts(
+            _artifact: &runtime::ModelArtifact,
+            _bytes: &[u8],
+            _compute: &ComputeConfig,
+        ) -> runtime::Result<Self> {
+            Err(error("LegacyPredictor::from_parts lands in L5"))
+        }
     }
 
     #[cfg(test)]
@@ -774,7 +784,7 @@ mod execution {
     }
 }
 
-#[cfg(feature = "training")]
+#[cfg(feature = "inference")]
 pub use execution::{
     CatalogSearchPredictorFactory, LegacyPredictor, LegacyTrainingEngine, register_legacy_engine,
 };

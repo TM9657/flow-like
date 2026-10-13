@@ -21,6 +21,7 @@ pub mod health;
 pub mod inbound;
 pub mod info;
 pub mod instances;
+pub mod invite;
 pub mod maintenance;
 pub mod oauth;
 pub mod og;
