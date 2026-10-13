@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600">
+<defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#dce4e6"/><stop offset="1" stop-color="#f4f3ee"/></linearGradient><linearGradient id="paint" x2=".1" y2="1"><stop stop-color="#6f919c"/><stop offset=".48" stop-color="#26444d"/><stop offset="1" stop-color="#26444d"/></linearGradient><filter id="shadow"><feGaussianBlur stdDeviation="15"/></filter></defs>
+<rect width="960" height="600" fill="url(#sky)"/>
+<path d="M0 275 L960 238 L960 600 L0 600 Z" fill="#bdc8c9"/>
+<path d="M0 288 L960 252" stroke="#fff" stroke-opacity=".25"/>
+<ellipse cx="480" cy="371" rx="355" ry="23" fill="#15262b" opacity=".22" filter="url(#shadow)"/>
+<g transform="translate(0 44)">
+<path d="M258 255 L330 190 Q351 178 409 180 L499 184 Q523 187 555 208 L613 254 Z" fill="url(#paint)"/>
+<path d="M141 264 Q185 250 252 251 L619 251 Q681 254 759 280 L815 305 L825 337 Q819 352 795 355 L156 355 Q134 351 133 334 L135 291 Z" fill="url(#paint)" stroke="#101c22" stroke-opacity=".35" stroke-width="2"/>
+<path d="M285 251 L342 201 Q356 193 407 194 L448 197 L451 251 Z M468 198 L498 199 Q518 202 547 220 L590 251 L470 251 Z" fill="#23323b"/>
+<path d="M283 248 L340 208 Q353 198 405 198" fill="none" stroke="#d2e0e6" stroke-opacity=".6" stroke-width="3"/>
+<path d="M152 287 L740 287" stroke="#fff" stroke-opacity=".23" stroke-width="2"/>
+<path d="M303 269 L298 333 M458 258 L459 338 M614 267 L628 333" stroke="#101b22" stroke-opacity=".35" fill="none"/>
+<path d="M336 271 h29 M496 271 h29" stroke="#6f919c" stroke-width="5" stroke-linecap="round"/>
+<path d="M151 291 L208 286 L204 305 L146 306 Z" fill="#efcfb1"/>
+<path d="M760 287 L803 306 L806 317 L765 308 Z" fill="#cedee4"/>
+<path d="M150 330 H795" stroke="#101c22" stroke-opacity=".4" stroke-width="5"/>
+<g fill="#1d252a" stroke="#11191f" stroke-width="8"><circle cx="255" cy="344" r="49"/><circle cx="697" cy="344" r="49"/></g>
+<g fill="#9ca8ad" stroke="#e4e7e8" stroke-width="3"><circle cx="255" cy="344" r="30"/><circle cx="697" cy="344" r="30"/></g>
+<g stroke="#39464f" stroke-width="7"><path d="M255 316v56M227 344h56M235 324l40 40M235 364l40-40"/><path d="M697 316v56M669 344h56M677 324l40 40M677 364l40-40"/></g>
+<g fill="#d9dfe1"><circle cx="255" cy="344" r="8"/><circle cx="697" cy="344" r="8"/></g>
+</g>
+</svg>
+

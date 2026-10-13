@@ -2931,6 +2931,7 @@ exports[`markdown fixtures M09-tables parses to the pinned Plate value 1`] = `
       {
         "children": [
           {
+            "align": "left",
             "children": [
               {
                 "children": [
@@ -2944,6 +2945,7 @@ exports[`markdown fixtures M09-tables parses to the pinned Plate value 1`] = `
             "type": "th",
           },
           {
+            "align": "center",
             "children": [
               {
                 "children": [
@@ -2957,6 +2959,7 @@ exports[`markdown fixtures M09-tables parses to the pinned Plate value 1`] = `
             "type": "th",
           },
           {
+            "align": "right",
             "children": [
               {
                 "children": [
@@ -2975,6 +2978,7 @@ exports[`markdown fixtures M09-tables parses to the pinned Plate value 1`] = `
       {
         "children": [
           {
+            "align": "left",
             "children": [
               {
                 "children": [
@@ -2989,6 +2993,7 @@ exports[`markdown fixtures M09-tables parses to the pinned Plate value 1`] = `
             "type": "td",
           },
           {
+            "align": "center",
             "children": [
               {
                 "children": [
@@ -3003,6 +3008,7 @@ exports[`markdown fixtures M09-tables parses to the pinned Plate value 1`] = `
             "type": "td",
           },
           {
+            "align": "right",
             "children": [
               {
                 "children": [
@@ -3027,6 +3033,7 @@ exports[`markdown fixtures M09-tables parses to the pinned Plate value 1`] = `
       {
         "children": [
           {
+            "align": "left",
             "children": [
               {
                 "children": [
@@ -3040,6 +3047,7 @@ exports[`markdown fixtures M09-tables parses to the pinned Plate value 1`] = `
             "type": "td",
           },
           {
+            "align": "center",
             "children": [
               {
                 "children": [
@@ -3053,6 +3061,7 @@ exports[`markdown fixtures M09-tables parses to the pinned Plate value 1`] = `
             "type": "td",
           },
           {
+            "align": "right",
             "children": [
               {
                 "children": [
@@ -3502,7 +3511,7 @@ exports[`markdown fixtures M09-tables renders through TextEditor 1`] = `
         <table aria-hidden="true" style="display:none">
           <tbody>
             <tr class="group/row h-full slate-tr" data-slate-node="element" data-slate-type="tr" style="position:relative">
-              <th class="*:m-0 before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:border-t before:border-t-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-muted/50 border-none font-semibold h-full overflow-visible p-0 slate-th text-left" colspan="1" data-slate-node="element" data-slate-type="th" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
+              <th class="*:m-0 before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:border-t before:border-t-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-muted/50 border-none font-semibold h-full overflow-visible p-0 slate-th text-left" colspan="1" data-slate-align="left" data-slate-node="element" data-slate-type="th" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
                 <div class="box-border h-full px-2 py-1.5 relative text-sm z-20">
                   <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
                     <span data-slate-node="text">
@@ -3513,7 +3522,7 @@ exports[`markdown fixtures M09-tables renders through TextEditor 1`] = `
                   </div>
                 </div>
               </th>
-              <th class="*:m-0 before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:border-t before:border-t-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-muted/50 border-none font-semibold h-full overflow-visible p-0 slate-th text-left" colspan="1" data-slate-node="element" data-slate-type="th" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
+              <th class="*:m-0 before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:border-t before:border-t-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-muted/50 border-none font-semibold h-full overflow-visible p-0 slate-th text-left" colspan="1" data-slate-align="center" data-slate-node="element" data-slate-type="th" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
                 <div class="box-border h-full px-2 py-1.5 relative text-sm z-20">
                   <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
                     <span data-slate-node="text">
@@ -3524,7 +3533,7 @@ exports[`markdown fixtures M09-tables renders through TextEditor 1`] = `
                   </div>
                 </div>
               </th>
-              <th class="*:m-0 before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:border-t before:border-t-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-muted/50 border-none font-semibold h-full overflow-visible p-0 slate-th text-left" colspan="1" data-slate-node="element" data-slate-type="th" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
+              <th class="*:m-0 before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:border-t before:border-t-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-muted/50 border-none font-semibold h-full overflow-visible p-0 slate-th text-left" colspan="1" data-slate-align="right" data-slate-node="element" data-slate-type="th" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
                 <div class="box-border h-full px-2 py-1.5 relative text-sm z-20">
                   <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
                     <span data-slate-node="text">
@@ -3537,7 +3546,7 @@ exports[`markdown fixtures M09-tables renders through TextEditor 1`] = `
               </th>
             </tr>
             <tr class="group/row h-full slate-tr" data-slate-node="element" data-slate-type="tr" style="position:relative">
-              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
+              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-align="left" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
                 <div class="box-border h-full px-2 py-1.5 relative text-sm z-20">
                   <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
                     <span data-slate-node="text">
@@ -3550,7 +3559,7 @@ exports[`markdown fixtures M09-tables renders through TextEditor 1`] = `
                   </div>
                 </div>
               </td>
-              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
+              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-align="center" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
                 <div class="box-border h-full px-2 py-1.5 relative text-sm z-20">
                   <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
                     <span data-slate-node="text">
@@ -3563,7 +3572,7 @@ exports[`markdown fixtures M09-tables renders through TextEditor 1`] = `
                   </div>
                 </div>
               </td>
-              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
+              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-align="right" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
                 <div class="box-border h-full px-2 py-1.5 relative text-sm z-20">
                   <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
                     <a class="decoration-primary font-medium slate-a text-primary underline underline-offset-4" data-slate-inline="true" data-slate-node="element" data-slate-type="a" data-slate-url="https://example.com" href="https://example.com/" style="position:relative">
@@ -3578,7 +3587,7 @@ exports[`markdown fixtures M09-tables renders through TextEditor 1`] = `
               </td>
             </tr>
             <tr class="group/row h-full slate-tr" data-slate-node="element" data-slate-type="tr" style="position:relative">
-              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
+              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-align="left" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
                 <div class="box-border h-full px-2 py-1.5 relative text-sm z-20">
                   <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
                     <span data-slate-node="text">
@@ -3589,7 +3598,7 @@ exports[`markdown fixtures M09-tables renders through TextEditor 1`] = `
                   </div>
                 </div>
               </td>
-              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
+              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-align="center" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
                 <div class="box-border h-full px-2 py-1.5 relative text-sm z-20">
                   <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
                     <span data-slate-node="text">
@@ -3600,7 +3609,7 @@ exports[`markdown fixtures M09-tables renders through TextEditor 1`] = `
                   </div>
                 </div>
               </td>
-              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
+              <td class="before:absolute before:border-b before:border-b-border before:border-l before:border-l-border before:border-r before:border-r-border before:box-border before:content-[&#x27;&#x27;] before:select-none before:size-full bg-background border-none h-full overflow-visible p-0 slate-td" colspan="1" data-slate-align="right" data-slate-node="element" data-slate-type="td" rowspan="1" style="position:relative;max-width:300px;min-width:60px">
                 <div class="box-border h-full px-2 py-1.5 relative text-sm z-20">
                   <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
                     <span data-slate-node="text">
@@ -4141,11 +4150,11 @@ exports[`markdown fixtures M09-tables streams towards the settled render 1`] = `
 
 exports[`markdown fixtures M09-tables serializes back to markdown 1`] = `
 {
-  "markdown":
-"| Left     | Center     | Right                       |
-| -------- | ---------- | --------------------------- |
-| **bold** | \`code\`     | [link](https://example.com) |
-| ​        | empty-left | a \\| pipe                   |
+  "markdown":\u0020
+"| Left     |   Center   |                       Right |
+| :------- | :--------: | --------------------------: |
+| **bold** |   \`code\`   | [link](https://example.com) |
+| ​        | empty-left |                   a \\| pipe |
 
 | C0 | C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8 | C9 |
 | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |
@@ -4879,17 +4888,12 @@ exports[`markdown fixtures M12-images parses to the pinned Plate value 1`] = `
 `;
 
 exports[`markdown fixtures M12-images renders through TextEditor 1`] = `
-"<link as="image" href="https://example.com/a.png" rel="preload" />
-<link as="image" href="https://example.com/b.png" rel="preload" />
-<link as="image" href="https://example.com/no-alt.png" rel="preload" />
-<link as="image" href="https://example.com/c.png" rel="preload" />
-<link as="image" href="https://example.com/icon.svg" rel="preload" />
-<div class="[&amp;_code]:wrap-break-word [&amp;_li]:[overflow-wrap:anywhere] [&amp;_p]:[overflow-wrap:anywhere] [&amp;_pre]:overflow-x-auto [&amp;_pre]:whitespace-pre-wrap overflow-hidden">
+"<div class="[&amp;_code]:wrap-break-word [&amp;_li]:[overflow-wrap:anywhere] [&amp;_p]:[overflow-wrap:anywhere] [&amp;_pre]:overflow-x-auto [&amp;_pre]:whitespace-pre-wrap overflow-hidden">
   <div class="[&amp;_h1:first-of-type]:mt-0 [&amp;_h2:first-of-type]:mt-0 [&amp;_h3:first-of-type]:mt-0 [&amp;_h4:first-of-type]:mt-0 [&amp;_h5:first-of-type]:mt-0 [&amp;_h6:first-of-type]:mt-0 py-0 slate-editor" data-slate-editor="true" data-slate-node="value">
     <div class="py-2.5 slate-img" data-slate-alt="Alt text" data-slate-node="element" data-slate-type="img" data-slate-url="https://example.com/a.png" data-slate-void="true" style="position:relative">
       <figure class="group inline-block m-0 relative">
         <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-          <img alt="Alt text" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" src="https://example.com/a.png" />
+          <img alt="Alt text" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" src="https://example.com/a.png" />
           <figcaption class="max-w-full mt-2 mx-auto">"Alt text"</figcaption>
         </div>
       </figure>
@@ -4904,7 +4908,7 @@ exports[`markdown fixtures M12-images renders through TextEditor 1`] = `
     <div class="py-2.5 slate-img" data-slate-alt="Titled" data-slate-node="element" data-slate-title="The title" data-slate-type="img" data-slate-url="https://example.com/b.png" data-slate-void="true" style="position:relative">
       <figure class="group inline-block m-0 relative">
         <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-          <img alt="Titled" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" src="https://example.com/b.png" />
+          <img alt="Titled" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" src="https://example.com/b.png" />
           <figcaption class="max-w-full mt-2 mx-auto">"Titled"</figcaption>
         </div>
       </figure>
@@ -4919,7 +4923,7 @@ exports[`markdown fixtures M12-images renders through TextEditor 1`] = `
     <div class="py-2.5 slate-img" data-slate-alt="" data-slate-node="element" data-slate-type="img" data-slate-url="https://example.com/no-alt.png" data-slate-void="true" style="position:relative">
       <figure class="group inline-block m-0 relative">
         <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-          <img alt="" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" src="https://example.com/no-alt.png" />
+          <img alt="" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" src="https://example.com/no-alt.png" />
           <figcaption class="max-w-full mt-2 mx-auto"></figcaption>
         </div>
       </figure>
@@ -4936,7 +4940,7 @@ exports[`markdown fixtures M12-images renders through TextEditor 1`] = `
         <div class="py-2.5 slate-img" data-slate-alt="linked" data-slate-node="element" data-slate-type="img" data-slate-url="https://example.com/c.png" data-slate-void="true" style="position:relative">
           <figure class="group inline-block m-0 relative">
             <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-              <img alt="linked" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" src="https://example.com/c.png" />
+              <img alt="linked" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" src="https://example.com/c.png" />
               <figcaption class="max-w-full mt-2 mx-auto">"linked"</figcaption>
             </div>
           </figure>
@@ -4953,7 +4957,7 @@ exports[`markdown fixtures M12-images renders through TextEditor 1`] = `
     <div class="py-2.5 slate-img" data-slate-alt="stored" data-slate-node="element" data-slate-type="img" data-slate-url="storage://apps/app-1/upload/d.png" data-slate-void="true" style="position:relative">
       <figure class="group inline-block m-0 relative">
         <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-          <img alt="stored" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" />
+          <img alt="stored" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" />
           <figcaption class="max-w-full mt-2 mx-auto">"stored"</figcaption>
         </div>
       </figure>
@@ -4975,7 +4979,7 @@ exports[`markdown fixtures M12-images renders through TextEditor 1`] = `
     <div class="py-2.5 slate-img" data-slate-alt="icon" data-slate-node="element" data-slate-type="img" data-slate-url="https://example.com/icon.svg" data-slate-void="true" style="position:relative">
       <figure class="group inline-block m-0 relative">
         <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-          <img alt="icon" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" src="https://example.com/icon.svg" />
+          <img alt="icon" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" src="https://example.com/icon.svg" />
           <figcaption class="max-w-full mt-2 mx-auto">"icon"</figcaption>
         </div>
       </figure>
@@ -6062,8 +6066,19 @@ exports[`markdown fixtures M16-chart-fences renders through TextEditor 1`] = `
     <div class="codeblock py-1 slate-code_block" data-slate-lang="nivo" data-slate-node="element" data-slate-type="code_block" style="position:relative">
       <div class="group overflow-hidden relative rounded-md">
         <button class="absolute bg-background/95 border border-border focus-visible:opacity-100 group-hover:opacity-100 hover:text-foreground left-2 opacity-0 px-2 py-1 rounded-md text-muted-foreground text-xs top-2 transition-opacity z-10" type="button">"View Source"</button>
+        <div data-fl-chart-pending="true">
+          <div class="font-medium pb-2 px-1 text-center text-sm">"Sales"</div>
+          <div class="bg-muted/10 flex items-center justify-center relative rounded-md" style="height:350px">
+            <div aria-hidden="true" class="absolute border-b border-border/70 border-l bottom-8 inset-x-8 top-10">
+              <div class="absolute border-border/35 border-t inset-x-0 top-1/4"></div>
+              <div class="absolute border-border/35 border-t inset-x-0 top-1/2"></div>
+              <div class="absolute border-border/35 border-t inset-x-0 top-3/4"></div>
+            </div>
+            <output class="bg-background/90 motion-safe:animate-pulse px-3 py-1.5 relative rounded text-muted-foreground text-sm">"Preparing chart…"</output>
+          </div>
+        </div>
       </div>
-      <div class="hidden">
+      <div aria-hidden="true" style="display:none">
         <div class="slate-code_line" data-slate-node="element" data-slate-type="code_line" style="position:relative">
           <span data-slate-node="text">
             <span data-slate-class-name="" data-slate-code-syntax="true" data-slate-leaf="true">
@@ -6123,8 +6138,18 @@ exports[`markdown fixtures M16-chart-fences renders through TextEditor 1`] = `
     <div class="codeblock py-1 slate-code_block" data-slate-lang="plotly" data-slate-node="element" data-slate-type="code_block" style="position:relative">
       <div class="group overflow-hidden relative rounded-md">
         <button class="absolute bg-background/95 border border-border focus-visible:opacity-100 group-hover:opacity-100 hover:text-foreground left-2 opacity-0 px-2 py-1 rounded-md text-muted-foreground text-xs top-2 transition-opacity z-10" type="button">"View Source"</button>
+        <div data-fl-chart-pending="true">
+          <div class="bg-muted/10 flex items-center justify-center relative rounded-md" style="height:350px">
+            <div aria-hidden="true" class="absolute border-b border-border/70 border-l bottom-8 inset-x-8 top-10">
+              <div class="absolute border-border/35 border-t inset-x-0 top-1/4"></div>
+              <div class="absolute border-border/35 border-t inset-x-0 top-1/2"></div>
+              <div class="absolute border-border/35 border-t inset-x-0 top-3/4"></div>
+            </div>
+            <output class="bg-background/90 motion-safe:animate-pulse px-3 py-1.5 relative rounded text-muted-foreground text-sm">"Preparing chart…"</output>
+          </div>
+        </div>
       </div>
-      <div class="hidden">
+      <div aria-hidden="true" style="display:none">
         <div class="slate-code_line" data-slate-node="element" data-slate-type="code_line" style="position:relative">
           <span data-slate-node="text">
             <span data-slate-class-name="" data-slate-code-syntax="true" data-slate-leaf="true">
@@ -6180,15 +6205,18 @@ exports[`markdown fixtures M16-chart-fences renders through the minimal kit 1`] 
 {
   "elements": {
     "button": 2,
-    "div": 6,
+    "div": 19,
     "div[code_block]": 2,
     "div[code_line]": 11,
+    "output": 2,
     "span": 44,
   },
   "styles": [
+    "display:none",
+    "height:350px",
     "position:relative",
   ],
-  "text": "View Sourcetype: bartitle: Sales---month,salesJan,1Feb,2View Sourcetype: line---x,y1,22,4",
+  "text": "View SourceSalesPreparing chart…type: bartitle: Sales---month,salesJan,1Feb,2View SourcePreparing chart…type: line---x,y1,22,4",
 }
 `;
 
@@ -12681,7 +12709,7 @@ exports[`markdown fixtures X04-image-urls renders through TextEditor 1`] = `
     <div class="py-2.5 slate-img" data-slate-alt="x" data-slate-node="element" data-slate-type="img" data-slate-url="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9ImFsZXJ0KDEpIi8+" data-slate-void="true" style="position:relative">
       <figure class="group inline-block m-0 relative">
         <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-          <img alt="x" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9ImFsZXJ0KDEpIi8+" />
+          <img alt="x" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9ImFsZXJ0KDEpIi8+" />
           <figcaption class="max-w-full mt-2 mx-auto">"x"</figcaption>
         </div>
       </figure>
@@ -13768,13 +13796,12 @@ aligned, line-height, indented
 `;
 
 exports[`stored Plate JSON fixtures S06-media-nodes renders through the RichText read-only path 1`] = `
-"<link as="image" href="https://example.com/i.png" rel="preload" />
-<div class="[&amp;_code]:wrap-break-word [&amp;_li]:[overflow-wrap:anywhere] [&amp;_p]:[overflow-wrap:anywhere] [&amp;_pre]:overflow-x-auto [&amp;_pre]:whitespace-pre-wrap overflow-hidden">
+"<div class="[&amp;_code]:wrap-break-word [&amp;_li]:[overflow-wrap:anywhere] [&amp;_p]:[overflow-wrap:anywhere] [&amp;_pre]:overflow-x-auto [&amp;_pre]:whitespace-pre-wrap overflow-hidden">
   <div class="[&amp;_h1:first-of-type]:mt-0 [&amp;_h2:first-of-type]:mt-0 [&amp;_h3:first-of-type]:mt-0 [&amp;_h4:first-of-type]:mt-0 [&amp;_h5:first-of-type]:mt-0 [&amp;_h6:first-of-type]:mt-0 py-0 slate-editor" data-slate-editor="true" data-slate-node="value">
     <div class="py-2.5 slate-align-right slate-img" data-slate-align="right" data-slate-node="element" data-slate-type="img" data-slate-url="https://example.com/i.png" data-slate-void="true" data-slate-width="320" style="position:relative;text-align:right">
       <figure class="group inline-block m-0 relative" style="width:320px">
         <div class="max-w-full min-w-[92px] relative" style="text-align:right">
-          <img alt="" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" src="https://example.com/i.png" />
+          <img alt="" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" src="https://example.com/i.png" />
           <figcaption class="max-w-full mt-2 mx-auto">"Image caption"</figcaption>
         </div>
       </figure>
@@ -13789,7 +13816,7 @@ exports[`stored Plate JSON fixtures S06-media-nodes renders through the RichText
     <div class="py-2.5 slate-img" data-slate-alt="Stored image" data-slate-asset-name="AppAnatomy" data-slate-node="element" data-slate-type="img" data-slate-url="storage://apps/app-1/upload/img.png" data-slate-void="true" style="position:relative">
       <figure class="group inline-block m-0 relative">
         <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-          <img alt="Stored image" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" />
+          <img alt="Stored image" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" />
         </div>
       </figure>
       <span data-slate-spacer="true" style="color:transparent;height:0;outline:none;position:absolute">
@@ -14380,8 +14407,7 @@ const a = 1;
 `;
 
 exports[`stored Plate JSON fixtures S09-malicious-stored renders through the RichText read-only path 1`] = `
-"<link as="image" href="javascript:throw new Error(&#x27;React has blocked a javascript: URL as a security precaution.&#x27;)" rel="preload" />
-<div class="[&amp;_code]:wrap-break-word [&amp;_li]:[overflow-wrap:anywhere] [&amp;_p]:[overflow-wrap:anywhere] [&amp;_pre]:overflow-x-auto [&amp;_pre]:whitespace-pre-wrap overflow-hidden">
+"<div class="[&amp;_code]:wrap-break-word [&amp;_li]:[overflow-wrap:anywhere] [&amp;_p]:[overflow-wrap:anywhere] [&amp;_pre]:overflow-x-auto [&amp;_pre]:whitespace-pre-wrap overflow-hidden">
   <div class="[&amp;_h1:first-of-type]:mt-0 [&amp;_h2:first-of-type]:mt-0 [&amp;_h3:first-of-type]:mt-0 [&amp;_h4:first-of-type]:mt-0 [&amp;_h5:first-of-type]:mt-0 [&amp;_h6:first-of-type]:mt-0 py-0 slate-editor" data-slate-editor="true" data-slate-node="value">
     <div class="slate-p" data-slate-node="element" data-slate-type="p" style="position:relative">
       <a class="decoration-primary font-medium slate-a text-primary underline underline-offset-4" data-slate-inline="true" data-slate-node="element" data-slate-type="a" data-slate-url="javascript:window.__xss=1" style="position:relative">
@@ -14404,7 +14430,7 @@ exports[`stored Plate JSON fixtures S09-malicious-stored renders through the Ric
     <div class="py-2.5 slate-img" data-slate-alt="&quot;&gt;&lt;img src=x onerror=window.__xss=4&gt;" data-slate-node="element" data-slate-type="img" data-slate-url="javascript:window.__xss=3" data-slate-void="true" style="position:relative">
       <figure class="group inline-block m-0 relative">
         <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-          <img alt="&quot;&gt;&lt;img src=x onerror=window.__xss=4&gt;" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" src="javascript:throw new Error(&#x27;React has blocked a javascript: URL as a security precaution.&#x27;)" />
+          <img alt="&quot;&gt;&lt;img src=x onerror=window.__xss=4&gt;" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" src="javascript:throw new Error(&#x27;React has blocked a javascript: URL as a security precaution.&#x27;)" />
         </div>
       </figure>
       <span data-slate-spacer="true" style="color:transparent;height:0;outline:none;position:absolute">
@@ -15761,7 +15787,6 @@ exports[`envelopes persisted by Plate 49 L49-static-M12-images keeps its text an
     "figcaption": 6,
     "figure": 6,
     "img": 6,
-    "link": 5,
     "span": 30,
   },
   "styles": [
@@ -15851,15 +15876,18 @@ exports[`envelopes persisted by Plate 49 L49-static-M16-chart-fences keeps its t
 {
   "elements": {
     "button": 2,
-    "div": 6,
+    "div": 19,
     "div[code_block]": 2,
     "div[code_line]": 11,
+    "output": 2,
     "span": 44,
   },
   "styles": [
+    "display:none",
+    "height:350px",
     "position:relative",
   ],
-  "text": "View Sourcetype: bartitle: Sales---month,salesJan,1Feb,2View Sourcetype: line---x,y1,22,4",
+  "text": "View SourceSalesPreparing chart…type: bartitle: Sales---month,salesJan,1Feb,2View SourcePreparing chart…type: line---x,y1,22,4",
 }
 `;
 
@@ -16284,7 +16312,6 @@ exports[`envelopes persisted by Plate 49 L49-editable-M12-images keeps its text 
     "figcaption": 6,
     "figure": 6,
     "img": 6,
-    "link": 5,
     "span": 36,
   },
   "styles": [
@@ -16969,8 +16996,7 @@ exports[`envelopes persisted by Plate 49 R01-cost-table-merged exports to markdo
 `;
 
 exports[`envelopes persisted by Plate 49 R02-columns-image-align renders on the website hero board 1`] = `
-"<link as="image" href="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Rust_programming_language_black_logo.svg/1200px-Rust_programming_language_black_logo.svg.png" rel="preload" />
-<div class="[&amp;_code]:wrap-break-word [&amp;_li]:[overflow-wrap:anywhere] [&amp;_p]:[overflow-wrap:anywhere] [&amp;_pre]:overflow-x-auto [&amp;_pre]:whitespace-pre-wrap overflow-hidden">
+"<div class="[&amp;_code]:wrap-break-word [&amp;_li]:[overflow-wrap:anywhere] [&amp;_p]:[overflow-wrap:anywhere] [&amp;_pre]:overflow-x-auto [&amp;_pre]:whitespace-pre-wrap overflow-hidden">
   <div class="[&amp;_h1:first-of-type]:mt-0 [&amp;_h2:first-of-type]:mt-0 [&amp;_h3:first-of-type]:mt-0 [&amp;_h4:first-of-type]:mt-0 [&amp;_h5:first-of-type]:mt-0 [&amp;_h6:first-of-type]:mt-0 py-0 slate-editor" data-slate-editor="true" data-slate-node="value">
     <div class="slate-p" data-block-id="lMgKd4JjbO" data-slate-id="lMgKd4JjbO" data-slate-node="element" data-slate-type="p" style="position:relative">
       <span data-slate-node="text">
@@ -16994,7 +17020,7 @@ exports[`envelopes persisted by Plate 49 R02-columns-image-align renders on the 
               <div class="py-2.5 slate-img" data-block-id="tCAL1a_1Ct" data-slate-id="tCAL1a_1Ct" data-slate-node="element" data-slate-type="img" data-slate-url="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Rust_programming_language_black_logo.svg/1200px-Rust_programming_language_black_logo.svg.png" data-slate-void="true" data-slate-width="137" style="position:relative">
                 <figure class="group inline-block m-0 relative" style="width:137px">
                   <div class="max-w-full min-w-[92px] relative" style="text-align:center">
-                    <img alt="" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Rust_programming_language_black_logo.svg/1200px-Rust_programming_language_black_logo.svg.png" />
+                    <img alt="" class="cursor-default max-w-full object-cover px-0 rounded-sm w-full" decoding="async" loading="lazy" src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Rust_programming_language_black_logo.svg/1200px-Rust_programming_language_black_logo.svg.png" />
                   </div>
                 </figure>
                 <span data-slate-spacer="true" style="color:transparent;height:0;outline:none;position:absolute">

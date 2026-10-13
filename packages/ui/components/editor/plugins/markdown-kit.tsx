@@ -9,16 +9,17 @@ import { KEYS, TextApi, type Value } from "platejs";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 
-import { deserializeMdKeepingCode } from "./markdown-code-guard";
 import { editorialMediaMarkdown } from "./editorial-media-markdown";
+import { deserializeMdKeepingCode } from "./markdown-code-guard";
 import { withoutUnsafeUrls } from "./safe-url-kit";
+import { tableMarkdown } from "./table-markdown";
 
 export const MarkdownKit = [
 	MarkdownPlugin.configure({
 		options: {
 			disallowedNodes: [KEYS.suggestion],
 			plainMarks: [KEYS.comment],
-			rules: editorialMediaMarkdown,
+			rules: { ...editorialMediaMarkdown, ...tableMarkdown },
 			remarkPlugins: [
 				[
 					remarkMath,

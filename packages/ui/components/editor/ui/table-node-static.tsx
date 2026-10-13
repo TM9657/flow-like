@@ -1,14 +1,25 @@
 "use client";
 import type * as React from "react";
 
-import type { TTableCellElement, TTableElement } from "platejs";
+import {
+	type Descendant,
+	ElementApi,
+	type TTableCellElement,
+	type TTableElement,
+} from "platejs";
 import type { SlateElementProps } from "platejs/static";
 
 import { BaseTablePlugin } from "@platejs/table";
-import { SlateElement } from "platejs/static";
+import {
+	ElementStatic,
+	LeafStatic,
+	SlateElement,
+	pipeDecorate,
+} from "platejs/static";
 
 import { cn } from "../../../lib/utils";
-import { TableViewer } from "./table-viewer";
+import { useRendererPresentation } from "../renderer-presentation";
+import { TableViewer, type TableViewerCell } from "./table-viewer";
 
 const childrenOf = (node: unknown): readonly unknown[] => {
 	const children = (node as { children?: unknown } | null)?.children;
@@ -26,13 +37,64 @@ function extractTableDataStatic(element: TTableElement): string[][] {
 	return childrenOf(element).map((row) => childrenOf(row).map(textOf));
 }
 
+function alignmentOf(node: unknown): TableViewerCell["align"] {
+	const alignment = (node as { align?: unknown } | null)?.align;
+	if (
+		alignment === "left" ||
+		alignment === "center" ||
+		alignment === "right" ||
+		alignment === "justify"
+	)
+		return alignment;
+	return childrenOf(node).map(alignmentOf).find(Boolean);
+}
+
 export function TableElementStatic({
 	children,
 	...props
 }: SlateElementProps<TTableElement>) {
+	const presentation = useRendererPresentation();
+	const isChat = presentation === "chat" || presentation === "chat-compact";
 	const { disableMarginLeft } = props.editor.getOptions(BaseTablePlugin);
 	const marginLeft = disableMarginLeft ? 0 : props.element.marginLeft;
 	const tableData = extractTableDataStatic(props.element);
+	const decorate = pipeDecorate(props.editor) ?? (() => []);
+	// Render the original nodes at their original paths. Sorting only changes where
+	// their React elements appear, so links, marks and plugin rendering survive.
+	const richCells = isChat
+		? childrenOf(props.element).map((row, rowIndex) =>
+				childrenOf(row).map(
+					(cell, columnIndex): TableViewerCell => ({
+						align: alignmentOf(cell),
+						content: childrenOf(cell).map((child, childIndex) => {
+							const node = child as Descendant;
+							const path = [...props.path, rowIndex, columnIndex, childIndex];
+							const decorations = props.editor.api.range(path)
+								? (decorate([node, path]) ?? [])
+								: [];
+							return ElementApi.isElement(node) ? (
+								<ElementStatic
+									key={path.join(".")}
+									editor={props.editor}
+									element={node}
+									path={path}
+									decorate={decorate}
+									decorations={decorations}
+								/>
+							) : (
+								<LeafStatic
+									key={path.join(".")}
+									editor={props.editor}
+									text={node}
+									path={path}
+									decorations={decorations}
+								/>
+							);
+						}),
+					}),
+				),
+			)
+		: undefined;
 
 	return (
 		<SlateElement
@@ -40,7 +102,13 @@ export function TableElementStatic({
 			className="py-3"
 			style={{ paddingLeft: marginLeft }}
 		>
-			<TableViewer data={tableData}>{children}</TableViewer>
+			<TableViewer
+				data={tableData}
+				appearance={isChat ? "chat" : "default"}
+				richCells={richCells}
+			>
+				{children}
+			</TableViewer>
 		</SlateElement>
 	);
 }

@@ -358,7 +358,10 @@ function NivoChartPreview({ input, height = 350 }: NivoChartPreviewProps) {
 	return (
 		<div className="w-full">
 			{title ? (
-				<div className="px-1 pb-2 text-center text-sm font-medium text-foreground">
+				<div
+					data-slot="chart-title"
+					className="px-1 pb-2 text-center text-sm font-medium text-foreground"
+				>
 					{title}
 				</div>
 			) : null}

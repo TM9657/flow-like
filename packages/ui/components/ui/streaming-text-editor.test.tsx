@@ -259,8 +259,7 @@ describe("streaming render matches the settled render", () => {
 	}
 
 	test("void nodes keep the attribute chat styling depends on", () => {
-		// global.css de-serifs embedded widgets through [data-fl-chat-prose]
-		// [data-slate-void], so the renderer swap must keep emitting it.
+		// Chat typography targets embedded widgets through [data-slate-void].
 		const html = renderToStaticMarkup(
 			createElement(StreamingTextEditor, {
 				content: "![alt](https://example.com/x.png)",

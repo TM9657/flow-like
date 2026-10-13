@@ -3,6 +3,7 @@
 import {
 	DndContext,
 	type DragEndEvent,
+	KeyboardSensor,
 	PointerSensor,
 	closestCenter,
 	useSensor,
@@ -12,6 +13,7 @@ import {
 	SortableContext,
 	arrayMove,
 	horizontalListSortingStrategy,
+	sortableKeyboardCoordinates,
 	useSortable,
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -50,8 +52,16 @@ import {
 
 interface TableViewerProps {
 	data: string[][];
-	children: React.ReactNode;
+	children?: React.ReactNode;
 	className?: string;
+	appearance?: "default" | "chat";
+	/** Cell content keeps its original row index when the text data is sorted. */
+	richCells?: readonly (readonly TableViewerCell[])[];
+}
+
+export interface TableViewerCell {
+	content: React.ReactNode;
+	align?: "left" | "center" | "right" | "justify";
 }
 
 type SortDirection = "asc" | "desc" | null;
@@ -267,12 +277,18 @@ function SortableHeaderCell({
 	sortColumn,
 	sortDirection,
 	onSort,
+	appearance = "default",
+	cell,
+	align,
 }: {
 	colIdx: number;
 	header: string;
 	sortColumn: number | null;
 	sortDirection: SortDirection;
 	onSort: (colIdx: number) => void;
+	appearance?: "default" | "chat";
+	cell?: TableViewerCell;
+	align?: TableViewerCell["align"];
 }) {
 	const { t } = useTranslation("common");
 	const {
@@ -289,7 +305,78 @@ function SortableHeaderCell({
 	const style: React.CSSProperties = {
 		transform: transform ? CSS.Transform.toString(transform) : undefined,
 		transition,
+		textAlign: align,
 	};
+	const label = header || t("columnVal", "Column {{val}}", { val: colIdx + 1 });
+	const activeDirection = sortColumn === colIdx ? sortDirection : null;
+
+	if (appearance === "chat") {
+		return (
+			<th
+				ref={setNodeRef}
+				style={style}
+				scope="col"
+				aria-sort={
+					activeDirection === "asc"
+						? "ascending"
+						: activeDirection === "desc"
+							? "descending"
+							: "none"
+				}
+				data-slot="table-header-cell"
+				className={cn(
+					"group/header px-3 py-2.5 align-bottom font-semibold",
+					isDragging && "opacity-50",
+				)}
+			>
+				<div
+					className={cn(
+						"flex items-center gap-1",
+						align === "right" && "justify-end",
+						align === "center" && "justify-center",
+					)}
+				>
+					<button
+						type="button"
+						{...attributes}
+						{...listeners}
+						aria-label={`Reorder ${label} column`}
+						className={cn(
+							"shrink-0 cursor-grab rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/header:opacity-100 group-focus-within/header:opacity-100 focus-visible:outline-2 focus-visible:outline-ring [@media(hover:none)]:opacity-60",
+							align === "right" ? "order-1" : "order-3",
+						)}
+					>
+						<GripVerticalIcon className="size-3" />
+					</button>
+					<div
+						data-slot="table-cell-content"
+						className={cn("min-w-0", align === "right" ? "order-3" : "order-1")}
+					>
+						{cell?.content ?? label}
+					</div>
+					<button
+						type="button"
+						aria-label={`Sort by ${label}`}
+						onClick={() => onSort(colIdx)}
+						className={cn(
+							"order-2 shrink-0 rounded p-0.5 text-muted-foreground transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring",
+							activeDirection
+								? "opacity-100"
+								: "opacity-0 group-hover/header:opacity-100 group-focus-within/header:opacity-100 [@media(hover:none)]:opacity-60",
+						)}
+					>
+						{activeDirection === "asc" ? (
+							<ArrowUpIcon className="size-3" />
+						) : activeDirection === "desc" ? (
+							<ArrowDownIcon className="size-3" />
+						) : (
+							<ArrowUpDownIcon className="size-3" />
+						)}
+					</button>
+				</div>
+			</th>
+		);
+	}
 
 	return (
 		<th
@@ -331,8 +418,15 @@ function SortableHeaderCell({
 	);
 }
 
-export function TableViewer({ data, children, className }: TableViewerProps) {
+export function TableViewer({
+	data,
+	children,
+	className,
+	appearance = "default",
+	richCells,
+}: TableViewerProps) {
 	const { t } = useTranslation("common");
+	const isChat = appearance === "chat";
 	const [copied, setCopied] = React.useState(false);
 	const [searchQuery, setSearchQuery] = React.useState("");
 	const [sortColumn, setSortColumn] = React.useState<number | null>(null);
@@ -341,7 +435,7 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 	const [showFilters, setShowFilters] = React.useState(false);
 	const [showColumns, setShowColumns] = React.useState(false);
 	const [isExpanded, setIsExpanded] = React.useState(false);
-	const [wrapCells, setWrapCells] = React.useState(false);
+	const [wrapCells, setWrapCells] = React.useState(isChat);
 	const [expandedCells, setExpandedCells] = React.useState<Set<string>>(
 		() => new Set(),
 	);
@@ -349,6 +443,20 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 	const hasHeader = data.length > 0;
 	const headers = hasHeader ? data[0] : [];
 	const rows = hasHeader ? data.slice(1) : [];
+	const sourceRowIndexes = new Map(data.map((row, index) => [row, index]));
+	const numericColumns = headers.map((_, column) => {
+		const values = rows
+			.map((row) => row[column]?.trim())
+			.filter((value): value is string => Boolean(value));
+		return (
+			values.length > 0 &&
+			values.every((value) =>
+				/^(?:[€$£¥]\s*)?[-+−]?\d[\d\s.,'’]*(?:\s*(?:%|€|\$|£|¥|EUR|USD|GBP))?$/.test(
+					value,
+				),
+			)
+		);
+	});
 
 	// Column order and visibility state
 	const [columnOrder, setColumnOrder] = React.useState<number[]>(() =>
@@ -364,6 +472,9 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 			activationConstraint: {
 				distance: 5,
 			},
+		}),
+		useSensor(KeyboardSensor, {
+			coordinateGetter: sortableKeyboardCoordinates,
 		}),
 	);
 
@@ -584,20 +695,43 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 
 	const resultCount = sortedRows.length;
 	const totalCount = rows.length;
+	const displayedRows =
+		isChat && !isExpanded ? sortedRows.slice(0, 10) : sortedRows;
 
 	return (
-		<div className={cn("group/table relative", className)}>
+		<div
+			className={cn(
+				"group/table relative",
+				isChat && "min-w-0 font-sans",
+				className,
+			)}
+			data-fl-table-appearance={isChat ? "chat" : undefined}
+			data-table-wrap={isChat ? wrapCells : undefined}
+		>
 			{/* Toolbar */}
-			<div className="flex items-center gap-1 mb-2 flex-wrap opacity-0 transition-opacity group-hover/table:opacity-100 focus-within:opacity-100">
+			<div
+				data-slot={isChat ? "table-toolbar" : undefined}
+				className={cn(
+					"flex items-center gap-1 mb-2 flex-wrap",
+					isChat
+						? "font-sans text-muted-foreground"
+						: "opacity-0 transition-opacity group-hover/table:opacity-100 focus-within:opacity-100",
+				)}
+			>
 				{/* Search */}
 				<div className="relative">
 					<SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
 					<Input
 						type="text"
 						placeholder="Search..."
+						aria-label={isChat ? t("searchTable", "Search table") : undefined}
 						value={searchQuery}
 						onChange={(e) => setSearchQuery(e.target.value)}
-						className="h-7 w-40 pl-7 text-xs"
+						className={cn(
+							"h-7 w-40 pl-7 text-xs",
+							isChat &&
+								"w-32 border-transparent bg-muted/35 shadow-none focus-visible:border-input",
+						)}
 					/>
 				</div>
 
@@ -631,6 +765,11 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 									<Input
 										type="text"
 										placeholder="Contains..."
+										aria-label={
+											isChat
+												? `Filter ${header || `column ${idx + 1}`}`
+												: undefined
+										}
 										value={
 											columnFilters.find((f) => f.column === idx)?.value || ""
 										}
@@ -709,15 +848,20 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 							size="sm"
 							className="h-7 px-2 text-xs"
 							onClick={() => setWrapCells((prev) => !prev)}
+							aria-pressed={isChat ? wrapCells : undefined}
 						>
 							<WrapTextIcon className="h-3 w-3 mr-1" />
 							{t("wrap", "Wrap")}
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent side="top">
-						{wrapCells
-							? t("truncateLongCells", "Truncate long cells")
-							: t("showFullTextInEveryCell", "Show full text in every cell")}
+						{isChat
+							? wrapCells
+								? t("keepCellTextOnOneLine", "Keep cell text on one line")
+								: t("wrapCellText", "Wrap cell text")
+							: wrapCells
+								? t("truncateLongCells", "Truncate long cells")
+								: t("showFullTextInEveryCell", "Show full text in every cell")}
 					</TooltipContent>
 				</Tooltip>
 
@@ -755,6 +899,9 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 							size="icon"
 							className="h-7 w-7"
 							onClick={() => handleCopy("markdown")}
+							aria-label={
+								isChat ? t("copyAsMarkdown", "Copy as Markdown") : undefined
+							}
 						>
 							{copied ? (
 								<CheckIcon className="h-3.5 w-3.5 text-green-500" />
@@ -776,6 +923,7 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 							size="icon"
 							className="h-7 w-7"
 							onClick={handleDownload}
+							aria-label={isChat ? t("downloadCsv", "Download CSV") : undefined}
 						>
 							<DownloadIcon className="h-3.5 w-3.5" />
 						</Button>
@@ -788,9 +936,15 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 
 			{/* Table container with scroll and max height */}
 			<div
+				data-slot={isChat ? "table-scroll" : undefined}
+				role={isChat ? "region" : undefined}
+				tabIndex={isChat ? 0 : undefined}
+				aria-label={isChat ? t("tableData", "Table data") : undefined}
 				className={cn(
-					"overflow-auto border border-border rounded-md",
-					isExpanded ? "max-h-[70vh]" : "max-h-[400px]",
+					isChat
+						? "max-w-full overflow-x-auto"
+						: "overflow-auto border border-border rounded-md",
+					!isChat && (isExpanded ? "max-h-[70vh]" : "max-h-[400px]"),
 				)}
 			>
 				<DndContext
@@ -798,10 +952,21 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 					collisionDetection={closestCenter}
 					onDragEnd={handleHeaderDragEnd}
 				>
-					<table className="w-full text-sm border-collapse">
+					<table
+						className={cn(
+							"w-full text-sm border-collapse",
+							isChat && "m-0 table-auto",
+						)}
+					>
 						{/* Sticky header */}
 						{hasHeader && (
-							<thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm border-b border-border">
+							<thead
+								className={
+									isChat
+										? "border-b border-border/60 bg-transparent"
+										: "sticky top-0 z-10 bg-muted/80 backdrop-blur-sm border-b border-border"
+								}
+							>
 								<SortableContext
 									items={visibleColumnIds}
 									strategy={horizontalListSortingStrategy}
@@ -815,6 +980,14 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 												sortColumn={sortColumn}
 												sortDirection={sortDirection}
 												onSort={handleColumnSort}
+												appearance={appearance}
+												cell={richCells?.[0]?.[colIdx]}
+												align={
+													isChat
+														? (richCells?.[0]?.[colIdx]?.align ??
+															(numericColumns[colIdx] ? "right" : "left"))
+														: undefined
+												}
 											/>
 										))}
 									</tr>
@@ -834,16 +1007,48 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 									</td>
 								</tr>
 							) : (
-								sortedRows.map((row, rowIdx) => (
+								displayedRows.map((row, rowIdx) => (
 									<tr
-										key={rowIdx}
+										key={sourceRowIndexes.get(row)}
 										className={cn(
 											"border-b border-border/50 last:border-0",
-											rowIdx % 2 === 1 && "bg-muted/30",
+											!isChat && rowIdx % 2 === 1 && "bg-muted/30",
 										)}
 									>
 										{visibleColumns.map((colIdx) => {
 											const cell = row[colIdx] || "";
+											const richCell =
+												richCells?.[sourceRowIndexes.get(row) ?? 0]?.[colIdx];
+											if (isChat) {
+												const alignment =
+													richCell?.align ??
+													richCells?.[0]?.[colIdx]?.align ??
+													(numericColumns[colIdx] ? "right" : "left");
+												return (
+													<td
+														key={colIdx}
+														data-slot="table-cell"
+														data-numeric={numericColumns[colIdx] || undefined}
+														className={cn(
+															"min-w-0 px-3 py-2.5 align-top",
+															wrapCells && "max-w-[32rem]",
+														)}
+														style={{ textAlign: alignment }}
+													>
+														<div
+															data-slot="table-cell-content"
+															className={cn(
+																"leading-relaxed",
+																wrapCells
+																	? "whitespace-normal break-words"
+																	: "whitespace-nowrap [&>*]:whitespace-nowrap",
+															)}
+														>
+															{richCell?.content ?? cell}
+														</div>
+													</td>
+												);
+											}
 											const hasMarkdownContent =
 												cell.includes("![") || cell.includes("](");
 											const isLongText =
@@ -912,16 +1117,17 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 			</div>
 
 			{/* Expand/collapse for large tables */}
-			{rows.length > 10 && (
+			{(isChat ? sortedRows.length : rows.length) > 10 && (
 				<button
 					type="button"
+					aria-expanded={isChat ? isExpanded : undefined}
 					onClick={() => setIsExpanded(!isExpanded)}
 					className="w-full mt-1 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
 				>
 					{isExpanded
 						? "Show less"
 						: t("showMoreLengthRows", "Show more ({{length}} rows)", {
-								length: rows.length,
+								length: isChat ? sortedRows.length : rows.length,
 							})}
 				</button>
 			)}
@@ -929,9 +1135,11 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 			{/* Hidden children for Slate to track elements. Inline style, not a
 			    utility class: descendant rules like `[&_table]:block` outrank
 			    `.hidden` and would render this tracking table as a duplicate. */}
-			<table style={{ display: "none" }} aria-hidden="true">
-				<tbody>{children}</tbody>
-			</table>
+			{!richCells && (
+				<table style={{ display: "none" }} aria-hidden="true">
+					<tbody>{children}</tbody>
+				</table>
+			)}
 		</div>
 	);
 }

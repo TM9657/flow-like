@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de" class="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Chat rendering preview</title>
+	</head>
+	<body>
+		<div id="root">Loading chat preview…</div>
+		<script>
+			const showPreviewError = (error) => {
+				const output = document.createElement("pre");
+				output.style.cssText = "white-space:pre-wrap;padding:24px;color:#ffd0cc;background:#261516;font:14px/1.5 monospace";
+				output.textContent = String(error?.stack || error?.message || error);
+				document.body.append(output);
+			};
+			window.addEventListener("error", (event) => showPreviewError(event.error || event.message));
+			window.addEventListener("unhandledrejection", (event) => showPreviewError(event.reason));
+		</script>
+		<script>window.process = { env: { NODE_ENV: "development" }, version: "", versions: {}, platform: "browser" };</script>
+		<script type="module" src="/main.tsx"></script>
+	</body>
+</html>

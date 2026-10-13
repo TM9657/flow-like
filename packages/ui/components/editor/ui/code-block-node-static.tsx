@@ -13,6 +13,9 @@ import { Suspense, lazy } from "react";
 import * as React from "react";
 import { Button } from "../../..";
 import { ChartCodeBlock } from "./chart-code-block";
+import { useIsStreamingMarkdown } from "../renderer-presentation";
+import { RichMediaCodeBlock } from "./rich-media-code-block";
+import { isRichMediaLanguage } from "./rich-media-data";
 
 const AdmonitionBlock = lazy(() => import("./admonition-block"));
 const SpoilerBlock = lazy(() => import("./spoiler-block"));
@@ -38,7 +41,22 @@ export function CodeBlockElementStatic(
 	props: SlateElementProps<TCodeBlockElement>,
 ) {
 	const lang = props.element.lang;
+	const isStreaming = useIsStreamingMarkdown();
 	const content = getCodeBlockText(props.element);
+	if (isRichMediaLanguage(lang)) {
+		return (
+			<SlateElement className="py-1" {...props}>
+				<RichMediaCodeBlock
+					content={content}
+					language={lang}
+					isStreaming={isStreaming}
+				/>
+				<div style={{ display: "none" }} aria-hidden="true">
+					{props.children}
+				</div>
+			</SlateElement>
+		);
+	}
 
 	// Render chart for nivo/plotly languages
 	if (isChartLanguage(lang)) {
@@ -47,10 +65,13 @@ export function CodeBlockElementStatic(
 				<ChartCodeBlock
 					content={content}
 					language={lang}
+					isStreaming={isStreaming}
 					className="rounded-md overflow-hidden"
 				/>
 				{/* Hidden children for Slate structure */}
-				<div className="hidden">{props.children}</div>
+				<div style={{ display: "none" }} aria-hidden="true">
+					{props.children}
+				</div>
 			</SlateElement>
 		);
 	}

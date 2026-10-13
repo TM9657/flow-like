@@ -833,11 +833,15 @@ export const MessageComponent = memo(
 											/>
 										) : loading && index === lastTextSegmentIndex ? (
 											<div key={segment.key} data-fl-chat-prose>
-												<StreamingTextEditor content={segment.text ?? ""} />
+												<StreamingTextEditor
+													presentation="chat"
+													content={segment.text ?? ""}
+												/>
 											</div>
 										) : (
 											<div key={segment.key} data-fl-chat-prose>
 												<TextEditor
+													presentation="chat"
 													initialContent={segment.text ?? ""}
 													isMarkdown={true}
 													editable={false}
@@ -854,7 +858,10 @@ export const MessageComponent = memo(
 								<ThinkingIndicator />
 							) : loading && !isUser && messageContent.text !== "" ? (
 								<div data-fl-chat-prose>
-									<StreamingTextEditor content={messageContent.text} />
+									<StreamingTextEditor
+										presentation="chat"
+										content={messageContent.text}
+									/>
 								</div>
 							) : isUser ? (
 								<TextEditor
@@ -865,6 +872,7 @@ export const MessageComponent = memo(
 							) : (
 								<div data-fl-chat-prose>
 									<TextEditor
+										presentation="chat"
 										initialContent={messageContent.text}
 										isMarkdown={true}
 										editable={false}

@@ -1,5 +1,6 @@
-import { defaultRules, parseAttributes, type MdRules } from "@platejs/markdown";
+import { type MdRules, defaultRules, parseAttributes } from "@platejs/markdown";
 import { NodeApi } from "platejs";
+import { safeStreamingImageUrl } from "../streaming-editorial-image";
 
 /** Plain Markdown images stay portable; editorial metadata uses an inert MDX image tag. */
 export const editorialMediaMarkdown: MdRules = {
@@ -9,10 +10,32 @@ export const editorialMediaMarkdown: MdRules = {
 			const attributes = node.attributes
 				? parseAttributes(node.attributes)
 				: {};
+			const pending =
+				attributes.streamingPending === true ||
+				attributes.streamingPending === "true";
+			if (pending) {
+				// MDX attributes are text; parseAttributes otherwise coerces strings
+				// such as alt="123" into JSON scalars.
+				for (const attribute of node.attributes ?? [])
+					if (typeof attribute.value === "string")
+						attributes[attribute.name] = attribute.value;
+			}
 			const { focalX, focalY, caption, rightsExpiresAt, ...rest } = attributes;
+			const pendingUrl = pending
+				? safeStreamingImageUrl(attributes.src)
+				: undefined;
 			return {
 				...parsed,
 				...rest,
+				...(pending
+					? {
+							url: pendingUrl,
+							streamingPending:
+								pendingUrl && typeof attributes.alt === "string"
+									? "ready"
+									: "loading",
+						}
+					: {}),
 				...(rightsExpiresAt !== undefined
 					? { rightsExpiresAt: Number(rightsExpiresAt) }
 					: {}),
@@ -22,7 +45,16 @@ export const editorialMediaMarkdown: MdRules = {
 						: (node.alt ?? ""),
 				...(typeof caption === "string"
 					? { caption: [{ text: caption }] }
-					: {}),
+					: pending
+						? {
+								caption: [
+									{
+										text:
+											typeof attributes.alt === "string" ? attributes.alt : "",
+									},
+								],
+							}
+						: {}),
 				...(focalX !== undefined && focalY !== undefined
 					? { focalPoint: { x: Number(focalX), y: Number(focalY) } }
 					: {}),
