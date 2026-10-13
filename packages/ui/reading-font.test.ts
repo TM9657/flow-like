@@ -11,14 +11,13 @@ const HOST_LAYOUTS = [
 	"apps/standalone/frontend/app/layout.tsx",
 ];
 
-describe("the reading serif", () => {
-	test("the answer font asks for --font-reading and keeps the family name and a serif stack as its fallback", () => {
+describe("chat and long-form reading fonts", () => {
+	test("chat answers use the theme's sans-serif family", () => {
 		const declaration =
 			/--fl-chat-prose-font:\s*([^;]+);/.exec(
 				read("packages/ui/global.css"),
 			)?.[1] ?? "";
-		expect(declaration).toMatch(/^var\(--font-reading,\s*"Source Serif 4"\)/);
-		expect(declaration).toMatch(/Georgia,\s*ui-serif,\s*serif\s*$/);
+		expect(declaration).toBe("var(--font-sans)");
 	});
 
 	for (const layout of HOST_LAYOUTS) {

@@ -1,0 +1,252 @@
+/* Chat presentation is shared by live and completed Markdown renderers. */
+[data-fl-renderer] {
+	min-width: 0;
+	width: 100%;
+	font-family: var(--fl-chat-prose-font, var(--font-sans));
+	font-size: var(--fl-chat-prose-size, 1rem);
+	line-height: var(--fl-chat-prose-leading, 1.65);
+	letter-spacing: -0.011em;
+	color: var(--foreground);
+}
+
+[data-fl-renderer="chat-compact"] {
+	--fl-chat-prose-size: 0.875rem;
+	--fl-chat-prose-leading: 1.6;
+}
+
+[data-fl-renderer] .slate-p {
+	margin: 0 0 1em;
+	padding: 0;
+	overflow-wrap: anywhere;
+}
+
+[data-fl-renderer]
+	.slate-editor
+	> :is(.slate-p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol) {
+	max-width: var(--fl-chat-measure, 42rem);
+}
+
+[data-fl-renderer] :is(h1, h2, h3, h4, h5, h6) {
+	margin: 1.6em 0 0.6em;
+	padding: 0;
+	font-family: inherit;
+	font-weight: 600;
+	line-height: 1.35;
+	letter-spacing: -0.022em;
+	text-wrap: pretty;
+}
+
+[data-fl-renderer] h1 {
+	font-size: 1.5em;
+}
+[data-fl-renderer] h2 {
+	font-size: 1.25em;
+}
+[data-fl-renderer] h3 {
+	font-size: 1.125em;
+}
+[data-fl-renderer] :is(h4, h5, h6) {
+	font-size: 1em;
+}
+
+[data-fl-renderer] .slate-editor > :first-child {
+	margin-top: 0;
+}
+
+[data-fl-renderer] .slate-editor > :last-child {
+	margin-bottom: 0;
+}
+
+[data-fl-renderer] strong {
+	font-weight: 600;
+}
+
+/* Plate represents each list item as a block with its own list wrapper. */
+[data-fl-renderer] .slate-p[data-slate-list-style-type] {
+	margin-bottom: 0.4em;
+}
+
+[data-fl-renderer]
+	[data-slate-list-style-type]
+	+ :not([data-slate-list-style-type]) {
+	margin-top: 1em;
+}
+
+[data-fl-renderer] li::marker {
+	color: var(--muted-foreground);
+}
+
+[data-fl-renderer] blockquote {
+	margin: 1.25em 0;
+	border-left: 3px solid var(--border);
+	padding: 0.1em 0 0.1em 1em;
+	color: var(--muted-foreground);
+	font-style: normal;
+}
+
+[data-fl-renderer] blockquote .slate-p:last-child {
+	margin-bottom: 0;
+}
+
+[data-fl-renderer] .slate-hr > div {
+	padding: 1.75em 0;
+}
+
+[data-fl-renderer] hr {
+	height: 1px;
+	margin: 0;
+	border-color: var(--border);
+}
+
+[data-fl-renderer] a {
+	overflow-wrap: anywhere;
+	font-weight: inherit;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+	text-decoration-color: color-mix(in oklch, currentColor 45%, transparent);
+}
+
+[data-fl-renderer] a:hover {
+	text-decoration-color: currentColor;
+}
+
+[data-fl-renderer]
+	:is(a, button, input, [data-slot="table-scroll"]):focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 3px;
+}
+
+[data-fl-renderer] :is(code, pre, kbd, samp) {
+	font-family: var(--font-mono);
+	letter-spacing: 0;
+}
+
+[data-fl-renderer] code {
+	border: 0;
+	border-radius: 4px;
+	padding: 0.12em 0.3em;
+	background: var(--muted);
+	font-size: 0.875em;
+	font-weight: 400;
+}
+
+[data-fl-renderer] .codeblock {
+	margin: 1.25em 0;
+	padding: 0;
+}
+
+[data-fl-renderer] pre {
+	margin: 0;
+	padding: 1.1rem 1.25rem;
+	font-size: 0.875em;
+	line-height: 1.65;
+	white-space: pre;
+	overflow-x: auto;
+	tab-size: 2;
+}
+
+[data-fl-renderer] pre code {
+	padding: 0;
+	background: transparent;
+	font-size: inherit;
+	white-space: inherit;
+	overflow-wrap: normal;
+	word-break: normal;
+}
+
+[data-fl-renderer] :is([data-slate-void], figure) {
+	font-family: var(--font-sans);
+	font-size: 0.875rem;
+	line-height: 1.5;
+}
+
+[data-fl-renderer] .slate-table {
+	max-width: 100%;
+	margin: 1.4em 0;
+	padding: 0;
+}
+
+[data-fl-table-appearance="chat"] {
+	font-family: var(--font-sans);
+	font-size: 0.875rem;
+	line-height: 1.55;
+	letter-spacing: -0.008em;
+}
+
+[data-fl-table-appearance="chat"] table {
+	width: 100%;
+	margin: 0;
+	border-collapse: collapse;
+	font-size: inherit;
+	line-height: inherit;
+}
+
+[data-fl-table-appearance="chat"] :is(thead, tbody, tr, th, td) {
+	background: transparent;
+}
+
+[data-fl-table-appearance="chat"] :is(th, td) {
+	border: 0;
+	border-bottom: 1px solid var(--fl-chat-rule, var(--border));
+	padding: 0.7rem 0.75rem;
+	font-size: inherit;
+	line-height: inherit;
+	vertical-align: top;
+}
+
+[data-fl-table-appearance="chat"] th {
+	min-width: 7rem;
+	border-bottom-color: var(--border);
+	font-weight: 600;
+}
+
+[data-fl-table-appearance="chat"] td {
+	min-width: 8.5rem;
+}
+
+[data-fl-table-appearance="chat"] td[data-numeric] {
+	min-width: 6rem;
+	font-variant-numeric: tabular-nums;
+}
+
+[data-fl-table-appearance="chat"] th [data-slot="table-cell-content"] {
+	min-width: min-content;
+}
+
+[data-fl-table-appearance="chat"] :is(th, td):first-child {
+	padding-left: 0;
+}
+[data-fl-table-appearance="chat"] :is(th, td):last-child {
+	padding-right: 0;
+}
+[data-fl-table-appearance="chat"] tbody tr:last-child td {
+	border-bottom: 0;
+}
+
+[data-fl-table-appearance="chat"] .slate-p {
+	max-width: none;
+	margin: 0;
+	padding: 0;
+	font-size: inherit;
+	line-height: inherit;
+	overflow-wrap: break-word;
+}
+
+[data-fl-table-appearance="chat"] [data-slot="table-scroll"],
+[data-fl-renderer] pre {
+	--fl-scrollbar-accent: var(--muted-foreground);
+	--fl-scrollbar-thumb: color-mix(
+		in oklch,
+		var(--muted-foreground) 40%,
+		transparent
+	);
+	--fl-scrollbar-tip: var(--fl-scrollbar-thumb);
+	scrollbar-width: thin;
+	scrollbar-color: var(--fl-scrollbar-thumb) transparent;
+}
+
+@media (max-width: 480px) {
+	[data-fl-table-appearance="chat"] :is(th, td) {
+		padding: 0.65rem 0.6rem;
+	}
+}

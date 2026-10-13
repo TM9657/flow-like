@@ -27,6 +27,10 @@ import { FootnoteScope } from "../editor/footnote-context";
 import { AIUsageAppContext } from "../editor/ai-usage-context";
 import { BaseEditorKit } from "../editor/editor-base-kit";
 import {
+	RendererPresentationContext,
+	type RendererPresentation,
+} from "../editor/renderer-presentation";
+import {
 	type MentionItem,
 	MentionItemsProvider,
 } from "../editor/mention-items-context";
@@ -557,12 +561,14 @@ function TextEditorStatic({
 	initialContent,
 	isMarkdown,
 	minimal = false,
+	presentation = "default",
 	onFocusNode,
 	onUserMention,
 }: Readonly<{
 	initialContent: string;
 	isMarkdown?: boolean;
 	minimal?: boolean;
+	presentation?: RendererPresentation;
 	onFocusNode?: (nodeId: string) => void;
 	onUserMention?: (sub: string) => void;
 }>) {
@@ -599,16 +605,22 @@ function TextEditorStatic({
 	const isLongDocument = value.length > WINDOWING_BLOCK_THRESHOLD;
 
 	return (
-		<div
-			{...createStaticProseHandlers({ onFocusNode, onUserMention })}
-			className={PROSE_WRAPPER_CLASSNAME}
-		>
-			{isLongDocument ? (
-				<LazyPlateStatic editor={editor} className={STATIC_EDITOR_CLASSNAME} />
-			) : (
-				<PlateStatic editor={editor} className={STATIC_EDITOR_CLASSNAME} />
-			)}
-		</div>
+		<RendererPresentationContext.Provider value={presentation}>
+			<div
+				{...createStaticProseHandlers({ onFocusNode, onUserMention })}
+				className={PROSE_WRAPPER_CLASSNAME}
+				data-fl-renderer={presentation === "default" ? undefined : presentation}
+			>
+				{isLongDocument ? (
+					<LazyPlateStatic
+						editor={editor}
+						className={STATIC_EDITOR_CLASSNAME}
+					/>
+				) : (
+					<PlateStatic editor={editor} className={STATIC_EDITOR_CLASSNAME} />
+				)}
+			</div>
+		</RendererPresentationContext.Provider>
 	);
 }
 
@@ -626,6 +638,7 @@ export type TextEditorProps = {
 	isMarkdown?: boolean;
 	editable?: boolean;
 	minimal?: boolean;
+	presentation?: RendererPresentation;
 	onFocusNode?: (nodeId: string) => void;
 	onUserMention?: (sub: string) => void;
 	mentionItems?: ReadonlyArray<MentionItem>;
@@ -648,6 +661,7 @@ export const TextEditor = memo(function TextEditor({
 	isMarkdown,
 	editable = false,
 	minimal = false,
+	presentation = "default",
 	onFocusNode,
 	onUserMention,
 	mentionItems,
@@ -715,6 +729,7 @@ export const TextEditor = memo(function TextEditor({
 			initialContent={initialContent}
 			isMarkdown={isMarkdown}
 			minimal={minimal}
+			presentation={presentation}
 			onFocusNode={onFocusNode}
 			onUserMention={onUserMention}
 		/>

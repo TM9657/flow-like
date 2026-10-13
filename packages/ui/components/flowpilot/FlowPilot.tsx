@@ -5450,9 +5450,7 @@ const MessageBubble = memo(function MessageBubble({
 						/>
 					)}
 
-				{/* Content. While this bubble is actively streaming, render plain text
-				    to avoid re-parsing the full markdown/Slate document on every 100ms
-				    flush; the formatted markdown mounts once when streaming completes. */}
+				{/* Streaming Markdown retains completed blocks between token flushes. */}
 				{message.content ? (
 					<MessageContent
 						content={message.content}
@@ -5460,7 +5458,7 @@ const MessageBubble = memo(function MessageBubble({
 						board={
 							agentMode === "board" || agentMode === "both" ? board : undefined
 						}
-						enableMarkdown={!isLoading}
+						isStreaming={Boolean(isLoading) && !isUser}
 					/>
 				) : isLoading || hasProcessEvents || hasFlowScriptPreview ? null : (
 					<p className="text-muted-foreground italic text-xs">No response</p>

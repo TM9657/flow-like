@@ -202,6 +202,62 @@ Local apps are the first choice for app, private-content, and action work. Publi
 
 const NATIVE_PUBLIC_WEB_ROUTE: &str = "4. Research public facts with your built-in web search and page fetch whenever a work item needs them, alongside other independent calls. An installed research/search app is optional and never a prerequisite: when one errors, cannot run, or returns nothing usable, search the web yourself. A call the user declined is still a stop. Queries and fetched URLs leave the device, so they carry only public subject matter (organizations, places, products, standards, topics) and never app record contents, internal IDs, file contents, credentials, personal data, or anything the user shared privately.";
 
+const CHAT_REPLY_FORMATTING: &str = r#"## CHAT REPLY FORMATTING
+
+Lead with the result. Default to short paragraphs; brief replies need no headings or widgets. Choose richer formats when they clarify the answer. Specialist ownership still applies; preserve returned chart/query/step-log blocks and verified source links.
+
+### Text and tables
+- Use `##`/`###` headings for substantial sections, **bold** for findings, *italic* for emphasis, `inline code` for identifiers, and `~~strikethrough~~` for deletions. Lists can be nested, numbered steps, or `- [ ]`/`- [x]` tasks. Separate blocks with blank lines.
+- Cite with `[label](URL)` near the claim, or `[^1]` plus a `[^1]: Source` definition. Use `>` for quotations, `---` sparingly, and language-labelled fences for code.
+- Tables suit shared attributes and exact values. Keep cells short, units in headers, explanations below. Separator alignment: text `:---`, numbers `---:`, center `:---:`. Cells support links, emphasis, and inline code. Search, sorting, filters, wrapping, copy, and export are automatic.
+
+### Pictures, ranked options, and compact comparisons
+One picture: `![description](image-URL)`. Caption/attribution: standalone `<img src="URL" alt="Description" caption="Caption" credit="Source" />`. Use verified or attached image URLs, descriptive alt text, and supplied credit; never invent them.
+
+These fences require strict JSON and non-empty `items`. Strings are plain text; citations belong outside. Replace illustrative examples with evidence.
+
+`gallery`: several relevant views. Required image fields: `src`, `alt`; optional `caption`, `credit`, `href`, and block `title`:
+```gallery
+{"title":"Views","items":[{"src":"https://example.com/front.jpg","alt":"Front view","caption":"Front","credit":"Photo source"}]}
+```
+`recommendations`: shortlist in ranked array order; explain criteria nearby. Required: item `title`. Optional: `subtitle`, `badge`, `description`, `href`, `image` (gallery shape), `specs` (string `label`/`value` pairs), block `title`:
+```recommendations
+{"items":[{"title":"Option A","badge":"Best fit","specs":[{"label":"Seats","value":"5"}],"description":"Why this option fits."}]}
+```
+`comparison`: one non-negative scale; positive finite `max`, required item `label` and numeric `value` within 0..max. Optional: block `title`/`description`/`unit`, item `valueLabel`/`detail`. Explain subjective scales:
+```comparison
+{"title":"Illustrative comfort ratings","description":"Subjective scale from 0 to 5","max":5,"items":[{"label":"A","value":4.5,"valueLabel":"Very good"},{"label":"B","value":3.5}]}
+```
+
+### Charts
+Use `nivo`/`plotly` for axes, multiple series, or interactive inspection: bars for categories, lines for trends, scatter for relationships, pie for a few parts of a whole. Label units, sources, and uncertainty; never invent measurements or replace missing values with zero. Mermaid is not rendered.
+
+Both accept `key: value` configuration, `---`, then simple CSV. Specify `type`; use JSON for cells containing commas. Options: `xLabel`, `yLabel`, `colors`, `height`, `showLegend`, `legendPosition`, `stacked`, `layout`, `animate`:
+```nivo
+type: bar
+title: Illustrative values
+layout: horizontal
+showLegend: false
+---
+option,value
+A,10
+B,7
+```
+Nivo JSON: `{"chartType":"bar","indexBy":"option","keys":["value"],"data":[{"option":"A","value":10}]}`. Plotly JSON uses `data`, `layout`, optional `config`:
+```plotly
+{"layout":{"title":{"text":"Illustrative values"}},"data":[{"type":"bar","x":["A","B"],"y":[10,7]}]}
+```
+For early streaming previews: gallery `src` then `alt` before captions; recommendation `title` before optional fields; comparison `max` before `items`; Nivo `chartType`/`indexBy`/`keys` before `data`; Plotly trace `type` before coordinates. Finish each item/CSV row, complete valid JSON, and close fences before prose. The client supplies progressive previews; no placeholder text is needed.
+
+### Other supported elements
+- Math: inline `$$E=mc^2$$`; display equations use `$$` on separate lines. Single `$` remains text.
+- Optional details: `||hidden text||`, or `:::spoiler Details`, body, closing `:::` on separate lines. Callout types: `info`, `tip`, `warning`, `error`, `success`. Bodies are plain text; keep answers and material caveats visible.
+- Media: `<video src="URL" />`, `<audio src="URL" />`, `<file src="URL" name="report.pdf" />`. An `embed` fence takes a public media URL, or `url: URL` with optional `start: seconds`, `autoplay: false` lines.
+- Geography: `map` fence JSON `{"type":"markers","markers":[{"lat":52.52,"lng":13.405,"label":"Berlin"}]}`. Optional `title`, `center: [lat,lng]`, `zoom`, marker `color`. Routes use `type: "route"`, `mode: "driving"|"walking"|"cycling"`. Verify coordinates.
+- Documents: `<toc />`, `<callout>Text</callout>`, `<date>2026-01-15</date>`, `<column_group><column width="50%">Left</column><column width="50%">Right</column></column_group>`. Prefer prose in narrow chat. `[Node](focus://node-id)`/`[Person](user://user-id)` need real supplied IDs and host context.
+
+Use supported formats and ordinary Markdown; never arbitrary HTML/CSS, scripts, or JSX expressions for chat layout."#;
+
 /// System prompt for the global (platform-level) FlowPilot assistant, for backends that delegate
 /// public-web research to the `research_agent` specialist.
 pub fn global_assistant_system_prompt() -> String {
@@ -239,6 +295,7 @@ pub fn global_assistant_system_prompt_for(capability: WebResearchCapability) -> 
         APP_BUILD_PIPELINE,
         BUILD_PLAYBOOK,
         web,
+        CHAT_REPLY_FORMATTING,
     ]
     .join("\n\n")
 }
@@ -998,29 +1055,36 @@ mod tests {
 
     #[test]
     fn standard_prompt_is_stable_and_within_size_budget() {
-        let first = global_assistant_system_prompt();
-        let second = global_assistant_system_prompt();
+        for capability in [
+            WebResearchCapability::Delegated,
+            WebResearchCapability::Inline,
+            WebResearchCapability::Native,
+        ] {
+            let first = global_assistant_system_prompt_for(capability);
+            let second = global_assistant_system_prompt_for(capability);
 
-        assert_eq!(
-            first, second,
-            "runtime context must not mutate the stable prompt"
-        );
-        // Reviewed 2026-08-17: +~4 KB for BUILD INTAKE and the BUILD BRIEF (spec checklist, the
-        // single batched `ask_user` pass, and the vague-request → Flow-Like-noun translation
-        // rules). This block is part of the stable cached prefix, so the cost is paid once per
-        // conversation; it replaces build runs lost to a misread request, which cost far more.
-        // Reviewed 2026-09-23: +~2.7 KB, almost all DURABLE APP BUILDS (PREVIEW); the `app_build`
-        // tool is registered unconditionally, so its routing rules belong in the stable prefix.
-        assert!(
-            first.len() <= 20_000,
-            "standard prompt grew beyond the reviewed 20 KB budget: {} bytes",
-            first.len()
-        );
-        assert!(
-            first.split_whitespace().count() <= 3_000,
-            "standard prompt grew beyond the reviewed word budget: {} words",
-            first.split_whitespace().count()
-        );
+            assert_eq!(
+                first, second,
+                "runtime context must not mutate the stable prompt"
+            );
+            assert_eq!(
+                first.matches(CHAT_REPLY_FORMATTING).count(),
+                1,
+                "every backend needs the same chat formatting contract exactly once"
+            );
+            // The cached prefix includes routing, build intake, and the renderer's compact
+            // format reference. Keep schemas here; leave extensive examples in the docs.
+            assert!(
+                first.len() <= 25_500,
+                "standard prompt grew beyond the reviewed 25.5 KB budget: {} bytes",
+                first.len()
+            );
+            assert!(
+                first.split_whitespace().count() <= 3_600,
+                "standard prompt grew beyond the reviewed word budget: {} words",
+                first.split_whitespace().count()
+            );
+        }
     }
 
     #[test]

@@ -117,13 +117,21 @@ pub const DATA_STUDIO_TRANSPARENCY_GUIDANCE: &str = r#"
 Every data answer is rendered as markdown. Make what you did visible and reproducible. Structure each
 substantive reply as:
 
-1. **Result first.** When the answer is quantitative or comparative, render an INTERACTIVE chart with
-   a fenced ```plotly block whose body is a single JSON object and MUST start with `{`:
+1. **Result first.** For quantitative or comparative answers, choose a chart, table, or compact
+   comparison. Interactive charts use a fenced ```plotly block containing one JSON object:
    ```plotly
    {"data":[{"type":"bar","x":["A","B"],"y":[10,7]}],"layout":{"title":"Top items"}}
    ```
-   `plotly` (or `nivo`) are the ONLY chart languages that render. NEVER use ```mermaid — it does not
-   render. If a table is clearer than a chart, use a normal markdown table instead.
+   Interactive charts use `plotly` or `nivo`. Mermaid is not rendered. If a table is clearer,
+   use a normal Markdown table. For a compact comparison on one non-negative scale, use:
+   ```comparison
+   {"title":"Top items","max":10,"items":[{"label":"A","value":10},{"label":"B","value":7}]}
+   ```
+   `max` must be finite and positive; each numeric `value` must be between zero and `max`.
+   Optional fields: block `description` and `unit`; item `valueLabel` and `detail`. String fields
+   are plain text, so keep citations in nearby prose. Explain subjective rating scales in
+   `description`. Write comparison `max` before `items`, and chart type/configuration before data,
+   so previews can render progressively. Return complete JSON and close the fence before prose.
 2. **The query you ran**, in a collapsible spoiler so it never clutters the answer:
    :::spoiler Query
    ```cypher
