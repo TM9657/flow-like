@@ -133,7 +133,7 @@ pub fn storage_skip(policy: &ForkPolicy) -> Option<SkipPredicate> {
     }))
 }
 
-fn is_published_model(relative_under_storage: &str) -> bool {
+pub(crate) fn is_published_model(relative_under_storage: &str) -> bool {
     relative_under_storage
         .strip_prefix(PUBLISHED_MODELS_DIR)
         .is_some_and(|rest| rest.starts_with('/'))

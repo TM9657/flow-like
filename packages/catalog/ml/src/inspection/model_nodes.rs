@@ -71,7 +71,9 @@ fn default_import_limit() -> u64 {
 pub struct ImportModelRequest {
     /// A published Burn or SAM 2 model, for example an Export Model folder's manifest.
     pub model: PublishedModelSource,
-    /// Register it in the executing user's private ledger instead of the app's.
+    /// Register it in the executing user's private ledger instead of the app's. A model read
+    /// from your private storage, or trained on private data, needs it unless the model source
+    /// names app storage explicitly.
     #[serde(default)]
     pub private: bool,
     #[serde(default = "default_import_limit")]
@@ -215,6 +217,63 @@ impl NodeLogic for ExtractPublishedFeaturesNode {
     }
 }
 
+#[cfg(feature = "training")]
+type Ledger = (
+    flow_like_ml_runtime::TrainingRepository,
+    super::lifecycle::LedgerScope,
+);
+
+/// The ledger of the inspection's stream, which must hold `artifact_id` for that stream.
+#[cfg(feature = "training")]
+async fn artifact_ledger(
+    context: &ExecutionContext,
+    inspection: InspectionContext,
+    artifact_id: &str,
+) -> Result<Ledger> {
+    use flow_like_types::anyhow;
+    let location = super::lifecycle::LedgerLocation::for_stream(context, &inspection.stream_id)?;
+    let scope = location.scope();
+    let requested = artifact_id.to_owned();
+    let repo = tokio::task::spawn_blocking(move || -> Result<_> {
+        let Some((repo, project)) = location.open_existing()? else {
+            return Err(anyhow!(
+                "No training ledger of this app holds artifact {requested} of stream {}",
+                inspection.stream_id
+            ));
+        };
+        let artifact = repo.get_artifact(&requested).map_err(|error| {
+            anyhow!("Reading artifact {requested} from the training ledger failed: {error}")
+        })?;
+        if artifact.stream != inspection.key(project)? {
+            return Err(anyhow!(
+                "Artifact {requested} belongs to another inspection stream or specification than {}",
+                inspection.stream_id
+            ));
+        }
+        Ok(repo)
+    })
+    .await??;
+    Ok((repo, scope))
+}
+
+/// The first ledger of this app that holds pretrained source `source_id`.
+#[cfg(feature = "training")]
+fn source_ledger(context: &ExecutionContext, source_id: &str) -> Result<Ledger> {
+    let located = super::lifecycle::locate_repository(context, |repo, project| {
+        match repo.get_pretrained_source(source_id) {
+            Ok(source) => Ok(source.project_id == project),
+            Err(flow_like_ml_runtime::Error::NotFound(_)) => Ok(false),
+            Err(error) => Err(error.into()),
+        }
+    })?
+    .ok_or_else(|| {
+        flow_like_types::anyhow!(
+            "No training ledger of this app holds pretrained source {source_id}"
+        )
+    })?;
+    Ok((located.repo, located.scope))
+}
+
 /// Finds the ledger holding the requested model and writes its folder to the destination.
 #[cfg(feature = "training")]
 pub(crate) async fn export_model(
@@ -222,61 +281,26 @@ pub(crate) async fn export_model(
     request: ExportModelRequest,
 ) -> Result<PublishedModelRef> {
     use super::publisher::{LedgerModel, export_model_folder};
-    use flow_like_types::anyhow;
-    let (repo, scope, model) = match request.source {
-        LedgerModelSource::Experiment { experiment_id } => {
-            let (repo, scope) = super::auto_training::experiment_ledger(context, &experiment_id)?;
-            (repo, scope, LedgerModel::Experiment { experiment_id })
-        }
-        LedgerModelSource::LearningChampion { project_id } => {
-            let (repo, scope) = super::learning::project_ledger(context, &project_id)?;
-            (repo, scope, LedgerModel::LearningChampion { project_id })
-        }
+    let ((repo, scope), model) = match request.source {
+        LedgerModelSource::Experiment { experiment_id } => (
+            super::auto_training::experiment_ledger(context, &experiment_id)?,
+            LedgerModel::Experiment { experiment_id },
+        ),
+        LedgerModelSource::LearningChampion { project_id } => (
+            super::learning::project_ledger(context, &project_id)?,
+            LedgerModel::LearningChampion { project_id },
+        ),
         LedgerModelSource::Artifact {
             inspection,
             artifact_id,
-        } => {
-            let location = super::lifecycle::LedgerLocation::for_stream(context, &inspection.stream_id)?;
-            let scope = location.scope();
-            let requested = artifact_id.clone();
-            let repo = tokio::task::spawn_blocking(move || -> Result<_> {
-                let Some((repo, project)) = location.open_existing()? else {
-                    return Err(anyhow!(
-                        "No training ledger of this app holds artifact {requested} of stream {}",
-                        inspection.stream_id
-                    ));
-                };
-                let artifact = repo.get_artifact(&requested).map_err(|error| {
-                    anyhow!("Reading artifact {requested} from the training ledger failed: {error}")
-                })?;
-                if artifact.stream != inspection.key(project)? {
-                    return Err(anyhow!(
-                        "Artifact {requested} belongs to another inspection stream or specification than {}",
-                        inspection.stream_id
-                    ));
-                }
-                Ok(repo)
-            })
-            .await??;
-            (repo, scope, LedgerModel::Artifact { artifact_id })
-        }
-        LedgerModelSource::PretrainedSource { source_id } => {
-            let located = super::lifecycle::locate_repository(context, |repo, project| {
-                match repo.get_pretrained_source(&source_id) {
-                    Ok(source) => Ok(source.project_id == project),
-                    Err(flow_like_ml_runtime::Error::NotFound(_)) => Ok(false),
-                    Err(error) => Err(error.into()),
-                }
-            })?
-            .ok_or_else(|| {
-                anyhow!("No training ledger of this app holds pretrained source {source_id}")
-            })?;
-            (
-                located.repo,
-                located.scope,
-                LedgerModel::PretrainedSource { source_id },
-            )
-        }
+        } => (
+            artifact_ledger(context, inspection, &artifact_id).await?,
+            LedgerModel::Artifact { artifact_id },
+        ),
+        LedgerModelSource::PretrainedSource { source_id } => (
+            source_ledger(context, &source_id)?,
+            LedgerModel::PretrainedSource { source_id },
+        ),
     };
     export_model_folder(context, &repo, scope, &model, &request.destination).await
 }
@@ -317,6 +341,107 @@ impl NodeLogic for ExportModelNode {
     }
 }
 
+#[cfg(feature = "training")]
+const MAXIMUM_IMPORT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// The pretrained-source manifest of a published Burn or SAM 2 model; other engines are
+/// refused.
+#[cfg(feature = "training")]
+async fn importable_manifest(
+    context: &mut ExecutionContext,
+    model: &super::published::ResolvedModel,
+) -> Result<Value> {
+    use flow_like_types::anyhow;
+    let engine = model.manifest.engine();
+    if !matches!(engine, "burn" | "sam2") {
+        return Err(anyhow!(
+            "Import Model registers Burn and SAM 2 models as pretrained sources, but {} is a {} model",
+            model.manifest.artifact_id(),
+            if engine.is_empty() { "unknown" } else { engine }
+        ));
+    }
+    match (&model.manifest.artifact, &model.manifest.pretrained_source) {
+        (Some(artifact), _) => {
+            let restored =
+                super::published::restore_artifact(context, model, artifact.clone()).await?;
+            Ok(restored.manifest)
+        }
+        (None, Some(source)) => Ok(source.manifest.clone()),
+        (None, None) => Err(anyhow!(
+            "{} describes neither a model nor a pretrained source",
+            model.manifest_path.path
+        )),
+    }
+}
+
+/// Whether a model source names app storage itself: `storage: app` on an id source, or a files
+/// source whose files all lie below app storage.
+#[cfg(feature = "training")]
+fn names_app_storage(
+    source: &PublishedModelSource,
+    files: &[flow_like_storage::Path],
+    app_root: &flow_like_storage::Path,
+) -> bool {
+    use super::published::ModelStorage;
+    match source {
+        PublishedModelSource::Files { .. } => {
+            files.iter().all(|file| file.prefix_matches(app_root))
+        }
+        PublishedModelSource::Experiment { storage, .. }
+        | PublishedModelSource::LearningChampion { storage, .. }
+        | PublishedModelSource::Deployment { storage, .. }
+        | PublishedModelSource::Artifact { storage, .. } => *storage == Some(ModelStorage::App),
+    }
+}
+
+/// Keeps private models out of the app's shared ledger: a model with a file in the executing
+/// user's directory is refused, and so is one whose manifest records a private ledger unless
+/// the request names app storage explicitly.
+#[cfg(feature = "training")]
+fn ensure_shareable(
+    context: &ExecutionContext,
+    source: &PublishedModelSource,
+    model: &super::published::ResolvedModel,
+) -> Result<()> {
+    use super::lifecycle::LedgerScope;
+    let cache = context
+        .execution_cache
+        .as_ref()
+        .ok_or_else(|| flow_like_types::anyhow!("Execution storage context is unavailable"))?;
+    let (app_root, user_root) = (cache.get_storage(false)?, cache.get_user_dir(false)?);
+    let files = [
+        model.manifest_path.object_path(),
+        model.weights_path.object_path(),
+    ];
+    let from_user_root = files.iter().any(|file| file.prefix_matches(&user_root));
+    let private_ledger = model
+        .manifest
+        .provenance
+        .as_ref()
+        .is_some_and(|provenance| provenance.ledger == LedgerScope::User);
+    if !from_user_root && (!private_ledger || names_app_storage(source, &files, &app_root)) {
+        return Ok(());
+    }
+    Err(private_model_refusal(model, from_user_root))
+}
+
+#[cfg(feature = "training")]
+fn private_model_refusal(
+    model: &super::published::ResolvedModel,
+    from_user_root: bool,
+) -> flow_like_types::Error {
+    let reason = if from_user_root {
+        "is read from your private (user-scoped) storage"
+    } else {
+        "was trained on private (user-scoped) data"
+    };
+    flow_like_types::anyhow!(
+        "Model {} at {} {reason}, so Import Model cannot register it in the app's shared training ledger; set private to true, or import a copy shared in app storage by naming it explicitly (storage \"app\", or a files manifest below app storage)",
+        model.manifest.artifact_id(),
+        model.manifest_path.path
+    )
+}
+
 /// Registers a published Burn or SAM 2 model as a pretrained source of this app's ledger, or
 /// of the executing user's private ledger.
 #[cfg(feature = "training")]
@@ -325,42 +450,24 @@ pub(crate) async fn import_model(
     request: ImportModelRequest,
 ) -> Result<flow_like_ml_runtime::PretrainedSource> {
     use super::lifecycle::LedgerScope;
-    use super::published::{published_weights, resolve_model, restore_artifact};
+    use super::published::{published_weights, resolve_model};
     use flow_like_types::{anyhow, json::json};
-    if request.maximum_bytes == 0 || request.maximum_bytes > 2 * 1024 * 1024 * 1024 {
+    if !(1..=MAXIMUM_IMPORT_BYTES).contains(&request.maximum_bytes) {
         return Err(anyhow!(
             "Import Model's byte limit must be between 1 byte and 2 GiB, not {}",
             request.maximum_bytes
         ));
     }
     let model = resolve_model(context, &request.model).await?;
-    let engine = model.manifest.engine().to_owned();
-    if !matches!(engine.as_str(), "burn" | "sam2") {
-        return Err(anyhow!(
-            "Import Model registers Burn and SAM 2 models as pretrained sources, but {} is a {} model",
-            model.manifest.artifact_id(),
-            if engine.is_empty() { "unknown" } else { engine.as_str() }
-        ));
+    if !request.private {
+        ensure_shareable(context, &request.model, &model)?;
     }
-    let manifest = match (&model.manifest.artifact, &model.manifest.pretrained_source) {
-        (Some(artifact), _) => {
-            restore_artifact(context, &model, artifact.clone())
-                .await?
-                .manifest
-        }
-        (None, Some(source)) => source.manifest.clone(),
-        (None, None) => {
-            return Err(anyhow!(
-                "{} describes neither a model nor a pretrained source",
-                model.manifest_path.path
-            ));
-        }
-    };
+    let manifest = importable_manifest(context, &model).await?;
     let bytes = published_weights(context, &model, request.maximum_bytes).await?;
     let origin = json!({
         "published": {
             "id": model.manifest.artifact_id(),
-            "engine": engine,
+            "engine": model.manifest.engine(),
             "sha256": model.manifest.weights.sha256,
             "manifest": model.manifest_path.path,
         }

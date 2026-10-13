@@ -14858,11 +14858,29 @@
     "class": null,
     "category": "AI/ML/Auto Training"
   },
+  "ml_export_model": {
+    "qualified": "inspection::exportModel",
+    "namespace": "inspection",
+    "alias": "exportModel",
+    "flat": "mlExportModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Export"
+  },
   "ml_export_student_onnx": {
     "qualified": "inspection::exportOnnx",
     "namespace": "inspection",
     "alias": "exportOnnx",
     "flat": "mlExportStudentOnnx",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Export"
+  },
+  "ml_export_training_ledger": {
+    "qualified": "inspection::exportTrainingLedger",
+    "namespace": "inspection",
+    "alias": "exportTrainingLedger",
+    "flat": "mlExportTrainingLedger",
     "receiver": null,
     "class": null,
     "category": "AI/ML/Export"
@@ -14884,6 +14902,15 @@
     "receiver": null,
     "class": null,
     "category": "AI/ML/Training"
+  },
+  "ml_extract_published_features": {
+    "qualified": "inspection::publishedImageFeatures",
+    "namespace": "inspection",
+    "alias": "publishedImageFeatures",
+    "flat": "mlExtractPublishedFeatures",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inference"
   },
   "ml_feature_importance": {
     "qualified": "ml::featureImportance",
@@ -15002,6 +15029,15 @@
     "class": null,
     "category": "AI/ML/Dataset"
   },
+  "ml_import_model": {
+    "qualified": "inspection::importModel",
+    "namespace": "inspection",
+    "alias": "importModel",
+    "flat": "mlImportModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Export"
+  },
   "ml_import_pretrained_vision": {
     "qualified": "inspection::importPretrainedVision",
     "namespace": "inspection",
@@ -15010,6 +15046,15 @@
     "receiver": null,
     "class": null,
     "category": "AI/ML/Training"
+  },
+  "ml_import_training_ledger": {
+    "qualified": "inspection::importTrainingLedger",
+    "namespace": "inspection",
+    "alias": "importTrainingLedger",
+    "flat": "mlImportTrainingLedger",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Export"
   },
   "ml_join_sources": {
     "qualified": "inspection::joinSources",
@@ -15155,6 +15200,15 @@
     "class": null,
     "category": "AI/ML/Auto Training"
   },
+  "ml_predict_published_model": {
+    "qualified": "inspection::predictPublishedModel",
+    "namespace": "inspection",
+    "alias": "predictPublishedModel",
+    "flat": "mlPredictPublishedModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Inference"
+  },
   "ml_preprocess_inspection_image": {
     "qualified": "inspection::preprocessImage",
     "namespace": "inspection",
@@ -15262,6 +15316,15 @@
     "receiver": null,
     "class": null,
     "category": "AI/ML/Evaluation"
+  },
+  "ml_reject_learning_candidate": {
+    "qualified": "inspection::rejectLearningCandidate",
+    "namespace": "inspection",
+    "alias": "rejectLearningCandidate",
+    "flat": "mlRejectLearningCandidate",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Continuous Learning"
   },
   "ml_resample_sensor": {
     "qualified": "inspection::resample",

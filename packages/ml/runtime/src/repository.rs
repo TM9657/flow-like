@@ -15,6 +15,11 @@ use std::{
 /// it exclusively, so a staged blob is never mistaken for an unreferenced one.
 const BLOB_STORE_LOCK: &str = "blob-store";
 
+/// JSON path of the content digests that an adopted training artifact keeps in its source row,
+/// outside `PretrainedSource`, so listings, node outputs and published manifests never carry
+/// them.
+pub(crate) const ADOPTED_LINEAGE: &str = "$.lineage_digests";
+
 /// Checkpoints that a resume or a successive-halving continuation can still read.
 const LIVE_CHECKPOINTS: &str = "SELECT json_extract(j.body,'$.checkpoint.blob.path'),NULL FROM jobs j LEFT JOIN experiment_trials t ON t.job_id=j.id WHERE CASE WHEN t.experiment_id IS NULL THEN j.status<>'succeeded' ELSE j.status IN ('queued','running','cancel_requested','paused','interrupted') OR t.experiment_id IN (SELECT id FROM experiments WHERE json_extract(body,'$.selected_trial_id') IS NULL AND json_extract(body,'$.status') IN ('running','cancel_requested','cancelled')) END";
 
@@ -1900,11 +1905,7 @@ impl TrainingRepository {
         let blobs = snapshot_blobs(&source_blobs)?;
         let mut installation = Installation::begin(destination)?;
         installation.link_blobs(&source_blobs, &blobs)?;
-        publish_database(
-            &database,
-            &installation.blob_dir,
-            &installation.destination,
-        )?;
+        publish_database(&database, &installation.blob_dir, &installation.destination)?;
         installation.finish(&root)
     }
 
@@ -1917,8 +1918,11 @@ impl TrainingRepository {
     /// Copies a pretrained source of `from` into this ledger under the same id and kind, with
     /// `project_id` rewritten. Both blob stores stay shared until the reference commits, so
     /// neither collector removes the blob, which is hard-linked where the file system allows
-    /// it and copied otherwise. Adopting again returns the stored record when its blob is the
-    /// same; another blob under that id is `Error::Conflict`.
+    /// it and copied otherwise. A training artifact also keeps the content digests of its
+    /// initialization lineage, since this ledger holds none of its snapshots; builds without a
+    /// training engine cannot read lineages and refuse to adopt one. Adopting again returns the
+    /// stored record when its blob is the same, recording a lineage an earlier adoption left
+    /// out; another blob under that id is `Error::Conflict`.
     pub fn adopt_pretrained_source(
         &self,
         from: &TrainingRepository,
@@ -1933,13 +1937,30 @@ impl TrainingRepository {
         }
         let source = from.get_pretrained_source(source_id)?;
         if let Some(existing) = self.adopted(&source)? {
+            self.backfill_lineage(from, &existing.id)?;
             return Ok(existing);
         }
+        let lineage = match source.source_kind {
+            PretrainedSourceKind::Imported => None,
+            PretrainedSourceKind::TrainingArtifact => Some(training_lineage(from, &source.id)?),
+        };
         let _shared = self.receive_blob(from, &source.blob)?;
-        self.insert_adopted(PretrainedSource {
-            project_id: project_id.into(),
-            ..source
-        })
+        self.insert_adopted(
+            PretrainedSource {
+                project_id: project_id.into(),
+                ..source
+            },
+            lineage,
+        )
+    }
+
+    /// Records the lineage that an earlier adoption of training artifact `source_id` left out.
+    fn backfill_lineage(&self, from: &TrainingRepository, source_id: &str) -> Result<()> {
+        let connection = self.connection()?;
+        if lacks_lineage(&connection, source_id)? {
+            record_lineage(&connection, source_id, &training_lineage(from, source_id)?)?;
+        }
+        Ok(())
     }
 
     /// This ledger's record under `source.id` when it holds the same blob.
@@ -1952,11 +1973,7 @@ impl TrainingRepository {
 
     /// Stores a blob of `from` here and returns both blob store locks, which the caller
     /// keeps until the blob's reference commits.
-    fn receive_blob(
-        &self,
-        from: &TrainingRepository,
-        blob: &BlobRef,
-    ) -> Result<[LocalRunLock; 2]> {
+    fn receive_blob(&self, from: &TrainingRepository, blob: &BlobRef) -> Result<[LocalRunLock; 2]> {
         validate_blob_reference(blob, u64::MAX)?;
         let locks = [self.blob_writer()?, from.blob_writer()?];
         verify_storage_entry(&from.root, &from.blob_dir, true)?;
@@ -1965,22 +1982,32 @@ impl TrainingRepository {
         Ok(locks)
     }
 
-    /// Inserts an adopted source; a concurrent adoption of the same id that committed first
-    /// is returned instead when it holds the same blob.
-    fn insert_adopted(&self, adopted: PretrainedSource) -> Result<PretrainedSource> {
+    /// Inserts an adopted source with the lineage it keeps; a concurrent adoption of the same
+    /// id that committed first is kept instead when it holds the same blob.
+    fn insert_adopted(
+        &self,
+        adopted: PretrainedSource,
+        lineage: Option<String>,
+    ) -> Result<PretrainedSource> {
         let body = serde_json::to_string(&adopted)?;
         let mut connection = self.connection()?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let stored = find_pretrained_source(&tx, &adopted.id)?;
-        let Some(existing) = reuse_adoption(stored, &adopted)? else {
-            tx.execute(
-                "INSERT INTO pretrained_sources(id,project_id,body) VALUES(?,?,?)",
-                params![adopted.id, adopted.project_id, body],
-            )?;
-            tx.commit()?;
-            return Ok(adopted);
+        let kept = match reuse_adoption(stored, &adopted)? {
+            Some(existing) => existing,
+            None => {
+                tx.execute(
+                    "INSERT INTO pretrained_sources(id,project_id,body) VALUES(?,?,?)",
+                    params![adopted.id, adopted.project_id, body],
+                )?;
+                adopted
+            }
         };
-        Ok(existing)
+        if let Some(lineage) = &lineage {
+            record_lineage(&tx, &kept.id, lineage)?;
+        }
+        tx.commit()?;
+        Ok(kept)
     }
 
     /// Stores another ledger's blob file here: hard-linked, or copied through a staging file
@@ -2501,6 +2528,41 @@ fn reuse_adoption(
         None => Ok(None),
     }
 }
+
+/// The content digests of training artifact `artifact_id`'s initialization lineage in `from`,
+/// as JSON.
+#[cfg(any(feature = "native", feature = "burn"))]
+fn training_lineage(from: &TrainingRepository, artifact_id: &str) -> Result<String> {
+    let digests = crate::engines::LineageDigests::of(&from.connection()?, artifact_id)?;
+    Ok(serde_json::to_string(&digests)?)
+}
+
+#[cfg(not(any(feature = "native", feature = "burn")))]
+fn training_lineage(_from: &TrainingRepository, artifact_id: &str) -> Result<String> {
+    Err(invalid(format!(
+        "adopting training artifact {artifact_id} records its training lineage, which needs a build with a training engine"
+    )))
+}
+
+/// Whether `source_id` names an adopted training artifact whose row lacks its lineage.
+fn lacks_lineage(connection: &Connection, source_id: &str) -> Result<bool> {
+    Ok(connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pretrained_sources WHERE id=?1 AND json_extract(body,'$.source_kind')='training_artifact' AND json_type(body,?2) IS NULL)",
+        params![source_id, ADOPTED_LINEAGE],
+        |row| row.get(0),
+    )?)
+}
+
+/// Stores the lineage digests of adopted training artifact `source_id` unless its row holds
+/// them already.
+fn record_lineage(connection: &Connection, source_id: &str, lineage: &str) -> Result<()> {
+    connection.execute(
+        "UPDATE pretrained_sources SET body=json_set(body,?2,json(?3)) WHERE id=?1 AND json_type(body,?2) IS NULL",
+        params![source_id, ADOPTED_LINEAGE, lineage],
+    )?;
+    Ok(())
+}
+
 fn save_job(tx: &Connection, job: &TrainingJob) -> Result<()> {
     tx.execute(
         "UPDATE jobs SET status=?,body=? WHERE id=?",
@@ -3101,7 +3163,7 @@ fn file_sha256(path: &Path, maximum_bytes: u64) -> Result<(u64, String)> {
 }
 
 /// Hard-links `source` to `target`, or copies it with a sync where linking fails, such as
-/// across file systems. `target` is never replaced.
+/// across file systems. `target` is never replaced, and a failed copy removes its partial file.
 fn link_or_copy(source: &Path, target: &Path) -> Result<()> {
     regular_file(source)?;
     match std::fs::hard_link(source, target) {
@@ -3111,12 +3173,20 @@ fn link_or_copy(source: &Path, target: &Path) -> Result<()> {
     }
 }
 
-/// Copies `source` into a file that must not exist yet, and syncs it.
+/// Copies `source` into a file that must not exist yet, and syncs it. A failed copy removes
+/// the file it created, so no caller is left with a partial target it cannot account for.
 fn copy_new(source: &Path, target: &Path) -> Result<()> {
-    let mut output = std::fs::OpenOptions::new()
+    let output = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(target)?;
+    copy_synced(source, output).inspect_err(|_| {
+        let _ = std::fs::remove_file(target);
+    })
+}
+
+/// `output` is closed when this returns, so a failed copy can be removed on every platform.
+fn copy_synced(source: &Path, mut output: std::fs::File) -> Result<()> {
     std::io::copy(&mut std::fs::File::open(source)?, &mut output)?;
     output.sync_all()?;
     Ok(())
@@ -3828,6 +3898,27 @@ mod blob_store_tests {
         assert!(matches!(repo.verify_storage(), Err(Error::Invalid(_))));
     }
 
+    #[cfg(not(any(feature = "native", feature = "burn")))]
+    #[test]
+    fn builds_without_a_training_engine_refuse_to_adopt_training_artifacts() {
+        let directory = tempfile::tempdir().unwrap();
+        let ledger = |name: &str| directory.path().join(name).join(LEDGER_DATABASE_FILE);
+        let app = TrainingRepository::open(ledger("app")).unwrap();
+        let job = queued_job(&app, "line");
+        let lease = app.claim_job(&job.id, "worker", 60_000, now_ms()).unwrap();
+        let artifact = app
+            .finish_training(&lease, b"model", json!({}), now_ms())
+            .unwrap();
+        let user = TrainingRepository::open(ledger("user")).unwrap();
+        let refused = user.adopt_pretrained_source(&app, &artifact.id, "blobs:user");
+        assert!(
+            matches!(&refused, Err(Error::Invalid(message)) if message.contains("training engine")),
+            "{refused:?}"
+        );
+        assert!(user.get_pretrained_source(&artifact.id).is_err());
+        assert!(!stored(&user, &artifact.blob));
+    }
+
     #[test]
     fn ledger_connections_are_defensive_and_distrust_schema_functions() {
         let directory = tempfile::tempdir().unwrap();
@@ -4093,5 +4184,18 @@ mod snapshot_tests {
         assert!(repo.blob_dir.join(&source.blob.path).exists());
         let snapshot = repo.snapshot_to(target.path()).unwrap();
         assert_eq!(snapshot.blobs.len(), 1);
+    }
+
+    #[test]
+    fn a_failed_copy_removes_the_target_it_created_but_never_one_it_found() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.blob");
+        let target = directory.path().join("target.blob");
+        assert!(copy_new(&source, &target).is_err());
+        assert!(!target.exists(), "the partial copy was removed");
+        std::fs::write(&source, b"source").unwrap();
+        std::fs::write(&target, b"kept").unwrap();
+        assert!(copy_new(&source, &target).is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"kept");
     }
 }

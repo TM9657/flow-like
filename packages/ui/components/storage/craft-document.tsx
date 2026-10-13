@@ -8,8 +8,15 @@ import {
 	useRef,
 	useState,
 } from "react";
+import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
 import { Button } from "../ui/button";
 import { type CraftViewer, craftSaveLabel } from "./craft-viewers";
+import {
+	FileSaveProgress,
+	type FileSaveStatus,
+	fileSaveError,
+	storageSaveProgress,
+} from "./file-save-progress";
 import { ViewerAbout } from "./viewer-about";
 import { readWordcraftMessage } from "./wordcraft-protocol";
 
@@ -21,7 +28,10 @@ interface CraftDocumentProps {
 	title?: ReactNode;
 	editable: boolean;
 	initialEditing?: boolean;
-	onSave: (file: File) => Promise<void>;
+	onSave: (
+		file: File,
+		onProgress?: BulkUploadProgressCallback,
+	) => Promise<void>;
 	onDirtyChange?: (dirty: boolean) => void;
 	onBusyChange?: (busy: boolean) => void;
 }
@@ -73,6 +83,8 @@ function CraftSession({
 	const [editing, setEditing] = useState(initialEditing && editable);
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [saveProgress, setSaveProgress] = useState<FileSaveStatus | null>(null);
+	const [saveFailed, setSaveFailed] = useState(false);
 	const [error, setError] = useState("");
 	const [warnings, setWarnings] = useState<string[]>([]);
 	const [saved, setSaved] = useState(false);
@@ -85,6 +97,7 @@ function CraftSession({
 		id: string;
 		timer: ReturnType<typeof setTimeout>;
 		persisting: boolean;
+		onTimeout: () => void;
 	} | null>(null);
 	const latest = useRef({ editable, onSave, onDirtyChange, onBusyChange });
 	latest.current = { editable, onSave, onDirtyChange, onBusyChange };
@@ -137,6 +150,7 @@ function CraftSession({
 		if (pending.current) clearTimeout(pending.current.timer);
 		pending.current = null;
 		setSaving(false);
+		setSaveProgress(null);
 		latest.current.onBusyChange?.(false);
 	}, []);
 
@@ -205,10 +219,32 @@ function CraftSession({
 				case "save-request":
 					if (opened) saveAction.current();
 					break;
+				case "export-progress": {
+					const request = pending.current;
+					if (
+						!request ||
+						request.id !== message.requestId ||
+						request.persisting
+					)
+						break;
+					// Active exports can exceed the timeout for an unresponsive viewer.
+					clearTimeout(request.timer);
+					request.timer = setTimeout(request.onTimeout, 10 * 60_000);
+					setSaveProgress({
+						stage: {
+							preparing: "Preparing video",
+							rendering: "Rendering video",
+							finalizing: "Finalizing video",
+						}[message.stage],
+						progress: message.progress,
+					});
+					break;
+				}
 				case "error":
 					if (message.requestId && message.requestId !== pending.current?.id)
 						break;
 					setError(message.error || "The document could not be processed.");
+					setSaveFailed(!!pending.current && !pending.current.persisting);
 					if (!opened) {
 						clearTimeout(timeout);
 						setStatus("failed");
@@ -225,6 +261,7 @@ function CraftSession({
 						break;
 					clearTimeout(request.timer);
 					if (!latest.current.editable) {
+						setSaveFailed(true);
 						setError(
 							"You do not have permission to save files in this storage.",
 						);
@@ -232,27 +269,28 @@ function CraftSession({
 						break;
 					}
 					request.persisting = true;
+					setSaveProgress({ stage: "Saving file", progress: null });
 					if (message.warnings?.length) setWarnings(message.warnings);
 					const file = new File([message.bytes], outputName, {
 						type: viewer.mime,
 					});
 					void (async () => {
 						try {
-							await latest.current.onSave(file);
-							if (!active.current) return;
+							await latest.current.onSave(file, (percent, detail) => {
+								if (!active.current || pending.current !== request) return;
+								setSaveProgress(storageSaveProgress(percent, detail));
+							});
+							if (!active.current || pending.current !== request) return;
 							setDownload(file);
 							setDownloadName(file.name);
 							post({ type: "saved", revision: message.revision });
 							setSaved(true);
 						} catch (cause) {
-							if (!active.current) return;
-							setError(
-								cause instanceof Error
-									? cause.message
-									: "The document could not be saved. Your changes are still open.",
-							);
+							if (!active.current || pending.current !== request) return;
+							setSaveFailed(true);
+							setError(fileSaveError(cause));
 						} finally {
-							if (active.current) finishSave();
+							if (active.current && pending.current === request) finishSave();
 						}
 					})();
 					break;
@@ -334,19 +372,23 @@ function CraftSession({
 		if (!editable || !editing || pending.current || status !== "ready") return;
 		const id = crypto.randomUUID();
 		setError("");
+		setSaveFailed(false);
 		setSaved(false);
 		setSaving(true);
+		setSaveProgress({ stage: "Preparing file", progress: null });
 		latest.current.onBusyChange?.(true);
+		const onTimeout = () => {
+			if (pending.current?.id !== id) return;
+			setSaveFailed(true);
+			setError("Preparing the file took too long.");
+			finishSave();
+		};
 		pending.current = {
 			id,
 			persisting: false,
+			onTimeout,
 			timer: setTimeout(
-				() => {
-					setError(
-						"Preparing the document took too long. Your changes are still open.",
-					);
-					finishSave();
-				},
+				onTimeout,
 				viewer.id === "filmcraft" ? 10 * 60_000 : 60_000,
 			),
 		};
@@ -427,15 +469,35 @@ function CraftSession({
 					</Button>
 				)}
 			</div>
+			{saving && saveProgress && <FileSaveProgress {...saveProgress} />}
 			{warnings.length > 0 && (
 				<output className="max-h-20 overflow-auto border-b px-3 py-2 text-xs text-muted-foreground">
 					{warnings.join(" ")}
 				</output>
 			)}
 			{error && (
-				<p role="alert" className="border-b px-3 py-2 text-sm text-destructive">
-					{error}
-				</p>
+				<div
+					role="alert"
+					className="shrink-0 border-b px-3 py-2 text-sm text-destructive"
+				>
+					{saveFailed && <p className="font-medium">Could not save file</p>}
+					<p>{error}</p>
+					{saveFailed && (
+						<>
+							<p>Your changes are still open. Try saving again.</p>
+							{editable && editing && status === "ready" && !saving && (
+								<Button
+									variant="outline"
+									size="sm"
+									className="mt-2"
+									onClick={saveDocument}
+								>
+									Try saving again
+								</Button>
+							)}
+						</>
+					)}
+				</div>
 			)}
 			<div className="relative flex-1 min-h-0">
 				{runtimeRequested && runtimeAvailable && status !== "failed" && (

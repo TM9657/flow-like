@@ -10,7 +10,6 @@ import {
 	toUploadTasks,
 	uploadToSignedUrl,
 } from "@flow-like/flow-like-ui";
-import { stabilizeSignedUrls } from "@flow-like/flow-like-ui/lib/stable-asset-url";
 import type { IStorageItemActionResult } from "@flow-like/flow-like-ui/state/backend-state/types";
 import { type WebBackendRef, apiDelete, apiFetch, apiPost } from "./api-utils";
 
@@ -149,15 +148,14 @@ export class WebStorageState implements IStorageState {
 		endpoint: string,
 		prefixes: string[],
 	): Promise<IStorageItemActionResult[]> {
+		// Keep the returned URLs because storage files can be overwritten.
 		return requestPrefixesInBatches(
 			prefixes,
 			async (batch) =>
-				stabilizeSignedUrls(
-					await apiPost<IStorageItemActionResult[]>(
-						endpoint,
-						{ prefixes: batch },
-						this.backend.auth,
-					),
+				apiPost<IStorageItemActionResult[]>(
+					endpoint,
+					{ prefixes: batch },
+					this.backend.auth,
 				),
 			{ errorMessage: "Download failed" },
 		);

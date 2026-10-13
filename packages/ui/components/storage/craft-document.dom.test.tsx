@@ -10,6 +10,7 @@ import {
 	it,
 	vi,
 } from "vitest";
+import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
 import { CraftDocument } from "./craft-document";
 import { craftViewer } from "./craft-viewers";
 const CRAFT_CHANNEL = "flow-like-craft";
@@ -54,7 +55,9 @@ let container: HTMLDivElement;
 let frameWindow: Window;
 let send: ReturnType<typeof vi.fn>;
 let fetchDocument: ReturnType<typeof vi.fn>;
-let saveDocument: Mock<(file: File) => Promise<void>>;
+let saveDocument: Mock<
+	(file: File, onProgress?: BulkUploadProgressCallback) => Promise<void>
+>;
 let dirtyChange: Mock<(dirty: boolean) => void>;
 let busyChange: Mock<(busy: boolean) => void>;
 let iframeLoadingDisabled: boolean;
@@ -280,7 +283,7 @@ describe("Flows Sheets document host", () => {
 		saveDocument.mockRejectedValueOnce(new Error("Storage is unavailable"));
 		await openForEditing();
 		const failedRequest = await exportDocument();
-		expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+		expect(container.querySelector('[role="alert"]')?.textContent).toContain(
 			"Storage is unavailable",
 		);
 		expect(container.textContent).toContain("Unsaved changes");
@@ -292,6 +295,155 @@ describe("Flows Sheets document host", () => {
 		expect(saveDocument).toHaveBeenCalledTimes(2);
 		expect(messages("saved")).toHaveLength(1);
 		expect(container.querySelector('[role="alert"]')).toBeNull();
+	});
+
+	it("shows export stages and storage progress until the save is acknowledged", async () => {
+		const upload = deferred<void>();
+		saveDocument.mockReturnValue(upload.promise);
+		await openForEditing();
+		await click("Save");
+		const requestId = messages("export").at(-1)?.requestId;
+		expect(container.textContent).toContain("Preparing file...");
+		expect(container.querySelector('[role="progressbar"]')).toBeNull();
+		await receive({
+			type: "export-progress",
+			requestId,
+			stage: "rendering",
+			progress: 42.5,
+		});
+		expect(container.textContent).toContain("Rendering video...");
+		expect(
+			container
+				.querySelector('[role="progressbar"]')
+				?.getAttribute("aria-valuenow"),
+		).toBe("42");
+		await receive({
+			type: "export-progress",
+			requestId,
+			stage: "finalizing",
+			progress: null,
+		});
+		expect(container.textContent).toContain("Finalizing video...");
+		expect(container.querySelector('[role="progressbar"]')).toBeNull();
+		await receive({
+			type: "exported",
+			requestId,
+			bytes: editedBytes.slice().buffer,
+			revision: 4,
+		});
+		expect(container.textContent).toContain("Saving file...");
+		const onProgress = saveDocument.mock.calls[0][1];
+		await act(async () => onProgress?.(73));
+		expect(
+			container
+				.querySelector('[role="progressbar"]')
+				?.getAttribute("aria-valuenow"),
+		).toBe("73");
+		await act(async () => onProgress?.(100));
+		expect(container.textContent).toContain("Finishing save...");
+		expect(messages("saved")).toHaveLength(0);
+		expect(button("Save").disabled).toBe(true);
+		await act(async () => upload.resolve());
+		expect(messages("saved")).toHaveLength(1);
+		expect(container.textContent).not.toContain("Finishing save...");
+		await act(async () => onProgress?.(20));
+		expect(container.querySelector('[role="progressbar"]')).toBeNull();
+	});
+
+	it("ignores stale and forged progress, including progress after export", async () => {
+		const upload = deferred<void>();
+		saveDocument.mockReturnValue(upload.promise);
+		await openForEditing();
+		await click("Save");
+		const requestId = messages("export").at(-1)?.requestId;
+		const progress = {
+			type: "export-progress",
+			requestId,
+			stage: "rendering",
+			progress: 50,
+		};
+		await receive({ ...progress, requestId: "old-save" });
+		await receive(progress, { source: window });
+		await receive(progress, { origin: "https://forged.example.test" });
+		expect(container.textContent).toContain("Preparing file...");
+		await receive({
+			type: "exported",
+			requestId,
+			bytes: editedBytes.slice().buffer,
+			revision: 4,
+		});
+		await receive(progress);
+		expect(container.textContent).toContain("Saving file...");
+		expect(container.textContent).not.toContain("Rendering video...");
+		await act(async () => upload.resolve());
+	});
+
+	it("does not report a save failure for a viewer error while storage is still writing", async () => {
+		const upload = deferred<void>();
+		saveDocument.mockReturnValue(upload.promise);
+		await openForEditing();
+		await exportDocument();
+		await receive({ type: "error", error: "The video preview stopped." });
+		expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+			"The video preview stopped.",
+		);
+		expect(container.textContent).not.toContain("Could not save file");
+		expect(container.textContent).toContain("Saving file...");
+		expect(button("Save").disabled).toBe(true);
+		await act(async () => upload.resolve());
+		expect(messages("saved")).toHaveLength(1);
+	});
+
+	it("keeps measured long exports running and reports a stalled export", async () => {
+		vi.useFakeTimers();
+		await openForEditing();
+		await click("Save");
+		const requestId = messages("export").at(-1)?.requestId;
+		const progress = {
+			type: "export-progress",
+			requestId,
+			stage: "rendering",
+			progress: 10,
+		};
+		await receive(progress);
+		await act(async () => vi.advanceTimersByTimeAsync(9 * 60_000));
+		await receive({ ...progress, progress: 20 });
+		await act(async () => vi.advanceTimersByTimeAsync(9 * 60_000));
+		expect(container.querySelector('[role="alert"]')).toBeNull();
+		expect(button("Save").disabled).toBe(true);
+		await act(async () => vi.advanceTimersByTimeAsync(60_000));
+		expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+			"Preparing the file took too long",
+		);
+		expect(container.textContent).toContain("Your changes are still open");
+		expect(button("Save").disabled).toBe(false);
+		expect(container.querySelector('[role="progressbar"]')).toBeNull();
+		expect(busyChange).toHaveBeenLastCalledWith(false);
+		await receive(progress);
+		expect(container.querySelector('[role="progressbar"]')).toBeNull();
+	});
+
+	it("shows export errors immediately and retries without discarding edits", async () => {
+		await openForEditing();
+		await click("Save");
+		const requestId = messages("export").at(-1)?.requestId;
+		await receive({
+			type: "error",
+			requestId,
+			error: "The video encoder is unavailable.",
+		});
+		expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+			"The video encoder is unavailable.",
+		);
+		expect(container.textContent).toContain("Could not save file");
+		expect(dirtyChange).toHaveBeenLastCalledWith(true);
+		expect(messages("saved")).toHaveLength(0);
+		expect(busyChange).toHaveBeenLastCalledWith(false);
+		await click("Try saving again");
+		expect(messages("export")).toHaveLength(2);
+		expect(messages("export").at(-1)?.requestId).not.toBe(requestId);
+		expect(container.querySelector('[role="alert"]')).toBeNull();
+		expect(container.textContent).toContain("Preparing file...");
 	});
 
 	it("ignores stale exports and duplicate responses during and after upload", async () => {

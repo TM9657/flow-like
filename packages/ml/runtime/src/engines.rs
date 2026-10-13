@@ -4,7 +4,7 @@ use crate::{worker::*, *};
 use flow_like_ml_core::ComputeBackend;
 use flow_like_ml_core::{Annotation, ComputeConfig, PreprocessingStep, Sample, TensorData};
 use rusqlite::{Connection, OptionalExtension};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 mod inference;
 pub use inference::{LoadedArtifactPredictor, verify_artifact_bytes};
@@ -311,12 +311,17 @@ impl LineageContent {
                     "initialization lineage of {artifact_id} exceeds {MAXIMUM_INITIALIZATION_DEPTH} models"
                 )));
             }
-            let body: String = connection
+            let body: Option<String> = connection
                 .query_row("SELECT body FROM artifacts WHERE id=?", [&id], |row| {
                     row.get(0)
                 })
-                .optional()?
-                .ok_or_else(|| Error::NotFound(format!("initialization artifact {id}")))?;
+                .optional()?;
+            let Some(body) = body else {
+                let adopted = LineageDigests::adopted(connection, &id)?;
+                lineage.trained.digests.extend(adopted.trained);
+                lineage.validated.digests.extend(adopted.validated);
+                break;
+            };
             let artifact: ModelArtifact = serde_json::from_str(&body)?;
             let own = stored_partitions(connection, &artifact.snapshot_id)?;
             for run in run_partitions(connection, &artifact.job_id, &artifact.snapshot_id, own)? {
@@ -336,6 +341,43 @@ impl LineageContent {
             consumed.groups.entry(scope).or_default().extend(groups);
         }
         consumed
+    }
+}
+
+/// Lineage content digests that an adopted copy of a training artifact keeps, because the
+/// adopting ledger holds neither the artifact nor its snapshots. The lineage's groups are left
+/// out: they only count in streams of the artifact's own project, which adoption rewrites.
+#[derive(Serialize, Deserialize)]
+pub(crate) struct LineageDigests {
+    trained: BTreeSet<String>,
+    validated: BTreeSet<String>,
+}
+
+impl LineageDigests {
+    pub(crate) fn of(connection: &Connection, artifact_id: &str) -> Result<Self> {
+        let lineage = LineageContent::load(connection, artifact_id)?;
+        Ok(Self {
+            trained: lineage.trained.digests.into_iter().collect(),
+            validated: lineage.validated.digests.into_iter().collect(),
+        })
+    }
+
+    /// The digests that the adopted copy of training artifact `id` keeps in this ledger.
+    fn adopted(connection: &Connection, id: &str) -> Result<Self> {
+        let digests = connection
+            .query_row(
+                "SELECT json_extract(body,?2) FROM pretrained_sources WHERE id=?1 AND json_extract(body,'$.source_kind')='training_artifact'",
+                [id, crate::repository::ADOPTED_LINEAGE],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten()
+            .ok_or_else(|| {
+                Error::NotFound(format!(
+                    "initialization artifact {id}, or the lineage its adopted copy keeps"
+                ))
+            })?;
+        Ok(serde_json::from_str(&digests)?)
     }
 }
 
@@ -1163,6 +1205,124 @@ mod independence_tests {
             contaminated_groups(&connection, "job-reshuffled", &reshuffled, &lineage).unwrap(),
             std::collections::BTreeSet::from(["b".to_owned(), "c".to_owned()])
         );
+    }
+
+    /// A finished training artifact of `repo`, fitted on six samples of `stream_id` whose
+    /// content digests are `first..first + 6`.
+    fn trained_artifact(
+        repo: &TrainingRepository,
+        stream_id: &str,
+        first: u32,
+        manifest: Value,
+    ) -> ModelArtifact {
+        let line = stream(stream_id);
+        for content in first..first + 6 {
+            let id = format!("{stream_id}-{content}");
+            repo.record_sample(&line, &sample(&id, &format!("{id}-lot"), content))
+                .unwrap();
+        }
+        let request = TrainingRequest {
+            engine: "fixture".into(),
+            recipe: serde_json::json!({}),
+            compute: serde_json::json!({}),
+        };
+        let policy = SplitPolicy::Group {
+            train_fraction: 0.5,
+            validation_fraction: 0.25,
+            seed: 7,
+        };
+        let job = repo
+            .trigger_after_n(&line, 6, request, policy, now_ms())
+            .unwrap()
+            .unwrap();
+        let lease = repo.claim_job(&job.id, "worker", 60_000, now_ms()).unwrap();
+        repo.finish_training(&lease, stream_id.as_bytes(), manifest, now_ms())
+            .unwrap()
+    }
+
+    #[test]
+    fn adopted_training_artifacts_keep_their_whole_lineage_without_the_app_ledger() {
+        let root = tempfile::tempdir().unwrap();
+        let ledger = |name: &str| root.path().join(name).join(LEDGER_DATABASE_FILE);
+        let app = TrainingRepository::open(ledger("project")).unwrap();
+        let origin = trained_artifact(&app, "camera", 0, serde_json::json!({}));
+        let middle = trained_artifact(&app, "press", 10, fine_tuned_from(&origin.id));
+        let expected = LineageContent::load(&app.connection().unwrap(), &middle.id).unwrap();
+        let origin_trained = app.get_snapshot(&origin.snapshot_id).unwrap().train;
+        let user = TrainingRepository::open(ledger("user")).unwrap();
+        user.adopt_pretrained_source(&app, &middle.id, "factory:user")
+            .unwrap();
+        drop(app);
+        std::fs::remove_dir_all(root.path().join("project")).unwrap();
+
+        let connection = user.connection().unwrap();
+        let adopted = LineageContent::load(&connection, &middle.id).unwrap();
+        assert_eq!(adopted.trained.digests, expected.trained.digests);
+        assert_eq!(adopted.validated.digests, expected.validated.digests);
+        let leaked = TrainingSample {
+            content_digest: origin_trained[0].content_digest.clone(),
+            ..sample("leaked", "leaked-lot", 0)
+        };
+        assert!(adopted.trained.digests.contains(&leaked.content_digest));
+        // A private fine-tune of the adopted model audits against its whole App lineage.
+        let target = snapshot(
+            "tuned",
+            vec![sample("t1", "t-lot-1", 900)],
+            vec![sample("t2", "t-lot-2", 901)],
+            Vec::new(),
+        );
+        let model = artifact("tuned", "tuned", fine_tuned_from(&middle.id));
+        let error = ensure_independent_audit(&connection, &model, &target, &[&leaked])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("leaked"), "{error}");
+        let fresh = sample("fresh", "fresh-lot", 902);
+        ensure_independent_audit(&connection, &model, &target, &[&fresh]).unwrap();
+        #[cfg(feature = "burn")]
+        {
+            let held_out = snapshot(
+                "held-out",
+                vec![sample("r1", "r-lot-1", 903)],
+                vec![leaked],
+                vec![fresh],
+            );
+            assert_eq!(
+                contaminated_groups(&connection, "job-held-out", &held_out, &adopted).unwrap(),
+                std::collections::BTreeSet::from(["leaked-lot".to_owned()])
+            );
+        }
+    }
+
+    #[test]
+    fn adopting_again_records_a_lineage_that_an_earlier_adoption_left_out() {
+        let root = tempfile::tempdir().unwrap();
+        let ledger = |name: &str| root.path().join(name).join(LEDGER_DATABASE_FILE);
+        let app = TrainingRepository::open(ledger("project")).unwrap();
+        let origin = trained_artifact(&app, "camera", 0, serde_json::json!({}));
+        let user = TrainingRepository::open(ledger("user")).unwrap();
+        let adopted = user
+            .adopt_pretrained_source(&app, &origin.id, "factory:user")
+            .unwrap();
+        let connection = user.connection().unwrap();
+        connection
+            .execute(
+                "UPDATE pretrained_sources SET body=json_remove(body,?1)",
+                [crate::repository::ADOPTED_LINEAGE],
+            )
+            .unwrap();
+        assert!(matches!(
+            LineageContent::load(&connection, &origin.id),
+            Err(Error::NotFound(_))
+        ));
+        assert_eq!(
+            user.adopt_pretrained_source(&app, &origin.id, "factory:user")
+                .unwrap(),
+            adopted
+        );
+        let expected = LineageContent::load(&app.connection().unwrap(), &origin.id).unwrap();
+        let recorded = LineageContent::load(&connection, &origin.id).unwrap();
+        assert_eq!(recorded.trained.digests, expected.trained.digests);
+        assert_eq!(recorded.validated.digests, expected.validated.digests);
     }
 
     #[test]

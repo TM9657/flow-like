@@ -141,8 +141,13 @@ fn native_artifact(repo: &TrainingRepository, engine: &str, recipe: Value) -> Mo
 
 /// The smallest ResNet18 the feature extractors accept: two classes of 1x8x8 images.
 fn resnet_artifact(repo: &TrainingRepository) -> ModelArtifact {
-    let line = stream("app:board", "camera");
-    record(repo, &line, 12, |index| {
+    resnet_on(repo, &stream("app:board", "camera"), Value::Null)
+}
+
+/// A ResNet18 trained on twelve images recorded in `line` and initialized from `pretrained`.
+/// Streams of the same name record the same images in any ledger.
+fn resnet_on(repo: &TrainingRepository, line: &StreamKey, pretrained: Value) -> ModelArtifact {
+    record(repo, line, 12, |index| {
         (
             TensorData {
                 shape: vec![1, 8, 8],
@@ -168,10 +173,10 @@ fn resnet_artifact(repo: &TrainingRepository) -> ModelArtifact {
     };
     train(
         repo,
-        &line,
+        line,
         12,
         "burn",
-        json!({"config":config,"labels":["camera-0","camera-1"],"pretrained":null,"preprocessing":[]}),
+        json!({"config":config,"labels":["camera-0","camera-1"],"pretrained":pretrained,"preprocessing":[]}),
         SplitPolicy::Time {
             train_end_ms: 5,
             validation_end_ms: 8,
@@ -258,7 +263,9 @@ fn names(directory: &Path) -> BTreeSet<String> {
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack.windows(needle.len()).any(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
 }
 
 fn invalid_containing<T: std::fmt::Debug>(result: Result<T>, text: &str) {
@@ -529,7 +536,9 @@ fn sam2_predictions_from_parts_match_the_ledger_at_every_stage() {
         shape: vec![1024, 1024, 3],
         values: image.values.clone(),
     };
-    assert!(same_outcome(&source, &channels_last, &prompts, &roomy).contains("image input contract"));
+    assert!(
+        same_outcome(&source, &channels_last, &prompts, &roomy).contains("image input contract")
+    );
     // Both paths pass every check and reach the placeholder weights; the portable one never
     // looks at the project.
     let foreign = PretrainedSource {
@@ -566,7 +575,9 @@ fn snapshots_hold_wal_commits_and_every_referenced_blob_in_one_database_file() {
     // An open reader keeps later commits in the WAL: no connection can checkpoint on close.
     let keeper = rusqlite::Connection::open(repo.path()).unwrap();
     keeper
-        .query_row("SELECT count(*) FROM ml_meta", [], |row| row.get::<_, i64>(0))
+        .query_row("SELECT count(*) FROM ml_meta", [], |row| {
+            row.get::<_, i64>(0)
+        })
         .unwrap();
     let late = repo
         .register_pretrained_source(
@@ -578,7 +589,12 @@ fn snapshots_hold_wal_commits_and_every_referenced_blob_in_one_database_file() {
             now_ms(),
         )
         .unwrap();
-    assert!(std::fs::metadata(companion(repo.path(), "-wal")).unwrap().len() > 0);
+    assert!(
+        std::fs::metadata(companion(repo.path(), "-wal"))
+            .unwrap()
+            .len()
+            > 0
+    );
     assert!(
         !contains(&std::fs::read(repo.path()).unwrap(), late.id.as_bytes()),
         "the late source is committed only to the WAL"
@@ -591,9 +607,11 @@ fn snapshots_hold_wal_commits_and_every_referenced_blob_in_one_database_file() {
     for suffix in ["-wal", "-shm", "-journal"] {
         assert!(!companion(&database, suffix).exists(), "{suffix}");
     }
-    let copy =
-        rusqlite::Connection::open_with_flags(&database, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .unwrap();
+    let copy = rusqlite::Connection::open_with_flags(
+        &database,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
     let mode: String = copy
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .unwrap();
@@ -612,7 +630,11 @@ fn snapshots_hold_wal_commits_and_every_referenced_blob_in_one_database_file() {
         .into_iter()
         .map(|blob| format!("{LEDGER_BLOB_DIR}/{}", blob.path))
         .collect();
-    let listed: BTreeSet<String> = snapshot.blobs.iter().map(|blob| blob.file.clone()).collect();
+    let listed: BTreeSet<String> = snapshot
+        .blobs
+        .iter()
+        .map(|blob| blob.file.clone())
+        .collect();
     assert_eq!(listed, expected);
     for blob in &snapshot.blobs {
         let bytes = std::fs::read(target.join(&blob.file)).unwrap();
@@ -624,13 +646,19 @@ fn snapshots_hold_wal_commits_and_every_referenced_blob_in_one_database_file() {
         snapshot.database.sha256,
         sha256_hex(&std::fs::read(&database).unwrap())
     );
-    assert_eq!(snapshot.project_ids, BTreeSet::from(["app:board".to_owned()]));
+    assert_eq!(
+        snapshot.project_ids,
+        BTreeSet::from(["app:board".to_owned()])
+    );
     assert_eq!(
         TrainingRepository::verify_snapshot(&target, u64::MAX).unwrap(),
         snapshot
     );
     for suffix in ["-wal", "-shm", "-journal"] {
-        assert!(!companion(&database, suffix).exists(), "verification wrote {suffix}");
+        assert!(
+            !companion(&database, suffix).exists(),
+            "verification wrote {suffix}"
+        );
     }
     assert!(matches!(repo.snapshot_to(&target), Err(Error::Conflict(_))));
 }
@@ -683,7 +711,11 @@ fn snapshot_verification_rejects_missing_or_altered_blobs_foreign_schemas_and_ov
     );
 
     for (name, sql, text) in [
-        ("table", "CREATE TABLE intruder(x)", "unexpected table intruder"),
+        (
+            "table",
+            "CREATE TABLE intruder(x)",
+            "unexpected table intruder",
+        ),
         (
             "trigger",
             "CREATE TRIGGER intruder AFTER INSERT ON jobs BEGIN DELETE FROM artifacts; END",
@@ -693,7 +725,10 @@ fn snapshot_verification_rejects_missing_or_altered_blobs_foreign_schemas_and_ov
     ] {
         let (foreign, _) = snapshot_at(name);
         edit_database(&foreign, sql);
-        invalid_containing(TrainingRepository::verify_snapshot(&foreign, u64::MAX), text);
+        invalid_containing(
+            TrainingRepository::verify_snapshot(&foreign, u64::MAX),
+            text,
+        );
     }
 
     let (wal, _) = snapshot_at("wal");
@@ -737,7 +772,10 @@ fn installs_fill_only_an_empty_destination_and_never_replace_a_ledger() {
     let installed = TrainingRepository::open(&installed_path).unwrap();
     assert_eq!(installed.project_ids().unwrap(), snapshot.project_ids);
     assert_eq!(installed.get_artifact(&artifact.id).unwrap(), artifact);
-    assert_eq!(installed.read_blob(&source.blob).unwrap(), b"imported weights");
+    assert_eq!(
+        installed.read_blob(&source.blob).unwrap(),
+        b"imported weights"
+    );
     assert_eq!(
         TrainingRepository::verify_snapshot(&snapshot_dir, u64::MAX).unwrap(),
         snapshot,
@@ -763,7 +801,10 @@ fn installs_fill_only_an_empty_destination_and_never_replace_a_ledger() {
         Err(Error::Conflict(_))
     ));
     assert_eq!(std::fs::read(&existing_path).unwrap(), database_before);
-    assert_eq!(names(&existing_path.with_extension("artifacts")), blobs_before);
+    assert_eq!(
+        names(&existing_path.with_extension("artifacts")),
+        blobs_before
+    );
     assert_eq!(
         existing.project_ids().unwrap(),
         BTreeSet::from(["app:other".to_owned()])
@@ -809,7 +850,10 @@ fn installs_fill_only_an_empty_destination_and_never_replace_a_ledger() {
         .iter()
         .map(|blob| blob.file.trim_start_matches("jobs.artifacts/").to_owned())
         .collect();
-    assert_eq!(names(&contested.with_extension("artifacts")), expected_blobs);
+    assert_eq!(
+        names(&contested.with_extension("artifacts")),
+        expected_blobs
+    );
     assert_eq!(
         TrainingRepository::open(&contested)
             .unwrap()
@@ -824,7 +868,8 @@ fn project_ids_cover_every_table_that_names_a_project() {
     let directory = tempfile::tempdir().unwrap();
     let repo = TrainingRepository::open(directory.path().join(LEDGER_DATABASE_FILE)).unwrap();
     assert!(repo.project_ids().unwrap().is_empty());
-    let key = |project: &str| json!({"project_id":project,"stream_id":"line","inspection_version":"v1"});
+    let key =
+        |project: &str| json!({"project_id":project,"stream_id":"line","inspection_version":"v1"});
     let connection = rusqlite::Connection::open(repo.path()).unwrap();
     for (sql, id, body) in [
         (
@@ -976,4 +1021,37 @@ fn adopted_sources_keep_their_id_kind_and_blob_under_the_private_project() {
         user.adopt_pretrained_source(&app, &imported.id, " "),
         Err(Error::Invalid(_))
     ));
+}
+
+#[test]
+fn private_ledgers_fine_tune_adopted_app_artifacts_after_the_app_ledger_is_gone() {
+    let root = tempfile::tempdir().unwrap();
+    let app_ledger = root.path().join("project");
+    let app = TrainingRepository::open(app_ledger.join(LEDGER_DATABASE_FILE)).unwrap();
+    let source = resnet_artifact(&app);
+    let user = TrainingRepository::open(
+        root.path()
+            .join("users")
+            .join("sub")
+            .join(LEDGER_DATABASE_FILE),
+    )
+    .unwrap();
+    user.adopt_pretrained_source(&app, &source.id, "app:board:user")
+        .unwrap();
+    drop(app);
+    std::fs::remove_dir_all(&app_ledger).unwrap();
+
+    // The same images under the same split keep the rows the source trained on in training.
+    let pretrained = json!({"source_id": source.id});
+    let tuned = resnet_on(&user, &stream("app:board:user", "camera"), pretrained);
+    assert_eq!(tuned.manifest["pretrained"]["source_id"], source.id);
+    assert_eq!(
+        tuned.manifest["pretrained"]["source_kind"],
+        "training_artifact"
+    );
+    // Audits walk the fine-tune's lineage back to the adopted source; only evidence is missing.
+    invalid_containing(
+        user.evaluate_classification(&tuned.id, now_ms()),
+        "no prediction pairs",
+    );
 }

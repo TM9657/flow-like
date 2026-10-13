@@ -10,6 +10,7 @@ import {
 	it,
 	vi,
 } from "vitest";
+import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
 import { WordcraftDocument } from "./wordcraft-document";
 import { DOCX_MIME, WORDCRAFT_CHANNEL } from "./wordcraft-protocol";
 
@@ -52,7 +53,9 @@ let container: HTMLDivElement;
 let frameWindow: Window;
 let send: ReturnType<typeof vi.fn>;
 let fetchDocument: ReturnType<typeof vi.fn>;
-let saveDocument: Mock<(file: File) => Promise<void>>;
+let saveDocument: Mock<
+	(file: File, onProgress?: BulkUploadProgressCallback) => Promise<void>
+>;
 let dirtyChange: Mock<(dirty: boolean) => void>;
 let busyChange: Mock<(busy: boolean) => void>;
 let iframeLoadingDisabled: boolean;
@@ -271,23 +274,78 @@ describe("Flows Word document host", () => {
 		expect(container.textContent).toContain("Saved");
 	});
 
-	it("retains dirty edits after a failed upload and permits another save", async () => {
-		saveDocument.mockRejectedValueOnce(new Error("Storage is unavailable"));
+	it("shows preparation and upload progress until storage confirms the save", async () => {
+		const upload = deferred<void>();
+		saveDocument.mockReturnValue(upload.promise);
 		await openForEditing();
-		const failedRequest = await exportDocument();
-		expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-			"Storage is unavailable",
-		);
-		expect(container.textContent).toContain("Unsaved changes");
+		await click("Save");
+		expect(container.textContent).toContain("Preparing file");
+		expect(container.querySelector('[role="progressbar"]')).toBeNull();
+		const requestId = messages("export").at(-1)?.requestId;
+		await receive({
+			type: "exported",
+			requestId,
+			bytes: editedBytes.slice().buffer,
+			revision: 4,
+		});
+		expect(container.textContent).toContain("Saving file");
+		const progress = saveDocument.mock.calls[0][1];
+		expect(progress).toBeTypeOf("function");
+		await act(async () => progress?.(43));
+		expect(container.textContent).toContain("43%");
+		expect(
+			container
+				.querySelector('[role="progressbar"]')
+				?.getAttribute("aria-valuenow"),
+		).toBe("43");
+		await act(async () => progress?.(100));
+		expect(container.textContent).toContain("Finishing save");
 		expect(messages("saved")).toHaveLength(0);
-		expect(dirtyChange).toHaveBeenLastCalledWith(true);
-		expect(button("Save").disabled).toBe(false);
-		const nextRequest = await exportDocument();
-		expect(nextRequest).not.toBe(failedRequest);
-		expect(saveDocument).toHaveBeenCalledTimes(2);
+		expect(button("Save").disabled).toBe(true);
+		await act(async () => upload.resolve());
+		expect(container.textContent).not.toContain("Finishing save");
 		expect(messages("saved")).toHaveLength(1);
-		expect(container.querySelector('[role="alert"]')).toBeNull();
+		await act(async () => progress?.(72));
+		expect(container.textContent).not.toContain("72%");
 	});
+
+	it.each([new Error("Storage is unavailable"), "Storage is unavailable"])(
+		"retains dirty edits and offers retry after upload failure: %s",
+		async (cause) => {
+			saveDocument.mockRejectedValueOnce(cause);
+			await openForEditing();
+			const documentFrame = container.querySelector("iframe");
+			const failedRequest = await exportDocument();
+			expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+				"Storage is unavailable",
+			);
+			expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+				"Could not save file",
+			);
+			expect(container.textContent).toContain("Your changes are still open.");
+			expect(container.textContent).toContain("Unsaved changes");
+			expect(messages("saved")).toHaveLength(0);
+			expect(dirtyChange).toHaveBeenLastCalledWith(true);
+			expect(button("Save").disabled).toBe(false);
+			await click("Try saving again");
+			expect(container.querySelector('[role="alert"]')).toBeNull();
+			expect(container.textContent).toContain("Preparing file");
+			const nextRequest = messages("export").at(-1)?.requestId;
+			expect(nextRequest).not.toBe(failedRequest);
+			await act(async () => saveDocument.mock.calls[0][1]?.(72));
+			expect(container.textContent).not.toContain("72%");
+			await receive({
+				type: "exported",
+				requestId: nextRequest,
+				bytes: editedBytes.slice().buffer,
+				revision: 5,
+			});
+			expect(saveDocument).toHaveBeenCalledTimes(2);
+			expect(messages("saved")).toHaveLength(1);
+			expect(container.querySelector('[role="alert"]')).toBeNull();
+			expect(container.querySelector("iframe")).toBe(documentFrame);
+		},
+	);
 
 	it("ignores stale exports and duplicate responses during and after upload", async () => {
 		const upload = deferred<void>();
@@ -376,6 +434,7 @@ describe("Flows Word document host", () => {
 		await exportDocument();
 		await act(async () => root?.unmount());
 		root = null;
+		await act(async () => saveDocument.mock.calls[0][1]?.(81));
 		await act(async () => upload.resolve());
 		expect(messages("saved")).toHaveLength(0);
 		expect(dirtyChange).toHaveBeenLastCalledWith(false);

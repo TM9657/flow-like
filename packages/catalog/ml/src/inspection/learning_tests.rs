@@ -211,6 +211,41 @@ async fn learning_harness(rows: usize) -> Harness {
     learning_harness_in(rows, false).await
 }
 
+/// The project and the user database locations of a harness directory.
+fn database_locations(directory: &Directory) -> [String; 2] {
+    ["database", "user-database"].map(|name| directory.0.join(name).to_string_lossy().into_owned())
+}
+
+/// A config whose project and user databases live at `locations`.
+fn harness_config(locations: &[String; 2]) -> flow_like::state::FlowLikeConfig {
+    let mut config = flow_like::state::FlowLikeConfig::new();
+    let [project, user] = locations.clone();
+    config.register_build_project_database(std::sync::Arc::new(move |_| {
+        flow_like_storage::lancedb::connect(&project)
+    }));
+    config.register_build_user_database(std::sync::Arc::new(move |_| {
+        flow_like_storage::lancedb::connect(&user)
+    }));
+    config
+}
+
+/// Local app storage in `directory` and a local user store below it.
+fn harness_stores(directory: &Directory) -> flow_like::state::FlowLikeStores {
+    use flow_like_storage::files::store::{FlowLikeStore, local_store::LocalObjectStore};
+    let user_store = directory.0.join("user-store");
+    std::fs::create_dir_all(&user_store).unwrap();
+    let local = |path: std::path::PathBuf| {
+        Some(FlowLikeStore::Local(std::sync::Arc::new(
+            LocalObjectStore::new(path).unwrap(),
+        )))
+    };
+    flow_like::state::FlowLikeStores {
+        app_storage_store: local(directory.0.clone()),
+        user_store: local(user_store),
+        ..Default::default()
+    }
+}
+
 /// A board context of user "tester" with local app storage, a local user store, and project and
 /// user databases; the source rows live in the user's database when `private` is set.
 async fn learning_harness_in(rows: usize, private: bool) -> Harness {
@@ -223,7 +258,7 @@ async fn learning_harness_in(rows: usize, private: bool) -> Harness {
             },
         },
         profile::Profile,
-        state::{FlowLikeConfig, FlowLikeState, FlowLikeStores},
+        state::FlowLikeState,
         utils::http::HTTPClient,
     };
     use flow_like_catalog_core::CachedDB;
@@ -231,7 +266,6 @@ async fn learning_harness_in(rows: usize, private: bool) -> Harness {
         databases::vector::{
             VectorStore, buffered::BufferedVectorStore, lancedb::LanceDBVectorStore,
         },
-        files::store::{FlowLikeStore, local_store::LocalObjectStore},
         object_store::path::Path,
     };
     use flow_like_types::sync::{Mutex, RwLock};
@@ -240,32 +274,18 @@ async fn learning_harness_in(rows: usize, private: bool) -> Harness {
         "flow-like-learning-project-{}",
         uuid::Uuid::new_v4()
     )));
-    let user_store = directory.0.join("user-store");
-    std::fs::create_dir_all(&user_store).unwrap();
-    let project_location = directory.0.join("database").to_string_lossy().into_owned();
-    let user_location = directory
-        .0
-        .join("user-database")
-        .to_string_lossy()
-        .into_owned();
-    let mut config = FlowLikeConfig::new();
-    let reopen = project_location.clone();
-    config.register_build_project_database(Arc::new(move |_| {
-        flow_like_storage::lancedb::connect(&reopen)
-    }));
-    let reopen = user_location.clone();
-    config.register_build_user_database(Arc::new(move |_| {
-        flow_like_storage::lancedb::connect(&reopen)
-    }));
+    let stores = harness_stores(&directory);
+    let locations = database_locations(&directory);
+    let state = Arc::new(FlowLikeState::new(
+        harness_config(&locations),
+        HTTPClient::new_without_refetch(),
+    ));
+    let [project_location, user_location] = locations;
     let db_location = if private {
         user_location
     } else {
         project_location
     };
-    let state = Arc::new(FlowLikeState::new(
-        config,
-        HTTPClient::new_without_refetch(),
-    ));
     let logic: Arc<dyn NodeLogic> = Arc::new(CreateLearningProjectNode);
     let node = Arc::new(InternalNode::new(
         logic.get_node(),
@@ -294,13 +314,6 @@ async fn learning_harness_in(rows: usize, private: bool) -> Harness {
         None,
     )
     .await;
-    let mut stores = FlowLikeStores::default();
-    stores.app_storage_store = Some(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(directory.0.clone()).unwrap(),
-    )));
-    stores.user_store = Some(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(user_store).unwrap(),
-    )));
     context.execution_cache = Some(ExecutionContextCache {
         stores,
         app_id: "learning-test".into(),
@@ -408,11 +421,19 @@ fn champion(
 async fn publish_pointer(context: &mut ExecutionContext, pointer: &ChampionPointer) {
     let root = FlowPath::from_storage_dir(context, false).await.unwrap();
     FlowPath {
-        path: format!("{}/{}", root.path, learning_pointer_path(&pointer.project_id)),
+        path: format!(
+            "{}/{}",
+            root.path,
+            learning_pointer_path(&pointer.project_id)
+        ),
         store_ref: root.store_ref,
         cache_store_ref: None,
     }
-    .put(context, flow_like_types::json::to_vec(pointer).unwrap(), true)
+    .put(
+        context,
+        flow_like_types::json::to_vec(pointer).unwrap(),
+        true,
+    )
     .await
     .unwrap();
     context.cache.write().await.clear();
@@ -516,7 +537,11 @@ async fn routing_without_a_ledger_follows_the_published_champion() {
             .unwrap(),
         LearningRoute::Teacher
     ));
-    publish_pointer(&mut harness.context, &champion("collecting", None, false, (0, 1))).await;
+    publish_pointer(
+        &mut harness.context,
+        &champion("collecting", None, false, (0, 1)),
+    )
+    .await;
     assert!(matches!(
         route(&mut harness.context, route_to("collecting"))
             .await
@@ -562,7 +587,10 @@ async fn a_newer_local_champion_pointer_routes_before_the_ledger() {
     publish_pointer(&mut harness.context, &newer).await;
     match route(&mut harness.context, route_request()).await.unwrap() {
         LearningRoute::Champion { artifact_id } => assert_eq!(artifact_id, "newer-champion"),
-        other => panic!("expected the newer published champion, got {}", json!(other)),
+        other => panic!(
+            "expected the newer published champion, got {}",
+            json!(other)
+        ),
     }
 }
 

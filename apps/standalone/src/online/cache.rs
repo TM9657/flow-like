@@ -2822,8 +2822,7 @@ mod tests {
             cloud.clone(),
             control(root.path(), "models", 4 * 1024 * 1024),
         );
-        let weights =
-            ObjectPath::from("apps/project/storage/models/artifacts/model-1/weights.bin");
+        let weights = ObjectPath::from("apps/project/storage/models/artifacts/model-1/weights.bin");
         let private =
             ObjectPath::from("users/alice/apps/project/models/artifacts/model-1/manifest.json");
         let pointer = ObjectPath::from("apps/project/storage/models/learning/project.json");

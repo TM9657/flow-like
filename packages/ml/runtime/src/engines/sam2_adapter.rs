@@ -284,11 +284,7 @@ fn unpack_source(
 
 /// Unpacks a source's verified blob bytes, whose bundle state must describe exactly the
 /// source's manifest.
-fn unpack_bundle(
-    source: &PretrainedSource,
-    bytes: &[u8],
-    limit: u64,
-) -> Result<tempfile::TempDir> {
+fn unpack_bundle(source: &PretrainedSource, bytes: &[u8], limit: u64) -> Result<tempfile::TempDir> {
     let directory = tempfile::tempdir()?;
     burn_adapter::unpack_named(bytes, directory.path(), burn::SAM2_MANIFEST_FILE, limit)?;
     let state: Value =

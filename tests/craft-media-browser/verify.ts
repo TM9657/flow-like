@@ -32,6 +32,8 @@ declare global {
 
 const directory = await mkdtemp(join(tmpdir(), "flow-like-craft-media-"));
 const assets = resolve(import.meta.dir, "../../apps/web/public/craft");
+const videoWidth = 320;
+const videoHeight = 180;
 const runtimes = process.argv.slice(2);
 const selected = runtimes.length
 	? runtimes
@@ -62,7 +64,7 @@ if (selected.includes("filmcraft")) {
 		"-f",
 		"lavfi",
 		"-i",
-		"color=c=blue:s=32x32:r=10",
+		`color=c=blue:s=${videoWidth}x${videoHeight}:r=10`,
 		"-f",
 		"lavfi",
 		"-i",
@@ -402,7 +404,7 @@ try {
 			await send({ type: "export", requestId: "save", format });
 			const exported = await waitEvent("exported", "save");
 			assert.ok(exported.bytes);
-			const output = Uint8Array.from(exported.bytes);
+			let output = Uint8Array.from(exported.bytes);
 			assert.ok(output.length > 44);
 			await send({ type: "saved", revision: (exported.revision ?? 0) + 1 });
 			await settle();
@@ -497,7 +499,7 @@ try {
 				assert.ok(
 					probe.streams.some(
 						(stream: { codec_name: string; width: number }) =>
-							stream.codec_name === "h264" && stream.width === 32,
+							stream.codec_name === "h264" && stream.width === videoWidth,
 					),
 				);
 				assert.ok(
@@ -524,7 +526,7 @@ try {
 					"pipe:1",
 				]);
 				const expectedPixels =
-					32 * 32 * Math.round(Number(video.duration) * 10);
+					videoWidth * videoHeight * Math.round(Number(video.duration) * 10);
 				assert.equal(pixels.length, expectedPixels * 3);
 				let blue = 0;
 				for (let offset = 0; offset < pixels.length; offset += 3)
@@ -576,6 +578,93 @@ try {
 					Math.sqrt(finalEnergy / 480) > 0.01,
 					"Correcting encoder delay must preserve the final edited audio samples",
 				);
+
+				const frame = await (await page.$("iframe"))?.contentFrame();
+				assert.ok(frame);
+				await frame.evaluate(() => document.querySelector("canvas")?.focus());
+				await page.keyboard.press("Home");
+				await settle();
+				await page.keyboard.press("ArrowRight");
+				await settle();
+				const modifier = await page.evaluate(() =>
+					navigator.platform.includes("Mac") ? "Meta" : "Control",
+				);
+				await page.keyboard.down(modifier);
+				await page.keyboard.down("Alt");
+				await page.keyboard.press("KeyC");
+				await page.keyboard.up("Alt");
+				await page.keyboard.up(modifier);
+				await settle();
+				await send({ type: "export", requestId: "subtitles", format });
+				const subtitled = await waitEvent("exported", "subtitles");
+				assert.ok(subtitled.bytes);
+				assert.ok(
+					(subtitled.revision ?? 0) > (exported.revision ?? 0),
+					"Adding a subtitle must change the exported revision",
+				);
+				const subtitledPath = join(directory, "subtitled.mp4");
+				await writeFile(subtitledPath, Uint8Array.from(subtitled.bytes));
+				const subtitlePixels = execFileSync(
+					"ffmpeg",
+					[
+						"-v",
+						"error",
+						"-i",
+						subtitledPath,
+						"-an",
+						"-f",
+						"rawvideo",
+						"-pix_fmt",
+						"rgb24",
+						"pipe:1",
+					],
+					{ maxBuffer: videoWidth * videoHeight * 3 * 40 },
+				);
+				const frameBytes = videoWidth * videoHeight * 3;
+				assert.equal(
+					subtitlePixels.length,
+					frameBytes * 31,
+					"The default three-second subtitle starts at 0.1 seconds",
+				);
+				const brightPixels = (
+					index: number,
+					firstRow: number,
+					lastRow: number,
+				) => {
+					let count = 0;
+					for (let y = firstRow; y < lastRow; y++) {
+						for (let x = 0; x < videoWidth; x++) {
+							const offset = index * frameBytes + (y * videoWidth + x) * 3;
+							if (
+								subtitlePixels[offset] > 180 &&
+								subtitlePixels[offset + 1] > 180 &&
+								subtitlePixels[offset + 2] > 180
+							)
+								count++;
+						}
+					}
+					return count;
+				};
+				assert.equal(
+					brightPixels(0, 0, videoHeight),
+					0,
+					"Subtitle text must not appear before its start time",
+				);
+				for (const index of [1, 30]) {
+					assert.ok(
+						brightPixels(index, (videoHeight * 2) / 3, videoHeight) > 50,
+						"Saved MP4 must contain subtitle text throughout its duration",
+					);
+					assert.equal(
+						brightPixels(index, 0, videoHeight / 2),
+						0,
+						"Subtitle text must retain its bottom-of-frame placement",
+					);
+				}
+				console.log(
+					"filmcraft: saved MP4 burns subtitle pixels at their timeline times",
+				);
+				output = Uint8Array.from(subtitled.bytes);
 			}
 			if (runtime === "soundcraft" || runtime === "filmcraft") {
 				const frame = await (await page.$("iframe"))?.contentFrame();

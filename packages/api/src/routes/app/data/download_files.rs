@@ -37,7 +37,8 @@ pub(crate) async fn sign_downloads(
 ) -> Vec<Value> {
     stream::iter(entries)
         .map(|(prefix, download_path)| async move {
-            match store.sign_cached("GET", &download_path, ttl).await {
+            // Editor saves overwrite these paths, so a reused URL can serve old browser bytes.
+            match store.sign("GET", &download_path, ttl).await {
                 Ok(url) => json::json!({
                     "prefix": prefix,
                     "url": url.to_string(),
@@ -197,4 +198,41 @@ pub async fn download_user_files(
     Ok(Json(
         sign_downloads(&project_dir, entries, ttl, &sub, &app_id).await,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flow_like_storage::object_store::aws::AmazonS3Builder;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn repeated_downloads_receive_fresh_signatures_for_mutable_files() {
+        let store = FlowLikeStore::AWS(Arc::new(
+            AmazonS3Builder::new()
+                .with_bucket_name(format!("downloads-{}", create_id()))
+                .with_region("us-east-1")
+                .with_endpoint("https://storage.example.test")
+                .with_access_key_id("test-access-key")
+                .with_secret_access_key("test-secret-key")
+                .build()
+                .unwrap(),
+        ));
+        let entries = vec![(
+            "video.mp4".to_string(),
+            paths::resolve_app_upload("app-a", "video.mp4"),
+        )];
+        let first =
+            sign_downloads(&store, entries.clone(), DOWNLOAD_URL_TTL, "user-a", "app-a").await;
+
+        // S3 signatures encode the signing time in whole seconds.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+
+        let second = sign_downloads(&store, entries, DOWNLOAD_URL_TTL, "user-a", "app-a").await;
+        assert_eq!(first[0]["prefix"], "video.mp4");
+        assert_eq!(second[0]["prefix"], "video.mp4");
+        let first_url = first[0]["url"].as_str().expect("first download URL");
+        let second_url = second[0]["url"].as_str().expect("refreshed download URL");
+        assert_ne!(first_url, second_url);
+    }
 }

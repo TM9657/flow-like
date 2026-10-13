@@ -353,9 +353,9 @@ mod tests {
         }
     }
 
+    /// A detached run context of `logic` without any stores.
     #[cfg(not(feature = "training"))]
-    #[tokio::test]
-    async fn agents_without_a_training_build_refuse_with_the_shared_text() {
+    async fn detached_context(logic: std::sync::Arc<dyn NodeLogic>) -> ExecutionContext {
         use ahash::AHashMap;
         use flow_like::{
             flow::{
@@ -366,10 +366,8 @@ mod tests {
             state::{FlowLikeConfig, FlowLikeState},
             utils::http::HTTPClient,
         };
-        use flow_like_catalog_ml::inspection::lifecycle::TRAINING_UNAVAILABLE;
         use flow_like_types::sync::{Mutex, RwLock};
         use std::sync::{Arc, Weak};
-        let logic: Arc<dyn NodeLogic> = Arc::new(LearningProjectAgentNode);
         let node = Arc::new(InternalNode::new(
             logic.get_node(),
             AHashMap::new(),
@@ -381,7 +379,7 @@ mod tests {
             HTTPClient::new_without_refetch(),
         ));
         let run: Weak<Mutex<Run>> = Weak::new();
-        let mut context = ExecutionContext::new(
+        ExecutionContext::new(
             Arc::new(AHashMap::from_iter([(
                 node.node_id().to_string(),
                 node.clone(),
@@ -401,12 +399,20 @@ mod tests {
             Arc::new(AHashMap::new()),
             None,
         )
-        .await;
+        .await
+    }
+
+    #[cfg(not(feature = "training"))]
+    #[tokio::test]
+    async fn agents_without_a_training_build_refuse_with_the_shared_text() {
+        use flow_like_catalog_ml::inspection::lifecycle::TRAINING_UNAVAILABLE;
+        use std::sync::Arc;
         let agents: [Arc<dyn NodeLogic>; 2] = [
             Arc::new(super::super::auto_training::AutoTrainAgentNode),
             Arc::new(LearningProjectAgentNode),
         ];
         for agent in agents {
+            let mut context = detached_context(agent.clone()).await;
             let error = agent.run(&mut context).await.unwrap_err();
             assert_eq!(error.to_string(), TRAINING_UNAVAILABLE);
         }

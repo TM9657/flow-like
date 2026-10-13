@@ -93,12 +93,18 @@ media libraries, so they do not open as standalone storage files.
 
 ## Models and training history
 
-Trained models are published as files under `storage/models` in **Storage**,
-or under `models` in **User Storage** for models trained on your own tables.
-They sync like any other app file, ship to devices with a deployment and travel
-in app archives, so other runtimes can run them. Forks that do not copy data
-leave `storage/models` out. Model folders are written once and checked by
-sha256; a file edited by hand there stops its model from loading.
+Trained models are published as files under `models` in the app's storage
+folder, which flows reach through the **Storage Dir** node. The **Storage** view
+lists the upload folder, so it does not show them. These models sync like any
+other app file, ship to devices with a deployment and travel in app archives,
+so other runtimes can run them. Forks that do not copy data leave them out.
+
+Models trained on your own tables go to `models` in **User Storage** instead.
+They sync for online apps and reach a device only with the data of the user a
+deployment selects; app archives leave them out.
+
+Model folders are written once and checked by sha256; a file edited by hand
+there stops its model from loading.
 
 The training history behind these models stays on the computer or device that
 trained them. Only **Export Training Ledger** and **Import Training Ledger**

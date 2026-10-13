@@ -128,7 +128,8 @@ async fn pretrained_features(
 }
 
 /// Features from the published folder of `request.source_id`: a pretrained source or a Burn
-/// model, in the app storage or the executing user's directory.
+/// model, in the app storage or the executing user's directory, computed by the feature
+/// extractor the model depends on when it records one.
 #[cfg(feature = "inference")]
 async fn published_pretrained_features(
     context: &mut ExecutionContext,
@@ -152,12 +153,56 @@ async fn published_pretrained_features(
     if request.preprocessing.is_empty() {
         return Ok((features, extractor));
     }
-    let published = super::published::resolve_model(context, &model).await?;
-    let source = published_source(&published.manifest)?;
+    let source = computing_source(context, &model, &extractor).await?;
     Ok((
         features,
         applied_extractor(&source, &shape, &request.preprocessing)?,
     ))
+}
+
+/// The pretrained source of the published folder whose weights computed `extractor`: the
+/// folder of `model`, or of the feature extractor it depends on, read where the loader reads
+/// it, the model root's artifact folder and then `dependencies/` beside the model.
+#[cfg(feature = "inference")]
+async fn computing_source(
+    context: &mut ExecutionContext,
+    model: &super::published::PublishedModelSource,
+    extractor: &super::lifecycle::FeatureExtractorRef,
+) -> Result<flow_like_ml_runtime::PretrainedSource> {
+    use super::published::{
+        MANIFEST_FILE, PublishedModelSource, child, dependency_dir, folder_of, resolve_model,
+    };
+    let mut folder = resolve_model(context, model).await?;
+    if let Some(dependency) = folder.manifest.dependencies.feature_extractor.clone() {
+        let canonical = PublishedModelSource::Artifact {
+            artifact_id: dependency.source_id.clone(),
+            storage: folder.storage,
+        };
+        folder = match resolve_model(context, &canonical).await {
+            Ok(found) => found,
+            Err(_) => {
+                let model_folder = folder_of(&folder.manifest_path);
+                let exported_folder = child(&model_folder, &dependency_dir(&dependency.source_id));
+                let exported = PublishedModelSource::Files {
+                    manifest: child(&exported_folder, MANIFEST_FILE),
+                    weights: None,
+                };
+                resolve_model(context, &exported).await?
+            }
+        };
+    }
+    let source = published_source(&folder.manifest)?;
+    if source.id != extractor.source_id || source.blob.sha256 != extractor.blob_sha256 {
+        return Err(anyhow!(
+            "{} holds {} with weights {}, not the feature extractor {} with weights {} that computed the features",
+            folder.manifest_path.path,
+            source.id,
+            source.blob.sha256,
+            extractor.source_id,
+            extractor.blob_sha256
+        ));
+    }
+    Ok(source)
 }
 
 /// The pretrained source a published folder holds; a model artifact counts as a training
@@ -421,8 +466,11 @@ impl NodeLogic for ListPretrainedVisionNode {
         {
             context.deactivate_exec_pin("exec_out").await?;
             let request: ListPretrainedVisionRequest = context.evaluate_pin("request").await?;
-            let (repo, project) = super::lifecycle::repository(context)?;
-            let result = repo.list_pretrained_sources(&project, request.maximum)?;
+            let scope = super::lifecycle::LedgerScope::App;
+            let result = match super::lifecycle::existing_repository(context, scope)? {
+                Some((repo, project)) => repo.list_pretrained_sources(&project, request.maximum)?,
+                None => Vec::new(),
+            };
             context
                 .set_pin_value("result", flow_like_types::json::json!(result))
                 .await?;
@@ -524,8 +572,150 @@ mod tests {
         .await
         .unwrap();
         for pin in ["result", "extractor"] {
-            assert_eq!(output(&files, pin).await, output(&ledger, pin).await, "{pin}");
+            assert_eq!(
+                output(&files, pin).await,
+                output(&ledger, pin).await,
+                "{pin}"
+            );
         }
+    }
+
+    #[cfg(feature = "training")]
+    #[tokio::test]
+    async fn listing_pretrained_weights_reads_the_app_ledger_without_creating_it() {
+        use super::super::lifecycle::{repository, test_device::*};
+        use flow_like_types::json::json;
+        let device = Device::new();
+        let request = json!({"maximum": 8});
+        let listed = run_node(ListPretrainedVisionNode, request.clone(), device.stores())
+            .await
+            .unwrap();
+        assert_eq!(listed, json!([]));
+        assert!(!device.root().join("training-ledgers").exists());
+        assert!(!device.root().join("apps").exists());
+        let context = plain_context(device.stores()).await;
+        let (repo, project) = repository(&context).unwrap();
+        let manifest = json!({
+            "engine": "burn", "format_version": 1, "config": {}, "input_shape": [1]
+        });
+        let source = repo
+            .register_pretrained_source(
+                &project,
+                b"weights",
+                manifest,
+                json!({"source": "fixture"}),
+                1024,
+                flow_like_ml_runtime::now_ms(),
+            )
+            .unwrap();
+        let listed = run_node(ListPretrainedVisionNode, request, device.stores())
+            .await
+            .unwrap();
+        assert_eq!(listed[0]["id"], json!(source.id));
+    }
+
+    #[cfg(feature = "training")]
+    #[tokio::test]
+    async fn published_dependencies_check_declared_preprocessing_and_name_the_extractor() {
+        use super::super::lifecycle::{FeatureExtractorRef, test_device::*};
+        use super::super::published::{
+            MANIFEST_FILE, PublishedModelSource, artifact_dir, dependency_dir,
+        };
+        use flow_like_ml_core::PreprocessingStep;
+        use flow_like_types::{Value, json::json};
+        let device = Device::new();
+        let mut context = plain_context(device.stores()).await;
+        let write = |folder: &std::path::Path, manifest: &Value| {
+            std::fs::create_dir_all(folder).unwrap();
+            std::fs::write(folder.join(MANIFEST_FILE), manifest.to_string()).unwrap();
+        };
+        let digest = |digit: &str| digit.repeat(64);
+        let blob = |sha: &str| json!({"sha256": sha, "bytes": 3, "path": format!("{sha}.blob")});
+        let weights = |sha: &str| json!({"file": "weights.bin", "sha256": sha, "bytes": 3});
+        let resize = PreprocessingStep::Resize {
+            width: 4,
+            height: 4,
+        };
+        let normalize = |mean: f32, std: f32| PreprocessingStep::Normalize {
+            mean: vec![mean; 3],
+            std: vec![std; 3],
+        };
+        let backbone_id = "pretrained:backbone";
+        let recommended = vec![resize.clone(), normalize(0.45, 0.225)];
+        let backbone = json!({
+            "format_version": 2,
+            "pretrained_source": {
+                "id": backbone_id, "project_id": "app:board", "source_kind": "imported",
+                "blob": blob(&digest("b")), "origin": {}, "created_at_ms": 0,
+                "manifest": {"engine": "burn", "recommended_preprocessing": recommended}
+            },
+            "weights": weights(&digest("b"))
+        });
+        let stream = json!({
+            "project_id": "app:board", "stream_id": "camera", "inspection_version": "1"
+        });
+        let patchcore = json!({
+            "format_version": 2,
+            "artifact": {
+                "id": "patchcore", "job_id": "job", "snapshot_id": "snapshot", "stream": stream,
+                "dataset_digest": digest("d"), "blob": blob(&digest("a")),
+                "manifest": {"engine": "patchcore"}, "created_at_ms": 0
+            },
+            "weights": weights(&digest("a")),
+            "dependencies": {
+                "feature_extractor": {"source_id": backbone_id, "blob_sha256": digest("b")}
+            }
+        });
+        let models = device.root().join("apps/app/storage");
+        let (patchcore_folder, backbone_folder) = (
+            models.join(artifact_dir("patchcore")),
+            models.join(artifact_dir(backbone_id)),
+        );
+        write(&patchcore_folder, &patchcore);
+        write(&backbone_folder, &backbone);
+        let model = PublishedModelSource::Artifact {
+            artifact_id: "patchcore".into(),
+            storage: None,
+        };
+        let computed = FeatureExtractorRef {
+            source_id: backbone_id.into(),
+            blob_sha256: digest("b"),
+            image_steps: recommended,
+        };
+        let source = computing_source(&mut context, &model, &computed)
+            .await
+            .unwrap();
+        assert_eq!(source.id, backbone_id);
+        let declared = vec![resize.clone(), normalize(0.5, 0.25)];
+        let applied = applied_extractor(&source, &[3, 4, 4], &declared).unwrap();
+        assert_eq!(applied.source_id, backbone_id);
+        assert_eq!(applied.blob_sha256, digest("b"));
+        assert_eq!(applied.image_steps, declared);
+        let unnormalized = vec![resize, normalize(0.0, 1.0)];
+        let error = applied_extractor(&source, &[3, 4, 4], &unnormalized).unwrap_err();
+        assert!(
+            error.to_string().contains("expects images normalized"),
+            "{error}"
+        );
+
+        std::fs::remove_dir_all(&backbone_folder).unwrap();
+        let exported_folder = patchcore_folder.join(dependency_dir(backbone_id));
+        write(&exported_folder, &backbone);
+        let exported = computing_source(&mut context, &model, &computed)
+            .await
+            .unwrap();
+        assert_eq!(exported.id, backbone_id);
+        let other = FeatureExtractorRef {
+            blob_sha256: digest("c"),
+            ..computed
+        };
+        let error = computing_source(&mut context, &model, &other)
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("not the feature extractor"),
+            "{error}"
+        );
     }
 
     #[cfg(feature = "inference")]

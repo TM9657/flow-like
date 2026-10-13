@@ -1137,6 +1137,10 @@ export const generatedNodeSidebar = [
                 "slug": "nodes/ai/ml/continuous-learning/ml-promote-learning-model"
               },
               {
+                "label": "Reject Learning Candidate",
+                "slug": "nodes/ai/ml/continuous-learning/ml-reject-learning-candidate"
+              },
+              {
                 "label": "Resume Learning Project",
                 "slug": "nodes/ai/ml/continuous-learning/ml-resume-learning-project"
               },
@@ -1267,8 +1271,24 @@ export const generatedNodeSidebar = [
                 "slug": "nodes/ai/ml/export"
               },
               {
+                "label": "Export Model",
+                "slug": "nodes/ai/ml/export/ml-export-model"
+              },
+              {
                 "label": "Export Student to ONNX",
                 "slug": "nodes/ai/ml/export/ml-export-student-onnx"
+              },
+              {
+                "label": "Export Training Ledger",
+                "slug": "nodes/ai/ml/export/ml-export-training-ledger"
+              },
+              {
+                "label": "Import Model",
+                "slug": "nodes/ai/ml/export/ml-import-model"
+              },
+              {
+                "label": "Import Training Ledger",
+                "slug": "nodes/ai/ml/export/ml-import-training-ledger"
               }
             ]
           },
@@ -1333,8 +1353,16 @@ export const generatedNodeSidebar = [
                 "slug": "nodes/ai/ml/inference/ml-apply-calibration"
               },
               {
+                "label": "Extract Published Image Features",
+                "slug": "nodes/ai/ml/inference/ml-extract-published-features"
+              },
+              {
                 "label": "Native Model Inference",
                 "slug": "nodes/ai/ml/inference/ml-native-model-inference"
+              },
+              {
+                "label": "Predict Published Model",
+                "slug": "nodes/ai/ml/inference/ml-predict-published-model"
               },
               {
                 "label": "Student Confidence Gate",

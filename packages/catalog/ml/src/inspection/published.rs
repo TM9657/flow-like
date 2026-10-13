@@ -23,6 +23,8 @@ use super::lifecycle::{
 #[cfg(feature = "inference")]
 use flow_like::flow::execution::context::ExecutionContext;
 #[cfg(feature = "inference")]
+use flow_like_catalog_core::found_or_missing;
+#[cfg(feature = "inference")]
 use flow_like_ml_core::{ComputeConfig, TensorData};
 #[cfg(feature = "inference")]
 use flow_like_ml_runtime::engines::FeatureExtractor;
@@ -30,14 +32,14 @@ use flow_like_ml_runtime::engines::FeatureExtractor;
 use flow_like_storage::{
     files::store::FlowLikeStore,
     join_object_path,
-    object_store::{self, ObjectMeta, ObjectStoreExt},
+    object_store::{self, GetResult, ObjectMeta, ObjectStoreExt, PutPayload},
 };
 #[cfg(feature = "inference")]
-use flow_like_types::{Result, anyhow, json};
+use flow_like_types::{Bytes, Result, anyhow, json};
 #[cfg(feature = "inference")]
 use std::{
     collections::VecDeque,
-    sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError},
+    sync::{Arc, LazyLock, Mutex, PoisonError},
 };
 
 pub const INFERENCE_UNAVAILABLE: &str = "Running trained models needs a build with ML inference. The desktop app, device placements and the AWS, Kubernetes, local and Docker Compose executors include it; Azure and GCP executors and the mobile apps do not in this version.";
@@ -140,13 +142,14 @@ pub enum PublishedModelSource {
         #[serde(default)]
         storage: Option<ModelStorage>,
     },
-    /// The current champion of a learning project.
+    /// The current champion of a learning project; refused while the project is paused or has
+    /// no champion, because the teacher decides then.
     LearningChampion {
         project_id: String,
         #[serde(default)]
         storage: Option<ModelStorage>,
     },
-    /// The active model of a lifecycle deployment.
+    /// The active model of a lifecycle deployment; refused while its routing is paused.
     Deployment {
         deployment_id: String,
         #[serde(default)]
@@ -424,6 +427,7 @@ pub(crate) struct TableRowsOutput {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PointerKind {
     Learning,
+    #[cfg(feature = "training")]
     Deployment,
 }
 
@@ -445,14 +449,6 @@ const MAXIMUM_VERIFIED_OBJECTS: usize = 256;
 #[cfg(feature = "inference")]
 const DEFAULT_PREDICTOR_BUDGET: u64 = 4 * 1024 * 1024 * 1024;
 
-#[cfg(feature = "inference")]
-fn storage_name(storage: ModelStorage) -> &'static str {
-    match storage {
-        ModelStorage::App => "app",
-        ModelStorage::User => "user",
-    }
-}
-
 /// `apps/{app}/storage` for App and `users/{sub}/apps/{app}` for User. Everything below it is
 /// built by the path helpers from constants and sanitized ids.
 #[cfg(feature = "inference")]
@@ -460,16 +456,11 @@ pub(crate) async fn model_root(
     context: &mut ExecutionContext,
     storage: ModelStorage,
 ) -> Result<FlowPath> {
-    let root = match storage {
-        ModelStorage::App => FlowPath::from_storage_dir(context, false).await,
-        ModelStorage::User => FlowPath::from_user_dir(context, false).await,
+    let (root, name) = match storage {
+        ModelStorage::App => (FlowPath::from_storage_dir(context, false).await, "app"),
+        ModelStorage::User => (FlowPath::from_user_dir(context, false).await, "user"),
     };
-    root.map_err(|error| {
-        anyhow!(
-            "The {} model root is unavailable in this run: {error}",
-            storage_name(storage)
-        )
-    })
+    root.map_err(|error| anyhow!("The {name} model root is unavailable in this run: {error}"))
 }
 
 /// `relative` below `base`, in the same stores.
@@ -520,7 +511,10 @@ fn plain_file_name(name: &str, field: &str, manifest: &FlowPath) -> Result<()> {
 /// directory.
 #[cfg(feature = "inference")]
 fn searched_roots(storage: Option<ModelStorage>) -> Vec<ModelStorage> {
-    storage.map_or_else(|| vec![ModelStorage::App, ModelStorage::User], |storage| vec![storage])
+    storage.map_or_else(
+        || vec![ModelStorage::App, ModelStorage::User],
+        |storage| vec![storage],
+    )
 }
 
 /// The root of `storage`. While searching both roots, a root this run cannot build is noted
@@ -586,15 +580,69 @@ async fn stat_capped(
     Ok(Some(StoredFile { store, meta }))
 }
 
-/// Reads through the path's cache layer only when that layer is Local, so desktop runs use
-/// their mirror while executors and online placements read the store and write no copy.
+/// The body of a GET of at most `maximum` bytes. The size the GET itself reports is checked
+/// before the body is read, so an object replaced after its HEAD is refused, not buffered.
 #[cfg(feature = "inference")]
-async fn fetch(context: &mut ExecutionContext, path: &FlowPath) -> Result<Vec<u8>> {
+async fn capped_body(result: GetResult, shown: &str, maximum: u64, what: &str) -> Result<Bytes> {
+    let refused = |size: u64| {
+        anyhow!("The {what} {shown} is {size} bytes, above its limit of {maximum} bytes")
+    };
+    if result.meta.size > maximum {
+        return Err(refused(result.meta.size));
+    }
+    let body = result.bytes().await?;
+    if body.len() as u64 > maximum {
+        return Err(refused(body.len() as u64));
+    }
+    Ok(body)
+}
+
+/// The GET of `path` through its cache layer only when that layer is Local, so desktop runs use
+/// their mirror while executors and online placements read the store. The flag says the mirror
+/// is stale and should receive the body.
+#[cfg(feature = "inference")]
+async fn located_get(
+    context: &mut ExecutionContext,
+    path: &FlowPath,
+) -> Result<(Option<GetResult>, bool)> {
     let through_local_cache = matches!(
         path.to_cache_layer(context).await?.as_deref(),
         Some(FlowLikeStore::Local(_))
     );
-    path.get(context, !through_local_cache).await
+    let store = path.to_store(context).await?;
+    if through_local_cache && !matches!(store, FlowLikeStore::Memory(_)) {
+        return path.get_cached_file(context).await;
+    }
+    let result = store.as_generic().get(&path.object_path()).await;
+    let found = found_or_missing(result, &path.path, &path.store_ref)?;
+    Ok((found, false))
+}
+
+/// Reads a file of at most `maximum` bytes and refreshes a stale Local mirror with it; nothing
+/// else is ever written.
+#[cfg(feature = "inference")]
+async fn fetch(
+    context: &mut ExecutionContext,
+    path: &FlowPath,
+    maximum: u64,
+    what: &str,
+) -> Result<Vec<u8>> {
+    let (result, stale) = located_get(context, path).await?;
+    let result =
+        result.ok_or_else(|| anyhow!("The {what} {} was removed before it was read", path.path))?;
+    let etag = result.meta.e_tag.clone();
+    let body = capped_body(result, &path.path, maximum, what).await?;
+    if stale
+        && let Err(error) = path
+            .write_cache_file(context, &PutPayload::from_bytes(body.clone()), etag)
+            .await
+    {
+        context.log_message(
+            &format!("Refreshing the local copy of {} failed: {error}", path.path),
+            flow_like::flow::execution::LogLevel::Warn,
+        );
+    }
+    Ok(body.into())
 }
 
 /// The bytes of a file of at most `maximum` bytes, checked by HEAD first; None when it does
@@ -609,15 +657,7 @@ async fn read_capped(
     if stat_capped(context, path, maximum, what).await?.is_none() {
         return Ok(None);
     }
-    let bytes = fetch(context, path).await?;
-    if bytes.len() as u64 > maximum {
-        return Err(anyhow!(
-            "The {what} {} grew to {} bytes while it was read, above its limit of {maximum} bytes",
-            path.path,
-            bytes.len()
-        ));
-    }
-    Ok(Some(bytes))
+    fetch(context, path, maximum, what).await.map(Some)
 }
 
 /// Reads a file whose size and sha256 a manifest records; `file` holds its HEAD.
@@ -637,7 +677,7 @@ async fn read_verified(
             file.meta.size
         ));
     }
-    let content = fetch(context, path).await?;
+    let content = fetch(context, path, bytes, what).await?;
     let (expected, shown, what) = (sha256.to_owned(), path.path.clone(), what.to_owned());
     tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
         if content.len() as u64 != bytes || flow_like_ml_core::content_digest(&content) != expected
@@ -652,16 +692,22 @@ async fn read_verified(
 }
 
 /// The store, object and version a requester reached, for proving it can read an object.
+/// In-memory stores all display alike, so their instance address names them.
 #[cfg(feature = "inference")]
 fn object_identity(path: &FlowPath, file: &StoredFile) -> String {
     let version = file.meta.e_tag.clone().unwrap_or_else(|| {
-        format!("{} bytes modified {}", file.meta.size, file.meta.last_modified)
+        format!(
+            "{} bytes modified {}",
+            file.meta.size, file.meta.last_modified
+        )
     });
+    let store = match &file.store {
+        FlowLikeStore::Memory(memory) => format!("InMemory@{:p}", Arc::as_ptr(memory)),
+        store => store.as_generic().to_string(),
+    };
     format!(
-        "{}\n{}\n{}\n{version}",
-        path.store_ref,
-        file.store.as_generic(),
-        file.meta.location
+        "{}\n{store}\n{}\n{version}",
+        path.store_ref, file.meta.location
     )
 }
 
@@ -672,7 +718,9 @@ pub(crate) struct RunMap<T>(Arc<Mutex<VecDeque<(String, T)>>>);
 #[cfg(feature = "inference")]
 impl<T: Clone> RunMap<T> {
     pub(crate) fn get(&self, key: &str) -> Option<T> {
-        self.entries()
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
             .iter()
             .find(|(known, _)| known == key)
             .map(|(_, value)| value.clone())
@@ -680,21 +728,17 @@ impl<T: Clone> RunMap<T> {
 
     /// Replaces `key`, dropping the oldest entries beyond `maximum`.
     pub(crate) fn insert(&self, key: String, value: T, maximum: usize) {
-        let mut entries = self.entries();
+        let mut entries = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         entries.retain(|(known, _)| *known != key);
         while entries.len() >= maximum.max(1) {
             entries.pop_front();
         }
         entries.push_back((key, value));
     }
-
-    fn entries(&self) -> MutexGuard<'_, VecDeque<(String, T)>> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner)
-    }
 }
 
 #[cfg(feature = "inference")]
-impl<T: Send + 'static> flow_like_types::Cacheable for RunMap<T> {
+impl<T: std::any::Any + Send> flow_like_types::Cacheable for RunMap<T> {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -705,7 +749,7 @@ impl<T: Send + 'static> flow_like_types::Cacheable for RunMap<T> {
 
 /// The run's map under `key`, created on first use.
 #[cfg(feature = "inference")]
-pub(crate) async fn run_map<T: Clone + Send + 'static>(
+pub(crate) async fn run_map<T: Clone + Send + std::any::Any>(
     context: &ExecutionContext,
     key: &str,
 ) -> Result<RunMap<T>> {
@@ -743,43 +787,54 @@ struct ParsedManifest {
     inline_preprocessing: Option<Value>,
 }
 
+/// A version 1 export manifest, which names no weights file and keeps its table
+/// preprocessing inline.
+#[cfg(feature = "inference")]
+fn legacy_manifest(value: Value, path: &FlowPath) -> Result<ParsedManifest> {
+    let legacy: ExportManifestV1 = json::from_value(value).map_err(|error| {
+        anyhow!(
+            "The version 1 model manifest {} is invalid: {error}",
+            path.path
+        )
+    })?;
+    let weights = PublishedFile {
+        file: None,
+        sha256: legacy.artifact.blob.sha256.clone(),
+        bytes: legacy.artifact.blob.bytes,
+    };
+    let manifest = PublishedModelManifest {
+        format_version: 1,
+        artifact: Some(legacy.artifact),
+        pretrained_source: None,
+        weights,
+        preprocessing: None,
+        task: None,
+        calibration: None,
+        goal_met: legacy.goal_met,
+        validation_metrics: legacy.validation_metrics,
+        final_test_metrics: legacy.final_test_metrics,
+        source_table_versions: legacy.source_table_versions,
+        dependencies: PublishedDependencies::default(),
+        provenance: None,
+    };
+    Ok(ParsedManifest {
+        manifest,
+        inline_preprocessing: Some(legacy.preprocessing).filter(|value| !value.is_null()),
+    })
+}
+
 /// Version 2, or version 1 when the manifest came from a files source.
 #[cfg(feature = "inference")]
 fn parse_manifest(bytes: &[u8], path: &FlowPath, files_source: bool) -> Result<ParsedManifest> {
-    let value: Value = json::from_slice(bytes)
-        .map_err(|error| anyhow!("The model manifest {} is not valid JSON: {error}", path.path))?;
+    let value: Value = json::from_slice(bytes).map_err(|error| {
+        anyhow!(
+            "The model manifest {} is not valid JSON: {error}",
+            path.path
+        )
+    })?;
     let version = value.get("format_version").and_then(Value::as_u64);
     if version == Some(1) && files_source {
-        let legacy: ExportManifestV1 = json::from_value(value).map_err(|error| {
-            anyhow!(
-                "The version 1 model manifest {} is invalid: {error}",
-                path.path
-            )
-        })?;
-        let weights = PublishedFile {
-            file: None,
-            sha256: legacy.artifact.blob.sha256.clone(),
-            bytes: legacy.artifact.blob.bytes,
-        };
-        let manifest = PublishedModelManifest {
-            format_version: 1,
-            artifact: Some(legacy.artifact),
-            pretrained_source: None,
-            weights,
-            preprocessing: None,
-            task: None,
-            calibration: None,
-            goal_met: legacy.goal_met,
-            validation_metrics: legacy.validation_metrics,
-            final_test_metrics: legacy.final_test_metrics,
-            source_table_versions: legacy.source_table_versions,
-            dependencies: PublishedDependencies::default(),
-            provenance: None,
-        };
-        return Ok(ParsedManifest {
-            manifest,
-            inline_preprocessing: Some(legacy.preprocessing).filter(|value| !value.is_null()),
-        });
+        return legacy_manifest(value, path);
     }
     if version != Some(u64::from(MANIFEST_FORMAT_VERSION)) {
         let hint = if version == Some(1) {
@@ -841,11 +896,25 @@ fn validate_manifest(manifest: &PublishedModelManifest, path: &FlowPath) -> Resu
     Ok(())
 }
 
+/// A pointer must have this runtime's format version and belong to the `kind` record
+/// `expected` it was read for.
 #[cfg(feature = "inference")]
-fn check_pointer_version(format_version: u32, path: &FlowPath) -> Result<()> {
+fn check_pointer(
+    path: &FlowPath,
+    format_version: u32,
+    kind: &str,
+    held: &str,
+    expected: &str,
+) -> Result<()> {
     if format_version != POINTER_FORMAT_VERSION {
         return Err(anyhow!(
             "The model pointer {} has format_version {format_version}, but this runtime reads version {POINTER_FORMAT_VERSION}",
+            path.path
+        ));
+    }
+    if held != expected {
+        return Err(anyhow!(
+            "The model pointer {} belongs to {kind} {held}, not {expected}",
             path.path
         ));
     }
@@ -888,18 +957,14 @@ async fn find_pointer<T: serde::de::DeserializeOwned>(
     Ok(None)
 }
 
-/// The artifact folder of `artifact_id` under `root`; None when its manifest is missing.
+/// The version 2 manifest in `folder`, with its path; None when it does not exist.
 #[cfg(feature = "inference")]
-async fn resolve_artifact(
+async fn folder_manifest(
     context: &mut ExecutionContext,
-    root: &FlowPath,
-    storage: ModelStorage,
-    artifact_id: &str,
-    pointed_sha256: Option<&str>,
+    folder: &FlowPath,
     tried: &mut Vec<String>,
-) -> Result<Option<ResolvedModel>> {
-    let folder = child(root, &artifact_dir(artifact_id));
-    let manifest_path = child(&folder, MANIFEST_FILE);
+) -> Result<Option<(FlowPath, PublishedModelManifest)>> {
+    let manifest_path = child(folder, MANIFEST_FILE);
     tried.push(manifest_path.path.clone());
     let Some(bytes) = read_capped(
         context,
@@ -912,35 +977,63 @@ async fn resolve_artifact(
         return Ok(None);
     };
     let parsed = parse_manifest(&bytes, &manifest_path, false)?;
-    if parsed.manifest.artifact_id() != artifact_id {
-        return Err(anyhow!(
-            "The model manifest {} describes {}, not {artifact_id}",
-            manifest_path.path,
-            parsed.manifest.artifact_id()
-        ));
-    }
-    if let Some(pointed) = pointed_sha256
-        && pointed != parsed.manifest.weights.sha256
-    {
-        return Err(anyhow!(
-            "A pointer names weights {pointed} for model {artifact_id}, but {} records {}",
-            manifest_path.path,
-            parsed.manifest.weights.sha256
-        ));
-    }
-    let file = parsed.manifest.weights.file.as_deref().ok_or_else(|| {
+    Ok(Some((manifest_path, parsed.manifest)))
+}
+
+/// A model read from its own folder, whose manifest must name the weights file beside it.
+#[cfg(feature = "inference")]
+fn in_folder(
+    folder: &FlowPath,
+    manifest_path: FlowPath,
+    manifest: PublishedModelManifest,
+    storage: Option<ModelStorage>,
+) -> Result<ResolvedModel> {
+    let file = manifest.weights.file.as_deref().ok_or_else(|| {
         anyhow!(
             "The model manifest {} names no weights file in its folder",
             manifest_path.path
         )
     })?;
-    Ok(Some(ResolvedModel {
-        weights_path: child(&folder, file),
-        manifest: parsed.manifest,
+    Ok(ResolvedModel {
+        weights_path: child(folder, file),
+        manifest,
         manifest_path,
-        storage: Some(storage),
+        storage,
         inline_preprocessing: None,
-    }))
+    })
+}
+
+/// The artifact folder of `artifact_id` under `root`; None when its manifest is missing.
+#[cfg(feature = "inference")]
+async fn resolve_artifact(
+    context: &mut ExecutionContext,
+    root: &FlowPath,
+    storage: ModelStorage,
+    artifact_id: &str,
+    pointed_sha256: Option<&str>,
+    tried: &mut Vec<String>,
+) -> Result<Option<ResolvedModel>> {
+    let folder = child(root, &artifact_dir(artifact_id));
+    let Some((manifest_path, manifest)) = folder_manifest(context, &folder, tried).await? else {
+        return Ok(None);
+    };
+    if manifest.artifact_id() != artifact_id {
+        return Err(anyhow!(
+            "The model manifest {} describes {}, not {artifact_id}",
+            manifest_path.path,
+            manifest.artifact_id()
+        ));
+    }
+    if let Some(pointed) = pointed_sha256
+        && pointed != manifest.weights.sha256
+    {
+        return Err(anyhow!(
+            "A pointer names weights {pointed} for model {artifact_id}, but {} records {}",
+            manifest_path.path,
+            manifest.weights.sha256
+        ));
+    }
+    in_folder(&folder, manifest_path, manifest, Some(storage)).map(Some)
 }
 
 #[cfg(feature = "inference")]
@@ -991,6 +1084,125 @@ async fn resolve_files(
     })
 }
 
+/// The artifact folder of `artifact_id` in the searched roots.
+#[cfg(feature = "inference")]
+async fn resolve_published_artifact(
+    context: &mut ExecutionContext,
+    artifact_id: &str,
+    storage: Option<ModelStorage>,
+) -> Result<ResolvedModel> {
+    let mut tried = Vec::new();
+    for candidate in searched_roots(storage) {
+        let Some(root) = searched_root(context, candidate, storage.is_some(), &mut tried).await?
+        else {
+            continue;
+        };
+        if let Some(model) =
+            resolve_artifact(context, &root, candidate, artifact_id, None, &mut tried).await?
+        {
+            return Ok(model);
+        }
+    }
+    Err(anyhow!(
+        "Model {artifact_id} is not published; looked for {}",
+        tried.join(", ")
+    ))
+}
+
+/// What a pointer of any kind names.
+#[cfg(feature = "inference")]
+struct Pointed {
+    record_id: String,
+    format_version: u32,
+    artifact_id: Option<String>,
+    sha256: Option<String>,
+    paused: bool,
+}
+
+#[cfg(feature = "inference")]
+impl From<ExperimentPointer> for Pointed {
+    fn from(pointer: ExperimentPointer) -> Self {
+        Self {
+            record_id: pointer.experiment_id,
+            format_version: pointer.format_version,
+            artifact_id: Some(pointer.artifact_id),
+            sha256: Some(pointer.sha256),
+            paused: false,
+        }
+    }
+}
+
+#[cfg(feature = "inference")]
+impl From<ChampionPointer> for Pointed {
+    fn from(pointer: ChampionPointer) -> Self {
+        Self {
+            record_id: pointer.project_id,
+            format_version: pointer.format_version,
+            artifact_id: pointer.artifact_id,
+            sha256: pointer.sha256,
+            paused: pointer.paused,
+        }
+    }
+}
+
+#[cfg(feature = "inference")]
+impl From<DeploymentPointer> for Pointed {
+    fn from(pointer: DeploymentPointer) -> Self {
+        Self {
+            record_id: pointer.deployment_id,
+            format_version: pointer.format_version,
+            artifact_id: Some(pointer.active_artifact_id),
+            sha256: Some(pointer.sha256),
+            paused: pointer.paused,
+        }
+    }
+}
+
+/// Follows the pointer of the `kind` record `id` at `relative` to the artifact folder it
+/// names. `missing` says what an absent pointer means. A paused pointer, or a champion
+/// pointer without a model, serves nothing: the teacher decides, as the routes say.
+#[cfg(feature = "inference")]
+async fn resolve_through<T: serde::de::DeserializeOwned + Into<Pointed>>(
+    context: &mut ExecutionContext,
+    storage: Option<ModelStorage>,
+    relative: &str,
+    kind: &str,
+    id: &str,
+    missing: &str,
+) -> Result<ResolvedModel> {
+    let mut tried = Vec::new();
+    let Some((pointer, found, root, path)) =
+        find_pointer::<T>(context, storage, relative, &mut tried).await?
+    else {
+        return Err(anyhow!("{missing}; looked for {}", tried.join(", ")));
+    };
+    let pointed: Pointed = pointer.into();
+    check_pointer(&path, pointed.format_version, kind, &pointed.record_id, id)?;
+    let artifact_id = match (pointed.artifact_id, pointed.paused) {
+        (Some(artifact_id), false) => artifact_id,
+        (_, paused) => {
+            let state = if paused {
+                "is paused"
+            } else {
+                "has no champion yet"
+            };
+            return Err(anyhow!(
+                "The model pointer {} serves no model: {kind} {id} {state}, so the teacher decides",
+                path.path
+            ));
+        }
+    };
+    resolve_pointed(
+        context,
+        &root,
+        found,
+        &artifact_id,
+        pointed.sha256.as_deref(),
+        &mut tried,
+    )
+    .await
+}
+
 /// Reads a published model's manifest: a files source directly, the other sources through
 /// their pointer or artifact folder in `storage`, or the app's storage before the user's
 /// directory when `storage` is None. Errors list every path tried.
@@ -999,7 +1211,6 @@ pub(crate) async fn resolve_model(
     context: &mut ExecutionContext,
     source: &PublishedModelSource,
 ) -> Result<ResolvedModel> {
-    let mut tried = Vec::new();
     match source {
         PublishedModelSource::Files { manifest, weights } => {
             resolve_files(context, manifest, weights.as_ref()).await
@@ -1007,53 +1218,18 @@ pub(crate) async fn resolve_model(
         PublishedModelSource::Artifact {
             artifact_id,
             storage,
-        } => {
-            for candidate in searched_roots(*storage) {
-                let Some(root) =
-                    searched_root(context, candidate, storage.is_some(), &mut tried).await?
-                else {
-                    continue;
-                };
-                if let Some(model) =
-                    resolve_artifact(context, &root, candidate, artifact_id, None, &mut tried)
-                        .await?
-                {
-                    return Ok(model);
-                }
-            }
-            Err(anyhow!(
-                "Model {artifact_id} is not published; looked for {}",
-                tried.join(", ")
-            ))
-        }
+        } => resolve_published_artifact(context, artifact_id, *storage).await,
         PublishedModelSource::Experiment {
             experiment_id,
             storage,
         } => {
-            let relative = experiment_pointer_path(experiment_id);
-            let Some((pointer, found, root, path)) =
-                find_pointer::<ExperimentPointer>(context, *storage, &relative, &mut tried).await?
-            else {
-                return Err(anyhow!(
-                    "Auto Train experiment {experiment_id} has no published winner; looked for {}",
-                    tried.join(", ")
-                ));
-            };
-            check_pointer_version(pointer.format_version, &path)?;
-            if pointer.experiment_id != *experiment_id {
-                return Err(anyhow!(
-                    "The model pointer {} belongs to experiment {}, not {experiment_id}",
-                    path.path,
-                    pointer.experiment_id
-                ));
-            }
-            resolve_pointed(
+            resolve_through::<ExperimentPointer>(
                 context,
-                &root,
-                found,
-                &pointer.artifact_id,
-                Some(&pointer.sha256),
-                &mut tried,
+                *storage,
+                &experiment_pointer_path(experiment_id),
+                "experiment",
+                experiment_id,
+                &format!("Auto Train experiment {experiment_id} has no published winner"),
             )
             .await
         }
@@ -1061,36 +1237,13 @@ pub(crate) async fn resolve_model(
             project_id,
             storage,
         } => {
-            let relative = learning_pointer_path(project_id);
-            let Some((pointer, found, root, path)) =
-                find_pointer::<ChampionPointer>(context, *storage, &relative, &mut tried).await?
-            else {
-                return Err(anyhow!(
-                    "Learning project {project_id} has no published champion; looked for {}",
-                    tried.join(", ")
-                ));
-            };
-            check_pointer_version(pointer.format_version, &path)?;
-            if pointer.project_id != *project_id {
-                return Err(anyhow!(
-                    "The model pointer {} belongs to learning project {}, not {project_id}",
-                    path.path,
-                    pointer.project_id
-                ));
-            }
-            let artifact_id = pointer.artifact_id.as_deref().ok_or_else(|| {
-                anyhow!(
-                    "Learning project {project_id} has no champion model yet, so the teacher decides ({})",
-                    path.path
-                )
-            })?;
-            resolve_pointed(
+            resolve_through::<ChampionPointer>(
                 context,
-                &root,
-                found,
-                artifact_id,
-                pointer.sha256.as_deref(),
-                &mut tried,
+                *storage,
+                &learning_pointer_path(project_id),
+                "learning project",
+                project_id,
+                &format!("Learning project {project_id} has no published champion"),
             )
             .await
         }
@@ -1098,31 +1251,13 @@ pub(crate) async fn resolve_model(
             deployment_id,
             storage,
         } => {
-            let relative = deployment_pointer_path(deployment_id);
-            let Some((pointer, found, root, path)) =
-                find_pointer::<DeploymentPointer>(context, *storage, &relative, &mut tried)
-                    .await?
-            else {
-                return Err(anyhow!(
-                    "Deployment {deployment_id} has no published model; looked for {}",
-                    tried.join(", ")
-                ));
-            };
-            check_pointer_version(pointer.format_version, &path)?;
-            if pointer.deployment_id != *deployment_id {
-                return Err(anyhow!(
-                    "The model pointer {} belongs to deployment {}, not {deployment_id}",
-                    path.path,
-                    pointer.deployment_id
-                ));
-            }
-            resolve_pointed(
+            resolve_through::<DeploymentPointer>(
                 context,
-                &root,
-                found,
-                &pointer.active_artifact_id,
-                Some(&pointer.sha256),
-                &mut tried,
+                *storage,
+                &deployment_pointer_path(deployment_id),
+                "deployment",
+                deployment_id,
+                &format!("Deployment {deployment_id} has no published model"),
             )
             .await
         }
@@ -1222,7 +1357,8 @@ async fn preprocessing_document(
             )
         })?;
     let key = format!("{}\n{}", object_identity(&path, &file), reference.sha256);
-    let documents = run_map::<Arc<PublishedPreprocessing>>(context, PREPROCESSING_CACHE_KEY).await?;
+    let documents =
+        run_map::<Arc<PublishedPreprocessing>>(context, PREPROCESSING_CACHE_KEY).await?;
     if let Some(document) = documents.get(&key) {
         return Ok(Some(document));
     }
@@ -1235,7 +1371,14 @@ async fn preprocessing_document(
         "preprocessing file",
     )
     .await?;
-    let document: PublishedPreprocessing = json::from_slice(&bytes)
+    let document = Arc::new(parse_preprocessing(&bytes, &path)?);
+    documents.insert(key, document.clone(), MAXIMUM_CACHED_DOCUMENTS);
+    Ok(Some(document))
+}
+
+#[cfg(feature = "inference")]
+fn parse_preprocessing(bytes: &[u8], path: &FlowPath) -> Result<PublishedPreprocessing> {
+    let document: PublishedPreprocessing = json::from_slice(bytes)
         .map_err(|error| anyhow!("The preprocessing file {} is invalid: {error}", path.path))?;
     if document.format_version != PREPROCESSING_FORMAT_VERSION {
         return Err(anyhow!(
@@ -1244,9 +1387,7 @@ async fn preprocessing_document(
             document.format_version
         ));
     }
-    let document = Arc::new(document);
-    documents.insert(key, document.clone(), MAXIMUM_CACHED_DOCUMENTS);
-    Ok(Some(document))
+    Ok(document)
 }
 
 /// The preprocessing file a published artifact manifest's marker names.
@@ -1285,12 +1426,14 @@ pub(crate) async fn restore_artifact(
             model.manifest_path.path
         ));
     }
-    let document = preprocessing_document(context, model).await?.ok_or_else(|| {
-        anyhow!(
-            "The preprocessing file {file} of model {} is missing",
-            artifact.id
-        )
-    })?;
+    let document = preprocessing_document(context, model)
+        .await?
+        .ok_or_else(|| {
+            anyhow!(
+                "The preprocessing file {file} of model {} is missing",
+                artifact.id
+            )
+        })?;
     let restored = document
         .artifact_preprocessing_manifest
         .clone()
@@ -1366,11 +1509,9 @@ impl PredictorCache {
         self.entries.retain(|entry| entry.key != key);
         while !self.entries.is_empty()
             && (self.entries.len() >= MAXIMUM_CACHED_PREDICTORS
-                || self
-                    .entries
-                    .iter()
-                    .fold(reserved, |total, entry| total.saturating_add(entry.reserved))
-                    > budget)
+                || self.entries.iter().fold(reserved, |total, entry| {
+                    total.saturating_add(entry.reserved)
+                }) > budget)
         {
             self.entries.pop_front();
         }
@@ -1386,8 +1527,8 @@ impl PredictorCache {
 static PREDICTORS: LazyLock<Mutex<PredictorCache>> = LazyLock::new(Default::default);
 
 #[cfg(feature = "inference")]
-fn predictors() -> MutexGuard<'static, PredictorCache> {
-    PREDICTORS.lock().unwrap_or_else(PoisonError::into_inner)
+fn with_predictors<R>(work: impl FnOnce(&mut PredictorCache) -> R) -> R {
+    work(&mut *PREDICTORS.lock().unwrap_or_else(PoisonError::into_inner))
 }
 
 /// Half of the detected container memory, or 4 GiB when none is detected.
@@ -1397,14 +1538,83 @@ fn predictor_budget() -> u64 {
         .map_or(DEFAULT_PREDICTOR_BUDGET, |bytes| bytes / 2)
 }
 
-/// The cache key of a predictor: its weights, its artifact manifest and the compute it was
-/// loaded for. The manifest digest keeps models that share weights apart.
+/// The cache key of a predictor: its weights, its whole artifact record and the compute it was
+/// loaded for. The record keeps artifacts that share weights apart, so a cached predictor
+/// always reports the artifact it was requested for.
 #[cfg(feature = "inference")]
-fn predictor_key(sha256: &str, artifact: &ModelArtifact, compute: &ComputeConfig) -> Result<String> {
-    let manifest = flow_like_ml_core::content_digest(&json::to_vec(&artifact.manifest)?);
+fn predictor_key(
+    sha256: &str,
+    artifact: &ModelArtifact,
+    compute: &ComputeConfig,
+) -> Result<String> {
+    let record = flow_like_ml_core::content_digest(&json::to_vec(artifact)?);
     Ok(flow_like_ml_core::content_digest(&json::to_vec(&(
-        sha256, manifest, compute,
+        sha256, record, compute,
     ))?))
+}
+
+/// Four times the weights, which must stay below the request's memory budget.
+#[cfg(feature = "inference")]
+fn load_reservation(artifact_id: &str, bytes: u64, compute: &ComputeConfig) -> Result<u64> {
+    let reserved = bytes
+        .checked_mul(4)
+        .ok_or_else(|| anyhow!("The memory estimate of model {artifact_id} overflows"))?;
+    if reserved >= compute.memory_limit_bytes {
+        return Err(anyhow!(
+            "Model {artifact_id} needs about {reserved} bytes to load, above the inference memory budget of {} bytes",
+            compute.memory_limit_bytes
+        ));
+    }
+    Ok(reserved)
+}
+
+/// A predictor its requester may load once it has read the verified weights.
+#[cfg(feature = "inference")]
+struct PredictorLoad {
+    artifact: ModelArtifact,
+    compute: ComputeConfig,
+    key: String,
+    reserved: u64,
+}
+
+/// Serves the predictor cached for the same verified weights object, or reads, verifies and
+/// decodes the weights and caches the result.
+#[cfg(feature = "inference")]
+async fn load_predictor(
+    context: &mut ExecutionContext,
+    model: &ResolvedModel,
+    file: StoredFile,
+    load: PredictorLoad,
+) -> Result<CachedPredictor> {
+    let identity = object_identity(&model.weights_path, &file);
+    let sha256 = model.manifest.weights.sha256.clone();
+    let key = load.key;
+    let cached = with_predictors(|cache| cache.verified_hit(&key, &identity, &sha256));
+    if let Some(predictor) = cached {
+        return Ok(predictor);
+    }
+    let content = read_verified(
+        context,
+        &model.weights_path,
+        &file,
+        model.manifest.weights.bytes,
+        &sha256,
+        "weights file",
+    )
+    .await?;
+    let cached = with_predictors(|cache| cache.verify(identity, sha256, &key));
+    if let Some(predictor) = cached {
+        return Ok(predictor);
+    }
+    let (artifact, compute) = (load.artifact, load.compute);
+    let loaded = tokio::task::spawn_blocking(move || {
+        CatalogLoadedPredictor::from_parts(artifact, &content, &compute)
+    })
+    .await??;
+    let predictor: CachedPredictor = Arc::new(loaded);
+    let budget = predictor_budget();
+    with_predictors(|cache| cache.insert(key, predictor.clone(), load.reserved, budget));
+    Ok(predictor)
 }
 
 /// The model's predictor, shared across runs while it stays cached. The request's compute is
@@ -1425,46 +1635,17 @@ pub(crate) async fn published_predictor(
             model.manifest.artifact_id()
         )
     })?;
-    let bytes = model.manifest.weights.bytes;
-    let reserved = bytes
-        .checked_mul(4)
-        .ok_or_else(|| anyhow!("The memory estimate of model {} overflows", artifact.id))?;
-    if reserved >= compute.memory_limit_bytes {
-        return Err(anyhow!(
-            "Model {} needs about {reserved} bytes to load, above the inference memory budget of {} bytes",
-            artifact.id,
-            compute.memory_limit_bytes
-        ));
-    }
+    let reserved = load_reservation(&artifact.id, model.manifest.weights.bytes, &compute)?;
     let file = stat_weights(context, model, served_weights_limit(&compute)).await?;
     let artifact = restore_artifact(context, model, artifact).await?;
     let key = predictor_key(&model.manifest.weights.sha256, &artifact, &compute)?;
-    let identity = object_identity(&model.weights_path, &file);
-    let sha256 = model.manifest.weights.sha256.clone();
-    let cached = predictors().verified_hit(&key, &identity, &sha256);
-    if let Some(predictor) = cached {
-        return Ok(predictor);
-    }
-    let content = read_verified(
-        context,
-        &model.weights_path,
-        &file,
-        bytes,
-        &sha256,
-        "weights file",
-    )
-    .await?;
-    let cached = predictors().verify(identity, sha256, &key);
-    if let Some(predictor) = cached {
-        return Ok(predictor);
-    }
-    let loaded = tokio::task::spawn_blocking(move || {
-        CatalogLoadedPredictor::from_parts(artifact, &content, &compute)
-    })
-    .await??;
-    let predictor: CachedPredictor = Arc::new(loaded);
-    predictors().insert(key, predictor.clone(), reserved, predictor_budget());
-    Ok(predictor)
+    let load = PredictorLoad {
+        artifact,
+        compute,
+        key,
+        reserved,
+    };
+    load_predictor(context, model, file, load).await
 }
 
 /// The table preprocessing of a published model: a version 1 export's inline value or the
@@ -1510,6 +1691,34 @@ pub(crate) fn check_stream(
     Ok(())
 }
 
+/// The input shape an artifact was trained on; empty when its manifest records none.
+#[cfg(feature = "inference")]
+fn trained_input_shape(artifact: &ModelArtifact) -> Vec<usize> {
+    artifact
+        .manifest
+        .get("input_shape")
+        .cloned()
+        .and_then(|shape| json::from_value(shape).ok())
+        .unwrap_or_default()
+}
+
+/// The one extractor all rows name, if any.
+#[cfg(feature = "inference")]
+fn single_extractor(named: Vec<FeatureExtractor>) -> Result<Option<FeatureExtractor>> {
+    let mut named = named.into_iter();
+    let first = named.next();
+    if let Some(first) = &first
+        && let Some(other) = named.find(|extractor| extractor != first)
+    {
+        return Err(anyhow!(
+            "Embeddings come from different feature extractors ({} and {}); predict each extractor's rows separately",
+            first.source_id,
+            other.source_id
+        ));
+    }
+    Ok(first)
+}
+
 /// Rows of a model without table preprocessing are tensors; a row with exactly the trained
 /// input shape gets a batch dimension. Rows may name their extractor inside the tensor value.
 #[cfg(feature = "inference")]
@@ -1518,12 +1727,7 @@ fn tensor_rows(
     rows: &[Value],
     explicit: Option<&FeatureExtractorRef>,
 ) -> Result<(Vec<TensorData>, Option<FeatureExtractor>)> {
-    let input_shape: Vec<usize> = artifact
-        .manifest
-        .get("input_shape")
-        .cloned()
-        .and_then(|shape| json::from_value(shape).ok())
-        .unwrap_or_default();
+    let input_shape = trained_input_shape(artifact);
     let mut named = explicit
         .map(FeatureExtractorRef::to_runtime)
         .transpose()?
@@ -1548,18 +1752,65 @@ fn tensor_rows(
         }
         inputs.push(tensor);
     }
-    let mut named = named.into_iter();
-    let first = named.next();
-    if let Some(first) = &first
-        && let Some(other) = named.find(|extractor| extractor != first)
-    {
-        return Err(anyhow!(
-            "Embeddings come from different feature extractors ({} and {}); predict each extractor's rows separately",
-            first.source_id,
-            other.source_id
-        ));
+    Ok((inputs, single_extractor(named)?))
+}
+
+/// Tensors, extractor and feature state of a prediction batch.
+#[cfg(feature = "inference")]
+type PreparedRows = (
+    Vec<TensorData>,
+    Option<FeatureExtractor>,
+    Option<FeatureStreamState>,
+);
+
+/// Table rows through the saved preprocessing, each with a batch dimension. The extractor the
+/// rows name is checked against the artifact before any row is transformed.
+#[cfg(feature = "inference")]
+fn preprocessed_rows(
+    artifact: &ModelArtifact,
+    preprocessing: &Value,
+    input: TableRowsInput,
+) -> Result<PreparedRows> {
+    let preprocessing: super::auto_training_tables::TablePreprocessing =
+        json::from_value(preprocessing.clone()).map_err(|error| {
+            anyhow!(
+                "The table preprocessing of model {} is invalid: {error}",
+                artifact.id
+            )
+        })?;
+    let extractor = super::auto_training::requested_extractor(
+        &preprocessing,
+        &input.rows,
+        input.feature_extractor.as_ref(),
+    )?;
+    super::auto_training::ensure_extractor_named(
+        &artifact.id,
+        &artifact.manifest,
+        extractor.as_ref(),
+    )?;
+    let (mut inputs, feature_state) = super::auto_training_tables::transform_table_rows_with_state(
+        &preprocessing,
+        &input.rows,
+        32 * 1024 * 1024,
+        input.feature_state,
+        input.stateful_features,
+    )?;
+    for tensor in &mut inputs {
+        tensor.shape.insert(0, 1);
     }
-    Ok((inputs, first))
+    Ok((inputs, extractor, feature_state))
+}
+
+/// Tensor rows as they are, after checking the extractor they name against the artifact.
+#[cfg(feature = "inference")]
+fn unprocessed_rows(artifact: &ModelArtifact, input: TableRowsInput) -> Result<PreparedRows> {
+    let (inputs, extractor) = tensor_rows(artifact, &input.rows, input.feature_extractor.as_ref())?;
+    super::auto_training::ensure_extractor_named(
+        &artifact.id,
+        &artifact.manifest,
+        extractor.as_ref(),
+    )?;
+    Ok((inputs, extractor, input.feature_state))
 }
 
 /// Predicts as Predict Auto Model does on the ledger: table rows go through the saved
@@ -1580,47 +1831,8 @@ pub(crate) fn predict_table_rows(
     }
     let artifact = predictor.artifact();
     let (inputs, extractor, feature_state) = match preprocessing {
-        Some(preprocessing) => {
-            let preprocessing: super::auto_training_tables::TablePreprocessing =
-                json::from_value(preprocessing.clone()).map_err(|error| {
-                    anyhow!(
-                        "The table preprocessing of model {} is invalid: {error}",
-                        artifact.id
-                    )
-                })?;
-            let extractor = super::auto_training::requested_extractor(
-                &preprocessing,
-                &input.rows,
-                input.feature_extractor.as_ref(),
-            )?;
-            super::auto_training::ensure_extractor_named(
-                &artifact.id,
-                &artifact.manifest,
-                extractor.as_ref(),
-            )?;
-            let (mut inputs, feature_state) =
-                super::auto_training_tables::transform_table_rows_with_state(
-                    &preprocessing,
-                    &input.rows,
-                    32 * 1024 * 1024,
-                    input.feature_state,
-                    input.stateful_features,
-                )?;
-            for tensor in &mut inputs {
-                tensor.shape.insert(0, 1);
-            }
-            (inputs, extractor, feature_state)
-        }
-        None => {
-            let (inputs, extractor) =
-                tensor_rows(artifact, &input.rows, input.feature_extractor.as_ref())?;
-            super::auto_training::ensure_extractor_named(
-                &artifact.id,
-                &artifact.manifest,
-                extractor.as_ref(),
-            )?;
-            (inputs, extractor, input.feature_state)
-        }
+        Some(preprocessing) => preprocessed_rows(artifact, preprocessing, input)?,
+        None => unprocessed_rows(artifact, input)?,
     };
     let predictions = inputs
         .iter()
@@ -1648,76 +1860,64 @@ fn artifacts_folder_of(manifest: &FlowPath) -> Option<FlowPath> {
     let key = manifest.object_path();
     let parts = key.as_ref().split('/').collect::<Vec<_>>();
     let count = parts.len();
-    (count >= 4 && parts[count - 3] == "artifacts" && parts[count - 4] == PUBLISHED_MODELS_DIR).then(
-        || FlowPath {
+    (count >= 4 && parts[count - 3] == "artifacts" && parts[count - 4] == PUBLISHED_MODELS_DIR)
+        .then(|| FlowPath {
             path: parts[..count - 2].join("/"),
             store_ref: manifest.store_ref.clone(),
             cache_store_ref: manifest.cache_store_ref.clone(),
-        },
-    )
+        })
 }
 
-/// The folder of a model's feature-extractor dependency: the sibling artifact folder of a
-/// model root, then `dependencies/{source}` beside the manifest. Only these two places are
-/// read, and the dependency's id and weights digest must match the record.
+/// Where a model's feature-extractor dependency may be: the sibling artifact folder of a
+/// model root, then `dependencies/{source}` beside the manifest.
+#[cfg(feature = "inference")]
+async fn dependency_folders(
+    context: &mut ExecutionContext,
+    model: &ResolvedModel,
+    source_id: &str,
+) -> Result<Vec<FlowPath>> {
+    let mut folders = Vec::new();
+    if let Some(storage) = model.storage {
+        let root = model_root(context, storage).await?;
+        folders.push(child(&root, &artifact_dir(source_id)));
+    } else if let Some(artifacts) = artifacts_folder_of(&model.manifest_path) {
+        folders.push(child(&artifacts, &seg(source_id)));
+    }
+    folders.push(child(
+        &folder_of(&model.manifest_path),
+        &dependency_dir(source_id),
+    ));
+    Ok(folders)
+}
+
+/// The folder of a model's feature-extractor dependency. Only the places `dependency_folders`
+/// names are read, and the dependency's id and weights digest must match the record.
 #[cfg(feature = "inference")]
 async fn resolve_dependency(
     context: &mut ExecutionContext,
     model: &ResolvedModel,
     dependency: &PublishedDependency,
 ) -> Result<ResolvedModel> {
-    let mut folders = Vec::new();
-    if let Some(storage) = model.storage {
-        let root = model_root(context, storage).await?;
-        folders.push(child(&root, &artifact_dir(&dependency.source_id)));
-    } else if let Some(artifacts) = artifacts_folder_of(&model.manifest_path) {
-        folders.push(child(&artifacts, &seg(&dependency.source_id)));
-    }
-    folders.push(child(
-        &folder_of(&model.manifest_path),
-        &dependency_dir(&dependency.source_id),
-    ));
     let mut tried = Vec::new();
-    for folder in folders {
-        let manifest_path = child(&folder, MANIFEST_FILE);
-        tried.push(manifest_path.path.clone());
-        let Some(bytes) = read_capped(
-            context,
-            &manifest_path,
-            MAXIMUM_MANIFEST_BYTES,
-            "model manifest",
-        )
-        .await?
+    for folder in dependency_folders(context, model, &dependency.source_id).await? {
+        let Some((manifest_path, manifest)) = folder_manifest(context, &folder, &mut tried).await?
         else {
             continue;
         };
-        let parsed = parse_manifest(&bytes, &manifest_path, false)?;
-        if parsed.manifest.artifact_id() != dependency.source_id
-            || parsed.manifest.weights.sha256 != dependency.blob_sha256
+        if manifest.artifact_id() != dependency.source_id
+            || manifest.weights.sha256 != dependency.blob_sha256
         {
             return Err(anyhow!(
                 "{} holds {} with weights {}, not the feature extractor {} with weights {} that model {} records",
                 manifest_path.path,
-                parsed.manifest.artifact_id(),
-                parsed.manifest.weights.sha256,
+                manifest.artifact_id(),
+                manifest.weights.sha256,
                 dependency.source_id,
                 dependency.blob_sha256,
                 model.manifest.artifact_id()
             ));
         }
-        let file = parsed.manifest.weights.file.as_deref().ok_or_else(|| {
-            anyhow!(
-                "The model manifest {} names no weights file in its folder",
-                manifest_path.path
-            )
-        })?;
-        return Ok(ResolvedModel {
-            weights_path: child(&folder, file),
-            manifest: parsed.manifest,
-            manifest_path,
-            storage: model.storage,
-            inline_preprocessing: None,
-        });
+        return in_folder(&folder, manifest_path, manifest, model.storage);
     }
     Err(anyhow!(
         "Feature extractor {} of model {} is not published; looked for {}",
@@ -1725,6 +1925,34 @@ async fn resolve_dependency(
         model.manifest.artifact_id(),
         tried.join(", ")
     ))
+}
+
+/// Features of a published pretrained Burn backbone.
+#[cfg(feature = "inference")]
+async fn source_features(
+    context: &mut ExecutionContext,
+    model: &ResolvedModel,
+    source: PretrainedSource,
+    input: TensorData,
+    compute: &ComputeConfig,
+) -> Result<(TensorData, FeatureExtractorRef)> {
+    if source.manifest["engine"] != "burn" {
+        return Err(anyhow!(
+            "Published source {} is a {} model; image features need a Burn backbone",
+            source.id,
+            model.manifest.engine()
+        ));
+    }
+    let bytes = published_weights(context, model, served_weights_limit(compute)).await?;
+    let extractor: FeatureExtractorRef = FeatureExtractor::from_source(&source)?.into();
+    let compute = compute.clone();
+    let features = tokio::task::spawn_blocking(move || {
+        flow_like_ml_runtime::engines::pretrained_features_from_parts(
+            &source, &bytes, &input, &compute,
+        )
+    })
+    .await??;
+    Ok((features, extractor))
 }
 
 /// Features of one published folder: a pretrained Burn source or a Burn image classifier.
@@ -1736,33 +1964,10 @@ async fn folder_features(
     compute: &ComputeConfig,
 ) -> Result<(TensorData, FeatureExtractorRef)> {
     if let Some(source) = model.manifest.pretrained_source.clone() {
-        if source.manifest["engine"] != "burn" {
-            return Err(anyhow!(
-                "Published source {} is a {} model; image features need a Burn backbone",
-                source.id,
-                model.manifest.engine()
-            ));
-        }
-        let bytes = published_weights(context, model, served_weights_limit(compute)).await?;
-        let extractor: FeatureExtractorRef = FeatureExtractor::from_source(&source)?.into();
-        let compute = compute.clone();
-        let features = tokio::task::spawn_blocking(move || {
-            flow_like_ml_runtime::engines::pretrained_features_from_parts(
-                &source, &bytes, &input, &compute,
-            )
-        })
-        .await??;
-        return Ok((features, extractor));
+        return source_features(context, model, source, input, compute).await;
     }
     let predictor = published_predictor(context, model, compute).await?;
-    let input_shape: Vec<usize> = predictor
-        .artifact()
-        .manifest
-        .get("input_shape")
-        .cloned()
-        .and_then(|shape| json::from_value(shape).ok())
-        .unwrap_or_default();
-    if input.shape == input_shape {
+    if input.shape == trained_input_shape(predictor.artifact()) {
         input.shape.insert(0, 1);
     }
     tokio::task::spawn_blocking(move || -> Result<_> {
@@ -1805,14 +2010,13 @@ pub(crate) async fn published_learning_route(
     else {
         return Ok(None);
     };
-    check_pointer_version(pointer.format_version, &path)?;
-    if pointer.project_id != project_id {
-        return Err(anyhow!(
-            "The model pointer {} belongs to learning project {}, not {project_id}",
-            path.path,
-            pointer.project_id
-        ));
-    }
+    check_pointer(
+        &path,
+        pointer.format_version,
+        "learning project",
+        &pointer.project_id,
+        project_id,
+    )?;
     Ok(Some(match pointer.artifact_id {
         Some(artifact_id) if !pointer.paused => {
             flow_like_ml_runtime::LearningRoute::Champion { artifact_id }
@@ -1833,14 +2037,13 @@ pub(crate) async fn published_deployment(
     let Some(pointer) = read_pointer::<DeploymentPointer>(context, &path).await? else {
         return Ok(None);
     };
-    check_pointer_version(pointer.format_version, &path)?;
-    if pointer.deployment_id != deployment_id {
-        return Err(anyhow!(
-            "The model pointer {} belongs to deployment {}, not {deployment_id}",
-            path.path,
-            pointer.deployment_id
-        ));
-    }
+    check_pointer(
+        &path,
+        pointer.format_version,
+        "deployment",
+        &pointer.deployment_id,
+        deployment_id,
+    )?;
     Ok(Some(pointer))
 }
 
@@ -1872,10 +2075,7 @@ pub(crate) async fn published_sam2_prediction(
                 model.manifest.engine()
             )
         })?;
-    let limit = compute
-        .memory_limit_bytes
-        .min(MAXIMUM_SERVED_WEIGHTS_BYTES);
-    let bytes = published_weights(context, &model, limit).await?;
+    let bytes = published_weights(context, &model, served_weights_limit(&compute)).await?;
     let (images, prompts) = (images.clone(), prompts.to_vec());
     Ok(tokio::task::spawn_blocking(move || {
         flow_like_ml_runtime::engines::predict_sam2_from_parts(
@@ -1914,36 +2114,38 @@ async fn local_pointer_order(
     };
     let relative = match kind {
         PointerKind::Learning => learning_pointer_path(id),
+        #[cfg(feature = "training")]
         PointerKind::Deployment => deployment_pointer_path(id),
     };
     let order = match store {
         Some(store @ FlowLikeStore::Local(_)) => {
-            let location = join_object_path(&base, &relative);
-            let generic = store.as_generic();
-            match generic.head(&location).await {
-                Ok(meta) if meta.size > MAXIMUM_POINTER_BYTES => {
-                    return Err(anyhow!(
-                        "The model pointer {location} is {} bytes, above its limit of {MAXIMUM_POINTER_BYTES} bytes",
-                        meta.size
-                    ));
-                }
-                Ok(_) => {
-                    let bytes = generic.get(&location).await?.bytes().await?;
-                    Some(match kind {
-                        PointerKind::Learning => json::from_slice::<ChampionPointer>(&bytes)?.order(),
-                        PointerKind::Deployment => {
-                            (json::from_slice::<DeploymentPointer>(&bytes)?.generation, 0)
-                        }
-                    })
-                }
-                Err(error) if not_found(&error) => None,
-                Err(error) => return Err(error.into()),
-            }
+            stored_order(&store, &join_object_path(&base, &relative), kind).await?
         }
         _ => None,
     };
     probes.insert(key, order, MAXIMUM_GENERATION_PROBES);
     Ok(order)
+}
+
+/// The order the pointer at `location` records; None when nothing is stored there.
+#[cfg(feature = "inference")]
+async fn stored_order(
+    store: &FlowLikeStore,
+    location: &flow_like_storage::Path,
+    kind: PointerKind,
+) -> Result<Option<(i64, i64)>> {
+    let result = match store.as_generic().get(location).await {
+        Ok(result) => result,
+        Err(error) if not_found(&error) => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let shown = location.to_string();
+    let bytes = capped_body(result, &shown, MAXIMUM_POINTER_BYTES, "model pointer").await?;
+    Ok(Some(match kind {
+        PointerKind::Learning => json::from_slice::<ChampionPointer>(&bytes)?.order(),
+        #[cfg(feature = "training")]
+        PointerKind::Deployment => (json::from_slice::<DeploymentPointer>(&bytes)?.generation, 0),
+    }))
 }
 
 /// Whether a pointer in the run's Local store orders strictly after `ledger_order`: a
@@ -1961,6 +2163,7 @@ pub(crate) async fn newer_published_generation(
     match local_pointer_order(context, kind, scope, id).await {
         Ok(Some(order)) => match kind {
             PointerKind::Learning => order > ledger_order,
+            #[cfg(feature = "training")]
             PointerKind::Deployment => order.0 > ledger_order.0,
         },
         Ok(None) => false,

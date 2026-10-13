@@ -1330,14 +1330,20 @@ mod tests {
         let dst = report.app_id.as_str();
         for store in [&meta, &storage] {
             let copied = keys(store, dst).await;
-            assert!(LEDGER.iter().all(|rel| !copied.contains(*rel)), "{copied:?}");
+            assert!(
+                LEDGER.iter().all(|rel| !copied.contains(*rel)),
+                "{copied:?}"
+            );
         }
         let copied = keys(&storage, dst).await;
         for rel in MODELS {
             assert!(copied.contains(rel), "{rel} missing from {copied:?}");
         }
         for rel in LEDGER {
-            assert!(storage.head(&path(SRC, rel)).await.is_ok(), "source lost {rel}");
+            assert!(
+                storage.head(&path(SRC, rel)).await.is_ok(),
+                "source lost {rel}"
+            );
         }
     }
 

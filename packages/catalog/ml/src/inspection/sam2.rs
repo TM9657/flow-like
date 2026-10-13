@@ -123,44 +123,7 @@ impl NodeLogic for FineTuneSam2Node {
         {
             context.deactivate_exec_pin("exec_out").await?;
             let request: FineTuneSam2Request = context.evaluate_pin("request").await?;
-            if !(1..=2 * 1024 * 1024 * 1024).contains(&request.maximum_bytes) {
-                return Err(anyhow!(
-                    "SAM artifact byte limit must be between 1 and 2 GiB, got {} bytes",
-                    request.maximum_bytes
-                ));
-            }
-            if context.is_cancelled() {
-                return Err(anyhow!("SAM fine-tuning cancelled"));
-            }
-            let (repo, project) = super::lifecycle::repository(context)?;
-            let ledger = repo.clone();
-            let token = context.get_cancellation_token();
-            let result = with_burn_cancellation(token, move |cancellation| {
-                flow_like_ml_runtime::engines::fine_tune_sam2_source(
-                    &repo,
-                    &project,
-                    &request.source_id,
-                    &request.config,
-                    &request.data,
-                    &request.compute,
-                    request.maximum_bytes,
-                    &cancellation,
-                    |_| {},
-                    flow_like_types::json::json!({"fine_tuned_from": request.source_id}),
-                    flow_like_ml_runtime::now_ms(),
-                )
-                .map_err(flow_like_types::Error::from)
-            })
-            .await?;
-            let outcome = super::publisher::publish_pretrained_source(
-                context,
-                &ledger,
-                super::lifecycle::LedgerScope::App,
-                &result.source,
-            )
-            .await;
-            let model = format!("Fine-tuned SAM 2 source {}", result.source.id);
-            super::lifecycle::warn_unpublished(context, &model, &outcome);
+            let result = fine_tune_sam2(context, request).await?;
             context
                 .set_pin_value("result", flow_like_types::json::json!(result))
                 .await?;
@@ -172,6 +135,74 @@ impl NodeLogic for FineTuneSam2Node {
             Err(super::lifecycle::training_unavailable())
         }
     }
+}
+
+/// Fine-tunes a SAM 2 source in the ledger that holds it, found like Segment with SAM 2 finds
+/// it, and publishes the result to that ledger's model root.
+#[cfg(feature = "training")]
+async fn fine_tune_sam2(
+    context: &mut ExecutionContext,
+    request: FineTuneSam2Request,
+) -> Result<flow_like_ml_runtime::Sam2FineTuneResult> {
+    use super::lifecycle::{LocatedLedger, holds_pretrained_source, locate_repository};
+    if !(1..=2 * 1024 * 1024 * 1024).contains(&request.maximum_bytes) {
+        return Err(anyhow!(
+            "SAM artifact byte limit must be between 1 and 2 GiB, got {} bytes",
+            request.maximum_bytes
+        ));
+    }
+    if context.is_cancelled() {
+        return Err(anyhow!("SAM fine-tuning cancelled"));
+    }
+    let located = locate_repository(context, |repo, project| {
+        holds_pretrained_source(repo, project, &request.source_id)
+    })?;
+    let Some(LocatedLedger {
+        repo,
+        project,
+        scope,
+    }) = located
+    else {
+        return Err(anyhow!(
+            "Fine-tune SAM 2 found no pretrained source {} of this board in this app's training ledger or in your private ledger on this device; import the SAM 2 weights with Import Pretrained Vision Weights or Import Model first",
+            request.source_id
+        ));
+    };
+    let ledger = repo.clone();
+    let token = context.get_cancellation_token();
+    let result = with_burn_cancellation(token, move |cancellation| {
+        flow_like_ml_runtime::engines::fine_tune_sam2_source(
+            &repo,
+            &project,
+            &request.source_id,
+            &request.config,
+            &request.data,
+            &request.compute,
+            request.maximum_bytes,
+            &cancellation,
+            |_| {},
+            flow_like_types::json::json!({"fine_tuned_from": request.source_id}),
+            flow_like_ml_runtime::now_ms(),
+        )
+        .map_err(flow_like_types::Error::from)
+    })
+    .await?;
+    publish_fine_tuned(context, &ledger, scope, &result.source).await;
+    Ok(result)
+}
+
+/// Publishes a fine-tuned source to the model root of its ledger's scope; a failure is a
+/// warning.
+#[cfg(feature = "training")]
+async fn publish_fine_tuned(
+    context: &mut ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    scope: super::lifecycle::LedgerScope,
+    source: &flow_like_ml_runtime::PretrainedSource,
+) {
+    let outcome = super::publisher::publish_pretrained_source(context, repo, scope, source).await;
+    let model = format!("Fine-tuned SAM 2 source {}", source.id);
+    super::lifecycle::log_publish_outcome(context, &model, &outcome);
 }
 
 /// Runs blocking SAM work with a Burn token that is cancelled when the run is cancelled or the
@@ -233,6 +264,84 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn fine_tuning_takes_its_source_from_the_ledger_that_holds_it() {
+        use super::super::lifecycle::{LedgerScope, scoped_repository, test_device::*};
+        use flow_like_ml_burn::{
+            BackendChoice, Sam2Config, Sam2Point, Sam2Prompt, Sam2TrainingConfig,
+            Sam2TrainingDataset, Sam2Variant, TensorData,
+        };
+        use flow_like_types::json::json;
+        let device = Device::new();
+        let mut context = plain_context(device.stores()).await;
+        let request = |source_id: &str| FineTuneSam2Request {
+            source_id: source_id.into(),
+            config: Sam2TrainingConfig {
+                model: Sam2Config {
+                    variant: Sam2Variant::HieraTiny,
+                },
+                backend: BackendChoice::Cpu,
+                epochs: 1,
+                batch_size: 1,
+                learning_rate: 1e-4,
+                seed: 7,
+                gradient_clip: 1.0,
+                freeze_image_encoder: true,
+            },
+            data: Sam2TrainingDataset {
+                images: TensorData {
+                    shape: vec![1, 3, 1024, 1024],
+                    values: vec![0.0; 3 * 1024 * 1024],
+                },
+                prompts: vec![Sam2Prompt {
+                    points: vec![Sam2Point {
+                        x: 512.0,
+                        y: 512.0,
+                        label: 1,
+                    }],
+                    ..Default::default()
+                }],
+                masks: TensorData {
+                    shape: vec![1, 1, 256, 256],
+                    values: vec![0.0; 256 * 256],
+                },
+            },
+            compute: Default::default(),
+            maximum_bytes: default_artifact_limit(),
+        };
+        let error = fine_tune_sam2(&mut context, request("pretrained:missing"))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("found no pretrained source pretrained:missing"),
+            "{error}"
+        );
+        assert!(!device.root().join("training-ledgers").exists());
+        assert!(!device.root().join("apps").exists());
+        let (user, project) = scoped_repository(&context, LedgerScope::User).unwrap();
+        let manifest = json!({
+            "engine": "burn", "format_version": 1, "config": {}, "input_shape": [1]
+        });
+        let private = user
+            .register_pretrained_source(
+                &project,
+                b"weights",
+                manifest,
+                json!({"source": "fixture"}),
+                1024,
+                flow_like_ml_runtime::now_ms(),
+            )
+            .unwrap();
+        let error = fine_tune_sam2(&mut context, request(&private.id))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("SAM source format"), "{error}");
+        let app_ledger = device.root().join("training-ledgers/apps/app/project");
+        assert!(!app_ledger.exists(), "{}", app_ledger.display());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "needs the official SAM 2.1 Hiera-T checkpoint in FLOW_LIKE_SAM2_WEIGHTS and minutes of CPU; L3 covers predict_sam2_from_parts"]
     async fn fine_tuned_sources_publish_and_segment_without_a_ledger() {
         use super::super::lifecycle::test_device::*;
@@ -267,7 +376,9 @@ mod tests {
             labels: Vec::new(),
             maximum_bytes: default_artifact_limit(),
         };
-        let imported = import_pretrained_vision(&mut context, import).await.unwrap();
+        let imported = import_pretrained_vision(&mut context, import)
+            .await
+            .unwrap();
         let pixels: Vec<f32> = (0..3 * 1024 * 1024)
             .map(|index| (index % 251) as f32 / 250.0)
             .collect();

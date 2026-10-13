@@ -5,10 +5,10 @@ use crate::{
     entity::{event, event_sink},
     error::ApiError,
     state::AppState,
-    utils::fork::{ForkDatabaseMode, ForkPolicy},
+    utils::fork::{ForkDatabaseMode, ForkPolicy, policy::is_published_model},
 };
 use flow_like_storage::Path;
-use flow_like_types::anyhow;
+use flow_like_types::{anyhow, storage_paths::is_legacy_training_ledger_path};
 use futures_util::TryStreamExt;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
@@ -168,7 +168,7 @@ pub async fn compute_fork_size_breakdown(
 
     let media_prefix = Path::from("media").join("apps").join(app_id.to_string());
     bucket_prefix(&content_store, &media_prefix, &mut breakdown, |_| {
-        (ForkCategory::Always, true)
+        Some((ForkCategory::Always, true))
     })
     .await?;
 
@@ -236,38 +236,49 @@ enum ForkCategory {
 /// Meta store layout: boards and their version archives are flows;
 /// `.widget` / `.template` files are their own categories; the manifest,
 /// events and pages always travel.
-fn classify_meta(relative: &str) -> (ForkCategory, bool) {
+fn classify_meta(relative: &str) -> Option<(ForkCategory, bool)> {
     if relative.starts_with("versions/") || relative.ends_with(".board") {
-        return (ForkCategory::Flows, true);
+        return Some((ForkCategory::Flows, true));
     }
     if relative.ends_with(".widget") {
-        return (ForkCategory::Widgets, true);
+        return Some((ForkCategory::Widgets, true));
     }
     if relative.ends_with(".template") {
-        return (ForkCategory::Templates, true);
+        return Some((ForkCategory::Templates, true));
     }
-    (ForkCategory::Always, true)
+    Some((ForkCategory::Always, true))
 }
 
 /// Content store layout: `upload/` is user files, `storage/db/` is the
-/// project database, everything else (metadata, flow scratch) always
-/// travels. Database objects contribute bytes but are never counted —
-/// see [`project_db_prefix`].
-fn classify_content(relative: &str) -> (ForkCategory, bool) {
+/// project database, `storage/models/` holds published models, which
+/// travel with the database data, and everything else (metadata, flow
+/// scratch) always travels. Database objects contribute bytes but are
+/// never counted — see [`project_db_prefix`]. The legacy training ledger
+/// never travels, so it is left out entirely (`None`).
+fn classify_content(relative: &str) -> Option<(ForkCategory, bool)> {
+    if is_legacy_training_ledger_path(relative) {
+        return None;
+    }
     if relative.starts_with("upload/") {
-        return (ForkCategory::Files, true);
+        return Some((ForkCategory::Files, true));
     }
     if relative.starts_with("storage/db/") {
-        return (ForkCategory::Databases, false);
+        return Some((ForkCategory::Databases, false));
     }
-    (ForkCategory::Always, true)
+    if relative
+        .strip_prefix("storage/")
+        .is_some_and(is_published_model)
+    {
+        return Some((ForkCategory::Databases, true));
+    }
+    Some((ForkCategory::Always, true))
 }
 
 async fn bucket_prefix(
     store: &Arc<dyn flow_like_storage::object_store::ObjectStore>,
     prefix: &Path,
     breakdown: &mut ForkSizeBreakdown,
-    classify: impl Fn(&str) -> (ForkCategory, bool),
+    classify: impl Fn(&str) -> Option<(ForkCategory, bool)>,
 ) -> Result<(), ApiError> {
     let mut listing = store.list(Some(prefix));
     while let Some(item) = listing
@@ -280,7 +291,9 @@ async fn bucket_prefix(
             Some(rest) if rest.is_empty() || rest.starts_with('/') => rest.trim_start_matches('/'),
             _ => continue,
         };
-        let (category, counted) = classify(relative);
+        let Some((category, counted)) = classify(relative) else {
+            continue;
+        };
         let bucket = match category {
             ForkCategory::Always => &mut breakdown.always,
             ForkCategory::Flows => &mut breakdown.flows,
@@ -428,5 +441,46 @@ fn event_config_has_auth_token(config: Option<&serde_json::Value>) -> bool {
             }
         }
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_legacy_training_ledger_is_never_counted() {
+        for relative in [
+            "storage/inspection/jobs.sqlite",
+            "storage/inspection/jobs.sqlite-wal",
+            "storage/inspection/jobs.artifacts/0a.blob",
+            "storage/inspection/.training-locks/install.lock",
+        ] {
+            assert_eq!(classify_content(relative), None, "{relative}");
+        }
+        assert_eq!(
+            classify_content("storage/inspection/pki/device.pem"),
+            Some((ForkCategory::Always, true))
+        );
+    }
+
+    #[test]
+    fn published_models_travel_with_the_database_data() {
+        let mut breakdown = ForkSizeBreakdown::default();
+        breakdown.databases.add(100, true);
+        assert_eq!(
+            classify_content("storage/models/artifacts/a/weights.bin"),
+            Some((ForkCategory::Databases, true))
+        );
+        assert_eq!(
+            classify_content("storage/models-old/weights.bin"),
+            Some((ForkCategory::Always, true))
+        );
+        let schema_only = ForkPolicy {
+            databases: ForkDatabaseMode::SchemaOnly,
+            ..ForkPolicy::default()
+        };
+        assert_eq!(breakdown.selected(&schema_only), (0, 0));
+        assert_eq!(breakdown.selected(&ForkPolicy::default()), (100, 1));
     }
 }

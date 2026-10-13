@@ -8,7 +8,14 @@ import {
 	useRef,
 	useState,
 } from "react";
+import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
 import { Button } from "../ui/button";
+import {
+	FileSaveProgress,
+	type FileSaveStatus,
+	fileSaveError,
+	storageSaveProgress,
+} from "./file-save-progress";
 import { ViewerAbout } from "./viewer-about";
 import {
 	DOCX_MIME,
@@ -22,7 +29,10 @@ interface WordcraftDocumentProps {
 	filename: string;
 	title?: ReactNode;
 	editable: boolean;
-	onSave: (file: File) => Promise<void>;
+	onSave: (
+		file: File,
+		onProgress?: BulkUploadProgressCallback,
+	) => Promise<void>;
 	onDirtyChange?: (dirty: boolean) => void;
 	onBusyChange?: (busy: boolean) => void;
 }
@@ -56,7 +66,9 @@ function WordcraftSession({
 	const [editing, setEditing] = useState(false);
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [saveProgress, setSaveProgress] = useState<FileSaveStatus | null>(null);
 	const [error, setError] = useState("");
+	const [saveError, setSaveError] = useState(false);
 	const [saved, setSaved] = useState(false);
 	const [download, setDownload] = useState<Blob | null>(null);
 	const [downloadUrl, setDownloadUrl] = useState(url);
@@ -92,6 +104,7 @@ function WordcraftSession({
 		if (pending.current) clearTimeout(pending.current.timer);
 		pending.current = null;
 		setSaving(false);
+		setSaveProgress(null);
 		latest.current.onBusyChange?.(false);
 	}, []);
 
@@ -145,6 +158,7 @@ function WordcraftSession({
 				case "error":
 					if (message.requestId && message.requestId !== pending.current?.id)
 						break;
+					setSaveError(!!pending.current && !pending.current.persisting);
 					setError(message.error || "The document could not be processed.");
 					if (!opened) {
 						clearTimeout(timeout);
@@ -162,6 +176,7 @@ function WordcraftSession({
 						break;
 					clearTimeout(request.timer);
 					if (!latest.current.editable) {
+						setSaveError(true);
 						setError(
 							"You do not have permission to save files in this storage.",
 						);
@@ -169,23 +184,24 @@ function WordcraftSession({
 						break;
 					}
 					request.persisting = true;
+					setSaveProgress({ stage: "Saving file", progress: null });
 					const file = new File([message.bytes], filename, { type: DOCX_MIME });
 					void (async () => {
 						try {
-							await latest.current.onSave(file);
-							if (!active.current) return;
+							await latest.current.onSave(file, (percent, detail) => {
+								if (!active.current || pending.current !== request) return;
+								setSaveProgress(storageSaveProgress(percent, detail));
+							});
+							if (!active.current || pending.current !== request) return;
 							setDownload(file);
 							post({ type: "saved", revision: message.revision });
 							setSaved(true);
 						} catch (cause) {
-							if (!active.current) return;
-							setError(
-								cause instanceof Error
-									? cause.message
-									: "The document could not be saved. Your changes are still open.",
-							);
+							if (!active.current || pending.current !== request) return;
+							setSaveError(true);
+							setError(fileSaveError(cause));
 						} finally {
-							if (active.current) finishSave();
+							if (active.current && pending.current === request) finishSave();
 						}
 					})();
 					break;
@@ -242,16 +258,17 @@ function WordcraftSession({
 		if (!editable || !editing || pending.current || status !== "ready") return;
 		const id = crypto.randomUUID();
 		setError("");
+		setSaveError(false);
 		setSaved(false);
 		setSaving(true);
+		setSaveProgress({ stage: "Preparing file", progress: null });
 		latest.current.onBusyChange?.(true);
 		pending.current = {
 			id,
 			persisting: false,
 			timer: setTimeout(() => {
-				setError(
-					"Preparing the document took too long. Your changes are still open.",
-				);
+				setSaveError(true);
+				setError("Preparing the document took too long.");
 				finishSave();
 			}, 30_000),
 		};
@@ -325,10 +342,30 @@ function WordcraftSession({
 					</Button>
 				)}
 			</div>
+			{saving && saveProgress && <FileSaveProgress {...saveProgress} />}
 			{error && (
-				<p role="alert" className="border-b px-3 py-2 text-sm text-destructive">
-					{error}
-				</p>
+				<div
+					role="alert"
+					className="shrink-0 border-b px-3 py-2 text-sm text-destructive"
+				>
+					{saveError && <p className="font-medium">Could not save file</p>}
+					<p>{error}</p>
+					{saveError && (
+						<>
+							<p>Your changes are still open. Try saving again.</p>
+							{editable && editing && status === "ready" && !saving && (
+								<Button
+									variant="outline"
+									size="sm"
+									className="mt-2"
+									onClick={saveDocument}
+								>
+									Try saving again
+								</Button>
+							)}
+						</>
+					)}
+				</div>
 			)}
 			<div className="relative flex-1 min-h-0">
 				{status !== "failed" && (

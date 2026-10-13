@@ -829,7 +829,10 @@ mod published_models {
 
     /// Leaves a rejected artifact folder out of the refresh.
     fn discard(artifact: &str, staged: &Path, reason: &anyhow::Error) -> Result<()> {
-        tracing::warn!(artifact, "Published model folder is not refreshed: {reason}");
+        tracing::warn!(
+            artifact,
+            "Published model folder is not refreshed: {reason}"
+        );
         if present(staged)? {
             std::fs::remove_dir_all(staged)?;
         }
@@ -1386,7 +1389,9 @@ mod tests {
             prepare(self.root.path(), &config, &self.cancel, guard)
         }
         fn store(&self) -> PathBuf {
-            self.root.path().join("placement-data/placement/current/store")
+            self.root
+                .path()
+                .join("placement-data/placement/current/store")
         }
         fn staging(&self) -> PathBuf {
             self.root
@@ -1617,9 +1622,15 @@ mod tests {
             "jobs.artifacts",
             ".training-locks",
         ] {
-            assert!(!seeded.join(skipped).exists(), "{skipped} stays on its device");
+            assert!(
+                !seeded.join(skipped).exists(),
+                "{skipped} stays on its device"
+            );
         }
-        assert_eq!(std::fs::read(seeded.join("pki/trusted/cert.der"))?, b"ledger");
+        assert_eq!(
+            std::fs::read(seeded.join("pki/trusted/cert.der"))?,
+            b"ledger"
+        );
         assert_eq!(std::fs::read(seeded.join("jobs.sqlite.bak"))?, b"ledger");
         assert_eq!(
             std::fs::read(data.join("apps/project/storage/db/table"))?,
@@ -1648,8 +1659,14 @@ mod tests {
         revisions.update(
             |_| Ok(()),
             || {
-                for file in ["artifacts/model-b/manifest.json", "experiments/experiment-f.json"] {
-                    assert!(staged.join(file).is_file(), "{file} is staged before the guard");
+                for file in [
+                    "artifacts/model-b/manifest.json",
+                    "experiments/experiment-f.json",
+                ] {
+                    assert!(
+                        staged.join(file).is_file(),
+                        "{file} is staged before the guard"
+                    );
                 }
                 assert!(!staged.join("artifacts/model-a").exists());
                 assert!(!models.join("artifacts/model-b").exists());
@@ -1668,7 +1685,10 @@ mod tests {
             ),
             "the guard only renames staged files"
         );
-        assert_eq!(std::fs::read(models.join("artifacts/model-b/weights.bin"))?, b"beta");
+        assert_eq!(
+            std::fs::read(models.join("artifacts/model-b/weights.bin"))?,
+            b"beta"
+        );
         let learning = read_json(&models.join("learning/project-l.json"));
         assert_eq!(learning["project_generation"], 2);
         let winner = read_json(&models.join("experiments/experiment-f.json"));
@@ -1704,13 +1724,32 @@ mod tests {
         )?;
         let models = app_models(&data);
         for (file, field, kept) in [
-            ("learning/project-m.json", "deployment_generation", serde_json::json!(2)),
-            ("deployments/deployment-d.json", "generation", serde_json::json!(7)),
-            ("experiments/experiment-e.json", "artifact_id", serde_json::json!("model-a")),
+            (
+                "learning/project-m.json",
+                "deployment_generation",
+                serde_json::json!(2),
+            ),
+            (
+                "deployments/deployment-d.json",
+                "generation",
+                serde_json::json!(7),
+            ),
+            (
+                "experiments/experiment-e.json",
+                "artifact_id",
+                serde_json::json!("model-a"),
+            ),
         ] {
-            assert_eq!(read_json(&models.join(file))[field], kept, "{file} keeps its state");
+            assert_eq!(
+                read_json(&models.join(file))[field],
+                kept,
+                "{file} keeps its state"
+            );
         }
-        assert_eq!(std::fs::read(models.join("artifacts/model-b/weights.bin"))?, b"beta");
+        assert_eq!(
+            std::fs::read(models.join("artifacts/model-b/weights.bin"))?,
+            b"beta"
+        );
         let device = std::fs::read(models.join("artifacts/device-x/weights.bin"))?;
         assert_eq!(device, b"device");
         let table = std::fs::read(data.join("apps/project/storage/db/table"))?;
@@ -1729,7 +1768,12 @@ mod tests {
             .join(USER_DATA_NAMESPACE)
             .join("models");
         model_folder(&user_models, "private-model", b"private", b"private");
-        champion(&user_models, "private-project", (1, 1), Some("private-model"));
+        champion(
+            &user_models,
+            "private-project",
+            (1, 1),
+            Some("private-model"),
+        );
         let data = revisions.update(|_| Ok(()), || Ok(()))?;
         let local = data.join("user/users/local/apps/project/models");
         let weights = std::fs::read(local.join("artifacts/private-model/weights.bin"))?;
@@ -1743,8 +1787,8 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn artifact_folders_failing_verification_and_pointers_to_them_are_not_refreshed()
-    -> Result<()> {
+    fn artifact_folders_failing_verification_and_pointers_to_them_are_not_refreshed() -> Result<()>
+    {
         let revisions = Revisions::new()?;
         let models = app_models(revisions.second.path());
         model_folder(&models, "tampered", b"changed", b"trained");
@@ -1759,7 +1803,10 @@ mod tests {
             "learning/project-tampered.json",
             "learning/project-missing.json",
         ] {
-            assert!(!published.join(missing).exists(), "{missing} is not refreshed");
+            assert!(
+                !published.join(missing).exists(),
+                "{missing} is not refreshed"
+            );
         }
         for present in [
             "artifacts/intact/weights.bin",

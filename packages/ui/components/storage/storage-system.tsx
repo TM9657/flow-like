@@ -940,7 +940,7 @@ export function StorageSystem({
 	);
 
 	const saveDocx = useCallback(
-		async (file: File) => {
+		async (file: File, onProgress?: BulkUploadProgressCallback) => {
 			const viewer = editorFor(preview.file);
 			if (!canWrite || !viewer) {
 				throw new Error("You do not have permission to save this document.");
@@ -957,7 +957,12 @@ export function StorageSystem({
 				conversionTarget.current.id,
 			);
 			try {
-				await storageApi.uploadStorageItems(appId, preview.folder, [document]);
+				await storageApi.uploadStorageItems(
+					appId,
+					preview.folder,
+					[document],
+					onProgress,
+				);
 			} finally {
 				await refreshFiles();
 			}

@@ -116,10 +116,11 @@ pub fn start(
     sequence: ItemId,
     pool: Arc<MediaPool>,
     services: Arc<dyn Services>,
+    progress: impl Fn(Option<f64>, &'static str) + 'static,
 ) {
     RESULT.with(|result| *result.borrow_mut() = None);
     wasm_bindgen_futures::spawn_local(async move {
-        let result = export(project, sequence, pool, services).await;
+        let result = export(project, sequence, pool, services, &progress).await;
         RESULT.with(|slot| *slot.borrow_mut() = Some(result));
         crate::repaint();
     });
@@ -137,7 +138,9 @@ async fn export(
     sequence: ItemId,
     pool: Arc<MediaPool>,
     services: Arc<dyn Services>,
+    progress: &dyn Fn(Option<f64>, &'static str),
 ) -> Result<Vec<u8>, String> {
+    progress(None, "preparing");
     let seq = project
         .sequence(sequence)
         .ok_or("There is no active video sequence.")?;
@@ -176,6 +179,8 @@ async fn export(
         .recording();
     let mut audio_start = 0i64;
     crate::webcodecs::take_failure();
+    progress(Some(0.0), "rendering");
+    let mut last_progress_at = web_time::Instant::now();
     for index in 0..total {
         let time = rate.tick_of(index);
         let mut ready = None;
@@ -186,7 +191,10 @@ async fn export(
                 &project,
                 sequence,
                 time,
-                filmcraft_render::RenderOptions::default(),
+                filmcraft_render::RenderOptions {
+                    captions: true,
+                    ..Default::default()
+                },
                 &provider,
             );
             if let Some(error) = crate::webcodecs::take_failure() {
@@ -262,9 +270,15 @@ async fn export(
                 audio_start += count as i64;
             }
         }
+        if index + 1 == total || last_progress_at.elapsed().as_millis() >= 100 {
+            progress(Some((index + 1) as f64 / total as f64 * 100.0), "rendering");
+            last_progress_at = web_time::Instant::now();
+        }
         // Let browser codec callbacks and editor events run between rendered frames.
         crate::fs::sleep(0).await;
     }
+    progress(None, "finalizing");
+    crate::fs::sleep(0).await;
     let output = JsFuture::from(finish_encoder(id).map_err(error)?)
         .await
         .map_err(error)?;

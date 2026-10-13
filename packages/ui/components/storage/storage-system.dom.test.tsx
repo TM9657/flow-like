@@ -706,9 +706,16 @@ describe("Storage DOCX documents", () => {
 			[new Uint8Array([0x50, 0x4b, 0, 0xff])],
 			"document.docx",
 		);
+		const onProgress = vi.fn();
+		fixture.backend.storageState.uploadStorageItems.mockImplementationOnce(
+			async (_appId, _directory, _files, reportProgress) => {
+				reportProgress?.(42);
+			},
+		);
 		await act(async () => {
-			await fixture.docxProps?.onSave(exported);
+			await fixture.docxProps?.onSave(exported, onProgress);
 		});
+		expect(onProgress).toHaveBeenCalledWith(42);
 		const [appId, directory, savedFiles] =
 			fixture.backend.storageState.uploadStorageItems.mock.calls[0];
 		expect(appId).toBe("app-a");
@@ -801,6 +808,28 @@ describe("Storage DOCX documents", () => {
 		expect(
 			fixture.backend.storageState.listStorageItems,
 		).toHaveBeenLastCalledWith("app-a", "", { refresh: true });
+	});
+
+	it("preserves the upload error when refreshing storage also fails", async () => {
+		fixture.items = [item("report.docx", false)];
+		await renderStorage("shared", "", { enableDocx: true });
+		await act(async () => {
+			await fixture.loadFile?.("report.docx");
+		});
+		fixture.backend.storageState.uploadStorageItems.mockRejectedValueOnce(
+			new Error("Upload failed"),
+		);
+		fixture.backend.storageState.listStorageItems.mockRejectedValueOnce(
+			new Error("Refresh failed"),
+		);
+		const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+		await expect(
+			fixture.docxProps?.onSave(new File(["content"], "report.docx")),
+		).rejects.toThrow("Upload failed");
+		expect(logError).toHaveBeenCalledWith(
+			"Failed to refresh storage:",
+			expect.objectContaining({ message: "Refresh failed" }),
+		);
 	});
 
 	it("retains the dirty editor when a refreshed listing becomes empty", async () => {
@@ -1117,14 +1146,19 @@ describe("Storage Craft editors", () => {
 				expect(fixture.craftProps?.initialEditing).toBe(true);
 			}
 			expect(fixture.craftProps?.viewer.id).toBe(id);
+			const onProgress = vi.fn();
 			await act(async () => {
-				await fixture.craftProps?.onSave(new File(["bytes"], "ignored.bin"));
+				await fixture.craftProps?.onSave(
+					new File(["bytes"], "ignored.bin"),
+					onProgress,
+				);
 			});
-			const [appId, directory, files] =
+			const [appId, directory, files, reportProgress] =
 				fixture.backend.storageState.uploadStorageItems.mock.calls[0];
 			expect(appId).toBe("app-a");
 			expect(directory).toBe("docs");
 			expect(files[0].name).toBe(`name%2Fpart.${extension}`);
+			expect(reportProgress).toBe(onProgress);
 		},
 	);
 	it.each(

@@ -1,6 +1,6 @@
 ---
 title: "Distribution Drift Node"
-description: "Distribution Drift Flow-Like node: Compare reference and current distributions using KS and PSI. Includes pin details, schemas, and package metadata."
+description: "Distribution Drift Flow-Like node: Compare reference and current distributions with KS and, when bin_edges are given, PSI."
 sidebar:
   label: "Distribution Drift"
 head:
@@ -15,7 +15,7 @@ head:
   - tag: script
     attrs:
       type: application/ld+json
-    content: "{\"@context\":\"https://schema.org\",\"@type\":\"TechArticle\",\"headline\":\"Distribution Drift Node\",\"name\":\"Distribution Drift\",\"description\":\"Distribution Drift Flow-Like node: Compare reference and current distributions using KS and PSI. Includes pin details, schemas, and package metadata.\",\"url\":\"https://docs.flow-like.com/nodes/ai/ml/monitoring/ml-distribution-drift/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"AI/ML/Monitoring\",\"keywords\":\"Distribution Drift, Distribution Drift node, Flow-Like node, Flow-Like node catalog, workflow automation node, AI/ML/Monitoring, ml, ml_distribution_drift, AI, Monitoring, pins, schemas, security rating\",\"programmingLanguage\":\"Rust\",\"mainEntity\":{\"@type\":\"SoftwareSourceCode\",\"name\":\"Distribution Drift\",\"description\":\"Compare reference and current distributions using KS and PSI\",\"codeSampleType\":\"Flow-Like node\",\"runtimePlatform\":\"Flow-Like\",\"programmingLanguage\":\"Rust\"}}"
+    content: "{\"@context\":\"https://schema.org\",\"@type\":\"TechArticle\",\"headline\":\"Distribution Drift Node\",\"name\":\"Distribution Drift\",\"description\":\"Distribution Drift Flow-Like node: Compare reference and current distributions with KS and, when bin_edges are given, PSI.\",\"url\":\"https://docs.flow-like.com/nodes/ai/ml/monitoring/ml-distribution-drift/\",\"isPartOf\":{\"@type\":\"CollectionPage\",\"name\":\"Flow-Like Node Catalog\",\"url\":\"https://docs.flow-like.com/nodes/overview/\"},\"about\":\"AI/ML/Monitoring\",\"keywords\":\"Distribution Drift, Distribution Drift node, Flow-Like node, Flow-Like node catalog, workflow automation node, AI/ML/Monitoring, ml, ml_distribution_drift, AI, Monitoring, pins, schemas, security rating\",\"programmingLanguage\":\"Rust\",\"mainEntity\":{\"@type\":\"SoftwareSourceCode\",\"name\":\"Distribution Drift\",\"description\":\"Compare reference and current distributions with KS and, when bin_edges are given, PSI. psi_drift is left empty when the windows are too small for PSI to separate drift from noise; psi_note says why\",\"codeSampleType\":\"Flow-Like node\",\"runtimePlatform\":\"Flow-Like\",\"programmingLanguage\":\"Rust\"}}"
 ---
 
 import { NodeReference } from "../../../../../../components/node-docs/NodeReference";

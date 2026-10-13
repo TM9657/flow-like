@@ -70,6 +70,39 @@ describe("WordCraft message boundary", () => {
 		).toEqual({ type: "exported", requestId: "save-1", bytes, revision: 8 });
 	});
 
+	it("accepts measured export progress and stages without a percentage", () => {
+		for (const progress of [0, 42.5, 100, null]) {
+			const message = {
+				type: "export-progress",
+				requestId: "save-1",
+				stage: "rendering",
+				progress,
+			};
+			expect(read(message)).toEqual(message);
+		}
+	});
+
+	it.each([
+		{ requestId: 12 },
+		{ stage: "unknown" },
+		{ progress: -1 },
+		{ progress: 101 },
+		{ progress: Number.NaN },
+		{ progress: Number.POSITIVE_INFINITY },
+		{ progress: "50" },
+		{ progress: undefined },
+	])("rejects invalid export progress: %j", (overrides) => {
+		expect(
+			read({
+				type: "export-progress",
+				requestId: "save-1",
+				stage: "rendering",
+				progress: 50,
+				...overrides,
+			}),
+		).toBeNull();
+	});
+
 	it.each([
 		{ requestId: 12 },
 		{ bytes: new Uint8Array([80, 75]) },

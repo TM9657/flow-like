@@ -216,11 +216,18 @@ impl Host {
                     .state
                     .active_sequence
                     .ok_or("There is no active video sequence.")?;
+                let progress_request = request.clone();
                 crate::browser_export::start(
                     session.project.clone(),
                     sequence,
                     session.media.clone(),
                     session.services.clone(),
+                    move |progress, stage| {
+                        event(
+                            "export-progress",
+                            json!({"requestId": progress_request, "progress": progress, "stage": stage}),
+                        );
+                    },
                 );
                 self.pending = Some(Pending { request, revision });
             }

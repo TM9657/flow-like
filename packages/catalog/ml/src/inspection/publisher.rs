@@ -4,8 +4,7 @@
 
 use super::auto_training::AutoTrainingResult;
 use super::auto_training_tables::{
-    SourceScope, TableLocator, experiment_source_locators, learning_source_locators,
-    scope_digests,
+    SourceScope, TableLocator, experiment_source_locators, learning_source_locators, scope_digests,
 };
 use super::lifecycle::{LEDGER_SCOPE_KEY, LedgerScope, StreamKind};
 use super::published::{
@@ -14,10 +13,10 @@ use super::published::{
     MAXIMUM_SERVED_WEIGHTS_BYTES, ModelProvenance, ModelPublisher, ModelStorage,
     POINTER_FORMAT_VERSION, PREPROCESSING_FILE, PREPROCESSING_FORMAT_VERSION,
     PREPROCESSING_MARKER_KEY, PublishedDependencies, PublishedDependency, PublishedFile,
-    PublishedModelManifest, PublishedModelRef, PublishedPreprocessing,
-    PublishedPreprocessingRef, RETAINED_PREVIOUS_ARTIFACTS, WEIGHTS_FILE, artifact_dir, child,
-    deployment_pointer_path, dependency_dir, experiment_pointer_path, folder_of,
-    is_plain_file_name, learning_pointer_path, model_root, preprocessing_cap, run_map,
+    PublishedModelManifest, PublishedModelRef, PublishedPreprocessing, PublishedPreprocessingRef,
+    RETAINED_PREVIOUS_ARTIFACTS, WEIGHTS_FILE, artifact_dir, child, dependency_dir,
+    deployment_pointer_path, experiment_pointer_path, folder_of, is_plain_file_name,
+    learning_pointer_path, model_root, preprocessing_cap, run_map,
 };
 use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 use flow_like_catalog_core::FlowPath;
@@ -52,9 +51,9 @@ pub(crate) enum PublishOutcome {
 }
 
 /// Why a publish runs. Self-repair runs at most once per run per record (run-cache key
-/// `published-models-checked-v1`); a state change always rebuilds the pointer from the
-/// ledger and publishes, and a concurrent publish of the same record waits instead of
-/// skipping it.
+/// `published-models-checked-v1`) and returns at once while this process publishes the same
+/// record; a state change always rebuilds the pointer from the ledger and publishes, waiting
+/// for a concurrent publish of the same record first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PublishReason {
     /// Read paths: Get Learning Project, Get Active Student, Get and Predict fallbacks.
@@ -93,6 +92,7 @@ pub(crate) const SOURCE_SCOPE_UNCLASSIFIABLE: &str = "source_scope_unclassifiabl
 pub(crate) const WEIGHTS_EXCEED_SERVING_CAP: &str = "weights_exceed_serving_cap";
 pub(crate) const MANIFEST_TOO_LARGE: &str = "manifest_too_large";
 pub(crate) const PREPROCESSING_TOO_LARGE: &str = "preprocessing_too_large";
+pub(crate) const POINTER_TOO_LARGE: &str = "pointer_too_large";
 pub(crate) const CHECKED_KEY: &str = "published-models-checked-v1";
 const MAXIMUM_CHECKED: usize = 4096;
 const MAXIMUM_EVENT_ERROR_BYTES: usize = 4096;
@@ -122,8 +122,8 @@ fn bounded(text: &str) -> String {
 /// Runs SQLite and blob work on a blocking thread.
 async fn on_ledger<T, F>(repo: &TrainingRepository, work: F) -> Result<T>
 where
-    T: Send + 'static,
-    F: FnOnce(&TrainingRepository) -> Result<T> + Send + 'static,
+    T: std::any::Any + Send,
+    F: FnOnce(&TrainingRepository) -> Result<T> + std::any::Any + Send,
 {
     let repo = repo.clone();
     tokio::task::spawn_blocking(move || work(&repo)).await?
@@ -153,8 +153,9 @@ type FlightLock = Arc<tokio::sync::Mutex<()>>;
 
 static FLIGHTS: LazyLock<Mutex<HashMap<String, FlightLock>>> = LazyLock::new(Default::default);
 
-/// Held while one publication of a record runs in this process. A concurrent publication of
-/// the same record waits for it and then checks the ledger again.
+/// Held while one publication of a record runs in this process. A concurrent state change of
+/// the same record waits for it and then checks the ledger again; a concurrent self-repair
+/// returns at once.
 struct Flight {
     key: String,
     _guard: tokio::sync::OwnedMutexGuard<()>,
@@ -184,6 +185,35 @@ async fn single_flight(key: String) -> Flight {
         key,
         _guard: lock.lock_owned().await,
     }
+}
+
+/// The flight of `key`; None while another publication holds it. The map stays locked until
+/// the attempt ends, so a failed attempt never keeps the holder's entry alive.
+fn try_single_flight(key: String) -> Option<Flight> {
+    let mut flights = FLIGHTS.lock().unwrap_or_else(PoisonError::into_inner);
+    let guard = flights
+        .entry(key.clone())
+        .or_default()
+        .clone()
+        .try_lock_owned()
+        .ok()?;
+    Some(Flight { key, _guard: guard })
+}
+
+fn flight_key(kind: &str, repo: &TrainingRepository, id: &str) -> String {
+    format!("{kind}\n{}\n{id}", repo.path().display())
+}
+
+/// Holds the flight a running publication of the `kind` record `id` holds.
+#[cfg(test)]
+pub(crate) async fn hold_flight(kind: &str, repo: &TrainingRepository, id: &str) -> Box<dyn Send> {
+    Box::new(single_flight(flight_key(kind, repo, id)).await)
+}
+
+/// Holds the lock a pointer write in `target`'s root holds.
+#[cfg(test)]
+pub(crate) async fn hold_root(target: &WriteTarget) -> Box<dyn Send> {
+    Box::new(target.prune_lock().await)
 }
 
 /// Credential-backed roots write through the undecorated content store, so a write reaches
@@ -216,7 +246,7 @@ fn etag_sidecar(path: &FlowPath) -> flow_like_storage::Path {
     normalize_object_path(&format!("{base}.s3flowEtag"))
 }
 
-/// A written file, copied into the Local mirror once its publication is complete.
+/// A stored file, copied into the Local mirror when its publication ends.
 pub(crate) struct Mirrored {
     path: FlowPath,
     payload: PutPayload,
@@ -248,22 +278,17 @@ pub(crate) async fn mirror(context: &mut ExecutionContext, written: Vec<Mirrored
 pub(crate) struct WriteTarget {
     pub(crate) root: FlowPath,
     pub(crate) store: FlowLikeStore,
-    mirror: bool,
+    cache: Option<Arc<FlowLikeStore>>,
 }
 
 impl WriteTarget {
     pub(crate) async fn new(context: &mut ExecutionContext, root: FlowPath) -> Result<Self> {
         let store = writer_store(context, &root).await?;
-        let mirror = root.cache_store_ref.is_some()
-            && matches!(
-                root.to_cache_layer(context).await?.as_deref(),
-                Some(FlowLikeStore::Local(_))
-            );
-        Ok(Self {
-            root,
-            store,
-            mirror,
-        })
+        let cache = root
+            .to_cache_layer(context)
+            .await?
+            .filter(|cache| matches!(**cache, FlowLikeStore::Local(_)));
+        Ok(Self { root, store, cache })
     }
 
     async fn for_storage(context: &mut ExecutionContext, storage: ModelStorage) -> Result<Self> {
@@ -286,25 +311,34 @@ impl WriteTarget {
         }
     }
 
-    /// The bytes of a file of at most `maximum` bytes; None when it is missing or larger.
-    async fn read(&self, path: &FlowPath, maximum: u64) -> Result<Option<Vec<u8>>> {
+    /// The bytes and stored ETag of a file of at most `maximum` bytes; None when it is missing
+    /// or larger. The GET's own size is checked before its body is read, so a file replaced by
+    /// a larger one after the HEAD is never buffered.
+    async fn fetch(
+        &self,
+        path: &FlowPath,
+        maximum: u64,
+    ) -> Result<Option<(Bytes, Option<String>)>> {
         let Some(meta) = self.head(path).await? else {
             return Ok(None);
         };
         if meta.size > maximum {
             return Ok(None);
         }
-        match self.store.as_generic().get(&path.object_path()).await {
-            Ok(result) => Ok(Some(
-                result
-                    .bytes()
-                    .await
-                    .map_err(|error| anyhow!("Reading {} failed: {error}", path.path))?
-                    .to_vec(),
-            )),
-            Err(object_store::Error::NotFound { .. }) => Ok(None),
-            Err(error) => Err(anyhow!("Reading {} failed: {error}", path.path)),
+        let result = match self.store.as_generic().get(&path.object_path()).await {
+            Ok(result) => result,
+            Err(object_store::Error::NotFound { .. }) => return Ok(None),
+            Err(error) => return Err(anyhow!("Reading {} failed: {error}", path.path)),
+        };
+        if result.meta.size > maximum {
+            return Ok(None);
         }
+        let e_tag = result.meta.e_tag.clone();
+        let bytes = result
+            .bytes()
+            .await
+            .map_err(|error| anyhow!("Reading {} failed: {error}", path.path))?;
+        Ok(Some((bytes, e_tag)))
     }
 
     /// A JSON file of at most `maximum` bytes; None when it is missing, larger or unreadable,
@@ -315,9 +349,9 @@ impl WriteTarget {
         maximum: u64,
     ) -> Result<Option<T>> {
         Ok(self
-            .read(path, maximum)
+            .fetch(path, maximum)
             .await?
-            .and_then(|bytes| json::from_slice(&bytes).ok()))
+            .and_then(|(bytes, _)| json::from_slice(&bytes).ok()))
     }
 
     /// Writes `bytes`, then confirms the size and, when both report one, the ETag with a HEAD.
@@ -337,7 +371,7 @@ impl WriteTarget {
         .await
         .map_err(|error| anyhow!("Writing {} failed: {error}", path.path))?;
         let e_tag = self.confirm(path, size, written.e_tag).await?;
-        if self.mirror {
+        if self.cache.is_some() {
             mirrors.push(Mirrored {
                 path: path.clone(),
                 payload,
@@ -382,9 +416,7 @@ impl WriteTarget {
             Ok(()) | Err(object_store::Error::NotFound { .. }) => {}
             Err(error) => return Err(anyhow!("Deleting {} failed: {error}", path.path)),
         }
-        if self.mirror
-            && let Ok(Some(cache)) = path.to_cache_layer(context).await
-        {
+        if let Some(cache) = &self.cache {
             for location in [path.object_path(), etag_sidecar(path)] {
                 if let Err(error) = cache.as_generic().delete(&location).await
                     && !matches!(error, object_store::Error::NotFound { .. })
@@ -397,6 +429,53 @@ impl WriteTarget {
             }
         }
         Ok(())
+    }
+
+    /// Queues `path`, which this publication left in place, for the Local mirror when the
+    /// mirror lacks it, with the stored ETag. `known` is its stored content when that is at
+    /// hand; otherwise the stored file of at most `maximum` bytes is read.
+    async fn mirror_stored(
+        &self,
+        path: &FlowPath,
+        known: Option<&Bytes>,
+        maximum: u64,
+        mirrors: &mut Vec<Mirrored>,
+    ) -> Result<()> {
+        let Some(cache) = &self.cache else {
+            return Ok(());
+        };
+        if mirrors.iter().any(|file| file.path.path == path.path) {
+            return Ok(());
+        }
+        let lacks = matches!(
+            cache.as_generic().head(&path.object_path()).await,
+            Err(object_store::Error::NotFound { .. })
+        );
+        if !lacks {
+            return Ok(());
+        }
+        let stored = match known {
+            Some(bytes) => self
+                .head(path)
+                .await?
+                .map(|meta| (bytes.clone(), meta.e_tag)),
+            None => self.fetch(path, maximum).await?,
+        };
+        if let Some((bytes, e_tag)) = stored {
+            mirrors.push(Mirrored {
+                path: path.clone(),
+                payload: PutPayload::from_bytes(bytes),
+                e_tag,
+            });
+        }
+        Ok(())
+    }
+
+    /// Held by pruning and by every pointer write below this root in this process, so pruning
+    /// never deletes a folder that a pointer being written names. Other processes writing the
+    /// same root are not covered.
+    async fn prune_lock(&self) -> Flight {
+        single_flight(format!("root\n{}\n{}", self.root.store_ref, self.root.path)).await
     }
 
     /// The folder's manifest when it records the same artifact and weights in plain file
@@ -509,6 +588,16 @@ fn load_experiment(repo: &TrainingRepository, id: &str) -> Result<ExperimentReco
     })
 }
 
+/// The experiment's metadata; `provenance` notes the experiment and its selected trial.
+fn experiment_metadata(
+    record: &ExperimentRecord,
+    provenance: &mut ModelProvenance,
+) -> ModelMetadata {
+    provenance.experiment_id = Some(record.experiment.id.clone());
+    provenance.selected_trial_id = selected_trial(&record.experiment);
+    ModelMetadata::of_experiment(&record.experiment, &record.result)
+}
+
 /// The files of one model folder, built from a ledger record.
 struct FolderPlan {
     weights: Bytes,
@@ -523,7 +612,11 @@ impl FolderPlan {
     }
 
     fn weights_file(&self) -> &str {
-        self.manifest.weights.file.as_deref().unwrap_or(WEIGHTS_FILE)
+        self.manifest
+            .weights
+            .file
+            .as_deref()
+            .unwrap_or(WEIGHTS_FILE)
     }
 
     fn model_ref(&self, folder: &FlowPath, storage: Option<ModelStorage>) -> PublishedModelRef {
@@ -538,9 +631,43 @@ impl FolderPlan {
     }
 }
 
+/// Why a ledger record is left unpublished; `code` is the reason its skip event records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SkipReason {
+    SourceScopeUnclassifiable,
+    WeightsExceedServingCap,
+    ManifestTooLarge,
+    PreprocessingTooLarge,
+}
+
+impl SkipReason {
+    fn code(&self) -> &str {
+        match self {
+            Self::SourceScopeUnclassifiable => SOURCE_SCOPE_UNCLASSIFIABLE,
+            Self::WeightsExceedServingCap => WEIGHTS_EXCEED_SERVING_CAP,
+            Self::ManifestTooLarge => MANIFEST_TOO_LARGE,
+            Self::PreprocessingTooLarge => PREPROCESSING_TOO_LARGE,
+        }
+    }
+
+    /// Why Export Model refuses the record.
+    fn export_text(&self) -> &str {
+        match self {
+            Self::SourceScopeUnclassifiable => {
+                "its source tables match neither this project's database nor yours"
+            }
+            Self::WeightsExceedServingCap => "its weights exceed the 2 GiB export limit",
+            Self::ManifestTooLarge => "its manifest would exceed 1 MiB",
+            Self::PreprocessingTooLarge => {
+                "its preprocessing exceeds the size its feature pipeline allows"
+            }
+        }
+    }
+}
+
 enum Planned {
     Ready(FolderPlan),
-    Skip(&'static str),
+    Skip(SkipReason),
 }
 
 /// How a ledger record becomes a folder plan.
@@ -587,8 +714,7 @@ fn feature_read_limit(preprocessing: Option<&Value>) -> u64 {
         .and_then(|value| value.pointer("/pipeline/limits/maximum_bytes"))
         .and_then(Value::as_u64)
         .unwrap_or(
-            flow_like_ml_native::feature_engineering::FeatureLimits::default().maximum_bytes
-                as u64,
+            flow_like_ml_native::feature_engineering::FeatureLimits::default().maximum_bytes as u64,
         )
 }
 
@@ -612,7 +738,7 @@ fn finish_plan(
     manifest: PublishedModelManifest,
 ) -> Result<Planned> {
     if json::to_vec(&manifest)?.len() as u64 > MAXIMUM_MANIFEST_BYTES {
-        return Ok(Planned::Skip(MANIFEST_TOO_LARGE));
+        return Ok(Planned::Skip(SkipReason::ManifestTooLarge));
     }
     Ok(Planned::Ready(FolderPlan {
         weights: Bytes::from(weights),
@@ -620,6 +746,56 @@ fn finish_plan(
         manifest,
         dependency: None,
     }))
+}
+
+/// A preprocessing file and the read limit of its feature pipeline.
+struct PreprocessingFile {
+    bytes: Vec<u8>,
+    limit: u64,
+}
+
+/// The preprocessing file holding `table` and, when it differs, the artifact's moved
+/// preprocessing manifest. None when it exceeds what the table's feature pipeline allows.
+fn preprocessing_file(table: &Value, moved: Option<Value>) -> Result<Option<PreprocessingFile>> {
+    let limit = feature_read_limit(Some(table));
+    let document = PublishedPreprocessing {
+        format_version: PREPROCESSING_FORMAT_VERSION,
+        artifact_preprocessing_manifest: moved.filter(|manifest| manifest != table),
+        preprocessing: Some(table.clone()),
+    };
+    let bytes = json::to_vec(&document)?;
+    if bytes.len() as u64 > preprocessing_cap(limit) {
+        return Ok(None);
+    }
+    Ok(Some(PreprocessingFile { bytes, limit }))
+}
+
+fn artifact_manifest(
+    artifact: ModelArtifact,
+    spec: PlanSpec,
+    preprocessing: Option<PublishedPreprocessingRef>,
+    feature_extractor: Option<PublishedDependency>,
+) -> PublishedModelManifest {
+    let weights = PublishedFile {
+        file: spec.weights_file,
+        sha256: artifact.blob.sha256.clone(),
+        bytes: artifact.blob.bytes,
+    };
+    PublishedModelManifest {
+        format_version: MANIFEST_FORMAT_VERSION,
+        artifact: Some(artifact),
+        pretrained_source: None,
+        weights,
+        preprocessing,
+        task: spec.metadata.task,
+        calibration: spec.metadata.calibration,
+        goal_met: spec.metadata.goal_met,
+        validation_metrics: spec.metadata.validation_metrics,
+        final_test_metrics: spec.metadata.final_test_metrics,
+        source_table_versions: spec.metadata.source_table_versions,
+        dependencies: PublishedDependencies { feature_extractor },
+        provenance: Some(spec.provenance),
+    }
 }
 
 /// A model artifact's folder. Its preprocessing manifest moves into the preprocessing file,
@@ -630,7 +806,7 @@ fn artifact_plan(
     spec: PlanSpec,
 ) -> Result<Planned> {
     if artifact.blob.bytes > spec.limit {
-        return Ok(Planned::Skip(WEIGHTS_EXCEED_SERVING_CAP));
+        return Ok(Planned::Skip(SkipReason::WeightsExceedServingCap));
     }
     let weights = repo.read_blob_limited(&artifact.blob, spec.limit)?;
     let dependency = recorded_dependency(&artifact.manifest)?;
@@ -642,56 +818,21 @@ fn artifact_plan(
         .or_else(|| moved.clone());
     let preprocessing = match &table {
         None => None,
-        Some(table_value) => {
-            let limit = feature_read_limit(Some(table_value));
-            let document = PublishedPreprocessing {
-                format_version: PREPROCESSING_FORMAT_VERSION,
-                artifact_preprocessing_manifest: moved
-                    .filter(|manifest| Some(manifest) != table.as_ref()),
-                preprocessing: table.clone(),
-            };
-            let bytes = json::to_vec(&document)?;
-            if bytes.len() as u64 > preprocessing_cap(limit) {
-                return Ok(Planned::Skip(PREPROCESSING_TOO_LARGE));
-            }
-            Some((bytes, limit))
-        }
+        Some(table) => match preprocessing_file(table, moved)? {
+            Some(file) => Some(file),
+            None => return Ok(Planned::Skip(SkipReason::PreprocessingTooLarge)),
+        },
     };
-    let blob = artifact.blob.clone();
     let reference = preprocessing
         .as_ref()
-        .map(|(bytes, limit)| PublishedPreprocessingRef {
+        .map(|file| PublishedPreprocessingRef {
             file: spec.preprocessing_file.clone(),
-            sha256: flow_like_ml_core::content_digest(bytes),
-            bytes: bytes.len() as u64,
-            maximum_bytes: *limit,
+            sha256: flow_like_ml_core::content_digest(&file.bytes),
+            bytes: file.bytes.len() as u64,
+            maximum_bytes: file.limit,
         });
-    let manifest = PublishedModelManifest {
-        format_version: MANIFEST_FORMAT_VERSION,
-        artifact: Some(artifact),
-        pretrained_source: None,
-        weights: PublishedFile {
-            file: spec.weights_file,
-            sha256: blob.sha256,
-            bytes: blob.bytes,
-        },
-        preprocessing: reference,
-        task: spec.metadata.task,
-        calibration: spec.metadata.calibration,
-        goal_met: spec.metadata.goal_met,
-        validation_metrics: spec.metadata.validation_metrics,
-        final_test_metrics: spec.metadata.final_test_metrics,
-        source_table_versions: spec.metadata.source_table_versions,
-        dependencies: PublishedDependencies {
-            feature_extractor: dependency,
-        },
-        provenance: Some(spec.provenance),
-    };
-    finish_plan(
-        weights,
-        preprocessing.map(|(bytes, _)| bytes),
-        manifest,
-    )
+    let manifest = artifact_manifest(artifact, spec, reference, dependency);
+    finish_plan(weights, preprocessing.map(|file| file.bytes), manifest)
 }
 
 /// A pretrained source's folder: its weights and a manifest with the source record.
@@ -702,7 +843,7 @@ fn source_plan(
     limit: u64,
 ) -> Result<Planned> {
     if source.blob.bytes > limit {
-        return Ok(Planned::Skip(WEIGHTS_EXCEED_SERVING_CAP));
+        return Ok(Planned::Skip(SkipReason::WeightsExceedServingCap));
     }
     let weights = repo.read_blob_limited(&source.blob, limit)?;
     let file = PublishedFile {
@@ -731,6 +872,8 @@ fn source_plan(
 enum DependencyLookup {
     Found(FolderPlan),
     Missing,
+    /// Only the executing user's private ledger holds it, and the model goes to app storage.
+    Private,
     TooLarge,
 }
 
@@ -784,12 +927,87 @@ fn holds_extractor(repo: &TrainingRepository, source_id: &str) -> Result<bool> {
     })
 }
 
-/// Adds the folder of the model's feature extractor, read from the record's own ledger or
-/// else from the first ledger of this run's App chain that holds it.
+/// A dependency's provenance: its dependent's, in the ledger that holds the dependency.
+fn dependency_provenance(base: &ModelProvenance, ledger: LedgerScope) -> ModelProvenance {
+    ModelProvenance {
+        ledger,
+        dependency: true,
+        experiment_id: None,
+        selected_trial_id: None,
+        learning_project_id: None,
+        cycle_id: None,
+        deployment_id: None,
+        deployment_generation: None,
+        ..base.clone()
+    }
+}
+
+async fn plan_dependency_in(
+    repo: &TrainingRepository,
+    dependency: &PublishedDependency,
+    provenance: ModelProvenance,
+    limit: u64,
+) -> Result<DependencyLookup> {
+    let dependency = dependency.clone();
+    on_ledger(repo, move |repo| {
+        dependency_plan(repo, &dependency, provenance, limit)
+    })
+    .await
+}
+
+/// The extractor's folder from the record's own ledger, else from the first ledger of this
+/// run's App chain that holds it. `storage` is the model root, None for an explicit export;
+/// an extractor found only in the private ledger never goes to app storage.
+async fn lookup_dependency(
+    context: &mut ExecutionContext,
+    repo: &TrainingRepository,
+    scope: LedgerScope,
+    storage: Option<ModelStorage>,
+    dependency: &PublishedDependency,
+    base: &ModelProvenance,
+    limit: u64,
+) -> Result<DependencyLookup> {
+    let own = dependency_provenance(base, scope);
+    let lookup = plan_dependency_in(repo, dependency, own, limit).await?;
+    if !matches!(lookup, DependencyLookup::Missing) {
+        return Ok(lookup);
+    }
+    let source_id = dependency.source_id.clone();
+    let located = super::lifecycle::locate_repository(context, |candidate, _| {
+        holds_extractor(candidate, &source_id)
+    });
+    match located {
+        Ok(Some(located))
+            if located.scope == LedgerScope::User && storage == Some(ModelStorage::App) =>
+        {
+            Ok(DependencyLookup::Private)
+        }
+        Ok(Some(located)) => {
+            let provenance = dependency_provenance(base, located.scope);
+            plan_dependency_in(&located.repo, dependency, provenance, limit).await
+        }
+        Ok(None) => Ok(DependencyLookup::Missing),
+        Err(error) => {
+            warn(
+                context,
+                &format!(
+                    "Looking up feature extractor {} in this app's training ledgers failed: {error}",
+                    dependency.source_id
+                ),
+            );
+            Ok(DependencyLookup::Missing)
+        }
+    }
+}
+
+/// Adds the folder of the model's feature extractor; a missing, private or oversized
+/// extractor only warns, and the model is published without it. `storage` is the model root,
+/// None for an explicit export, which may write a private extractor anywhere.
 async fn attach_dependency(
     context: &mut ExecutionContext,
     repo: &TrainingRepository,
     scope: LedgerScope,
+    storage: Option<ModelStorage>,
     plan: &mut FolderPlan,
     limit: u64,
 ) -> Result<()> {
@@ -801,73 +1019,27 @@ async fn attach_dependency(
         .provenance
         .clone()
         .unwrap_or_else(|| provenance(ModelPublisher::Export, scope, None));
-    let dependency_provenance = |ledger: LedgerScope| ModelProvenance {
-        ledger,
-        dependency: true,
-        experiment_id: None,
-        selected_trial_id: None,
-        learning_project_id: None,
-        cycle_id: None,
-        deployment_id: None,
-        deployment_generation: None,
-        ..base.clone()
-    };
-    let lookup = {
-        let (dependency, provenance) = (dependency.clone(), dependency_provenance(scope));
-        on_ledger(repo, move |repo| {
-            dependency_plan(repo, &dependency, provenance, limit)
-        })
-        .await?
-    };
-    let lookup = match lookup {
-        DependencyLookup::Missing => {
-            let source_id = dependency.source_id.clone();
-            let located = super::lifecycle::locate_repository(context, |candidate, _| {
-                holds_extractor(candidate, &source_id)
-            });
-            match located {
-                Ok(Some(located)) => {
-                    let (dependency, provenance) =
-                        (dependency.clone(), dependency_provenance(located.scope));
-                    on_ledger(&located.repo, move |repo| {
-                        dependency_plan(repo, &dependency, provenance, limit)
-                    })
-                    .await?
-                }
-                Ok(None) => DependencyLookup::Missing,
-                Err(error) => {
-                    warn(
-                        context,
-                        &format!(
-                            "Looking up feature extractor {} in this app's training ledgers failed: {error}",
-                            dependency.source_id
-                        ),
-                    );
-                    DependencyLookup::Missing
-                }
-            }
+    let lookup =
+        lookup_dependency(context, repo, scope, storage, &dependency, &base, limit).await?;
+    let problem = match lookup {
+        DependencyLookup::Found(found) => {
+            plan.dependency = Some(Box::new(found));
+            return Ok(());
         }
-        found => found,
+        DependencyLookup::Missing => "is in no training ledger of this app".to_owned(),
+        DependencyLookup::Private => {
+            "is only in your private training ledger, which app storage never receives".to_owned()
+        }
+        DependencyLookup::TooLarge => format!("has more than {limit} bytes of weights"),
     };
-    match lookup {
-        DependencyLookup::Found(found) => plan.dependency = Some(Box::new(found)),
-        DependencyLookup::Missing => warn(
-            context,
-            &format!(
-                "Feature extractor {} of model {} is in no training ledger of this app, so it is not published beside the model",
-                dependency.source_id,
-                plan.artifact_id()
-            ),
+    warn(
+        context,
+        &format!(
+            "Feature extractor {} of model {} {problem}, so it is not published beside the model",
+            dependency.source_id,
+            plan.artifact_id()
         ),
-        DependencyLookup::TooLarge => warn(
-            context,
-            &format!(
-                "Feature extractor {} of model {} has more than {limit} bytes of weights, so it is not published beside the model",
-                dependency.source_id,
-                plan.artifact_id()
-            ),
-        ),
-    }
+    );
     Ok(())
 }
 
@@ -896,6 +1068,28 @@ async fn record_storage(
     })
 }
 
+/// `record_storage`, warning that the `model` of `record` stays unpublished when its source
+/// tables cannot be classified.
+async fn classified_storage(
+    context: &mut ExecutionContext,
+    scope: LedgerScope,
+    marker: Option<&Value>,
+    locators: &[Option<TableLocator>],
+    record: &str,
+    model: &str,
+) -> Result<Option<ModelStorage>> {
+    let storage = record_storage(context, scope, marker, locators).await?;
+    if storage.is_none() {
+        warn(
+            context,
+            &format!(
+                "{record} predates ledger scopes and reads source tables that match neither this project's database nor yours, so its {model} is not published"
+            ),
+        );
+    }
+    Ok(storage)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FolderMode {
     /// A model folder: kept when its manifest records the same weights, repaired otherwise.
@@ -907,46 +1101,101 @@ enum FolderMode {
     Export,
 }
 
+/// A written folder: whether any of its files or its dependency's changed, and the manifests a
+/// pointer to it relies on, its own and its dependency's.
 struct FolderWrite {
     any: bool,
     weights_e_tag: Option<String>,
+    manifests: Vec<FlowPath>,
 }
 
-/// Writes a folder in order: weights, preprocessing, the dependency folder, then the
-/// manifest, which makes the folder visible. Files that are already present with the size the
-/// manifest records are kept.
-async fn write_model_folder(
+/// A folder whose data files are in place, whether its manifest must be written, and the
+/// matching manifest it already holds.
+#[derive(Default)]
+struct FolderFiles {
+    any: bool,
+    weights_e_tag: Option<String>,
+    rewrite_manifest: bool,
+    kept: Option<PublishedModelManifest>,
+}
+
+/// Whether a folder's manifest must be written: it holds no matching one, or the one it keeps
+/// lacks the planned preprocessing reference.
+fn manifest_outdated(kept: Option<&PublishedModelManifest>, plan: &FolderPlan) -> bool {
+    kept.is_none_or(|kept| kept.preprocessing.is_none() && plan.manifest.preprocessing.is_some())
+}
+
+/// The stored object at `path`, looked up only when the folder's files are checked.
+async fn present(
+    target: &WriteTarget,
+    path: &FlowPath,
+    checks: bool,
+) -> Result<Option<ObjectMeta>> {
+    if checks {
+        target.head(path).await
+    } else {
+        Ok(None)
+    }
+}
+
+/// Writes the planned preprocessing file unless the file the kept manifest lists is present
+/// with its recorded size. Some(whether that listing changes) when it was written.
+async fn write_preprocessing(
+    target: &WriteTarget,
+    folder: &FlowPath,
+    plan: &FolderPlan,
+    kept: Option<&PublishedModelManifest>,
+    checks: bool,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<Option<bool>> {
+    let (Some(bytes), Some(planned)) = (&plan.preprocessing, &plan.manifest.preprocessing) else {
+        return Ok(None);
+    };
+    let listed = kept
+        .and_then(|manifest| manifest.preprocessing.as_ref())
+        .unwrap_or(planned);
+    let stored = present(target, &child(folder, &listed.file), checks).await?;
+    if stored.is_some_and(|meta| meta.size == listed.bytes) {
+        return Ok(None);
+    }
+    target
+        .write(&child(folder, &planned.file), bytes.clone(), mirrors)
+        .await?;
+    Ok(Some(listed != planned))
+}
+
+/// Writes a folder's weights and preprocessing unless they are present with the size its
+/// manifest records; a content-addressed folder that is already published is left alone. A
+/// kept manifest without the planned preprocessing reference is rewritten.
+async fn write_folder_files(
     target: &WriteTarget,
     folder: &FlowPath,
     plan: &FolderPlan,
     mode: FolderMode,
     mirrors: &mut Vec<Mirrored>,
-) -> Result<FolderWrite> {
+) -> Result<FolderFiles> {
     let checks = mode != FolderMode::Export;
-    let manifest_path = child(folder, MANIFEST_FILE);
     let kept = if checks {
-        target.matching_manifest(&manifest_path, plan).await?
+        target
+            .matching_manifest(&child(folder, MANIFEST_FILE), plan)
+            .await?
     } else {
         None
     };
     if mode == FolderMode::ContentAddressed && kept.is_some() {
-        return Ok(FolderWrite {
-            any: false,
-            weights_e_tag: None,
+        return Ok(FolderFiles {
+            kept,
+            ..FolderFiles::default()
         });
     }
-    let mut any = false;
     let described = kept.as_ref().unwrap_or(&plan.manifest);
     let weights_path = child(
         folder,
         described.weights.file.as_deref().unwrap_or(WEIGHTS_FILE),
     );
-    let present = if checks {
-        target.head(&weights_path).await?
-    } else {
-        None
-    };
-    let weights_e_tag = match present.filter(|meta| meta.size == plan.manifest.weights.bytes) {
+    let stored = present(target, &weights_path, checks).await?;
+    let mut any = false;
+    let weights_e_tag = match stored.filter(|meta| meta.size == plan.manifest.weights.bytes) {
         Some(meta) => meta.e_tag,
         None => {
             any = true;
@@ -955,57 +1204,149 @@ async fn write_model_folder(
                 .await?
         }
     };
-    let mut rewrite_manifest = kept.is_none();
-    if let (Some(bytes), Some(planned)) = (&plan.preprocessing, &plan.manifest.preprocessing) {
-        let listed = kept
-            .as_ref()
-            .and_then(|manifest| manifest.preprocessing.as_ref())
-            .unwrap_or(planned);
-        let present = if checks {
-            target.head(&child(folder, &listed.file)).await?
-        } else {
-            None
-        };
-        if present.is_none_or(|meta| meta.size != listed.bytes) {
-            rewrite_manifest |= listed != planned;
-            any = true;
-            target
-                .write(&child(folder, &planned.file), bytes.clone(), mirrors)
-                .await?;
-        }
+    let mut rewrite_manifest = manifest_outdated(kept.as_ref(), plan);
+    if let Some(changed) =
+        write_preprocessing(target, folder, plan, kept.as_ref(), checks, mirrors).await?
+    {
+        any = true;
+        rewrite_manifest |= changed;
     }
+    Ok(FolderFiles {
+        any,
+        weights_e_tag,
+        rewrite_manifest,
+        kept,
+    })
+}
+
+async fn write_folder_manifest(
+    target: &WriteTarget,
+    folder: &FlowPath,
+    plan: &FolderPlan,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<()> {
+    target
+        .write(
+            &child(folder, MANIFEST_FILE),
+            Bytes::from(json::to_vec(&plan.manifest)?),
+            mirrors,
+        )
+        .await?;
+    Ok(())
+}
+
+/// Where a folder's dependency goes: `dependencies/{source}` inside an export, otherwise its
+/// own content-addressed folder below the root.
+fn dependency_location(
+    target: &WriteTarget,
+    folder: &FlowPath,
+    mode: FolderMode,
+    dependency: &FolderPlan,
+) -> (FlowPath, FolderMode) {
+    if mode == FolderMode::Export {
+        (
+            child(folder, &dependency_dir(dependency.artifact_id())),
+            FolderMode::Export,
+        )
+    } else {
+        (
+            target.file(&artifact_dir(dependency.artifact_id())),
+            FolderMode::ContentAddressed,
+        )
+    }
+}
+
+/// Queues the files a folder's manifest names that this publication left in place and the
+/// Local mirror lacks; that manifest is the planned one when it was written.
+async fn mirror_folder(
+    target: &WriteTarget,
+    folder: &FlowPath,
+    plan: &FolderPlan,
+    files: &FolderFiles,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<()> {
+    if target.cache.is_none() {
+        return Ok(());
+    }
+    let manifest = if files.rewrite_manifest {
+        Some(&plan.manifest)
+    } else {
+        files.kept.as_ref()
+    };
+    let Some(manifest) = manifest else {
+        return Ok(());
+    };
+    let weights_file = manifest.weights.file.as_deref().unwrap_or(WEIGHTS_FILE);
+    let weights = child(folder, weights_file);
+    let size = plan.manifest.weights.bytes;
+    target
+        .mirror_stored(&weights, Some(&plan.weights), size, mirrors)
+        .await?;
+    if let Some(reference) = &manifest.preprocessing {
+        let path = child(folder, &reference.file);
+        let known = plan
+            .preprocessing
+            .as_ref()
+            .filter(|_| plan.manifest.preprocessing.as_ref() == Some(reference));
+        target
+            .mirror_stored(&path, known, reference.bytes, mirrors)
+            .await?;
+    }
+    let manifest_path = child(folder, MANIFEST_FILE);
+    target
+        .mirror_stored(&manifest_path, None, MAXIMUM_MANIFEST_BYTES, mirrors)
+        .await
+}
+
+/// Writes the folder's manifest when it must change, which makes the folder visible, and
+/// queues the files the Local mirror lacks. Returns whether anything in the folder changed.
+async fn finish_folder(
+    target: &WriteTarget,
+    folder: &FlowPath,
+    plan: &FolderPlan,
+    files: &FolderFiles,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<bool> {
+    if files.rewrite_manifest {
+        write_folder_manifest(target, folder, plan, mirrors).await?;
+    }
+    mirror_folder(target, folder, plan, files, mirrors).await?;
+    Ok(files.any || files.rewrite_manifest)
+}
+
+/// Writes a folder in order: weights, preprocessing, the dependency folder, then the
+/// manifest. Files that are already present with the size the manifest records are kept.
+async fn write_model_folder(
+    target: &WriteTarget,
+    folder: &FlowPath,
+    plan: &FolderPlan,
+    mode: FolderMode,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<FolderWrite> {
+    let files = write_folder_files(target, folder, plan, mode, mirrors).await?;
+    let mut manifests = vec![child(folder, MANIFEST_FILE)];
+    let mut dependency_written = false;
     if let Some(dependency) = &plan.dependency {
-        let (dependency_folder, dependency_mode) = if checks {
-            (
-                target.file(&artifact_dir(dependency.artifact_id())),
-                FolderMode::ContentAddressed,
-            )
-        } else {
-            (
-                child(folder, &dependency_dir(dependency.artifact_id())),
-                FolderMode::Export,
-            )
-        };
-        Box::pin(write_model_folder(
+        let (dependency_folder, dependency_mode) =
+            dependency_location(target, folder, mode, dependency);
+        let written = write_folder_files(
             target,
             &dependency_folder,
             dependency,
             dependency_mode,
             mirrors,
-        ))
+        )
         .await?;
+        dependency_written =
+            finish_folder(target, &dependency_folder, dependency, &written, mirrors).await?;
+        manifests.push(child(&dependency_folder, MANIFEST_FILE));
     }
-    if rewrite_manifest {
-        any = true;
-        target
-            .write(
-                &manifest_path,
-                Bytes::from(json::to_vec(&plan.manifest)?),
-                mirrors,
-            )
-            .await?;
-    }
-    Ok(FolderWrite { any, weights_e_tag })
+    let any = finish_folder(target, folder, plan, &files, mirrors).await? || dependency_written;
+    Ok(FolderWrite {
+        any,
+        weights_e_tag: files.weights_e_tag,
+        manifests,
+    })
 }
 
 /// Equal apart from the publication time.
@@ -1022,7 +1363,10 @@ fn same_pointer<T: Serialize>(left: &T, right: &T) -> bool {
 
 /// Previous artifacts a pointer keeps, newest first: the previous pointer's artifact, then its
 /// retained ids, without the new artifact, at most three.
-fn next_retained(previous: Option<(Option<&str>, &[String])>, current: Option<&str>) -> Vec<String> {
+pub(crate) fn next_retained(
+    previous: Option<(Option<&str>, &[String])>,
+    current: Option<&str>,
+) -> Vec<String> {
     let Some((previous_current, previous_retained)) = previous else {
         return Vec::new();
     };
@@ -1040,7 +1384,7 @@ fn next_retained(previous: Option<(Option<&str>, &[String])>, current: Option<&s
 }
 
 /// Ids the previous pointer referenced that the new one no longer does.
-fn released_ids(
+pub(crate) fn released_ids(
     previous: Option<(Option<&str>, &[String])>,
     current: Option<&str>,
     retained: &[String],
@@ -1056,8 +1400,8 @@ fn released_ids(
         .collect()
 }
 
-/// Ids every pointer of the root names as current or retained; None above 1000 pointers.
-async fn referenced_artifacts(target: &WriteTarget) -> Result<Option<BTreeSet<String>>> {
+/// The pointer files below the root; None above 1000.
+async fn pointer_locations(target: &WriteTarget) -> Result<Option<Vec<flow_like_storage::Path>>> {
     let mut pointers = Vec::new();
     for kind in ["experiments", "learning", "deployments"] {
         let prefix = target
@@ -1074,6 +1418,28 @@ async fn referenced_artifacts(target: &WriteTarget) -> Result<Option<BTreeSet<St
             }
         }
     }
+    Ok(Some(pointers))
+}
+
+/// The ids a pointer of any kind names as current or retained.
+fn pointer_references(pointer: &Value) -> Vec<String> {
+    let current = ["artifact_id", "active_artifact_id"]
+        .into_iter()
+        .filter_map(|key| pointer.get(key).and_then(Value::as_str));
+    let retained = pointer
+        .get("retained")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str);
+    current.chain(retained).map(str::to_owned).collect()
+}
+
+/// Ids every pointer of the root names as current or retained; None above 1000 pointers.
+async fn referenced_artifacts(target: &WriteTarget) -> Result<Option<BTreeSet<String>>> {
+    let Some(pointers) = pointer_locations(target).await? else {
+        return Ok(None);
+    };
     let mut referenced = BTreeSet::new();
     for location in pointers {
         let path = FlowPath {
@@ -1085,25 +1451,79 @@ async fn referenced_artifacts(target: &WriteTarget) -> Result<Option<BTreeSet<St
             .read_json::<Value>(&path, MAXIMUM_POINTER_BYTES)
             .await?
             .ok_or_else(|| anyhow!("The model pointer {} cannot be read", path.path))?;
-        for key in ["artifact_id", "active_artifact_id"] {
-            if let Some(id) = pointer.get(key).and_then(Value::as_str) {
-                referenced.insert(id.to_owned());
-            }
-        }
-        if let Some(retained) = pointer.get("retained").and_then(Value::as_array) {
-            referenced.extend(retained.iter().filter_map(Value::as_str).map(str::to_owned));
-        }
+        referenced.extend(pointer_references(&pointer));
     }
     Ok(Some(referenced))
 }
 
+/// The extractors the manifests of `referenced` folders name.
+async fn protected_dependencies(
+    target: &WriteTarget,
+    referenced: &BTreeSet<String>,
+) -> Result<BTreeSet<String>> {
+    let mut protected = BTreeSet::new();
+    for id in referenced {
+        let path = target.file(&format!("{}/{MANIFEST_FILE}", artifact_dir(id)));
+        if let Some(manifest) = target
+            .read_json::<PublishedModelManifest>(&path, MAXIMUM_MANIFEST_BYTES)
+            .await?
+            && let Some(dependency) = manifest.dependencies.feature_extractor
+        {
+            protected.insert(dependency.source_id);
+        }
+    }
+    Ok(protected)
+}
+
+/// Deletes the folder of `id`, manifest first, when automatic publication wrote it, and
+/// returns the extractor it names.
+async fn delete_auto_folder(
+    context: &mut ExecutionContext,
+    target: &WriteTarget,
+    id: &str,
+) -> Result<Option<String>> {
+    let folder = target.file(&artifact_dir(id));
+    let manifest_path = child(&folder, MANIFEST_FILE);
+    let Some(manifest) = target
+        .read_json::<PublishedModelManifest>(&manifest_path, MAXIMUM_MANIFEST_BYTES)
+        .await?
+    else {
+        return Ok(None);
+    };
+    if manifest
+        .provenance
+        .as_ref()
+        .is_none_or(|provenance| provenance.publisher != ModelPublisher::Auto)
+    {
+        return Ok(None);
+    }
+    target.delete(context, &manifest_path).await?;
+    let files = manifest
+        .preprocessing
+        .as_ref()
+        .map(|reference| reference.file.as_str())
+        .into_iter()
+        .chain(Some(
+            manifest.weights.file.as_deref().unwrap_or(WEIGHTS_FILE),
+        ));
+    for file in files.filter(|file| is_plain_file_name(file)) {
+        target.delete(context, &child(&folder, file)).await?;
+    }
+    Ok(manifest
+        .dependencies
+        .feature_extractor
+        .map(|dependency| dependency.source_id))
+}
+
 /// Deletes released folders that automatic publication wrote and that no pointer and no kept
-/// manifest names, manifest first, then their dependencies under the same rule.
-async fn prune_released(
+/// manifest names, then their dependencies under the same rule. Pointer writes in this process
+/// wait for it, and it waits for them.
+pub(crate) async fn prune_released(
     context: &mut ExecutionContext,
     target: &WriteTarget,
     released: Vec<String>,
 ) -> Result<()> {
+    let _pruning = target.prune_lock().await;
     let Some(referenced) = referenced_artifacts(target).await? else {
         warn(
             context,
@@ -1114,50 +1534,15 @@ async fn prune_released(
         );
         return Ok(());
     };
-    let manifest_of = |id: &str| target.file(&format!("{}/{MANIFEST_FILE}", artifact_dir(id)));
-    let mut protected = BTreeSet::new();
-    for id in &referenced {
-        if let Some(manifest) = target
-            .read_json::<PublishedModelManifest>(&manifest_of(id), MAXIMUM_MANIFEST_BYTES)
-            .await?
-            && let Some(dependency) = manifest.dependencies.feature_extractor
-        {
-            protected.insert(dependency.source_id);
-        }
-    }
+    let protected = protected_dependencies(target, &referenced).await?;
     let mut queue = released;
     let mut visited = BTreeSet::new();
     while let Some(id) = queue.pop() {
         if referenced.contains(&id) || protected.contains(&id) || !visited.insert(id.clone()) {
             continue;
         }
-        let folder = target.file(&artifact_dir(&id));
-        let manifest_path = child(&folder, MANIFEST_FILE);
-        let Some(manifest) = target
-            .read_json::<PublishedModelManifest>(&manifest_path, MAXIMUM_MANIFEST_BYTES)
-            .await?
-        else {
-            continue;
-        };
-        if manifest
-            .provenance
-            .as_ref()
-            .is_none_or(|provenance| provenance.publisher != ModelPublisher::Auto)
-        {
-            continue;
-        }
-        target.delete(context, &manifest_path).await?;
-        let files = manifest
-            .preprocessing
-            .as_ref()
-            .map(|reference| reference.file.as_str())
-            .into_iter()
-            .chain(Some(manifest.weights.file.as_deref().unwrap_or(WEIGHTS_FILE)));
-        for file in files.filter(|file| is_plain_file_name(file)) {
-            target.delete(context, &child(&folder, file)).await?;
-        }
-        if let Some(dependency) = manifest.dependencies.feature_extractor {
-            queue.push(dependency.source_id);
+        if let Some(dependency) = delete_auto_folder(context, target, &id).await? {
+            queue.push(dependency);
         }
     }
     Ok(())
@@ -1184,7 +1569,7 @@ fn note_publication(
     repo: &TrainingRepository,
     experiment_id: &str,
     artifact_id: &str,
-    kind: &'static str,
+    kind: &str,
     body: Value,
 ) -> Result<()> {
     let events = repo.experiment_events(experiment_id)?;
@@ -1195,7 +1580,9 @@ fn note_publication(
                 && event
                     .get("kind")
                     .and_then(Value::as_str)
-                    .is_some_and(|kind| [PUBLISHED_EVENT, FAILED_EVENT, SKIPPED_EVENT].contains(&kind))
+                    .is_some_and(|kind| {
+                        [PUBLISHED_EVENT, FAILED_EVENT, SKIPPED_EVENT].contains(&kind)
+                    })
         })
         .collect::<Vec<_>>();
     let repeated = match kind {
@@ -1219,12 +1606,16 @@ async fn record_event(
     repo: &TrainingRepository,
     experiment_id: &str,
     artifact_id: &str,
-    kind: &'static str,
+    kind: &str,
     body: Value,
 ) {
-    let (experiment, artifact) = (experiment_id.to_owned(), artifact_id.to_owned());
+    let (experiment, artifact, event) = (
+        experiment_id.to_owned(),
+        artifact_id.to_owned(),
+        kind.to_owned(),
+    );
     let recorded = on_ledger(repo, move |repo| {
-        note_publication(repo, &experiment, &artifact, kind, body)
+        note_publication(repo, &experiment, &artifact, &event, body)
     })
     .await;
     if let Err(error) = recorded {
@@ -1235,13 +1626,175 @@ async fn record_event(
     }
 }
 
+/// The run memo key and the held flight of a record's publication. A state change waits for
+/// any publication of the same record in this process. A self-repair gets None, without
+/// waiting and without marking the run memo, while one runs, and None once a self-repair
+/// checked the record in this run.
+async fn begin_publication(
+    context: &ExecutionContext,
+    repo: &TrainingRepository,
+    kind: &str,
+    scope: LedgerScope,
+    id: &str,
+    reason: PublishReason,
+) -> Option<(String, Flight)> {
+    let memo = format!("{kind}\n{scope:?}\n{id}");
+    let key = flight_key(kind, repo, id);
+    if reason == PublishReason::StateChange {
+        return Some((memo, single_flight(key).await));
+    }
+    if already_checked(context, &memo).await {
+        return None;
+    }
+    let flight = try_single_flight(key)?;
+    if already_checked(context, &memo).await {
+        return None;
+    }
+    Some((memo, flight))
+}
+
+/// A record's publication: the ledger it is read from and the model root it writes to.
+struct Publication {
+    repo: TrainingRepository,
+    scope: LedgerScope,
+    storage: ModelStorage,
+    target: WriteTarget,
+}
+
+impl Publication {
+    async fn new(
+        context: &mut ExecutionContext,
+        repo: &TrainingRepository,
+        scope: LedgerScope,
+        storage: ModelStorage,
+    ) -> Result<Self> {
+        Ok(Self {
+            repo: repo.clone(),
+            scope,
+            storage,
+            target: WriteTarget::for_storage(context, storage).await?,
+        })
+    }
+
+    fn provenance(&self) -> ModelProvenance {
+        provenance(ModelPublisher::Auto, self.scope, Some(self.storage))
+    }
+}
+
+enum FolderOutcome {
+    Written {
+        reference: PublishedModelRef,
+        written: FolderWrite,
+    },
+    Skipped(SkipReason),
+}
+
+/// Plans an artifact's folder from the ledger, adds its extractor and writes the folder below
+/// the publication's root.
+async fn publish_artifact_folder(
+    context: &mut ExecutionContext,
+    publication: &Publication,
+    artifact: ModelArtifact,
+    spec: PlanSpec,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<FolderOutcome> {
+    let limit = spec.limit;
+    let planned = on_ledger(&publication.repo, move |repo| {
+        artifact_plan(repo, artifact, spec)
+    })
+    .await?;
+    let mut plan = match planned {
+        Planned::Ready(plan) => plan,
+        Planned::Skip(reason) => return Ok(FolderOutcome::Skipped(reason)),
+    };
+    attach_dependency(
+        context,
+        &publication.repo,
+        publication.scope,
+        Some(publication.storage),
+        &mut plan,
+        limit,
+    )
+    .await?;
+    let target = &publication.target;
+    let folder = target.file(&artifact_dir(plan.artifact_id()));
+    let written = write_model_folder(target, &folder, &plan, FolderMode::Model, mirrors).await?;
+    Ok(FolderOutcome::Written {
+        reference: plan.model_ref(&folder, Some(publication.storage)),
+        written,
+    })
+}
+
+/// Fails when a manifest that `folder` relies on is no longer stored, so the pointer at `path`
+/// is not written.
+async fn confirm_still_stored(
+    target: &WriteTarget,
+    folder: Option<&FolderWrite>,
+    path: &FlowPath,
+) -> Result<()> {
+    for manifest in folder.iter().flat_map(|written| &written.manifests) {
+        if target.head(manifest).await?.is_none() {
+            return Err(anyhow!(
+                "{} was pruned while this publication ran, so {} is not written; the next publication writes both",
+                manifest.path,
+                path.path
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Writes `pointer` unless its `folder` is unchanged and the published pointer equals it apart
+/// from the publication time. The write holds the root's prune lock and first confirms that
+/// the manifests the folder relies on are still stored, so it never names a folder pruned
+/// meanwhile. Returns whether it was written.
+async fn write_pointer<T: Serialize>(
+    target: &WriteTarget,
+    path: &FlowPath,
+    pointer: &T,
+    current: Option<&T>,
+    folder: Option<&FolderWrite>,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<bool> {
+    let folder_written = folder.is_some_and(|folder| folder.any);
+    if !folder_written && current.is_some_and(|current| same_pointer(current, pointer)) {
+        target
+            .mirror_stored(path, None, MAXIMUM_POINTER_BYTES, mirrors)
+            .await?;
+        return Ok(false);
+    }
+    let _pruning = target.prune_lock().await;
+    confirm_still_stored(target, folder, path).await?;
+    target
+        .write(path, Bytes::from(json::to_vec(pointer)?), mirrors)
+        .await?;
+    Ok(true)
+}
+
 enum Winner {
     Published {
         reference: PublishedModelRef,
         weights_e_tag: Option<String>,
     },
     Unchanged,
-    Skipped(&'static str),
+    Skipped(SkipReason),
+}
+
+fn experiment_pointer(
+    record: &ExperimentRecord,
+    reference: &PublishedModelRef,
+    storage: ModelStorage,
+) -> ExperimentPointer {
+    ExperimentPointer {
+        format_version: POINTER_FORMAT_VERSION,
+        experiment_id: record.experiment.id.clone(),
+        artifact_id: reference.artifact_id.clone(),
+        sha256: reference.sha256.clone(),
+        bytes: reference.bytes,
+        goal_met: record.result.goal_met,
+        storage,
+        published_at_ms: now_ms(),
+    }
 }
 
 /// Writes a standalone Auto Train winner: its folder, then `models/experiments/{id}.json`.
@@ -1252,73 +1805,117 @@ async fn publish_winner(
     record: &ExperimentRecord,
     artifact: ModelArtifact,
     limits: PublishLimits,
+    mirrors: &mut Vec<Mirrored>,
 ) -> Result<Winner> {
     let experiment = &record.experiment;
     let locators = experiment_source_locators(&experiment.request.context);
     let marker = experiment.request.context.get(LEDGER_SCOPE_KEY);
-    let Some(storage) = record_storage(context, scope, marker, &locators).await? else {
-        warn(
-            context,
-            &format!(
-                "Auto Train experiment {} predates ledger scopes and reads source tables that match neither this project's database nor yours, so its winner is not published",
-                experiment.id
-            ),
-        );
-        return Ok(Winner::Skipped(SOURCE_SCOPE_UNCLASSIFIABLE));
+    let name = format!("Auto Train experiment {}", experiment.id);
+    let Some(storage) =
+        classified_storage(context, scope, marker, &locators, &name, "winner").await?
+    else {
+        return Ok(Winner::Skipped(SkipReason::SourceScopeUnclassifiable));
     };
-    let mut provenance = provenance(ModelPublisher::Auto, scope, Some(storage));
-    provenance.experiment_id = Some(experiment.id.clone());
-    provenance.selected_trial_id = selected_trial(experiment);
-    let spec = PlanSpec::published(
-        ModelMetadata::of_experiment(experiment, &record.result),
-        provenance,
-        limits.serving_weights_bytes,
-    );
-    let mut plan = match on_ledger(repo, move |repo| artifact_plan(repo, artifact, spec)).await? {
-        Planned::Ready(plan) => plan,
-        Planned::Skip(reason) => return Ok(Winner::Skipped(reason)),
-    };
-    attach_dependency(context, repo, scope, &mut plan, limits.serving_weights_bytes).await?;
-    let target = WriteTarget::for_storage(context, storage).await?;
-    let folder = target.file(&artifact_dir(plan.artifact_id()));
-    let mut mirrors = Vec::new();
-    let written =
-        write_model_folder(&target, &folder, &plan, FolderMode::Model, &mut mirrors).await?;
-    let pointer = ExperimentPointer {
-        format_version: POINTER_FORMAT_VERSION,
-        experiment_id: experiment.id.clone(),
-        artifact_id: plan.artifact_id().to_owned(),
-        sha256: plan.manifest.weights.sha256.clone(),
-        bytes: plan.manifest.weights.bytes,
-        goal_met: record.result.goal_met,
-        storage,
-        published_at_ms: now_ms(),
-    };
+    let publication = Publication::new(context, repo, scope, storage).await?;
+    let mut provenance = publication.provenance();
+    let metadata = experiment_metadata(record, &mut provenance);
+    let spec = PlanSpec::published(metadata, provenance, limits.serving_weights_bytes);
+    let (reference, written) =
+        match publish_artifact_folder(context, &publication, artifact, spec, mirrors).await? {
+            FolderOutcome::Written { reference, written } => (reference, written),
+            FolderOutcome::Skipped(reason) => return Ok(Winner::Skipped(reason)),
+        };
+    let target = &publication.target;
+    let pointer = experiment_pointer(record, &reference, storage);
     let pointer_path = target.file(&experiment_pointer_path(&experiment.id));
     let current = target
         .read_json::<ExperimentPointer>(&pointer_path, MAXIMUM_POINTER_BYTES)
         .await?;
-    let pointer_written =
-        written.any || current.is_none_or(|current| !same_pointer(&current, &pointer));
-    if pointer_written {
-        target
-            .write(
-                &pointer_path,
-                Bytes::from(json::to_vec(&pointer)?),
-                &mut mirrors,
-            )
-            .await?;
-    }
-    mirror(context, mirrors).await;
-    if !pointer_written {
-        return Ok(Winner::Unchanged);
-    }
-    Ok(Winner::Published {
-        reference: plan.model_ref(&folder, Some(storage)),
-        weights_e_tag: written.weights_e_tag,
+    let pointer_written = write_pointer(
+        target,
+        &pointer_path,
+        &pointer,
+        current.as_ref(),
+        Some(&written),
+        mirrors,
+    )
+    .await?;
+    Ok(if pointer_written {
+        Winner::Published {
+            reference,
+            weights_e_tag: written.weights_e_tag,
+        }
+    } else {
+        Winner::Unchanged
     })
 }
 
+/// The event a publication's outcome records, and that outcome.
+async fn record_outcome(
+    context: &mut ExecutionContext,
+    repo: &TrainingRepository,
+    experiment_id: &str,
+    artifact_id: &str,
+    winner: Result<Winner>,
+) -> PublishOutcome {
+    match winner {
+        Ok(Winner::Published {
+            reference,
+            weights_e_tag,
+        }) => {
+            let body = json!({
+                "artifact_id": artifact_id,
+                "storage": reference.storage,
+                "manifest": reference.manifest.path,
+                "sha256": reference.sha256,
+                "bytes": reference.bytes,
+                "weights_etag": weights_e_tag,
+            });
+            record_event(
+                context,
+                repo,
+                experiment_id,
+                artifact_id,
+                PUBLISHED_EVENT,
+                body,
+            )
+            .await;
+            PublishOutcome::Published(reference)
+        }
+        Ok(Winner::Unchanged) => PublishOutcome::Unchanged,
+        Ok(Winner::Skipped(reason)) => {
+            let body = json!({ "artifact_id": artifact_id, "reason": reason.code() });
+            record_event(
+                context,
+                repo,
+                experiment_id,
+                artifact_id,
+                SKIPPED_EVENT,
+                body,
+            )
+            .await;
+            PublishOutcome::Skipped {
+                reason: reason.code().to_owned(),
+            }
+        }
+        Err(error) => {
+            let error = bounded(&error.to_string());
+            let body = json!({ "artifact_id": artifact_id, "error": error });
+            record_event(
+                context,
+                repo,
+                experiment_id,
+                artifact_id,
+                FAILED_EVENT,
+                body,
+            )
+            .await;
+            PublishOutcome::Failed { error }
+        }
+    }
+}
+
+/// `publish_experiment` with the default serving cap.
 pub(crate) async fn ensure_experiment_published(
     context: &mut ExecutionContext,
     repo: &TrainingRepository,
@@ -1348,19 +1945,11 @@ pub(crate) async fn publish_experiment(
     reason: PublishReason,
     limits: PublishLimits,
 ) -> PublishOutcome {
-    let memo = format!("experiment\n{scope:?}\n{experiment_id}");
-    let repair = reason == PublishReason::SelfRepair;
-    if repair && already_checked(context, &memo).await {
+    let Some((memo, _flight)) =
+        begin_publication(context, repo, "experiment", scope, experiment_id, reason).await
+    else {
         return PublishOutcome::Unchanged;
-    }
-    let _flight = single_flight(format!(
-        "experiment\n{}\n{experiment_id}",
-        repo.path().display()
-    ))
-    .await;
-    if repair && already_checked(context, &memo).await {
-        return PublishOutcome::Unchanged;
-    }
+    };
     let id = experiment_id.to_owned();
     let record = match on_ledger(repo, move |repo| load_experiment(repo, &id)).await {
         Ok(record) => record,
@@ -1388,37 +1977,19 @@ pub(crate) async fn publish_experiment(
         return PublishOutcome::Unchanged;
     };
     let artifact_id = artifact.id.clone();
-    match publish_winner(context, repo, scope, &record, artifact, limits).await {
-        Ok(Winner::Published {
-            reference,
-            weights_e_tag,
-        }) => {
-            let body = json!({
-                "artifact_id": artifact_id,
-                "storage": reference.storage,
-                "manifest": reference.manifest.path,
-                "sha256": reference.sha256,
-                "bytes": reference.bytes,
-                "weights_etag": weights_e_tag,
-            });
-            record_event(context, repo, experiment_id, &artifact_id, PUBLISHED_EVENT, body).await;
-            PublishOutcome::Published(reference)
-        }
-        Ok(Winner::Unchanged) => PublishOutcome::Unchanged,
-        Ok(Winner::Skipped(reason)) => {
-            let body = json!({ "artifact_id": artifact_id, "reason": reason });
-            record_event(context, repo, experiment_id, &artifact_id, SKIPPED_EVENT, body).await;
-            PublishOutcome::Skipped {
-                reason: reason.to_owned(),
-            }
-        }
-        Err(error) => {
-            let error = bounded(&error.to_string());
-            let body = json!({ "artifact_id": artifact_id, "error": error });
-            record_event(context, repo, experiment_id, &artifact_id, FAILED_EVENT, body).await;
-            PublishOutcome::Failed { error }
-        }
-    }
+    let mut mirrors = Vec::new();
+    let winner = publish_winner(
+        context,
+        repo,
+        scope,
+        &record,
+        artifact,
+        limits,
+        &mut mirrors,
+    )
+    .await;
+    mirror(context, mirrors).await;
+    record_outcome(context, repo, experiment_id, &artifact_id, winner).await
 }
 
 struct ChampionRecord {
@@ -1429,6 +2000,26 @@ struct ChampionRecord {
     experiment: Option<ExperimentRecord>,
 }
 
+/// The newest cycle of learning project `project_id` that produced `artifact_id`: its id and
+/// the experiment that trained the artifact.
+fn producing_cycle(
+    repo: &TrainingRepository,
+    project_id: &str,
+    artifact_id: &str,
+) -> Result<(Option<String>, Option<ExperimentRecord>)> {
+    let cycle = repo
+        .learning_cycles(project_id)?
+        .into_iter()
+        .rev()
+        .find(|cycle| cycle.artifact_id.as_deref() == Some(artifact_id));
+    let experiment = cycle
+        .as_ref()
+        .and_then(|cycle| cycle.experiment_id.as_deref())
+        .map(|id| load_experiment(repo, id))
+        .transpose()?;
+    Ok((cycle.map(|cycle| cycle.id), experiment))
+}
+
 fn load_champion(repo: &TrainingRepository, project_id: &str) -> Result<ChampionRecord> {
     let project = repo.get_learning_project(project_id)?;
     let deployment = optional(repo.get_deployment(&project.request.deployment_id))?;
@@ -1437,24 +2028,15 @@ fn load_champion(repo: &TrainingRepository, project_id: &str) -> Result<Champion
         .as_deref()
         .map(|id| repo.get_artifact(id))
         .transpose()?;
-    let cycle = match &champion {
-        Some(artifact) => repo
-            .learning_cycles(project_id)?
-            .into_iter()
-            .rev()
-            .find(|cycle| cycle.artifact_id.as_deref() == Some(artifact.id.as_str())),
-        None => None,
+    let (cycle_id, experiment) = match &champion {
+        Some(artifact) => producing_cycle(repo, project_id, &artifact.id)?,
+        None => (None, None),
     };
-    let experiment = cycle
-        .as_ref()
-        .and_then(|cycle| cycle.experiment_id.as_deref())
-        .map(|id| load_experiment(repo, id))
-        .transpose()?;
     Ok(ChampionRecord {
         project,
         deployment,
         champion,
-        cycle_id: cycle.map(|cycle| cycle.id),
+        cycle_id,
         experiment,
     })
 }
@@ -1471,11 +2053,7 @@ fn champion_metadata(record: &ChampionRecord, provenance: &mut ModelProvenance) 
             .map_or(0, |deployment| deployment.generation),
     );
     match &record.experiment {
-        Some(experiment) => {
-            provenance.experiment_id = Some(experiment.experiment.id.clone());
-            provenance.selected_trial_id = selected_trial(&experiment.experiment);
-            ModelMetadata::of_experiment(&experiment.experiment, &experiment.result)
-        }
+        Some(experiment) => experiment_metadata(experiment, provenance),
         None => ModelMetadata {
             task: Some(record.project.request.goals.task.clone()),
             ..ModelMetadata::default()
@@ -1483,49 +2061,21 @@ fn champion_metadata(record: &ChampionRecord, provenance: &mut ModelProvenance) 
     }
 }
 
-/// Writes the champion folder, when the project has a champion, then
-/// `models/learning/{id}.json`, unless a pointer of greater order is already published.
-async fn publish_champion(
-    context: &mut ExecutionContext,
-    repo: &TrainingRepository,
-    scope: LedgerScope,
-    project_id: &str,
-) -> Result<PublishOutcome> {
-    let id = project_id.to_owned();
-    let record = on_ledger(repo, move |repo| load_champion(repo, &id)).await?;
-    let source = &record.project.request.source;
-    let locators = learning_source_locators(source);
-    let Some(storage) = record_storage(context, scope, source.get(LEDGER_SCOPE_KEY), &locators).await?
-    else {
-        warn(
-            context,
-            &format!(
-                "Learning project {project_id} predates ledger scopes and reads source tables that match neither this project's database nor yours, so its champion is not published"
-            ),
-        );
-        return Ok(PublishOutcome::Skipped {
-            reason: SOURCE_SCOPE_UNCLASSIFIABLE.into(),
-        });
-    };
-    let target = WriteTarget::for_storage(context, storage).await?;
-    let pointer_path = target.file(&learning_pointer_path(project_id));
-    let current = target
-        .read_json::<ChampionPointer>(&pointer_path, MAXIMUM_POINTER_BYTES)
-        .await?;
-    let previous = current
-        .as_ref()
-        .map(|pointer| (pointer.artifact_id.as_deref(), pointer.retained.as_slice()));
+fn champion_pointer(
+    record: &ChampionRecord,
+    storage: ModelStorage,
+    previous: Option<(Option<&str>, &[String])>,
+) -> ChampionPointer {
     let champion_id = record.champion.as_ref().map(|artifact| artifact.id.clone());
-    let pointer = ChampionPointer {
+    ChampionPointer {
         format_version: POINTER_FORMAT_VERSION,
-        project_id: project_id.to_owned(),
+        project_id: record.project.id.clone(),
         deployment_id: record.project.request.deployment_id.clone(),
         deployment_generation: record
             .deployment
             .as_ref()
             .map_or(0, |deployment| deployment.generation),
         project_generation: record.project.generation,
-        artifact_id: champion_id.clone(),
         sha256: record
             .champion
             .as_ref()
@@ -1537,9 +2087,92 @@ async fn publish_champion(
                 .is_some_and(|deployment| deployment.paused),
         cycle_id: record.cycle_id.clone(),
         retained: next_retained(previous, champion_id.as_deref()),
+        artifact_id: champion_id,
         storage,
         published_at_ms: now_ms(),
+    }
+}
+
+/// The champion's folder and its outcome: Unchanged without a folder when the project has no
+/// champion. A skipped champion warns and is cleared from `pointer`, so readers route to the
+/// teacher, and the ids of `previous` stay retained.
+async fn champion_folder(
+    context: &mut ExecutionContext,
+    publication: &Publication,
+    record: &ChampionRecord,
+    pointer: &mut ChampionPointer,
+    previous: Option<(Option<&str>, &[String])>,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<(PublishOutcome, Option<FolderWrite>)> {
+    let Some(artifact) = record.champion.clone() else {
+        return Ok((PublishOutcome::Unchanged, None));
     };
+    let mut provenance = publication.provenance();
+    let metadata = champion_metadata(record, &mut provenance);
+    let spec = PlanSpec::published(metadata, provenance, MAXIMUM_SERVED_WEIGHTS_BYTES);
+    let outcome = publish_artifact_folder(context, publication, artifact, spec, mirrors).await?;
+    let reason = match outcome {
+        FolderOutcome::Written { reference, written } => {
+            return Ok((PublishOutcome::Published(reference), Some(written)));
+        }
+        FolderOutcome::Skipped(reason) => reason.code().to_owned(),
+    };
+    warn(
+        context,
+        &format!(
+            "The champion of learning project {} is not published: {reason}",
+            record.project.id
+        ),
+    );
+    pointer.artifact_id = None;
+    pointer.sha256 = None;
+    pointer.retained = next_retained(previous, None);
+    Ok((PublishOutcome::Skipped { reason }, None))
+}
+
+/// A folder's outcome once its pointer is settled: Published becomes Unchanged when the pointer
+/// was not written either.
+fn settled(outcome: PublishOutcome, pointer_written: bool) -> PublishOutcome {
+    match outcome {
+        PublishOutcome::Published(_) if !pointer_written => PublishOutcome::Unchanged,
+        outcome => outcome,
+    }
+}
+
+/// Writes the champion folder, when the project has a champion, then
+/// `models/learning/{id}.json`, unless a pointer of greater order is already published. A
+/// champion whose folder is skipped is published as no champion, so devices without the
+/// training ledger route to the teacher.
+async fn publish_champion(
+    context: &mut ExecutionContext,
+    repo: &TrainingRepository,
+    scope: LedgerScope,
+    project_id: &str,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<PublishOutcome> {
+    let id = project_id.to_owned();
+    let record = on_ledger(repo, move |repo| load_champion(repo, &id)).await?;
+    let source = &record.project.request.source;
+    let locators = learning_source_locators(source);
+    let marker = source.get(LEDGER_SCOPE_KEY);
+    let name = format!("Learning project {project_id}");
+    let Some(storage) =
+        classified_storage(context, scope, marker, &locators, &name, "champion").await?
+    else {
+        return Ok(PublishOutcome::Skipped {
+            reason: SOURCE_SCOPE_UNCLASSIFIABLE.into(),
+        });
+    };
+    let publication = Publication::new(context, repo, scope, storage).await?;
+    let target = &publication.target;
+    let pointer_path = target.file(&learning_pointer_path(project_id));
+    let current = target
+        .read_json::<ChampionPointer>(&pointer_path, MAXIMUM_POINTER_BYTES)
+        .await?;
+    let previous = current
+        .as_ref()
+        .map(|pointer| (pointer.artifact_id.as_deref(), pointer.retained.as_slice()));
+    let mut pointer = champion_pointer(&record, storage, previous);
     if let Some(current) = &current
         && current.order() > pointer.order()
     {
@@ -1552,56 +2185,36 @@ async fn publish_champion(
             ),
         });
     }
-    let mut mirrors = Vec::new();
-    let mut folder = None;
-    if let Some(artifact) = record.champion.clone() {
-        let mut provenance = provenance(ModelPublisher::Auto, scope, Some(storage));
-        let metadata = champion_metadata(&record, &mut provenance);
-        let spec = PlanSpec::published(metadata, provenance, MAXIMUM_SERVED_WEIGHTS_BYTES);
-        let mut plan = match on_ledger(repo, move |repo| artifact_plan(repo, artifact, spec)).await? {
-            Planned::Ready(plan) => plan,
-            Planned::Skip(reason) => {
-                warn(
-                    context,
-                    &format!(
-                        "The champion of learning project {project_id} is not published: {reason}"
-                    ),
-                );
-                return Ok(PublishOutcome::Skipped {
-                    reason: reason.into(),
-                });
-            }
-        };
-        attach_dependency(context, repo, scope, &mut plan, MAXIMUM_SERVED_WEIGHTS_BYTES).await?;
-        let location = target.file(&artifact_dir(plan.artifact_id()));
-        let written =
-            write_model_folder(&target, &location, &plan, FolderMode::Model, &mut mirrors).await?;
-        folder = Some((plan.model_ref(&location, Some(storage)), written.any));
+    let (outcome, folder) = champion_folder(
+        context,
+        &publication,
+        &record,
+        &mut pointer,
+        previous,
+        mirrors,
+    )
+    .await?;
+    let written = write_pointer(
+        target,
+        &pointer_path,
+        &pointer,
+        current.as_ref(),
+        folder.as_ref(),
+        mirrors,
+    )
+    .await?;
+    if written {
+        let released = released_ids(previous, pointer.artifact_id.as_deref(), &pointer.retained);
+        prune(context, target, released).await;
     }
-    let folder_written = folder.as_ref().is_some_and(|(_, written)| *written);
-    if !folder_written
-        && current
-            .as_ref()
-            .is_some_and(|current| same_pointer(current, &pointer))
-    {
-        return Ok(PublishOutcome::Unchanged);
-    }
-    target
-        .write(
-            &pointer_path,
-            Bytes::from(json::to_vec(&pointer)?),
-            &mut mirrors,
-        )
-        .await?;
-    mirror(context, mirrors).await;
-    let released = released_ids(previous, pointer.artifact_id.as_deref(), &pointer.retained);
-    prune(context, &target, released).await;
-    Ok(match folder {
-        Some((reference, _)) => PublishOutcome::Published(reference),
-        None => PublishOutcome::Unchanged,
-    })
+    Ok(settled(outcome, written))
 }
 
+/// Publishes a learning project's champion pointer and, when it has a champion, the champion's
+/// folder. Published names the champion folder; a pointer of a project without a champion
+/// reports Unchanged even when it was written, and one whose champion folder is skipped
+/// reports Skipped. Whatever was written reaches the Local mirror, even when a later step
+/// fails.
 pub(crate) async fn ensure_champion_published(
     context: &mut ExecutionContext,
     repo: &TrainingRepository,
@@ -1609,26 +2222,20 @@ pub(crate) async fn ensure_champion_published(
     project_id: &str,
     reason: PublishReason,
 ) -> PublishOutcome {
-    let memo = format!("learning\n{scope:?}\n{project_id}");
-    let repair = reason == PublishReason::SelfRepair;
-    if repair && already_checked(context, &memo).await {
+    let Some((memo, _flight)) =
+        begin_publication(context, repo, "learning", scope, project_id, reason).await
+    else {
         return PublishOutcome::Unchanged;
-    }
-    let _flight = single_flight(format!(
-        "learning\n{}\n{project_id}",
-        repo.path().display()
-    ))
-    .await;
-    if repair && already_checked(context, &memo).await {
-        return PublishOutcome::Unchanged;
-    }
-    let outcome = publish_champion(context, repo, scope, project_id)
+    };
+    let mut mirrors = Vec::new();
+    let outcome = publish_champion(context, repo, scope, project_id, &mut mirrors)
         .await
         .unwrap_or_else(|error| PublishOutcome::Failed {
             error: bounded(&format!(
                 "Publishing the champion of learning project {project_id} failed: {error}"
             )),
         });
+    mirror(context, mirrors).await;
     mark_checked(context, memo).await;
     outcome
 }
@@ -1640,7 +2247,8 @@ struct DeploymentRecord {
 }
 
 /// The active artifact, and for a minted stream the learning project or experiment that owns
-/// it: its scope marker and source locators.
+/// it: its scope marker and source locators, and the experiment that trained the artifact, so
+/// a deployment publishes the same metadata as the champion it serves.
 fn load_deployment(repo: &TrainingRepository, deployment: &Deployment) -> Result<DeploymentRecord> {
     let artifact = repo.get_artifact(&deployment.active_artifact_id)?;
     let (owner, experiment) = match StreamKind::of_stream(&deployment.stream.stream_id) {
@@ -1652,16 +2260,23 @@ fn load_deployment(repo: &TrainingRepository, deployment: &Deployment) -> Result
                     project.request.deployment_id == deployment.id
                         || project.request.stream == deployment.stream
                 });
+            let (_, experiment) = match &project {
+                Some(project) => producing_cycle(repo, &project.id, &artifact.id)?,
+                None => (None, None),
+            };
             let owner = project.map(|project| {
                 (
                     project.request.source.get(LEDGER_SCOPE_KEY).cloned(),
                     learning_source_locators(&project.request.source),
                 )
             });
-            (owner, None)
+            (owner, experiment)
         }
         Some(StreamKind::Auto) => {
-            let experiment = repo.list_experiments(&deployment.stream)?.into_iter().next();
+            let experiment = repo
+                .list_experiments(&deployment.stream)?
+                .into_iter()
+                .next();
             let record = experiment
                 .as_ref()
                 .map(|experiment| load_experiment(repo, &experiment.id))
@@ -1683,52 +2298,36 @@ fn load_deployment(repo: &TrainingRepository, deployment: &Deployment) -> Result
     })
 }
 
-/// Writes the active artifact's folder, then `models/deployments/{id}.json`, unless a pointer
-/// of greater generation is already published. A deployment of a minted stream follows the
-/// root of the learning project or experiment that owns it and is never published to app
-/// storage while that owner cannot be classified.
-async fn publish_deployment(
-    context: &mut ExecutionContext,
-    repo: &TrainingRepository,
+/// The root a deployment publishes to. A deployment of a minted stream follows the root of
+/// the learning project or experiment that owns it; None while that owner cannot be
+/// classified.
+async fn deployment_storage(
+    context: &ExecutionContext,
     scope: LedgerScope,
     deployment: &Deployment,
-) -> Result<PublishOutcome> {
-    let loaded = deployment.clone();
-    let record = on_ledger(repo, move |repo| load_deployment(repo, &loaded)).await?;
-    let storage = match (scope, StreamKind::of_stream(&deployment.stream.stream_id)) {
-        (LedgerScope::User, _) => Some(ModelStorage::User),
-        (LedgerScope::App, None) => Some(ModelStorage::App),
-        (LedgerScope::App, Some(_)) => match &record.owner {
-            Some((marker, locators)) => {
-                record_storage(context, scope, marker.as_ref(), locators).await?
-            }
-            None => None,
+    record: &DeploymentRecord,
+) -> Result<Option<ModelStorage>> {
+    Ok(
+        match (scope, StreamKind::of_stream(&deployment.stream.stream_id)) {
+            (LedgerScope::User, _) => Some(ModelStorage::User),
+            (LedgerScope::App, None) => Some(ModelStorage::App),
+            (LedgerScope::App, Some(_)) => match &record.owner {
+                Some((marker, locators)) => {
+                    record_storage(context, scope, marker.as_ref(), locators).await?
+                }
+                None => None,
+            },
         },
-    };
-    let Some(storage) = storage else {
-        return Ok(PublishOutcome::Skipped {
-            reason: format!(
-                "{SOURCE_SCOPE_UNCLASSIFIABLE}: deployment {} serves stream {}, whose learning project or experiment predates ledger scopes and reads source tables that match neither this project's database nor yours",
-                deployment.id, deployment.stream.stream_id
-            ),
-        });
-    };
-    let target = WriteTarget::for_storage(context, storage).await?;
-    let pointer_path = target.file(&deployment_pointer_path(&deployment.id));
-    let current = target
-        .read_json::<DeploymentPointer>(&pointer_path, MAXIMUM_POINTER_BYTES)
-        .await?;
-    if let Some(current) = &current
-        && current.generation > deployment.generation
-    {
-        return Ok(PublishOutcome::Skipped {
-            reason: format!(
-                "the published deployment pointer {} has generation {}, newer than the ledger's {}",
-                pointer_path.path, current.generation, deployment.generation
-            ),
-        });
-    }
-    let mut provenance = provenance(ModelPublisher::Auto, scope, Some(storage));
+    )
+}
+
+/// The active model's folder plan input: the experiment's metadata when it trained that model.
+fn deployment_spec(
+    publication: &Publication,
+    deployment: &Deployment,
+    record: &DeploymentRecord,
+) -> PlanSpec {
+    let mut provenance = publication.provenance();
     provenance.deployment_id = Some(deployment.id.clone());
     provenance.deployment_generation = Some(deployment.generation);
     let metadata = match &record.experiment {
@@ -1736,74 +2335,156 @@ async fn publish_deployment(
             if experiment.result.model_artifact_id.as_deref()
                 == Some(record.artifact.id.as_str()) =>
         {
-            provenance.experiment_id = Some(experiment.experiment.id.clone());
-            provenance.selected_trial_id = selected_trial(&experiment.experiment);
-            ModelMetadata::of_experiment(&experiment.experiment, &experiment.result)
+            experiment_metadata(experiment, &mut provenance)
         }
         _ => ModelMetadata::default(),
     };
-    let artifact = record.artifact.clone();
-    let spec = PlanSpec::published(metadata, provenance, MAXIMUM_SERVED_WEIGHTS_BYTES);
-    let mut plan = match on_ledger(repo, move |repo| artifact_plan(repo, artifact, spec)).await? {
-        Planned::Ready(plan) => plan,
-        Planned::Skip(reason) => {
-            return Ok(PublishOutcome::Skipped {
-                reason: format!(
-                    "{reason}: the active model {} of deployment {} is not published",
-                    deployment.active_artifact_id, deployment.id
-                ),
-            });
-        }
-    };
-    attach_dependency(context, repo, scope, &mut plan, MAXIMUM_SERVED_WEIGHTS_BYTES).await?;
-    let folder = target.file(&artifact_dir(plan.artifact_id()));
-    let mut mirrors = Vec::new();
-    let written =
-        write_model_folder(&target, &folder, &plan, FolderMode::Model, &mut mirrors).await?;
-    let previous = current.as_ref().map(|pointer| {
-        (
-            Some(pointer.active_artifact_id.as_str()),
-            pointer.retained.as_slice(),
-        )
-    });
-    let active = deployment.active_artifact_id.as_str();
-    let pointer = DeploymentPointer {
+    PlanSpec::published(metadata, provenance, MAXIMUM_SERVED_WEIGHTS_BYTES)
+}
+
+/// Skipped when the published pointer has a greater generation than the ledger's deployment.
+fn newer_deployment(
+    current: Option<&DeploymentPointer>,
+    deployment: &Deployment,
+    path: &FlowPath,
+) -> Option<PublishOutcome> {
+    let current = current.filter(|current| current.generation > deployment.generation)?;
+    Some(PublishOutcome::Skipped {
+        reason: format!(
+            "the published deployment pointer {} has generation {}, newer than the ledger's {}",
+            path.path, current.generation, deployment.generation
+        ),
+    })
+}
+
+fn deployment_pointer(
+    deployment: &Deployment,
+    sha256: String,
+    storage: ModelStorage,
+    previous: Option<(Option<&str>, &[String])>,
+) -> DeploymentPointer {
+    DeploymentPointer {
         format_version: POINTER_FORMAT_VERSION,
         deployment_id: deployment.id.clone(),
         generation: deployment.generation,
         active_artifact_id: deployment.active_artifact_id.clone(),
         paused: deployment.paused,
         stream: deployment.stream.clone(),
-        sha256: plan.manifest.weights.sha256.clone(),
+        sha256,
         deployment: deployment.clone(),
-        retained: next_retained(previous, Some(active)),
+        retained: next_retained(previous, Some(deployment.active_artifact_id.as_str())),
         storage,
         published_at_ms: now_ms(),
-    };
-    if !written.any
-        && current
-            .as_ref()
-            .is_some_and(|current| same_pointer(current, &pointer))
-    {
-        return Ok(PublishOutcome::Unchanged);
     }
-    target
-        .write(
-            &pointer_path,
-            Bytes::from(json::to_vec(&pointer)?),
-            &mut mirrors,
-        )
-        .await?;
-    mirror(context, mirrors).await;
-    prune(
-        context,
-        &target,
-        released_ids(previous, Some(active), &pointer.retained),
-    )
-    .await;
-    Ok(PublishOutcome::Published(plan.model_ref(&folder, Some(storage))))
 }
 
+/// The active model's folder and its outcome. A skipped folder pauses `pointer` and the
+/// deployment it carries, so readers route to the teacher and never load the unpublished model.
+async fn deployment_folder(
+    context: &mut ExecutionContext,
+    publication: &Publication,
+    record: &DeploymentRecord,
+    pointer: &mut DeploymentPointer,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<(PublishOutcome, Option<FolderWrite>)> {
+    let spec = deployment_spec(publication, &pointer.deployment, record);
+    let artifact = record.artifact.clone();
+    let outcome = publish_artifact_folder(context, publication, artifact, spec, mirrors).await?;
+    let skipped = match outcome {
+        FolderOutcome::Written { reference, written } => {
+            return Ok((PublishOutcome::Published(reference), Some(written)));
+        }
+        FolderOutcome::Skipped(reason) => reason,
+    };
+    pointer.paused = true;
+    pointer.deployment.paused = true;
+    let reason = format!(
+        "{}: the active model {} of deployment {} is not published, so its published pointer routes to the teacher",
+        skipped.code(),
+        pointer.active_artifact_id,
+        pointer.deployment_id
+    );
+    Ok((PublishOutcome::Skipped { reason }, None))
+}
+
+/// Skipped when `pointer` would exceed the size every reader of it accepts.
+fn oversized_pointer<T: Serialize>(pointer: &T, path: &FlowPath) -> Result<Option<PublishOutcome>> {
+    let bytes = json::to_vec(pointer)?.len() as u64;
+    if bytes <= MAXIMUM_POINTER_BYTES {
+        return Ok(None);
+    }
+    Ok(Some(PublishOutcome::Skipped {
+        reason: format!(
+            "{POINTER_TOO_LARGE}: the model pointer {} would hold {bytes} bytes, above the {MAXIMUM_POINTER_BYTES} bytes its readers accept",
+            path.path
+        ),
+    }))
+}
+
+/// Writes the active artifact's folder, then `models/deployments/{id}.json`, unless a pointer
+/// of greater generation is already published or the pointer would be too large to read. A
+/// deployment whose active folder is skipped is published paused, so devices without the
+/// training ledger route to the teacher. A deployment is never published to app storage while
+/// `deployment_storage` cannot classify it.
+async fn publish_deployment(
+    context: &mut ExecutionContext,
+    repo: &TrainingRepository,
+    scope: LedgerScope,
+    deployment: &Deployment,
+    mirrors: &mut Vec<Mirrored>,
+) -> Result<PublishOutcome> {
+    let loaded = deployment.clone();
+    let record = on_ledger(repo, move |repo| load_deployment(repo, &loaded)).await?;
+    let Some(storage) = deployment_storage(context, scope, deployment, &record).await? else {
+        return Ok(PublishOutcome::Skipped {
+            reason: format!(
+                "{SOURCE_SCOPE_UNCLASSIFIABLE}: deployment {} serves stream {}, whose learning project or experiment predates ledger scopes and reads source tables that match neither this project's database nor yours",
+                deployment.id, deployment.stream.stream_id
+            ),
+        });
+    };
+    let publication = Publication::new(context, repo, scope, storage).await?;
+    let target = &publication.target;
+    let pointer_path = target.file(&deployment_pointer_path(&deployment.id));
+    let current = target
+        .read_json::<DeploymentPointer>(&pointer_path, MAXIMUM_POINTER_BYTES)
+        .await?;
+    if let Some(skipped) = newer_deployment(current.as_ref(), deployment, &pointer_path) {
+        return Ok(skipped);
+    }
+    let previous = current.as_ref().map(|pointer| {
+        (
+            Some(pointer.active_artifact_id.as_str()),
+            pointer.retained.as_slice(),
+        )
+    });
+    let sha256 = record.artifact.blob.sha256.clone();
+    let mut pointer = deployment_pointer(deployment, sha256, storage, previous);
+    if let Some(skipped) = oversized_pointer(&pointer, &pointer_path)? {
+        return Ok(skipped);
+    }
+    let (outcome, folder) =
+        deployment_folder(context, &publication, &record, &mut pointer, mirrors).await?;
+    let written = write_pointer(
+        target,
+        &pointer_path,
+        &pointer,
+        current.as_ref(),
+        folder.as_ref(),
+        mirrors,
+    )
+    .await?;
+    if written {
+        let active = Some(deployment.active_artifact_id.as_str());
+        let released = released_ids(previous, active, &pointer.retained);
+        prune(context, target, released).await;
+    }
+    Ok(settled(outcome, written))
+}
+
+/// Publishes a lifecycle deployment's active model and its deployment pointer. Skipped
+/// carries a readable reason for the caller's warning. Whatever was written reaches the Local
+/// mirror, even when a later step fails.
 pub(crate) async fn ensure_deployment_published(
     context: &mut ExecutionContext,
     repo: &TrainingRepository,
@@ -1811,21 +2492,13 @@ pub(crate) async fn ensure_deployment_published(
     deployment: &Deployment,
     reason: PublishReason,
 ) -> PublishOutcome {
-    let memo = format!("deployment\n{scope:?}\n{}", deployment.id);
-    let repair = reason == PublishReason::SelfRepair;
-    if repair && already_checked(context, &memo).await {
+    let Some((memo, _flight)) =
+        begin_publication(context, repo, "deployment", scope, &deployment.id, reason).await
+    else {
         return PublishOutcome::Unchanged;
-    }
-    let _flight = single_flight(format!(
-        "deployment\n{}\n{}",
-        repo.path().display(),
-        deployment.id
-    ))
-    .await;
-    if repair && already_checked(context, &memo).await {
-        return PublishOutcome::Unchanged;
-    }
-    let outcome = publish_deployment(context, repo, scope, deployment)
+    };
+    let mut mirrors = Vec::new();
+    let outcome = publish_deployment(context, repo, scope, deployment, &mut mirrors)
         .await
         .unwrap_or_else(|error| PublishOutcome::Failed {
             error: bounded(&format!(
@@ -1833,6 +2506,7 @@ pub(crate) async fn ensure_deployment_published(
                 deployment.id
             )),
         });
+    mirror(context, mirrors).await;
     mark_checked(context, memo).await;
     outcome
 }
@@ -1842,6 +2516,7 @@ async fn publish_source(
     repo: &TrainingRepository,
     scope: LedgerScope,
     source: &PretrainedSource,
+    mirrors: &mut Vec<Mirrored>,
 ) -> Result<PublishOutcome> {
     let storage = ModelStorage::from(scope);
     let provenance = provenance(ModelPublisher::Auto, scope, Some(storage));
@@ -1854,22 +2529,24 @@ async fn publish_source(
         Planned::Ready(plan) => plan,
         Planned::Skip(reason) => {
             return Ok(PublishOutcome::Skipped {
-                reason: format!("{reason}: pretrained source {} is not published", source.id),
+                reason: format!(
+                    "{}: pretrained source {} is not published",
+                    reason.code(),
+                    source.id
+                ),
             });
         }
     };
     let target = WriteTarget::for_storage(context, storage).await?;
     let folder = target.file(&artifact_dir(plan.artifact_id()));
-    let mut mirrors = Vec::new();
     let written = write_model_folder(
         &target,
         &folder,
         &plan,
         FolderMode::ContentAddressed,
-        &mut mirrors,
+        mirrors,
     )
     .await?;
-    mirror(context, mirrors).await;
     Ok(if written.any {
         PublishOutcome::Published(plan.model_ref(&folder, Some(storage)))
     } else {
@@ -1877,36 +2554,26 @@ async fn publish_source(
     })
 }
 
-/// Content-addressed: an existing folder with the same blob digest is left as it is.
+/// Content-addressed: an existing folder with the same blob digest is left as it is. Whatever
+/// was written reaches the Local mirror, even when a later step fails.
 pub(crate) async fn publish_pretrained_source(
     context: &mut ExecutionContext,
     repo: &TrainingRepository,
     scope: LedgerScope,
     source: &PretrainedSource,
 ) -> PublishOutcome {
-    let _flight = single_flight(format!(
-        "source\n{}\n{}",
-        repo.path().display(),
-        source.id
-    ))
-    .await;
-    publish_source(context, repo, scope, source)
+    let _flight = single_flight(flight_key("source", repo, &source.id)).await;
+    let mut mirrors = Vec::new();
+    let outcome = publish_source(context, repo, scope, source, &mut mirrors)
         .await
         .unwrap_or_else(|error| PublishOutcome::Failed {
             error: bounded(&format!(
                 "Publishing pretrained source {} failed: {error}",
                 source.id
             )),
-        })
-}
-
-fn skip_text(reason: &str) -> &'static str {
-    match reason {
-        WEIGHTS_EXCEED_SERVING_CAP => "its weights exceed the 2 GiB export limit",
-        MANIFEST_TOO_LARGE => "its manifest would exceed 1 MiB",
-        PREPROCESSING_TOO_LARGE => "its preprocessing exceeds the size its feature pipeline allows",
-        _ => "it cannot be written as a model folder",
-    }
+        });
+    mirror(context, mirrors).await;
+    outcome
 }
 
 fn exported(planned: Planned, model: &LedgerModel) -> Result<FolderPlan> {
@@ -1914,9 +2581,24 @@ fn exported(planned: Planned, model: &LedgerModel) -> Result<FolderPlan> {
         Planned::Ready(plan) => Ok(plan),
         Planned::Skip(reason) => Err(anyhow!(
             "{model:?} cannot be exported: {}",
-            skip_text(reason)
+            reason.export_text()
         )),
     }
+}
+
+/// An experiment's model with its metadata; `provenance` notes the experiment.
+fn experiment_model(
+    repo: &TrainingRepository,
+    id: &str,
+    provenance: &mut ModelProvenance,
+) -> Result<(ModelArtifact, ModelMetadata)> {
+    let record = load_experiment(repo, id)?;
+    let artifact = record
+        .result
+        .model_bundle_ref
+        .clone()
+        .ok_or_else(|| anyhow!("Experiment {id} has no model to export yet"))?;
+    Ok((artifact, experiment_metadata(&record, provenance)))
 }
 
 fn export_plan(
@@ -1924,46 +2606,22 @@ fn export_plan(
     model: &LedgerModel,
     mut provenance: ModelProvenance,
 ) -> Result<Planned> {
-    match model {
+    let (artifact, metadata) = match model {
         LedgerModel::Experiment { experiment_id } => {
-            let record = load_experiment(repo, experiment_id)?;
-            let artifact = record.result.model_bundle_ref.clone().ok_or_else(|| {
-                anyhow!("Experiment {experiment_id} has no model to export yet")
-            })?;
-            provenance.experiment_id = Some(experiment_id.clone());
-            provenance.selected_trial_id = selected_trial(&record.experiment);
-            let metadata = ModelMetadata::of_experiment(&record.experiment, &record.result);
-            artifact_plan(
-                repo,
-                artifact,
-                PlanSpec::published(metadata, provenance, MAXIMUM_EXPORT_WEIGHTS_BYTES),
-            )
+            experiment_model(repo, experiment_id, &mut provenance)?
         }
         LedgerModel::LearningChampion { project_id } => {
             let record = load_champion(repo, project_id)?;
             let artifact = record.champion.clone().ok_or_else(|| {
                 anyhow!("Learning project {project_id} has no champion model to export yet")
             })?;
-            let metadata = champion_metadata(&record, &mut provenance);
-            artifact_plan(
-                repo,
-                artifact,
-                PlanSpec::published(metadata, provenance, MAXIMUM_EXPORT_WEIGHTS_BYTES),
-            )
+            (artifact, champion_metadata(&record, &mut provenance))
         }
         LedgerModel::Artifact { artifact_id } => {
             let artifact = repo.get_artifact(artifact_id).map_err(|error| {
                 anyhow!("Reading artifact {artifact_id} from the training ledger failed: {error}")
             })?;
-            artifact_plan(
-                repo,
-                artifact,
-                PlanSpec::published(
-                    ModelMetadata::default(),
-                    provenance,
-                    MAXIMUM_EXPORT_WEIGHTS_BYTES,
-                ),
-            )
+            (artifact, ModelMetadata::default())
         }
         LedgerModel::PretrainedSource { source_id } => {
             let source = repo.get_pretrained_source(source_id).map_err(|error| {
@@ -1971,9 +2629,11 @@ fn export_plan(
                     "Reading pretrained source {source_id} from the training ledger failed: {error}"
                 )
             })?;
-            source_plan(repo, source, provenance, MAXIMUM_EXPORT_WEIGHTS_BYTES)
+            return source_plan(repo, source, provenance, MAXIMUM_EXPORT_WEIGHTS_BYTES);
         }
-    }
+    };
+    let spec = PlanSpec::published(metadata, provenance, MAXIMUM_EXPORT_WEIGHTS_BYTES);
+    artifact_plan(repo, artifact, spec)
 }
 
 /// Writes the model folder, with `dependencies/{source}` for its extractor, to `destination`.
@@ -1988,7 +2648,15 @@ pub(crate) async fn export_model_folder(
     let requested = model.clone();
     let planned = on_ledger(repo, move |repo| export_plan(repo, &requested, provenance)).await?;
     let mut plan = exported(planned, model)?;
-    attach_dependency(context, repo, scope, &mut plan, MAXIMUM_EXPORT_WEIGHTS_BYTES).await?;
+    attach_dependency(
+        context,
+        repo,
+        scope,
+        None,
+        &mut plan,
+        MAXIMUM_EXPORT_WEIGHTS_BYTES,
+    )
+    .await?;
     let target = WriteTarget::new(context, destination.clone()).await?;
     let mut mirrors = Vec::new();
     write_model_folder(
@@ -2007,24 +2675,15 @@ fn same_location(left: &FlowPath, right: &FlowPath) -> bool {
     left.store_ref == right.store_ref && left.object_path() == right.object_path()
 }
 
-/// Export Auto Model's files: the weights at `weights`, the preprocessing as
-/// `{manifest stem}.preprocessing.json` beside the manifest and a v2 manifest at `manifest`.
-/// The manifest names the weights file only when both share a folder.
-pub(crate) async fn export_auto_model_files(
-    context: &mut ExecutionContext,
-    repo: &TrainingRepository,
-    scope: LedgerScope,
-    experiment_id: &str,
-    weights: &FlowPath,
-    manifest: &FlowPath,
-) -> Result<PublishedModelRef> {
+/// The preprocessing file name `{manifest stem}.preprocessing.json`, and the weights file name
+/// the manifest records when weights and manifest share a folder.
+fn auto_export_names(weights: &FlowPath, manifest: &FlowPath) -> Result<(String, Option<String>)> {
     if same_location(weights, manifest) {
         return Err(anyhow!(
             "Weights and manifest must have different destinations, but both are {}",
             manifest.path
         ));
     }
-    let manifest_folder = folder_of(manifest);
     let manifest_name = display_file_name(&manifest.object_path())
         .ok_or_else(|| anyhow!("The manifest destination {} names no file", manifest.path))?;
     let weights_name = display_file_name(&weights.object_path())
@@ -2033,35 +2692,21 @@ pub(crate) async fn export_auto_model_files(
         .rsplit_once('.')
         .map_or(manifest_name.as_str(), |(stem, _)| stem);
     let preprocessing_file = format!("{stem}.preprocessing.json");
-    let weights_file = (same_location(&folder_of(weights), &manifest_folder)
+    let weights_file = (same_location(&folder_of(weights), &folder_of(manifest))
         && is_plain_file_name(&weights_name))
     .then_some(weights_name);
-    let id = experiment_id.to_owned();
-    let planned = on_ledger(repo, move |repo| {
-        let record = load_experiment(repo, &id)?;
-        let artifact = record
-            .result
-            .model_bundle_ref
-            .clone()
-            .ok_or_else(|| anyhow!("Experiment {id} has no model to export yet"))?;
-        let mut provenance = provenance(ModelPublisher::Export, scope, None);
-        provenance.experiment_id = Some(id.clone());
-        provenance.selected_trial_id = selected_trial(&record.experiment);
-        let spec = PlanSpec {
-            metadata: ModelMetadata::of_experiment(&record.experiment, &record.result),
-            provenance,
-            preprocessing_file,
-            weights_file,
-            limit: MAXIMUM_EXPORT_WEIGHTS_BYTES,
-        };
-        artifact_plan(repo, artifact, spec)
-    })
-    .await?;
-    let model = LedgerModel::Experiment {
-        experiment_id: experiment_id.to_owned(),
-    };
-    let mut plan = exported(planned, &model)?;
-    attach_dependency(context, repo, scope, &mut plan, MAXIMUM_EXPORT_WEIGHTS_BYTES).await?;
+    Ok((preprocessing_file, weights_file))
+}
+
+/// Writes the weights, then the preprocessing file and extractor folder beside the manifest,
+/// then the manifest.
+async fn write_auto_export(
+    context: &mut ExecutionContext,
+    plan: &FolderPlan,
+    weights: &FlowPath,
+    manifest: &FlowPath,
+) -> Result<()> {
+    let manifest_folder = folder_of(manifest);
     let weights_target = WriteTarget::new(context, weights.clone()).await?;
     let manifest_target = WriteTarget::new(context, manifest.clone()).await?;
     let mut mirrors = Vec::new();
@@ -2069,12 +2714,9 @@ pub(crate) async fn export_auto_model_files(
         .write(weights, plan.weights.clone(), &mut mirrors)
         .await?;
     if let (Some(bytes), Some(reference)) = (&plan.preprocessing, &plan.manifest.preprocessing) {
+        let path = child(&manifest_folder, &reference.file);
         manifest_target
-            .write(
-                &child(&manifest_folder, &reference.file),
-                bytes.clone(),
-                &mut mirrors,
-            )
+            .write(&path, bytes.clone(), &mut mirrors)
             .await?;
     }
     if let Some(dependency) = &plan.dependency {
@@ -2096,6 +2738,49 @@ pub(crate) async fn export_auto_model_files(
         )
         .await?;
     mirror(context, mirrors).await;
+    Ok(())
+}
+
+/// Export Auto Model's files: the weights at `weights`, the preprocessing as
+/// `{manifest stem}.preprocessing.json` beside the manifest and a v2 manifest at `manifest`.
+/// The manifest names the weights file only when both share a folder.
+pub(crate) async fn export_auto_model_files(
+    context: &mut ExecutionContext,
+    repo: &TrainingRepository,
+    scope: LedgerScope,
+    experiment_id: &str,
+    weights: &FlowPath,
+    manifest: &FlowPath,
+) -> Result<PublishedModelRef> {
+    let (preprocessing_file, weights_file) = auto_export_names(weights, manifest)?;
+    let id = experiment_id.to_owned();
+    let planned = on_ledger(repo, move |repo| {
+        let mut provenance = provenance(ModelPublisher::Export, scope, None);
+        let (artifact, metadata) = experiment_model(repo, &id, &mut provenance)?;
+        let spec = PlanSpec {
+            metadata,
+            provenance,
+            preprocessing_file,
+            weights_file,
+            limit: MAXIMUM_EXPORT_WEIGHTS_BYTES,
+        };
+        artifact_plan(repo, artifact, spec)
+    })
+    .await?;
+    let model = LedgerModel::Experiment {
+        experiment_id: experiment_id.to_owned(),
+    };
+    let mut plan = exported(planned, &model)?;
+    attach_dependency(
+        context,
+        repo,
+        scope,
+        None,
+        &mut plan,
+        MAXIMUM_EXPORT_WEIGHTS_BYTES,
+    )
+    .await?;
+    write_auto_export(context, &plan, weights, manifest).await?;
     Ok(PublishedModelRef {
         artifact_id: plan.artifact_id().to_owned(),
         manifest: manifest.clone(),

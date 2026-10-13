@@ -14,7 +14,6 @@ import {
 	uploadToSignedUrl,
 } from "@flow-like/flow-like-ui";
 import { asArray } from "@flow-like/flow-like-ui/lib/response-shape";
-import { stabilizeSignedUrls } from "@flow-like/flow-like-ui/lib/stable-asset-url";
 import type { IStorageItemActionResult } from "@flow-like/flow-like-ui/state/backend-state/types";
 import { invoke } from "@tauri-apps/api/core";
 import { dirname, resolve } from "@tauri-apps/api/path";
@@ -346,19 +345,18 @@ export class StorageState implements IStorageState {
 			const auth = this.backend.auth;
 			// The route caps a request at MAX_PREFIXES and rejects anything
 			// larger, so a large selection goes over in batches.
+			// Keep the returned URLs because storage files can be overwritten.
 			return requestPrefixesInBatches(
 				prefixes,
 				async (batch) =>
-					stabilizeSignedUrls(
-						await fetcher<IStorageItemActionResult[]>(
-							profile,
-							`apps/${appId}/data/download`,
-							{
-								method: "POST",
-								body: JSON.stringify({ prefixes: batch }),
-							},
-							auth,
-						),
+					fetcher<IStorageItemActionResult[]>(
+						profile,
+						`apps/${appId}/data/download`,
+						{
+							method: "POST",
+							body: JSON.stringify({ prefixes: batch }),
+						},
+						auth,
 					),
 				{ errorMessage: "Download failed" },
 			);
@@ -390,19 +388,18 @@ export class StorageState implements IStorageState {
 			const auth = this.backend.auth;
 			// The route caps a request at MAX_PREFIXES and rejects anything
 			// larger, so a large selection goes over in batches.
+			// Keep the returned URLs because storage files can be overwritten.
 			return requestPrefixesInBatches(
 				prefixes,
 				async (batch) =>
-					stabilizeSignedUrls(
-						await fetcher<IStorageItemActionResult[]>(
-							profile,
-							`apps/${appId}/data/user/download`,
-							{
-								method: "POST",
-								body: JSON.stringify({ prefixes: batch }),
-							},
-							auth,
-						),
+					fetcher<IStorageItemActionResult[]>(
+						profile,
+						`apps/${appId}/data/user/download`,
+						{
+							method: "POST",
+							body: JSON.stringify({ prefixes: batch }),
+						},
+						auth,
 					),
 				{ errorMessage: "Download failed" },
 			);

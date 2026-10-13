@@ -1,3 +1,7 @@
+import {
+	resetStableAssetUrls,
+	stableAssetUrl,
+} from "@flow-like/flow-like-ui/lib/stable-asset-url";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -12,17 +16,16 @@ const mocks = vi.hoisted(() => ({
 	runBulkUpload: vi.fn(),
 	toUploadTasks: vi.fn(),
 }));
-vi.mock("@flow-like/flow-like-ui", () => ({
+vi.mock("@flow-like/flow-like-ui", async () => ({
 	BulkUploadAbortError: class extends Error {},
 	assertBulkUploadSucceeded: vi.fn(),
-	requestPrefixesInBatches: vi.fn(),
+	requestPrefixesInBatches: (
+		await import("@flow-like/flow-like-ui/lib/storage-batching")
+	).requestPrefixesInBatches,
 	runBulkUpload: mocks.runBulkUpload,
 	storageDisplayName: vi.fn(),
 	toUploadTasks: mocks.toUploadTasks,
 	uploadToSignedUrl: vi.fn(),
-}));
-vi.mock("@flow-like/flow-like-ui/lib/stable-asset-url", () => ({
-	stabilizeSignedUrls: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("@tauri-apps/api/path", () => ({
@@ -39,6 +42,52 @@ vi.mock("@tauri-apps/plugin-fs", () => ({
 vi.mock("../../../lib/api", () => ({ fetcher: mocks.fetcher }));
 
 import { StorageState } from "../storage-state";
+
+describe("desktop storage downloads", () => {
+	beforeEach(() => {
+		vi.resetAllMocks();
+		resetStableAssetUrls();
+	});
+
+	test.each([
+		["downloadStorageItems", "apps/app/data/download"],
+		["downloadStorageItemsUser", "apps/app/data/user/download"],
+	] as const)(
+		"%s preserves new signatures for overwritten files",
+		async (method, endpoint) => {
+			const backend = {
+				isOffline: vi.fn().mockResolvedValue(false),
+				profile: {},
+				auth: {},
+				queryClient: {},
+			};
+			const state = new StorageState(backend as never);
+			const expires = Math.floor(Date.now() / 1000) + 86_400;
+			const base = "https://bucket.s3.amazonaws.com/docs/video.mp4";
+			const first = `${base}?AWSAccessKeyId=key&Expires=${expires}&Signature=first`;
+			const second = `${base}?AWSAccessKeyId=key&Expires=${expires + 60}&Signature=second`;
+			expect(stableAssetUrl(first)).toBe(first);
+			mocks.fetcher
+				.mockResolvedValueOnce([{ prefix: "docs/video.mp4", url: first }])
+				.mockResolvedValueOnce([{ prefix: "docs/video.mp4", url: second }]);
+			expect(await state[method]("app", ["docs/video.mp4"])).toEqual([
+				{ prefix: "docs/video.mp4", url: first },
+			]);
+			expect(await state[method]("app", ["docs/video.mp4"])).toEqual([
+				{ prefix: "docs/video.mp4", url: second },
+			]);
+			expect(mocks.fetcher).toHaveBeenLastCalledWith(
+				backend.profile,
+				endpoint,
+				{
+					method: "POST",
+					body: JSON.stringify({ prefixes: ["docs/video.mp4"] }),
+				},
+				backend.auth,
+			);
+		},
+	);
+});
 
 const routes = [
 	["listStorageItems", "apps/app/data/list", "storage_list"],

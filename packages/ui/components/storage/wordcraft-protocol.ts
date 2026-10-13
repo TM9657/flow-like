@@ -10,6 +10,12 @@ export type WordcraftMessage =
 	| { type: "dirty"; dirty: boolean }
 	| { type: "error"; error: string; requestId?: string }
 	| {
+			type: "export-progress";
+			requestId: string;
+			stage: "preparing" | "rendering" | "finalizing";
+			progress: number | null;
+	  }
+	| {
 			type: "exported";
 			requestId: string;
 			bytes: ArrayBuffer;
@@ -63,6 +69,23 @@ export function readWordcraftMessage(
 							typeof data.requestId === "string" ? data.requestId : undefined,
 					}
 				: null;
+		case "export-progress":
+			if (
+				typeof data.requestId !== "string" ||
+				!["preparing", "rendering", "finalizing"].includes(data.stage) ||
+				(data.progress !== null &&
+					(typeof data.progress !== "number" ||
+						!Number.isFinite(data.progress) ||
+						data.progress < 0 ||
+						data.progress > 100))
+			)
+				return null;
+			return {
+				type: "export-progress",
+				requestId: data.requestId,
+				stage: data.stage,
+				progress: data.progress,
+			};
 		case "exported":
 			if (
 				typeof data.requestId !== "string" ||

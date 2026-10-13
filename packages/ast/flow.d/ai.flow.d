@@ -2188,13 +2188,14 @@ declare namespace inspection {
     // === AI/ML/Anomaly ===
 
     /**
-     * Convert a channel-first spatial feature map to position-major PatchCore or PaDiM embeddings
+     * Convert a channel-first spatial feature map to position-major PatchCore or PaDiM embeddings and pass its feature extractor on
      * @node ml_feature_map_to_patches @alias mlFeatureMapToPatches
      * @param request — Inputs and configuration
      * @returns result — Operation result
+     * @returns extractor — The request's feature extractor, or null when it has none
      * @impure has side effects / drives control flow
      */
-    function patches({ request: Struct }): Struct;
+    function patches({ request: Struct }): { result: Struct, extractor: Struct };
 
     /**
      * Fit isolation trees to normal sensor or embedding features
@@ -2316,7 +2317,7 @@ declare namespace inspection {
     function getAutoTraining({ request: Struct }): Struct;
 
     /**
-     * Apply the winning model's saved preprocessing to raw rows and load its durable weights
+     * Apply the winning model's saved preprocessing to raw rows and load its durable weights; anomaly models also return the audited calibrated probability and decision. Without the experiment in this device's training ledger, it runs the winner published under storage/models/experiments
      * @node ml_predict_auto_model @alias mlPredictAutoModel
      * @param request — Inputs and configuration
      * @returns result — Operation result
@@ -2404,7 +2405,7 @@ declare namespace inspection {
     function notifyLearningProductChange({ request: Struct }): Struct;
 
     /**
-     * Record sample predictions, embeddings and operating conditions for review and drift detection
+     * Record sample predictions, embeddings and operating conditions for review and drift detection. With a positive canary fraction every observation needs its raw source row in sample
      * @node ml_observe_learning_sample @alias mlObserveLearningSample
      * @param request — Inputs and configuration
      * @returns result — Operation result
@@ -2431,6 +2432,15 @@ declare namespace inspection {
     function promoteLearningModel({ request: Struct }): Struct;
 
     /**
+     * Discard the shadow or canary candidate without promoting it. The champion keeps serving, canary samples that judged the candidate stay sealed for audits and the next training cycle can start
+     * @node ml_reject_learning_candidate @alias mlRejectLearningCandidate
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function rejectLearningCandidate({ request: Struct }): Struct;
+
+    /**
      * Resume the project with its saved budget, datasets and model state
      * @node ml_resume_learning_project @alias mlResumeLearningProject
      * @param request — Inputs and configuration
@@ -2449,7 +2459,7 @@ declare namespace inspection {
     function reviewLearningSample({ request: Struct }): Struct;
 
     /**
-     * Restore the previous model in the project deployment
+     * Restore the previous model in the project deployment. By default it rolls back the more recently trained of the active and previous model, so a repeated request keeps the restored model serving
      * @node ml_rollback_learning_model @alias mlRollbackLearningModel
      * @param request — Inputs and configuration
      * @returns result — Operation result
@@ -2532,7 +2542,7 @@ declare namespace inspection {
     function snapshot({ request: Struct }): Struct;
 
     /**
-     * Keep related samples together and purge temporal boundary overlap
+     * Keep related samples together and purge temporal boundary overlap. A time split purges samples until their label (review or outcome) is available, so a train or validation sample's window, horizon and label all end by that partition's cutoff
      * @node ml_group_time_split @alias mlGroupTimeSplit
      * @param request — Inputs and configuration
      * @returns result — Operation result
@@ -2617,6 +2627,15 @@ declare namespace inspection {
     // === AI/ML/Export ===
 
     /**
+     * Write a ledger model as a model folder (weights.bin, preprocessing.json, dependencies/ and manifest.json, written last) to any FlowPath, including app storage, so Predict Published Model and Import Model can use it anywhere
+     * @node ml_export_model @alias mlExportModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function exportModel({ request: Struct }): Struct;
+
+    /**
      * Export a supported inference graph with fixed dimensions and explicit output semantics
      * @node ml_export_student_onnx @alias mlExportStudentOnnx
      * @param request — Inputs and configuration
@@ -2624,6 +2643,33 @@ declare namespace inspection {
      * @impure has side effects / drives control flow
      */
     function exportOnnx({ request: Struct }): Struct;
+
+    /**
+     * Write a consistent snapshot of this device's training ledger (the app's, or your private one) to a folder: ledger.json, jobs.sqlite and every referenced blob, streamed in parts
+     * @node ml_export_training_ledger @alias mlExportTrainingLedger
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function exportTrainingLedger({ request: Struct }): Struct;
+
+    /**
+     * Register a published Burn or SAM 2 model as a pretrained source of this app's training ledger, or of your private ledger, to fine-tune it or extract features with it; other engines are refused
+     * @node ml_import_model @alias mlImportModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function importModel({ request: Struct }): Struct;
+
+    /**
+     * Fill this device's empty training ledger of the same app (the app's, or your private one) from an Export Training Ledger folder after checking every project id, file size and sha256; an existing ledger is never replaced
+     * @node ml_import_training_ledger @alias mlImportTrainingLedger
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function importTrainingLedger({ request: Struct }): Struct;
 
     // === AI/ML/Feature Engineering ===
 
@@ -2655,7 +2701,7 @@ declare namespace inspection {
     function joinSources({ request: Struct }): Struct;
 
     /**
-     * Write prepared partitions with original and generated named columns
+     * Write prepared partitions with their mapped source columns and generated named columns
      * @node ml_materialize_dataset @alias mlMaterializeDataset
      * @param request — Inputs and configuration
      * @returns result — Operation result
@@ -2711,6 +2757,25 @@ declare namespace inspection {
      * @impure has side effects / drives control flow
      */
     function predictNative({ request: Struct }): Struct;
+
+    /**
+     * Predict with a model published under storage/models or exported to files, without a training ledger: the saved preprocessing turns raw rows into model inputs and anomaly models also return their audited calibrated decision
+     * @node ml_predict_published_model @alias mlPredictPublishedModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function predictPublishedModel({ request: Struct }): Struct;
+
+    /**
+     * Extract NCHW spatial features with a published model without a training ledger: through the feature extractor a PatchCore or PaDiM model records, with a published pretrained source, or with a Burn image classifier
+     * @node ml_extract_published_features @alias mlExtractPublishedFeatures
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @returns extractor — Model and image steps that computed these features. Pass it to PatchCore or PaDiM inference so features from another extractor are refused
+     * @impure has side effects / drives control flow
+     */
+    function publishedImageFeatures({ request: Struct }): { result: Struct, extractor: Struct };
 
     /**
      * Compare a prediction score with an explicit inclusive threshold and direction
@@ -2829,9 +2894,10 @@ declare namespace inspection {
      * @node ml_extract_patch_features @alias mlExtractPatchFeatures
      * @param request — Inputs and configuration
      * @returns result — Operation result
+     * @returns extractor — Model and image steps that computed these features. Pass it to PatchCore or PaDiM training and inference so features from another extractor are refused
      * @impure has side effects / drives control flow
      */
-    function imageFeatures({ request: Struct }): Struct;
+    function imageFeatures({ request: Struct }): { result: Struct, extractor: Struct };
 
     /**
      * Return decisions to the teacher after drift or resume an audited deployment
@@ -2888,7 +2954,7 @@ declare namespace inspection {
     function recordSample({ request: Struct }): Struct;
 
     /**
-     * Restart queued jobs or reclaim expired worker leases after process restart
+     * Settle jobs whose worker stopped and restart queued or interrupted jobs after a process restart
      * @node ml_recover_training_jobs @alias mlRecoverTrainingJobs
      * @param request — Inputs and configuration
      * @returns result — Operation result
@@ -2897,7 +2963,7 @@ declare namespace inspection {
     function recoverTraining({ request: Struct }): Struct[];
 
     /**
-     * Resume an interrupted or cancelled job from its saved checkpoint
+     * Resume an interrupted, cancelled or waiting job from its saved checkpoint under the given worker limits, optionally with new compute settings
      * @node ml_resume_training @alias mlResumeTraining
      * @param request — Inputs and configuration
      * @returns result — Operation result
@@ -3142,7 +3208,7 @@ declare namespace inspection {
     // === AI/ML/Monitoring ===
 
     /**
-     * Compare reference and current distributions using KS and PSI
+     * Compare reference and current distributions with KS and, when bin_edges are given, PSI. psi_drift is left empty when the windows are too small for PSI to separate drift from noise; psi_note says why
      * @node ml_distribution_drift @alias mlDistributionDrift
      * @param request — Inputs and configuration
      * @returns result — Operation result
@@ -3151,7 +3217,7 @@ declare namespace inspection {
     function distributionDrift({ request: Struct }): Struct;
 
     /**
-     * Update a persisted Page-Hinkley detector for increasing prediction error
+     * Update a persisted Page-Hinkley detector for increasing prediction error. The configured delta, threshold and minimum samples also apply to a supplied state
      * @node ml_loss_drift @alias mlLossDrift
      * @param request — Inputs and configuration
      * @returns result — Operation result
@@ -3316,9 +3382,10 @@ declare namespace inspection {
      * @node ml_extract_pretrained_features @alias mlExtractPretrainedFeatures
      * @param request — Inputs and configuration
      * @returns result — Operation result
+     * @returns extractor — Source, weights digest and image steps of these features: the declared preprocessing, else the source's unverified recommendation. Patch models record it and reject features from other weights or steps
      * @impure has side effects / drives control flow
      */
-    function pretrainedImageFeatures({ request: Struct }): Struct;
+    function pretrainedImageFeatures({ request: Struct }): { result: Struct, extractor: Struct };
 
     /**
      * Check new labelled samples and class coverage

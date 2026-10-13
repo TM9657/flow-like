@@ -169,7 +169,14 @@ pub(crate) fn project_ledger(
             "Route Learning Project reads its published champion",
         ));
     };
-    if ledger.repo.get_learning_project(id)?.request.stream.project_id != ledger.project {
+    if ledger
+        .repo
+        .get_learning_project(id)?
+        .request
+        .stream
+        .project_id
+        != ledger.project
+    {
         return Err(anyhow!(
             "Learning project belongs to a different app or board"
         ));
@@ -357,7 +364,14 @@ async fn published_champion(
             &format!("The champion of learning project {id} was not published: {skipped}"),
             LogLevel::Warn,
         ),
-        PublishOutcome::Published(_) | PublishOutcome::Unchanged => {}
+        PublishOutcome::Published(reference) => context.log_message(
+            &format!(
+                "The champion of learning project {id} was published at {}",
+                reference.manifest.path
+            ),
+            LogLevel::Info,
+        ),
+        PublishOutcome::Unchanged => {}
     }
     Ok(output)
 }
@@ -505,8 +519,10 @@ async fn route(
     };
     let id = &request.project_id;
     let located = super::lifecycle::locate_repository_for_inference(context, |repo, project| {
-        Ok(super::auto_training::existing(repo.get_learning_project(id))?
-            .is_some_and(|learning| learning.request.stream.project_id == project))
+        Ok(
+            super::auto_training::existing(repo.get_learning_project(id))?
+                .is_some_and(|learning| learning.request.stream.project_id == project),
+        )
     })?;
     let mut storage: Option<ModelStorage> = None;
     if let Some(ledger) = located {

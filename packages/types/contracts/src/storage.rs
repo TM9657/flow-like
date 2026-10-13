@@ -92,9 +92,10 @@ pub fn training_ledger_dir(app_id: &str, user_sub: Option<&str>) -> String {
 
 /// `app_relative` is relative to `apps/{app}/`. The database prefix matches
 /// only the SQLite file and its `-wal`, `-shm` and `-journal` companions; the
-/// directory prefixes match the directory and everything below it.
+/// directory prefixes match the directory and everything below it. ASCII case
+/// is ignored, because macOS and Windows open case variants as the same file.
 pub fn is_legacy_training_ledger_path(app_relative: &str) -> bool {
-    let path = app_relative.trim_start_matches('/');
+    let path = app_relative.trim_start_matches('/').to_ascii_lowercase();
     LEGACY_TRAINING_LEDGER_PREFIXES
         .iter()
         .any(|prefix| match prefix.strip_suffix('/') {
@@ -162,6 +163,31 @@ mod tests {
             "storage/inspection",
             "inspection/jobs.sqlite",
             "",
+        ] {
+            assert!(
+                !is_legacy_training_ledger_path(path),
+                "{path} should not match"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_ledger_predicate_matches_case_variants_of_ledger_files() {
+        for path in [
+            "storage/inspection/Jobs.sqlite",
+            "storage/inspection/JOBS.SQLITE-WAL",
+            "Storage/Inspection/jobs.sqlite-Journal",
+            "storage/inspection/Jobs.Artifacts/x.blob",
+            "storage/inspection/JOBS.ARTIFACTS",
+            "STORAGE/INSPECTION/.Training-Locks/a.lock",
+            "/Storage/inspection/jobs.SQLITE-shm",
+        ] {
+            assert!(is_legacy_training_ledger_path(path), "{path} should match");
+        }
+        for path in [
+            "storage/inspection/PKI/cert.der",
+            "storage/inspection/JOBS.SQLITE.bak",
+            "storage/inspection/Jobs.Artifactsx/y.blob",
         ] {
             assert!(
                 !is_legacy_training_ledger_path(path),

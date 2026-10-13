@@ -4890,7 +4890,9 @@ mod tests {
     /// every other file arrives.
     async fn import_without_ledger(archive: PathBuf, app_id: &str) -> Arc<InMemory> {
         let (state, _, storage) = setup_state();
-        App::import_archive(state, archive, None).await.expect("import");
+        App::import_archive(state, archive, None)
+            .await
+            .expect("import");
         for rel in LEGACY_LEDGER {
             assert!(!has_app_file(&storage, app_id, rel).await, "restored {rel}");
         }
@@ -5034,7 +5036,10 @@ mod tests {
         assert_eq!(replaced.deleted_files, 1);
         assert!(!has_app_file(&storage, app_id, stale).await);
         for rel in LEGACY_LEDGER {
-            assert!(has_app_file(&storage, app_id, rel).await, "Replace deleted {rel}");
+            assert!(
+                has_app_file(&storage, app_id, rel).await,
+                "Replace deleted {rel}"
+            );
         }
     }
 

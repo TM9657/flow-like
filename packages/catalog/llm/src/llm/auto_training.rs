@@ -1592,12 +1592,14 @@ mod agent_tests {
         // The extractor rejects a reply outside the decision schema; the usage the provider
         // reported for it still replaces the reservation.
         let invalid = reserve_consultation(&repo, &id, &limits, 10_000, &mut agent).unwrap();
-        let reply = Some(Err(super::super::llm_extractor_history::ExtractionFailure {
-            error: flow_like_types::anyhow!(
-                "Extracted data does not match the schema: 'delete_rows' is not a known action"
-            ),
-            usage: Some(usage(400, 100, 500)),
-        }));
+        let reply = Some(Err(
+            super::super::llm_extractor_history::ExtractionFailure {
+                error: flow_like_types::anyhow!(
+                    "Extracted data does not match the schema: 'delete_rows' is not a known action"
+                ),
+                usage: Some(usage(400, 100, 500)),
+            },
+        ));
         assert!(
             conclude_consultation(&repo, &id, &limits, &invalid, reply, &mut agent)
                 .unwrap()

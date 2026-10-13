@@ -1885,7 +1885,14 @@ mod table_io {
         digests: &ScopeDigests,
     ) -> Result<SourceScope> {
         let cached = database.load(context).await?;
-        let uri = cached.db.read().await.inner().connection()?.uri().to_owned();
+        let uri = cached
+            .db
+            .read()
+            .await
+            .inner()
+            .connection()?
+            .uri()
+            .to_owned();
         Ok(digests.classify_digest(&content_digest(uri.as_bytes())))
     }
     /// The run's project database, or with `user_scoped` the executing user's database, built
@@ -2449,7 +2456,8 @@ mod tests {
 
     #[test]
     fn recorded_sources_list_the_main_locator_then_every_side() {
-        let locator = |digest: &str| json!({"app_id":"app","board_id":"board","connection_digest":digest});
+        let locator =
+            |digest: &str| json!({"app_id":"app","board_id":"board","connection_digest":digest});
         let pinned = |locator: Value| json!({"database":{"cache_key":"source"},"reference":{"table":"t","branch":"main","version":1,"read_only":true,"pinned":true},"locator":locator});
         let digests = |locators: Vec<Option<TableLocator>>| -> Vec<Option<String>> {
             locators
@@ -3393,33 +3401,35 @@ mod tests {
         database
     }
 
+    /// A local database `name` in `directory`: its location and an open connection.
+    #[cfg(feature = "execute")]
+    async fn local_database(
+        directory: &TestDirectory,
+        name: &str,
+    ) -> (String, flow_like_storage::lancedb::Connection) {
+        let location = directory.0.join(name).to_string_lossy().into_owned();
+        let connection = flow_like_storage::lancedb::connect(&location)
+            .execute()
+            .await
+            .unwrap();
+        (location, connection)
+    }
+
     #[cfg(feature = "execute")]
     #[tokio::test]
     async fn scope_digests_tell_project_user_and_other_databases_apart() {
         let (directory, mut context, project) = table_context().await;
-        let user_location = directory
-            .0
-            .join("user-database")
-            .to_string_lossy()
-            .into_owned();
-        let reopen_user = user_location.clone();
+        let (user_location, user) = local_database(&directory, "user-database").await;
+        let (_, other) = local_database(&directory, "other").await;
         context
             .app_state
             .config
             .write()
             .await
             .register_build_user_database(Arc::new(move |_| {
-                flow_like_storage::lancedb::connect(&reopen_user)
+                flow_like_storage::lancedb::connect(&user_location)
             }));
         let digests = scope_digests(&context).await.unwrap();
-        let connect = |location: String| async move {
-            flow_like_storage::lancedb::connect(&location)
-                .execute()
-                .await
-                .unwrap()
-        };
-        let user = connect(user_location).await;
-        let other = connect(directory.0.join("other").to_string_lossy().into_owned()).await;
         assert_eq!(
             digests.project,
             Some(content_digest(project.uri().as_bytes()))
@@ -3442,14 +3452,22 @@ mod tests {
                 "{name}"
             );
             let pinned = pin_table_source(&mut context, &table).await.unwrap();
-            assert_eq!(digests.classify(pinned.locator.as_ref()), expected, "{name}");
+            assert_eq!(
+                digests.classify(pinned.locator.as_ref()),
+                expected,
+                "{name}"
+            );
             if expected == SourceScope::User {
                 pinned_user = Some(pinned);
             }
         }
         // Without the run's cached view, reopening finds the user database by its digest.
         let pinned = pinned_user.unwrap();
-        context.cache.write().await.remove(&pinned.database.cache_key);
+        context
+            .cache
+            .write()
+            .await
+            .remove(&pinned.database.cache_key);
         let reopened = reopen_pinned_source(&mut context, &pinned).await.unwrap();
         assert_ne!(reopened.cache_key, pinned.database.cache_key);
     }

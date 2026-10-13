@@ -3,9 +3,13 @@ use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
 };
-use flow_like_ml_core::{ComputeConfig, TaskKind};
+use flow_like_ml_core::ComputeConfig;
+#[cfg(any(feature = "training", test))]
+use flow_like_ml_core::TaskKind;
 use flow_like_ml_runtime::experiment::*;
-use flow_like_types::{Result, Value, anyhow};
+#[cfg(any(feature = "inference", test))]
+use flow_like_types::anyhow;
+use flow_like_types::{Result, Value};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -209,6 +213,7 @@ pub enum AutoTrainTask {
     Anomaly,
 }
 
+#[cfg(any(feature = "training", test))]
 fn validate_task(facade: AutoTrainTask, task: &TaskKind) -> Result<()> {
     let allowed = match facade {
         AutoTrainTask::Tabular => matches!(
@@ -398,6 +403,22 @@ pub(crate) fn drain_experiments(
     deadline: std::time::Instant,
 ) -> super::lifecycle::DrainReport {
     background::drain(ledgers, deadline)
+}
+
+/// Keeps background experiments from being queued or driven on the closed ledgers while it
+/// lives.
+#[cfg(feature = "training")]
+pub(crate) struct ExperimentsClosed {
+    _draining: background::Draining,
+}
+
+/// Closes `ledgers`, canonical prefixes as for [`drain_experiments`], to background
+/// experiments until the returned guard drops.
+#[cfg(feature = "training")]
+pub(crate) fn close_experiments(ledgers: &[std::path::PathBuf]) -> ExperimentsClosed {
+    ExperimentsClosed {
+        _draining: background::begin_drain(ledgers).0,
+    }
 }
 
 #[cfg(feature = "training")]
@@ -665,7 +686,9 @@ pub async fn start_auto_training_scoped(
                 .pretrained
                 .as_ref()
                 .map(|source| source.source_id.as_str()),
-            extractor.as_ref().map(|extractor| extractor.source_id.as_str()),
+            extractor
+                .as_ref()
+                .map(|extractor| extractor.source_id.as_str()),
         )
         .await?;
     }
@@ -692,25 +715,24 @@ pub async fn start_auto_training_scoped(
     if let Some(marker) = marker {
         experiment_context[LEDGER_SCOPE_KEY] = marker;
     }
-    let experiment_request = flow_like_ml_runtime::experiment::ExperimentRequest {
-        stream: stream.clone(),
-        snapshot_id: String::new(),
-        spec: json!(prepared.spec),
-        candidates,
-        goals,
-        budget: request.budget.clone(),
-        source_table_versions: std::iter::once(json!(prepared.source.reference))
-            .chain(
-                prepared.feature_sources.iter().map(
+    let experiment_request =
+        flow_like_ml_runtime::experiment::ExperimentRequest {
+            stream: stream.clone(),
+            snapshot_id: String::new(),
+            spec: json!(prepared.spec),
+            candidates,
+            goals,
+            budget: request.budget.clone(),
+            source_table_versions: std::iter::once(json!(prepared.source.reference))
+                .chain(prepared.feature_sources.iter().map(
                     |source| json!({"alias":source.alias,"reference":source.source.reference}),
-                ),
-            )
-            .collect(),
-        created_tables: vec![],
-        updated_table_versions: vec![],
-        preprocessing_manifest: json!(prepared.preprocessing),
-        context: experiment_context,
-    };
+                ))
+                .collect(),
+            created_tables: vec![],
+            updated_table_versions: vec![],
+            preprocessing_manifest: json!(prepared.preprocessing),
+            context: experiment_context,
+        };
     let experiment = create_started_experiment(
         context.get_cancellation_token(),
         &repo,
@@ -772,17 +794,26 @@ struct StartLedger {
 
 #[cfg(feature = "training")]
 impl StartLedger {
-    /// A learning cycle's stream, in the ledger its project string names. A cycle's experiment
-    /// copies its project's marker, which projects created before markers lack.
+    /// A learning cycle's stream, in the ledger that holds the cycle, which may be the legacy
+    /// App ledger; a stream without a cycle uses the ledger its project string names. A cycle's
+    /// experiment copies its project's marker, which projects created before markers lack.
     fn for_stream(
         context: &ExecutionContext,
         request: &AutoTrainRequest,
         background: bool,
         stream: flow_like_ml_runtime::StreamKey,
     ) -> Result<Self> {
-        use super::lifecycle::{LEDGER_SCOPE_KEY, LedgerScope};
-        let scope = LedgerScope::of_project(&stream.project_id);
-        let (repo, project) = super::lifecycle::scoped_repository(context, scope)?;
+        let (repo, project, scope) = match &request.learning_cycle_id {
+            Some(cycle_id) => {
+                let ledger = cycle_ledger(context, cycle_id, &stream)?;
+                (ledger.repo, ledger.project, ledger.scope)
+            }
+            None => {
+                let scope = super::lifecycle::LedgerScope::of_project(&stream.project_id);
+                let (repo, project) = super::lifecycle::scoped_repository(context, scope)?;
+                (repo, project, scope)
+            }
+        };
         let scoped = super::lifecycle::InspectionContext {
             stream_id: stream.stream_id.clone(),
             spec: request.dataset.spec.clone(),
@@ -793,20 +824,10 @@ impl StartLedger {
                 "Training stream belongs to another project or inspection contract"
             ));
         }
-        let mut marker = Some(flow_like_types::json::json!(scope));
-        if let Some(cycle_id) = &request.learning_cycle_id {
-            if background {
-                return Err(anyhow!(
-                    "Learning cycles must attach their experiment before dispatch"
-                ));
-            }
-            let cycle = repo.get_learning_cycle(cycle_id)?;
-            let learning = repo.get_learning_project(&cycle.project_id)?;
-            if learning.request.stream != scoped {
-                return Err(anyhow!("Learning cycle does not own this training stream"));
-            }
-            marker = learning.request.source.get(LEDGER_SCOPE_KEY).cloned();
-        }
+        let marker = match &request.learning_cycle_id {
+            Some(cycle_id) => cycle_marker(&repo, cycle_id, background, &scoped)?,
+            None => Some(flow_like_types::json::json!(scope)),
+        };
         Ok(Self {
             repo,
             scope,
@@ -836,6 +857,55 @@ impl StartLedger {
     }
 }
 
+/// A learning cycle attaches its experiment before dispatch and must own `stream`. Its
+/// experiment copies the project's marker, which projects created before markers lack.
+#[cfg(feature = "training")]
+fn cycle_marker(
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    cycle_id: &str,
+    background: bool,
+    stream: &flow_like_ml_runtime::StreamKey,
+) -> Result<Option<Value>> {
+    if background {
+        return Err(anyhow!(
+            "Learning cycles must attach their experiment before dispatch"
+        ));
+    }
+    let cycle = repo.get_learning_cycle(cycle_id)?;
+    let learning = repo.get_learning_project(&cycle.project_id)?;
+    if learning.request.stream != *stream {
+        return Err(anyhow!("Learning cycle does not own this training stream"));
+    }
+    Ok(learning
+        .request
+        .source
+        .get(super::lifecycle::LEDGER_SCOPE_KEY)
+        .cloned())
+}
+
+/// The ledger of `stream`'s project that holds learning cycle `cycle_id`: the one its learning
+/// project was found in, which may be the legacy App ledger next to a newer App ledger.
+#[cfg(feature = "training")]
+fn cycle_ledger(
+    context: &ExecutionContext,
+    cycle_id: &str,
+    stream: &flow_like_ml_runtime::StreamKey,
+) -> Result<super::lifecycle::LocatedLedger> {
+    let located = super::lifecycle::locate_repository(context, |repo, project| {
+        if project != stream.project_id {
+            return Ok(false);
+        }
+        Ok(existing(repo.get_learning_cycle(cycle_id))?.is_some())
+    })?;
+    located.ok_or_else(|| {
+        anyhow!(
+            "Learning cycle {cycle_id} of stream {} is in no training ledger of project {} on this device",
+            stream.stream_id,
+            stream.project_id
+        )
+    })
+}
+
 /// App only when every source reads the run's project database; any other source, including
 /// one that cannot be classified, keeps the training private.
 #[cfg(feature = "training")]
@@ -853,7 +923,8 @@ pub(crate) fn source_ledger_scope(
 }
 
 /// D10: private training writes no tables into the project database, neither tables created
-/// beside a project main source nor rows merged into a project destination.
+/// beside a project main source nor rows merged into a project destination. While the project
+/// database has no digest, a database that cannot be classified counts as the project's.
 #[cfg(feature = "training")]
 pub(crate) async fn ensure_private_table_writes(
     context: &mut ExecutionContext,
@@ -862,12 +933,15 @@ pub(crate) async fn ensure_private_table_writes(
     policy: &super::auto_training_tables::TableWritePolicy,
 ) -> Result<()> {
     use super::auto_training_tables::{SourceScope, connection_scope};
-    let beside_main =
-        policy.create_tables && digests.classify(main.locator.as_ref()) == SourceScope::Project;
+    let project_like = |scope: SourceScope| match scope {
+        SourceScope::Project => true,
+        SourceScope::Unknown => digests.project.is_none(),
+        SourceScope::User => false,
+    };
+    let main_scope = digests.classify(main.locator.as_ref());
+    let beside_main = policy.create_tables && project_like(main_scope);
     let into_destination = match &policy.allowed_destination {
-        Some(destination) => {
-            connection_scope(context, destination, digests).await? == SourceScope::Project
-        }
+        Some(destination) => project_like(connection_scope(context, destination, digests).await?),
         None => false,
     };
     if beside_main || into_destination {
@@ -888,27 +962,60 @@ pub(crate) async fn adopt_pretrained_sources(
     named: Option<&str>,
     extractor: Option<&str>,
 ) -> Result<()> {
-    use super::lifecycle::{LedgerLocation, LedgerScope};
     if let Some(source_id) = named {
-        match locate_pretrained_source(context, source_id)? {
-            Some(ledger) if ledger.scope == LedgerScope::User => {}
-            Some(ledger) => {
-                repo.adopt_pretrained_source(&ledger.repo, source_id, project)?;
-            }
-            None => {
-                return Err(anyhow!(
-                    "Pretrained source {source_id} is in neither this app's training ledger nor your private one, so private training cannot fine-tune from it"
-                ));
-            }
-        }
+        adopt_named_source(context, repo, project, source_id)?;
     }
-    if let Some(source_id) = extractor
-        && let Some(ledger) = locate_pretrained_source(context, source_id)?
-        && ledger.scope != LedgerScope::User
+    if let Some(source_id) = extractor {
+        adopt_extractor_source(context, repo, project, source_id)?;
+    }
+    adopt_consultant_sources(context, repo, project).await
+}
+
+#[cfg(feature = "training")]
+fn adopt_named_source(
+    context: &ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    project: &str,
+    source_id: &str,
+) -> Result<()> {
+    let Some(ledger) = locate_pretrained_source(context, source_id)? else {
+        return Err(anyhow!(
+            "Pretrained source {source_id} is in neither this app's training ledger nor your private one, so private training cannot fine-tune from it"
+        ));
+    };
+    if ledger.scope == super::lifecycle::LedgerScope::App {
+        repo.adopt_pretrained_source(&ledger.repo, source_id, project)?;
+    }
+    Ok(())
+}
+
+/// Embeddings may name an extractor that only exists as published files, which is no error.
+#[cfg(feature = "training")]
+fn adopt_extractor_source(
+    context: &ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    project: &str,
+    source_id: &str,
+) -> Result<()> {
+    let Some(ledger) = locate_pretrained_source(context, source_id)? else {
+        return Ok(());
+    };
+    if ledger.scope == super::lifecycle::LedgerScope::App
         && let Err(error) = repo.adopt_pretrained_source(&ledger.repo, source_id, project)
     {
         tracing::warn!(source_id, %error, "The feature extractor of private training was not adopted into its ledger");
     }
+    Ok(())
+}
+
+/// The newest App `burn` sources, the ones the consultant may name.
+#[cfg(feature = "training")]
+async fn adopt_consultant_sources(
+    context: &ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    project: &str,
+) -> Result<()> {
+    use super::lifecycle::{LedgerLocation, LedgerScope};
     let app = LedgerLocation::new(context, LedgerScope::App)?;
     let (repo, project) = (repo.clone(), project.to_owned());
     tokio::task::spawn_blocking(move || -> Result<()> {
@@ -2625,10 +2732,22 @@ async fn materialize_with(
     if !result.final_test_metrics.is_empty() {
         result = publish_winner(context, &repo, scope, id, reason).await?;
     }
+    materialize_predictions_table(context, &repo, id, result).await
+}
+
+/// Writes an audited experiment's final predictions table once and returns the result read
+/// after it.
+#[cfg(feature = "training")]
+async fn materialize_predictions_table(
+    context: &mut ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    id: &str,
+    result: AutoTrainingResult,
+) -> Result<AutoTrainingResult> {
     if result.predictions_table.is_some() || result.final_test_metrics.is_empty() {
         return Ok(result);
     }
-    match write_predictions_table(context, &repo, id, &result).await {
+    match write_predictions_table(context, repo, id, &result).await {
         Ok(false) => Ok(result),
         Ok(true) => Ok(repo.experiment_result(id)?.into()),
         // The table copies durable predictions; a source connection that is unavailable in this
@@ -2644,7 +2763,7 @@ async fn materialize_with(
                 return Ok(result);
             }
             note_experiment(
-                &repo,
+                repo,
                 id,
                 "predictions_table_failed",
                 flow_like_types::json::json!({ "error": error }),
@@ -3278,9 +3397,8 @@ fn record_feature_extractor(
 #[cfg(feature = "inference")]
 #[derive(Clone, Default)]
 struct AutoModelCache {
-    models: std::sync::Arc<
-        tokio::sync::Mutex<Vec<(String, super::lifecycle::CachedPredictor, u64)>>,
-    >,
+    models:
+        std::sync::Arc<tokio::sync::Mutex<Vec<(String, super::lifecycle::CachedPredictor, u64)>>>,
 }
 
 #[cfg(feature = "inference")]
@@ -3482,7 +3600,9 @@ mod background {
 
     impl Queue {
         fn draining(&self, ledger: &Path) -> bool {
-            self.draining.iter().any(|prefix| ledger.starts_with(prefix))
+            self.draining
+                .iter()
+                .any(|prefix| ledger.starts_with(prefix))
         }
     }
 
@@ -3659,7 +3779,11 @@ mod background {
         let targets = queue
             .entries
             .iter()
-            .filter(|(_, entry)| prefixes.iter().any(|prefix| entry.ledger.starts_with(prefix)))
+            .filter(|(_, entry)| {
+                prefixes
+                    .iter()
+                    .any(|prefix| entry.ledger.starts_with(prefix))
+            })
             .map(|(key, entry)| (key.clone(), entry.clone()))
             .collect();
         (Draining(prefixes.to_vec()), targets)
@@ -5877,7 +6001,12 @@ mod tests {
             use crate::inspection::feature_engineering::FeatureSourceInput;
             let mut harness = harness(anomaly_rows()).await;
             let notes = harness
-                .table(TableHome::User, "operator_notes", anomaly_rows(), "user-notes")
+                .table(
+                    TableHome::User,
+                    "operator_notes",
+                    anomaly_rows(),
+                    "user-notes",
+                )
                 .await;
             let mut request = anomaly_request(&harness.source);
             request.feature_sources = vec![FeatureSourceInput {
@@ -5905,6 +6034,107 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn private_table_writes_fail_closed_without_the_project_database_digest() {
+            use crate::inspection::auto_training_tables::{
+                ScopeDigests, TableWritePolicy, pin_table_source, scope_digests,
+            };
+            let mut harness = harness(anomaly_rows()).await;
+            let notes = harness
+                .table(
+                    TableHome::User,
+                    "operator_notes",
+                    anomaly_rows(),
+                    "user-notes",
+                )
+                .await;
+            let project_main = pin_table_source(&mut harness.context, &harness.source)
+                .await
+                .unwrap();
+            let user_main = pin_table_source(&mut harness.context, &notes)
+                .await
+                .unwrap();
+            let unknown = ScopeDigests {
+                project: None,
+                ..scope_digests(&harness.context).await.unwrap()
+            };
+            let beside_main = TableWritePolicy::default();
+            let refused = ensure_private_table_writes(
+                &mut harness.context,
+                &unknown,
+                &project_main,
+                &beside_main,
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(refused.to_string(), PRIVATE_TABLE_WRITES);
+            ensure_private_table_writes(&mut harness.context, &unknown, &user_main, &beside_main)
+                .await
+                .unwrap();
+            let into_project = TableWritePolicy {
+                create_tables: false,
+                allowed_destination: Some(harness.source.clone()),
+                ..TableWritePolicy::default()
+            };
+            let refused = ensure_private_table_writes(
+                &mut harness.context,
+                &unknown,
+                &user_main,
+                &into_project,
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(refused.to_string(), PRIVATE_TABLE_WRITES);
+        }
+
+        #[tokio::test]
+        async fn cycle_starts_use_the_ledger_that_holds_their_learning_cycle() {
+            use flow_like_ml_runtime::{
+                LearningProjectRequest, MetricBound, auto_training::default_goals,
+            };
+            let harness = harness(anomaly_rows()).await;
+            let (app, project) =
+                crate::inspection::lifecycle::repository(&harness.context).unwrap();
+            let legacy_path = harness.stored(LedgerScope::App, "inspection/jobs.sqlite");
+            let legacy = TrainingRepository::open(legacy_path).unwrap();
+            let request = anomaly_request(&harness.source);
+            let stream = scoped_stream(&project, &request);
+            let mut goals = default_goals(&request.dataset.spec);
+            goals.bounds = vec![MetricBound {
+                name: goals.primary_metric.clone(),
+                minimum: Some(0.5),
+                maximum: None,
+            }];
+            let learning = legacy
+                .create_learning_project(
+                    LearningProjectRequest {
+                        stream: stream.clone(),
+                        spec: json!(request.dataset.spec),
+                        source: json!({}),
+                        goals,
+                        policy: Default::default(),
+                        budget: Default::default(),
+                        deployment_id: "deployment:learning".into(),
+                    },
+                    now_ms(),
+                )
+                .unwrap();
+            let cycle = legacy
+                .reserve_learning_cycle(&learning.id, "cycle:0", request.budget.clone(), now_ms())
+                .unwrap();
+            let mut cycled = request.clone();
+            cycled.learning_cycle_id = Some(cycle.id.clone());
+            let started =
+                StartLedger::for_stream(&harness.context, &cycled, false, stream.clone()).unwrap();
+            let held = started.repo.get_learning_cycle(&cycle.id).unwrap();
+            assert_eq!(held.id, cycle.id);
+            assert_eq!((started.scope, started.marker), (LedgerScope::App, None));
+            assert!(app.get_learning_cycle(&cycle.id).is_err());
+            let without_cycle =
+                StartLedger::for_stream(&harness.context, &request, false, stream).unwrap();
+            assert_eq!(without_cycle.repo.path(), app.path());
+        }
+
+        #[tokio::test]
         async fn private_training_adopts_the_app_sources_it_may_fine_tune() {
             let mut harness = harness_in(distance_rows(), TableHome::User).await;
             let (app, app_project) =
@@ -5927,13 +6157,16 @@ mod tests {
             let mut request = distance_request(&harness.source);
             request.tables.create_tables = false;
             request.pretrained = Some(
-                from_value(json!({"source_id":source.id,"replace_head":false,"freeze_backbone":false}))
-                    .unwrap(),
+                from_value(
+                    json!({"source_id":source.id,"replace_head":false,"freeze_backbone":false}),
+                )
+                .unwrap(),
             );
             let started = start_auto_training(&mut harness.context, request, false)
                 .await
                 .unwrap();
-            let (repo, scope) = experiment_ledger(&harness.context, &started.experiment_id).unwrap();
+            let (repo, scope) =
+                experiment_ledger(&harness.context, &started.experiment_id).unwrap();
             assert_eq!(scope, LedgerScope::User);
             let adopted = repo.get_pretrained_source(&source.id).unwrap();
             assert_eq!(adopted.project_id, "auto-test:board:user");
@@ -6044,12 +6277,10 @@ mod tests {
             // Another board's runs see the ledger row under a foreign project string, which
             // counts as missing, so they read the published files.
             enter_scope(&mut harness, "auto-test", "other-board");
-            let foreign = predict_auto_model_or_published(
-                &mut harness.context,
-                raw_rows_request(&id, &test),
-            )
-            .await
-            .unwrap();
+            let foreign =
+                predict_auto_model_or_published(&mut harness.context, raw_rows_request(&id, &test))
+                    .await
+                    .unwrap();
             assert_same_predictions(&ledger, &foreign);
             // A runtime without a local ledger reads the same files from its own app store.
             enter_scope(&mut harness, "auto-test", "board");
@@ -6063,12 +6294,10 @@ mod tests {
                 .unwrap()
                 .stores
                 .app_storage_store = Some(copy);
-            let served = predict_auto_model_or_published(
-                &mut harness.context,
-                raw_rows_request(&id, &test),
-            )
-            .await
-            .unwrap();
+            let served =
+                predict_auto_model_or_published(&mut harness.context, raw_rows_request(&id, &test))
+                    .await
+                    .unwrap();
             assert_same_predictions(&ledger, &served);
         }
 
