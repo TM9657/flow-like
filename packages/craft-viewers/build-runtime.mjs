@@ -16,6 +16,11 @@ import { gzipSync } from "node:zlib";
 import { wasmLinkerEnvironment } from "../device-crypto/build-web.mjs";
 import { acquireBuildLock } from "./build-lock.mjs";
 import {
+	assertPinnedLockPackages,
+	assertPlatformMediaDependencies,
+	usesPlatformMedia,
+} from "./codec-policy.mjs";
+import {
 	assertNoBrandArtwork,
 	bundleLicenses,
 	hashLicenseInputs,
@@ -257,6 +262,50 @@ if (!cached()) {
 	});
 	if (!installedTargets.split(/\s+/).includes("wasm32-unknown-unknown"))
 		run("rustup", ["target", "add", "wasm32-unknown-unknown"]);
+	if (prepared.reconcileLock) {
+		// Cargo may remove dependency edges, but must keep reviewed versions and
+		// checksums. Always start from the pin so earlier local builds cannot drift.
+		write("Cargo.lock", original("Cargo.lock"));
+		run(
+			"cargo",
+			[
+				"tree",
+				"--offline",
+				"--target",
+				"wasm32-unknown-unknown",
+				"-p",
+				pin.cargoPackage,
+				...(prepared.cargoArgs || []),
+			],
+			{ env, stdio: "pipe" },
+		);
+		assertPinnedLockPackages(
+			original("Cargo.lock"),
+			readFileSync(join(source, "Cargo.lock"), "utf8"),
+		);
+	}
+	if (usesPlatformMedia(id)) {
+		const dependencies = run(
+			"cargo",
+			[
+				"tree",
+				"--locked",
+				"--target",
+				"wasm32-unknown-unknown",
+				"-p",
+				pin.cargoPackage,
+				"--edges",
+				"normal",
+				"--prefix",
+				"none",
+				"--format",
+				"{p}",
+				...(prepared.cargoArgs || []),
+			],
+			{ env, encoding: "utf8", stdio: "pipe" },
+		);
+		assertPlatformMediaDependencies(id, dependencies, pin.cargoPackage);
+	}
 	run(
 		"cargo",
 		[

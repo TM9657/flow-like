@@ -545,6 +545,14 @@ struct Cgroup {
     procs: File,
 }
 
+/// The name of each of a placement's replica cgroups, less its slot number.
+fn placement_cgroup_prefix(project: u32, placement: &str) -> String {
+    format!(
+        "p{project}-{}-",
+        &blake3::hash(placement.as_bytes()).to_hex()[..24]
+    )
+}
+
 impl Cgroup {
     fn new(
         resources: &PlacementResources,
@@ -558,9 +566,8 @@ impl Cgroup {
             .unwrap_or_else(|error| error.into_inner());
         let root = cgroup_root(state_dir)?;
         let maximum = capacity(&root)?;
-        let identity = blake3::hash(placement.as_bytes()).to_hex().to_string();
-        let name = format!("p{project}-{}-{slot}", &identity[..24]);
-        let path = root.join(&name);
+        let prefix = placement_cgroup_prefix(project, placement);
+        let path = root.join(format!("{prefix}{slot}"));
         if path.try_exists()?
             && !active.contains(&path)
             && read(&path.join("cgroup.events"))?
@@ -585,8 +592,7 @@ impl Cgroup {
             );
             let entry_name = entry.file_name().to_string_lossy().into_owned();
             ensure!(
-                !entry_name.starts_with(&format!("p{project}-"))
-                    || entry_name.starts_with(&format!("p{project}-{}-", &identity[..24])),
+                !entry_name.starts_with(&format!("p{project}-")) || entry_name.starts_with(&prefix),
                 "Different placements cannot share a disk project quota"
             );
             let limits = capacity(&entry.path())?;
@@ -931,9 +937,73 @@ fn policy_file(filters: &[libc::sock_filter]) -> Result<File> {
     Ok(file)
 }
 
+/// Moves what earlier runs of the placement's other replica slots left in the shared `/tmp`
+/// under `slot`'s names, which [`replica_temporary_directory`] removes next. A slot without a
+/// cgroup runs nothing, the admission lock keeps one from being admitted meanwhile, and a
+/// launch makes its directory only after its cgroup. With no other slot running, the `.tmp*`
+/// entries runs left at the top of `/tmp` before each launch had its own directory go too.
+/// Renames keep the lock short; an entry that cannot be moved is reported.
+fn adopt_idle_replica_directories(
+    scratch: &Path,
+    cgroups: &Path,
+    prefix: &str,
+    slot: u8,
+) -> Result<()> {
+    let active = CGROUP_ADMISSION
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let mut admitted = active
+        .iter()
+        .filter_map(|path| path.file_name())
+        .map(|name| name.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    for entry in std::fs::read_dir(cgroups)? {
+        admitted.push(entry?.file_name().to_string_lossy().into_owned());
+    }
+    let own = slot.to_string();
+    let running = admitted
+        .iter()
+        .filter_map(|name| name.strip_prefix(prefix))
+        .filter(|other| *other != own)
+        .collect::<std::collections::HashSet<_>>();
+    for entry in std::fs::read_dir(scratch)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let idle = match name
+            .strip_prefix(".replica-")
+            .and_then(|rest| rest.split_once('-'))
+        {
+            Some((other, _)) => {
+                other != own
+                    && other
+                        .parse::<u8>()
+                        .is_ok_and(|number| number.to_string() == other)
+                    && !running.contains(other)
+            }
+            None => running.is_empty() && name.starts_with(".tmp"),
+        };
+        if !idle {
+            continue;
+        }
+        let adopted = scratch.join(format!(
+            ".replica-{slot}-{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..12]
+        ));
+        if let Err(error) = std::fs::rename(entry.path(), &adopted) {
+            tracing::warn!(
+                path = %entry.path().display(),
+                %error,
+                "Cannot move the temporary directory of an idle replica aside for removal"
+            );
+        }
+    }
+    Ok(())
+}
+
 /// A fresh `TMPDIR` for this launch inside the placement's `/tmp`, which its replicas share
 /// for their reply sockets. Admitting the slot's cgroup proves that no earlier process of the
-/// slot is alive, so the directories its earlier runs left behind are removed first. One that
+/// slot is alive, so the directories its earlier runs left behind, and what
+/// [`adopt_idle_replica_directories`] moved under its names, are removed first. One that
 /// cannot be removed is reported and does not block the launch.
 fn replica_temporary_directory(scratch: &Path, slot: u8) -> Result<String> {
     let prefix = format!(".replica-{slot}-");
@@ -1015,6 +1085,12 @@ pub(super) fn command(
         scopes: scope_rules()?,
         preserve_listener: config.hosting.is_some(),
     };
+    adopt_idle_replica_directories(
+        &scratch,
+        &cgroup_root(&state)?,
+        &placement_cgroup_prefix(project_id, &config.id),
+        slot,
+    )?;
     let temporary = replica_temporary_directory(&scratch, slot)?;
     let mut command = tokio::process::Command::new(bubblewrap()?);
     command.args([
@@ -1607,6 +1683,65 @@ mod tests {
             std::fs::set_permissions(&read_only, std::fs::Permissions::from_mode(0o700))?;
         }
         assert!(launched?.starts_with("/tmp/.replica-2-"));
+        Ok(())
+    }
+
+    #[test]
+    fn idle_slots_and_legacy_tmp_entries_go_with_the_launching_slots_leftovers() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let scratch = root.path().join(".sandbox-tmp");
+        let cgroups = root.path().join("cgroups");
+        crate::outbox::private_directory(&scratch)?;
+        std::fs::create_dir(&cgroups)?;
+        let prefix = placement_cgroup_prefix(7, "placement");
+        for slot in [0, 2] {
+            std::fs::create_dir(cgroups.join(format!("{prefix}{slot}")))?;
+        }
+        let other_placement = placement_cgroup_prefix(7, "other");
+        std::fs::create_dir(cgroups.join(format!("{other_placement}1")))?;
+        let retired = scratch.join(".replica-1-retired/.tmpburn");
+        std::fs::create_dir_all(&retired)?;
+        std::fs::write(retired.join("model.bin"), b"weights")?;
+        let unrelated = [".replica-x-named", ".replica-01-padded", "flc-sockets"];
+        for path in unrelated
+            .iter()
+            .chain(&[".replica-2-running", ".tmplegacy"])
+        {
+            std::fs::create_dir(scratch.join(path))?;
+        }
+        let launch = || -> Result<Vec<String>> {
+            adopt_idle_replica_directories(&scratch, &cgroups, &prefix, 0)?;
+            replica_temporary_directory(&scratch, 0)?;
+            let mut names = Vec::new();
+            for entry in std::fs::read_dir(&scratch)? {
+                names.push(entry?.file_name().to_string_lossy().into_owned());
+            }
+            assert_eq!(
+                names
+                    .iter()
+                    .filter(|name| name.starts_with(".replica-0-"))
+                    .count(),
+                1
+            );
+            for path in unrelated {
+                assert!(scratch.join(path).is_dir(), "{path}");
+            }
+            Ok(names)
+        };
+
+        let names = launch()?;
+        assert!(!names.iter().any(|name| name.starts_with(".replica-1-")));
+        assert!(scratch.join(".replica-2-running").is_dir());
+        assert!(scratch.join(".tmplegacy").is_dir());
+
+        std::fs::remove_dir(cgroups.join(format!("{prefix}2")))?;
+        let names = launch()?;
+        assert!(
+            !names
+                .iter()
+                .any(|name| name.starts_with(".replica-2-") || name.starts_with(".tmp")),
+            "{names:?}"
+        );
         Ok(())
     }
 

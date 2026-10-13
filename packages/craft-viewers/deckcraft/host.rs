@@ -55,6 +55,12 @@ async fn start_app() -> Result<(), String> {
             eframe::WebOptions::default(),
             Box::new(|cc| {
                 CONTEXT.with(|ctx| *ctx.borrow_mut() = Some(cc.egui_ctx.clone()));
+                let ctx = cc.egui_ctx.clone();
+                let repaint = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
+                    ctx.request_repaint()
+                });
+                deckcraft_media::browser::set_repaint(repaint.as_ref().unchecked_ref());
+                repaint.forget();
                 let app = create_app(cc);
                 Ok(Box::new(Host {
                     app,
@@ -337,12 +343,19 @@ fn create_app(cc: &eframe::CreationContext<'_>) -> deckcraft_ui_egui::SlideApp {
             }
             let inbox = picker_inbox.clone();
             let ctx = ctx.clone();
+            let prepare_media = matches!(purpose, "audio" | "video");
             wasm_bindgen_futures::spawn_local(async move {
                 let Some(file) = rfd::AsyncFileDialog::new().pick_file().await else {
                     return;
                 };
                 let bytes = file.read().await;
                 if bytes.len() <= MAX_BYTES {
+                    let bytes = std::sync::Arc::new(bytes);
+                    if prepare_media {
+                        let _ = deckcraft_media::browser::prepare(&bytes).await;
+                    }
+                    let bytes =
+                        std::sync::Arc::try_unwrap(bytes).unwrap_or_else(|bytes| (*bytes).clone());
                     inbox
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())

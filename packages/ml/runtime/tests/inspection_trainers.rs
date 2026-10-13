@@ -32,6 +32,8 @@ fn sample(index: usize, kind: &str) -> Sample {
                 && pixel / size < size * 3 / 4
         })
         .collect::<Vec<_>>();
+    // Classification images show the square only for the defect class.
+    let lit = !matches!((kind, index % 2), ("classification", 0));
     let values = mask
         .iter()
         .enumerate()
@@ -41,10 +43,32 @@ fn sample(index: usize, kind: &str) -> Sample {
                     + ((pixel / size) as f32 * 0.04).cos()
                     + index as f32 * 0.001
             } else {
-                (if *foreground { 1.0 } else { -1.0 }) + index as f32 * 0.001
+                (if *foreground && lit { 1.0 } else { -1.0 }) + index as f32 * 0.001
             }
         })
         .collect();
+    Sample {
+        id: format!("sample-{index}"),
+        group_id: format!("lot-{index}"),
+        stream_id: kind.into(),
+        timestamp_ms: index as i64,
+        window_start_ms: index as i64,
+        window_end_ms: index as i64,
+        input: TensorData {
+            shape: vec![1, size, size],
+            values,
+        },
+        annotation: annotation(kind, index, size, mask),
+        provenance: LabelProvenance::Teacher {
+            model: "fixture-teacher".into(),
+            prompt_digest: "fixture-prompt".into(),
+            confidence: Some(0.99),
+        },
+        outcome: None,
+    }
+}
+/// The label of a `kind` fixture whose image shows a centered square `mask`.
+fn annotation(kind: &str, index: usize, size: usize, mask: Vec<bool>) -> Annotation {
     let bounds = BoundingBox {
         class_id: 0,
         x_min: 0.25,
@@ -52,7 +76,7 @@ fn sample(index: usize, kind: &str) -> Sample {
         x_max: 0.75,
         y_max: 0.75,
     };
-    let annotation = match kind {
+    match kind {
         "yolox" => Annotation::Boxes {
             boxes: vec![bounds],
         },
@@ -71,26 +95,10 @@ fn sample(index: usize, kind: &str) -> Sample {
             }],
         },
         "efficient_ad" => Annotation::Anomaly { is_anomaly: false },
+        "classification" => Annotation::Class {
+            class_id: (index % 2) as u32,
+        },
         _ => unreachable!(),
-    };
-    Sample {
-        id: format!("sample-{index}"),
-        group_id: format!("lot-{index}"),
-        stream_id: kind.into(),
-        timestamp_ms: index as i64,
-        window_start_ms: index as i64,
-        window_end_ms: index as i64,
-        input: TensorData {
-            shape: vec![1, size, size],
-            values,
-        },
-        annotation,
-        provenance: LabelProvenance::Teacher {
-            model: "fixture-teacher".into(),
-            prompt_digest: "fixture-prompt".into(),
-            confidence: Some(0.99),
-        },
-        outcome: None,
     }
 }
 fn populate(repo: &TrainingRepository, key: &StreamKey, kind: &str) {
@@ -210,6 +218,7 @@ fn inspection(kind: &str) -> InspectionSpec {
         "yolox" => (TaskKind::ObjectDetection, vec!["defect"]),
         "unet" => (TaskKind::Segmentation, vec!["background", "defect"]),
         "mask_rcnn" => (TaskKind::InstanceSegmentation, vec!["defect"]),
+        "classification" => (TaskKind::ImageClassification, vec!["ok", "defect"]),
         _ => unreachable!(),
     };
     InspectionSpec {
@@ -224,38 +233,52 @@ fn inspection(kind: &str) -> InspectionSpec {
     }
 }
 
+/// A reviewed fixture row. Class audits compare its ledger label with the class order.
+fn reviewed_row(index: usize, kind: &str, labels: &[String]) -> TrainingSample {
+    let sample = Sample {
+        provenance: LabelProvenance::Reviewed {
+            reviewer: "fixture".into(),
+            reviewed_at_ms: index as i64,
+        },
+        ..sample(index, kind)
+    };
+    let payload = match &sample.annotation {
+        Annotation::Class { class_id } => {
+            json!({"sample": sample, "label": labels[*class_id as usize]})
+        }
+        _ => serde_json::to_value(&sample).unwrap(),
+    };
+    TrainingSample {
+        id: sample.id.clone(),
+        annotation_revision: 1,
+        group_id: sample.group_id.clone(),
+        captured_at_ms: sample.timestamp_ms,
+        label_available_at_ms: sample.timestamp_ms,
+        content_digest: format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&sample.input).unwrap())
+        ),
+        source: LabelSource::Reviewed,
+        accepted: true,
+        payload,
+    }
+}
+
 /// Reviewed fixtures split 6/3/3, so validation and the final audit have audited truth.
-fn search_experiment(kind: &str) -> (tempfile::TempDir, TrainingRepository, Experiment) {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+fn search_request(
+    repo: &TrainingRepository,
+    kind: &str,
+    candidates: Vec<TrainingRequest>,
+) -> ExperimentRequest {
     let key = StreamKey {
         project_id: "factory".into(),
         stream_id: kind.into(),
         inspection_version: "search-v1".into(),
     };
+    let spec = inspection(kind);
     let rows = (0..12)
         .map(|index| {
-            let sample = Sample {
-                provenance: LabelProvenance::Reviewed {
-                    reviewer: "fixture".into(),
-                    reviewed_at_ms: index as i64,
-                },
-                ..sample(index, kind)
-            };
-            let row = TrainingSample {
-                id: sample.id.clone(),
-                annotation_revision: 1,
-                group_id: sample.group_id.clone(),
-                captured_at_ms: sample.timestamp_ms,
-                label_available_at_ms: sample.timestamp_ms,
-                content_digest: format!(
-                    "{:x}",
-                    Sha256::digest(serde_json::to_vec(&sample.input).unwrap())
-                ),
-                source: LabelSource::Reviewed,
-                accepted: true,
-                payload: serde_json::to_value(&sample).unwrap(),
-            };
+            let row = reviewed_row(index, kind, &spec.labels);
             repo.record_sample(&key, &row).unwrap();
             row
         })
@@ -274,28 +297,72 @@ fn search_experiment(kind: &str) -> (tempfile::TempDir, TrainingRepository, Expe
             excluded: vec![],
         })
         .unwrap();
-    let spec = inspection(kind);
     let mut goals = default_goals(&spec);
     goals.minimum_audited_samples = 1;
-    let experiment = repo
-        .create_experiment(
-            ExperimentRequest {
-                stream: key,
-                snapshot_id: snapshot.id,
-                spec: serde_json::to_value(&spec).unwrap(),
-                candidates: vec![request(kind)],
-                goals,
-                budget: ExperimentBudget::default(),
-                source_table_versions: vec![],
-                created_tables: vec![],
-                updated_table_versions: vec![],
-                preprocessing_manifest: json!({}),
-                context: json!({}),
-            },
-            now_ms(),
-        )
-        .unwrap();
+    ExperimentRequest {
+        stream: key,
+        snapshot_id: snapshot.id,
+        spec: serde_json::to_value(&spec).unwrap(),
+        candidates,
+        goals,
+        budget: ExperimentBudget::default(),
+        source_table_versions: vec![],
+        created_tables: vec![],
+        updated_table_versions: vec![],
+        preprocessing_manifest: json!({}),
+        context: json!({}),
+    }
+}
+
+fn search_experiment(kind: &str) -> (tempfile::TempDir, TrainingRepository, Experiment) {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let search = search_request(&repo, kind, vec![request(kind)]);
+    let experiment = repo.create_experiment(search, now_ms()).unwrap();
     (dir, repo, experiment)
+}
+
+fn burn_worker(repo: &TrainingRepository, limits: &WorkerLimits) -> TrainingWorker {
+    let mut worker = TrainingWorker::new(repo.clone(), limits.clone()).unwrap();
+    register_burn_engine(&mut worker).unwrap();
+    worker
+}
+
+/// Serialized size of the worker view, which every experiment over the request's snapshot
+/// shares.
+fn worker_view_bytes(repo: &TrainingRepository, request: &ExperimentRequest) -> u64 {
+    let probe = repo.create_experiment(request.clone(), now_ms()).unwrap();
+    let view = repo
+        .experiment_result(&probe.id)
+        .unwrap()
+        .datasets
+        .remove(0)
+        .training_snapshot_id;
+    serde_json::to_vec(&repo.get_snapshot(&view).unwrap())
+        .unwrap()
+        .len() as u64
+}
+
+/// The smallest generated ResNet18 for the classification fixture, at batch 8.
+fn generated_resnet(spec: &InspectionSpec) -> (TrainingRequest, burn::TrainingConfig) {
+    let search = AutoSearchConfig {
+        min_epochs: 1,
+        max_epochs: 1,
+        batch_size: 8,
+        ..Default::default()
+    };
+    let candidate = generate_candidates(spec, &search, &compute())
+        .unwrap()
+        .into_iter()
+        .find(|candidate| {
+            candidate.recipe["config"]["recipe"]["architecture"] == "res_net18"
+                && candidate.recipe["config"]["recipe"]["base_channels"] == 16
+        })
+        .unwrap();
+    let config: burn::TrainingConfig =
+        serde_json::from_value(candidate.recipe["config"].clone()).unwrap();
+    assert_eq!(config.batch_size, 8);
+    (candidate, config)
 }
 
 #[test]
@@ -334,12 +401,7 @@ fn vision_search_validates_and_audits_detection_and_segmentation_models() {
         ),
     ] {
         let (_dir, repo, experiment) = search_experiment(kind);
-        let mut worker = TrainingWorker::new(
-            repo.clone(),
-            experiment.request.budget.worker_limits.clone(),
-        )
-        .unwrap();
-        register_burn_engine(&mut worker).unwrap();
+        let worker = burn_worker(&repo, &experiment.request.budget.worker_limits);
         let result = AutoTrainingController::new(repo.clone(), worker)
             .run(&experiment.id)
             .unwrap();
@@ -380,6 +442,47 @@ fn vision_search_validates_and_audits_detection_and_segmentation_models() {
             evaluation.metrics
         );
     }
+}
+
+#[test]
+fn a_generated_image_candidate_trains_at_a_resized_batch_and_passes_the_final_audit() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let spec = inspection("classification");
+    let (candidate, config) = generated_resnet(&spec);
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let mut search = search_request(&repo, "classification", vec![candidate]);
+    let view_bytes = worker_view_bytes(&repo, &search);
+    // Batch 2 is the largest halving of 8 that fits beside the worker's charge for the view.
+    search.budget.worker_limits.memory_budget_bytes = config
+        .recipe
+        .estimated_training_bytes(&spec.input_shape, 2)
+        .unwrap()
+        + 12 * view_bytes;
+    let limits = search.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(search, now_ms()).unwrap();
+    let result = AutoTrainingController::new(repo.clone(), burn_worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    let winner = repo
+        .get_experiment_trial(result.selected_trial_id.as_ref().unwrap())
+        .unwrap();
+    assert_eq!(winner.candidate_index, 1, "the resized copy trains");
+    assert!(winner.artifact_id.is_some());
+    assert_eq!(
+        repo.get_job(&winner.job_id).unwrap().request.recipe["config"]["batch_size"],
+        2
+    );
+    let evaluation = repo
+        .get_evaluation(result.final_evaluation_id.as_ref().unwrap())
+        .unwrap();
+    assert_eq!(evaluation.audited_samples, 3);
 }
 
 #[test]

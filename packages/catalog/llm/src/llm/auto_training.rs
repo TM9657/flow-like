@@ -290,6 +290,11 @@ async fn agent_request(context: &mut ExecutionContext) -> Result<AutoTrainerAgen
 #[cfg(feature = "training")]
 const CONSULTATION_TOKEN_MARGIN: u64 = 512;
 
+/// A consultation that would time out sooner is skipped uncharged: its reply could not arrive
+/// before the search window closes, and a timed-out call keeps its whole reservation.
+#[cfg(feature = "training")]
+const MINIMUM_CONSULTATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[cfg(feature = "training")]
 const CONSULTANT_HINT: &str = "You advise an industrial ML experiment. Use the fixed task and class order. You may run the next candidate, propose a supported Burn architecture with a bounded training config, select allowed tabular features, or engineer a validated feature pipeline. Pipelines can derive numeric columns, compute causal grouped windows, join authorized source aliases, fit imputation and scaling, and project features with PCA. Use only the reported allowed columns and source aliases. For pretrained fine-tuning, use only source IDs in the reported pretrained_sources, match the source backbone, and replace the classifier head when the class order changes. A frozen backbone is useful to test when labeled data is limited. Never invent checkpoint IDs, model support or weight licenses. The controller fits transformations on training rows and preserves their runtime recipe. Optimize the declared validation objective and resource constraints. You cannot edit targets, provenance, splits, budgets or final-test data. Never fabricate accuracy. Smaller models and better feature representations are valid experiments. Finish if further trials are unlikely to improve the observed result.";
 
@@ -641,7 +646,8 @@ fn consultation_timeout(
     std::time::Duration::from_millis(search_window_ms.clamp(1, 90_000))
 }
 
-/// Charges one call before it is made. None means no further call fits this run.
+/// Charges one call before it is made. None means no further call fits this run, including
+/// when the search window closes before a reply could arrive.
 #[cfg(feature = "training")]
 fn reserve_consultation(
     repo: &flow_like_ml_runtime::TrainingRepository,
@@ -652,7 +658,17 @@ fn reserve_consultation(
 ) -> Option<ConsultationReservation> {
     let reserved =
         consultation_reservation(prompt_bytes, limits).and_then(|(tokens, cost_micros)| {
-            let experiment = repo.reserve_experiment_consultation(
+            let timeout = consultation_timeout(
+                &repo.get_experiment(experiment_id)?,
+                flow_like_ml_runtime::now_ms(),
+            );
+            if timeout < MINIMUM_CONSULTATION_TIMEOUT {
+                return Err(flow_like_types::anyhow!(
+                    "the search window closes in {} ms, before a reply could arrive",
+                    timeout.as_millis()
+                ));
+            }
+            repo.reserve_experiment_consultation(
                 experiment_id,
                 tokens,
                 cost_micros,
@@ -662,7 +678,7 @@ fn reserve_consultation(
             Ok(ConsultationReservation {
                 tokens,
                 cost_micros,
-                timeout: consultation_timeout(&experiment, flow_like_ml_runtime::now_ms()),
+                timeout,
             })
         });
     match reserved {
@@ -999,6 +1015,7 @@ pub(crate) mod test_support {
                 LogLevel, Run,
                 context::{ExecutionContext, ExecutionContextCache},
                 internal_node::InternalNode,
+                internal_pin::InternalPin,
             },
             node::NodeLogic,
         },
@@ -1200,6 +1217,38 @@ pub(crate) mod test_support {
         let repo = host::experiment_repository(&fixture.context, &started.experiment_id).unwrap();
         (repo, started)
     }
+
+    /// Runs `logic` as a node of the fixture's board with `request` on its request pin and
+    /// returns the value it published on its result pin.
+    pub(crate) async fn run_node(
+        context: &ExecutionContext,
+        logic: Arc<dyn NodeLogic>,
+        request: Value,
+    ) -> flow_like_types::Result<Value> {
+        let node = logic.get_node();
+        let pins = node
+            .pins
+            .values()
+            .map(|pin| (pin.id.clone(), Arc::new(InternalPin::new(pin, false))))
+            .collect();
+        let node = Arc::new(InternalNode::new(
+            node,
+            pins,
+            logic.clone(),
+            AHashMap::new(),
+        ));
+        node.get_pin_by_name("request")
+            .await?
+            .set_value(request)
+            .await;
+        let mut node_context = context.create_sub_context(&node).await;
+        logic.run(&mut node_context).await?;
+        node.get_pin_by_name("result")
+            .await?
+            .get_raw_value()
+            .await
+            .ok_or_else(|| flow_like_types::anyhow!("{} published no result", node.node_name()))
+    }
 }
 
 #[cfg(all(test, feature = "training"))]
@@ -1308,6 +1357,28 @@ mod agent_tests {
         assert_eq!(timeout_after(600_000), 1);
     }
 
+    #[tokio::test]
+    async fn closing_search_window_skips_the_consultation_without_a_charge() {
+        let mut fixture = fixture(1).await;
+        // The audit holds back a tenth, leaving a search window below the consultation floor.
+        fixture.request.training.budget.maximum_wall_time_ms = 10_000;
+        let (repo, started) = start(&mut fixture).await;
+        let id = started.experiment_id.clone();
+        let mut agent = agent_result(started);
+        let limits = ConsultationLimits::default();
+
+        assert!(reserve_consultation(&repo, &id, &limits, 10_000, &mut agent).is_none());
+        assert_eq!(llm_tokens(&repo, &id), 0);
+        assert_eq!(events(&repo, &id, "consultation_reserved"), 0);
+        assert_eq!(agent.consultation_errors.len(), 1);
+        assert!(
+            agent.consultation_errors[0]
+                .starts_with("Consultation skipped: the search window closes in"),
+            "{}",
+            agent.consultation_errors[0]
+        );
+    }
+
     #[test]
     fn owner_wait_backs_off_until_its_patience_without_progress_is_spent() {
         let mut wait = OwnerWait::default();
@@ -1388,6 +1459,69 @@ mod agent_tests {
             result.training.stop_reason.as_deref(),
             Some("wall_time_budget_exhausted")
         );
+    }
+
+    #[tokio::test]
+    async fn cancelled_run_cancels_its_experiment_before_another_trial() {
+        let mut fixture = fixture(1).await;
+        let (repo, started) = start(&mut fixture).await;
+        let id = started.experiment_id;
+        let token = flow_like_types::tokio_util::sync::CancellationToken::new();
+        token.cancel();
+        fixture.context.set_cancellation_token(token);
+        let request = AutoTrainerAgentRequest {
+            experiment_id: Some(id.clone()),
+            ..fixture.request.clone()
+        };
+        let error = run_agent(&mut fixture.context, request, None, None, false)
+            .await
+            .err()
+            .expect("a cancelled run must stop the agent");
+        assert_eq!(
+            error.to_string(),
+            "Auto training was cancelled; resume its saved experiment ID to continue"
+        );
+        assert_eq!(
+            repo.get_experiment(&id).unwrap().status,
+            ExperimentStatus::Cancelled
+        );
+        assert!(repo.list_experiment_trials(&id).unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn invalid_consultation_limits_fail_before_training_starts() {
+        let mut fixture = fixture(1).await;
+        let mut training = fixture.request.training.clone();
+        // Starting fails on an unconnected source, so only a check ahead of it reports limits.
+        training.dataset.source = NodeDBConnection {
+            cache_key: "unconnected-source".into(),
+        };
+        let limits = |maximum_calls, maximum_completion_tokens| ConsultationLimits {
+            maximum_calls,
+            maximum_completion_tokens,
+            ..ConsultationLimits::default()
+        };
+        for (consultations, rejected) in [
+            (limits(33, 2048), true),
+            (limits(4, 0), true),
+            (limits(4, 8193), true),
+            (limits(32, 8192), false),
+        ] {
+            let request = AutoTrainerAgentRequest {
+                training: training.clone(),
+                consultations,
+                experiment_id: None,
+            };
+            let error = run_agent(&mut fixture.context, request, None, None, false)
+                .await
+                .err()
+                .expect("an unconnected source cannot train");
+            assert_eq!(
+                error.to_string().starts_with("Consultation limits require"),
+                rejected,
+                "{error}"
+            );
+        }
     }
 
     #[tokio::test]

@@ -3,10 +3,20 @@ use burn::tensor::Device;
 use std::{
     collections::HashMap,
     sync::{Mutex, MutexGuard, OnceLock},
+    time::{Duration, Instant},
 };
 
-type ResolvedCache = HashMap<(BackendChoice, bool), BackendChoice>;
+#[derive(Clone, Debug, PartialEq)]
+struct Resolved {
+    backend: BackendChoice,
+    /// Set when a higher-priority compiled backend failed its probe: when this one was chosen.
+    fallback_at: Option<Instant>,
+}
+type ResolvedCache = HashMap<(BackendChoice, bool), Resolved>;
 static RESOLVED: OnceLock<Mutex<ResolvedCache>> = OnceLock::new();
+/// A fallback may stem from a GPU that was only briefly unavailable (a driver reset, or memory
+/// another job held), so the preferred backends are probed again once it is this old.
+const FALLBACK_RETRY: Duration = Duration::from_secs(60);
 
 fn resolved_cache() -> MutexGuard<'static, ResolvedCache> {
     RESOLVED
@@ -23,7 +33,8 @@ pub fn resolve_backend(choice: &BackendChoice) -> Result<BackendChoice> {
 
 /// Resolve an automatic or explicit preference by executing a numerical device probe.
 /// Successful selections are cached for this process and reused while their device still
-/// opens. Explicit GPU fallback moves through lower-priority GPU backends and then CPU; Auto
+/// opens; a fallback is reused for at most a minute before the preferred backends are probed
+/// again. Explicit GPU fallback moves through lower-priority GPU backends and then CPU; Auto
 /// always permits this search.
 pub fn resolve_backend_with_fallback(
     choice: &BackendChoice,
@@ -38,6 +49,7 @@ pub fn resolve_backend_with_fallback(
         choice,
         allow_fallback,
         &compiled_backends(),
+        Instant::now(),
         |resolved| open_device(resolved, false).is_ok(),
         |candidate| probe_candidate(candidate, require_physical_gpu).map(|_| ()),
     )
@@ -50,29 +62,74 @@ fn resolve_cached(
     choice: &BackendChoice,
     allow_fallback: bool,
     compiled: &[&str],
+    now: Instant,
     usable: impl FnOnce(&BackendChoice) -> bool,
     probe: impl FnMut(&BackendChoice) -> Result<()>,
 ) -> Result<BackendChoice> {
     let key = (choice.clone(), allow_fallback);
-    if let Some(resolved) = cache.get(&key).cloned() {
-        if usable(&resolved) {
-            return Ok(resolved);
+    if let Some(cached) = cache.get(&key).cloned() {
+        let stale = cached
+            .fallback_at
+            .is_some_and(|chosen| now.saturating_duration_since(chosen) >= FALLBACK_RETRY);
+        if !stale {
+            if usable(&cached.backend) {
+                return Ok(cached.backend);
+            }
+            forget_in(cache, &cached.backend);
         }
-        forget_in(cache, &resolved);
     }
     let resolved = resolve_with_probe(choice, allow_fallback, compiled, probe)?;
-    cache.insert((resolved.clone(), false), resolved.clone());
-    cache.insert(key, resolved.clone());
+    let preferred = candidates(choice, allow_fallback)
+        .into_iter()
+        .find(|candidate| compiled.contains(&backend_name(candidate)));
+    let fallback_at = (preferred.as_ref() != Some(&resolved)).then_some(now);
+    cache.insert(
+        (resolved.clone(), false),
+        Resolved {
+            backend: resolved.clone(),
+            fallback_at: None,
+        },
+    );
+    cache.insert(
+        key,
+        Resolved {
+            backend: resolved.clone(),
+            fallback_at,
+        },
+    );
     Ok(resolved)
 }
 
 fn forget_in(cache: &mut ResolvedCache, failed: &BackendChoice) {
-    cache.retain(|_, resolved| *resolved != *failed);
+    cache.retain(|_, resolved| resolved.backend != *failed);
 }
 
 /// Must not be called while the resolution cache is locked.
 fn forget(failed: &BackendChoice) {
     forget_in(&mut resolved_cache(), failed);
+}
+
+/// Backends to try for `choice`, most preferred first.
+fn candidates(choice: &BackendChoice, allow_fallback: bool) -> Vec<BackendChoice> {
+    use BackendChoice::*;
+    match (choice, allow_fallback) {
+        (Auto, _) => vec![Cuda { device: 0 }, Rocm { device: 0 }, Wgpu, Cpu],
+        (Cuda { device }, true) => vec![choice.clone(), Rocm { device: *device }, Wgpu, Cpu],
+        (Rocm { .. }, true) => vec![choice.clone(), Wgpu, Cpu],
+        (Wgpu | WgpuAdapter { .. }, true) => vec![choice.clone(), Cpu],
+        _ => vec![choice.clone()],
+    }
+}
+
+fn backend_name(candidate: &BackendChoice) -> &'static str {
+    use BackendChoice::*;
+    match candidate {
+        Cpu => "cpu",
+        Wgpu | WgpuAdapter { .. } => "wgpu",
+        Cuda { .. } => "cuda",
+        Rocm { .. } => "rocm",
+        Auto => "auto",
+    }
 }
 
 fn resolve_with_probe(
@@ -81,23 +138,9 @@ fn resolve_with_probe(
     compiled: &[&str],
     mut probe: impl FnMut(&BackendChoice) -> Result<()>,
 ) -> Result<BackendChoice> {
-    use BackendChoice::*;
-    let candidates = match (choice, allow_fallback) {
-        (Auto, _) => vec![Cuda { device: 0 }, Rocm { device: 0 }, Wgpu, Cpu],
-        (Cuda { device }, true) => vec![choice.clone(), Rocm { device: *device }, Wgpu, Cpu],
-        (Rocm { .. }, true) => vec![choice.clone(), Wgpu, Cpu],
-        (Wgpu | WgpuAdapter { .. }, true) => vec![choice.clone(), Cpu],
-        _ => vec![choice.clone()],
-    };
     let mut failures = Vec::new();
-    for candidate in candidates {
-        let name = match &candidate {
-            Cpu => "cpu",
-            Wgpu | WgpuAdapter { .. } => "wgpu",
-            Cuda { .. } => "cuda",
-            Rocm { .. } => "rocm",
-            Auto => unreachable!("automatic candidates must be concrete"),
-        };
+    for candidate in candidates(choice, allow_fallback) {
+        let name = backend_name(&candidate);
         if !compiled.contains(&name) {
             failures.push(format!("{candidate:?}: not enabled in this build"));
             continue;
@@ -457,50 +500,83 @@ mod tests {
         );
     }
 
-    fn resolve_in(
-        cache: &mut ResolvedCache,
-        choice: &BackendChoice,
-        allow_fallback: bool,
+    const ALL_BACKENDS: &[&str] = &["cuda", "rocm", "wgpu", "cpu"];
+
+    struct Machine {
+        compiled: &'static [&'static str],
         gpu_alive: bool,
-        probes: &mut Vec<BackendChoice>,
-    ) -> Result<BackendChoice> {
-        let alive = move |candidate: &BackendChoice| gpu_alive || *candidate == BackendChoice::Cpu;
-        resolve_cached(
-            cache,
-            choice,
-            allow_fallback,
-            &["cuda", "rocm", "wgpu", "cpu"],
-            alive,
-            |candidate| {
-                probes.push(candidate.clone());
-                if alive(candidate) {
-                    Ok(())
-                } else {
-                    Err(Error::Backend("device lost".into()))
-                }
-            },
-        )
+        now: Instant,
+        probes: Vec<BackendChoice>,
+    }
+    impl Machine {
+        fn new(compiled: &'static [&'static str]) -> Self {
+            Self {
+                compiled,
+                gpu_alive: true,
+                now: Instant::now(),
+                probes: Vec::new(),
+            }
+        }
+        fn resolve(
+            &mut self,
+            cache: &mut ResolvedCache,
+            choice: &BackendChoice,
+            allow_fallback: bool,
+        ) -> Result<BackendChoice> {
+            let gpu_alive = self.gpu_alive;
+            let alive =
+                move |candidate: &BackendChoice| gpu_alive || *candidate == BackendChoice::Cpu;
+            let probes = &mut self.probes;
+            resolve_cached(
+                cache,
+                choice,
+                allow_fallback,
+                self.compiled,
+                self.now,
+                alive,
+                |candidate| {
+                    probes.push(candidate.clone());
+                    if alive(candidate) {
+                        Ok(())
+                    } else {
+                        Err(Error::Backend("device lost".into()))
+                    }
+                },
+            )
+        }
+    }
+
+    fn cached(backend: BackendChoice) -> Resolved {
+        Resolved {
+            backend,
+            fallback_at: None,
+        }
     }
 
     #[test]
     fn cached_selection_is_probed_again_after_its_gpu_is_lost() {
         let cuda = BackendChoice::Cuda { device: 0 };
         let mut cache = ResolvedCache::new();
-        let mut probes = Vec::new();
+        let mut machine = Machine::new(ALL_BACKENDS);
         for _ in 0..2 {
             assert_eq!(
-                resolve_in(&mut cache, &BackendChoice::Auto, true, true, &mut probes).unwrap(),
+                machine
+                    .resolve(&mut cache, &BackendChoice::Auto, true)
+                    .unwrap(),
                 cuda
             );
         }
-        assert_eq!(probes, vec![cuda.clone()]);
-        probes.clear();
+        assert_eq!(machine.probes, vec![cuda.clone()]);
+        machine.probes.clear();
+        machine.gpu_alive = false;
         assert_eq!(
-            resolve_in(&mut cache, &BackendChoice::Auto, true, false, &mut probes).unwrap(),
+            machine
+                .resolve(&mut cache, &BackendChoice::Auto, true)
+                .unwrap(),
             BackendChoice::Cpu
         );
         assert_eq!(
-            probes,
+            machine.probes,
             vec![
                 cuda.clone(),
                 BackendChoice::Rocm { device: 0 },
@@ -508,24 +584,79 @@ mod tests {
                 BackendChoice::Cpu
             ]
         );
-        assert!(!cache.values().any(|resolved| *resolved == cuda));
-        assert!(resolve_in(&mut cache, &cuda, false, false, &mut probes).is_err());
+        assert!(!cache.values().any(|resolved| resolved.backend == cuda));
+        assert!(machine.resolve(&mut cache, &cuda, false).is_err());
         assert!(!cache.contains_key(&(cuda, false)));
+    }
+
+    #[test]
+    fn fallback_selection_is_probed_again_once_the_gpu_may_have_recovered() {
+        let cuda = BackendChoice::Cuda { device: 0 };
+        let mut cache = ResolvedCache::new();
+        let mut machine = Machine::new(ALL_BACKENDS);
+        machine.gpu_alive = false;
+        assert_eq!(
+            machine
+                .resolve(&mut cache, &BackendChoice::Auto, true)
+                .unwrap(),
+            BackendChoice::Cpu
+        );
+        assert_eq!(
+            cache[&(BackendChoice::Auto, true)].fallback_at,
+            Some(machine.now)
+        );
+        assert_eq!(cache[&(BackendChoice::Cpu, false)].fallback_at, None);
+        machine.gpu_alive = true;
+        machine.probes.clear();
+        machine.now += FALLBACK_RETRY / 2;
+        assert_eq!(
+            machine
+                .resolve(&mut cache, &BackendChoice::Auto, true)
+                .unwrap(),
+            BackendChoice::Cpu
+        );
+        assert!(machine.probes.is_empty());
+        machine.now += FALLBACK_RETRY;
+        assert_eq!(
+            machine
+                .resolve(&mut cache, &BackendChoice::Auto, true)
+                .unwrap(),
+            cuda
+        );
+        assert_eq!(machine.probes, vec![cuda.clone()]);
+        assert_eq!(cache[&(BackendChoice::Auto, true)], cached(cuda));
+
+        let mut cache = ResolvedCache::new();
+        let mut cpu_only = Machine::new(&["cpu"]);
+        cpu_only.gpu_alive = false;
+        cpu_only
+            .resolve(&mut cache, &BackendChoice::Auto, true)
+            .unwrap();
+        assert_eq!(
+            cache[&(BackendChoice::Auto, true)],
+            cached(BackendChoice::Cpu)
+        );
+        cpu_only.probes.clear();
+        cpu_only.now += FALLBACK_RETRY * 2;
+        cpu_only
+            .resolve(&mut cache, &BackendChoice::Auto, true)
+            .unwrap();
+        assert!(cpu_only.probes.is_empty());
     }
 
     #[test]
     fn failed_device_evicts_every_selection_that_resolved_to_it() {
         let cuda = BackendChoice::Cuda { device: 0 };
         let mut cache = ResolvedCache::from([
-            ((BackendChoice::Auto, true), cuda.clone()),
-            ((BackendChoice::Auto, false), cuda.clone()),
-            ((cuda.clone(), false), cuda.clone()),
-            ((BackendChoice::Wgpu, true), BackendChoice::Cpu),
+            ((BackendChoice::Auto, true), cached(cuda.clone())),
+            ((BackendChoice::Auto, false), cached(cuda.clone())),
+            ((cuda.clone(), false), cached(cuda.clone())),
+            ((BackendChoice::Wgpu, true), cached(BackendChoice::Cpu)),
         ]);
         forget_in(&mut cache, &cuda);
         assert_eq!(
             cache,
-            ResolvedCache::from([((BackendChoice::Wgpu, true), BackendChoice::Cpu)])
+            ResolvedCache::from([((BackendChoice::Wgpu, true), cached(BackendChoice::Cpu))])
         );
     }
 }

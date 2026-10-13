@@ -74,7 +74,7 @@ const server = Bun.serve({
 			});
 		}
 		const file = Bun.file(
-			path.startsWith("/craft/")
+			path.startsWith("/craft/") || path.startsWith("/wordcraft/")
 				? resolve(import.meta.dir, "../../apps/web/public", `.${path}`)
 				: join(directory, path),
 		);
@@ -100,6 +100,10 @@ try {
 		if (
 			request.url().startsWith(server.url.origin) ||
 			/^(blob|data):/.test(request.url()) ||
+			// Chromium's built-in PDF reader loads shared browser resources.
+			request
+				.url()
+				.startsWith("chrome://resources/") ||
 			request
 				.url()
 				.startsWith("chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/")
@@ -175,14 +179,30 @@ try {
 		licenseBounds && licenseBounds.height > 300 && licenseBounds.width > 500,
 		"The license page needs enough space to read and use its links",
 	);
-	await licenseFrame.waitForSelector('a[download][href^="sources/"]');
-	const sourceUrl = await licenseFrame.$eval(
+	const audioInventory = await fetch(
+		new URL("/craft/soundcraft/licenses/manifest.json", server.url),
+	);
+	assert.ok(audioInventory.ok);
+	assert.equal(
+		(await audioInventory.json()).packages.some((pkg: { name: string }) =>
+			pkg.name.startsWith("symphonia"),
+		),
+		false,
+		"Audio imports use platform decoding and must not bundle Symphonia",
+	);
+	// Word still contains MPL-covered code after Audio switches to platform codecs.
+	const sourcePage = await browser.newPage();
+	await sourcePage.goto(
+		new URL("/wordcraft/licenses/index.html", server.url).href,
+	);
+	await sourcePage.waitForSelector('a[download][href^="sources/"]');
+	const sourceUrl = await sourcePage.$eval(
 		'a[download][href^="sources/"]',
 		(el) => (el as HTMLAnchorElement).href,
 	);
 	assert.equal(new URL(sourceUrl).origin, server.url.origin);
 	const manifestResponse = await fetch(
-		new URL("/craft/soundcraft/licenses/manifest.json", server.url),
+		new URL("/wordcraft/licenses/manifest.json", server.url),
 	);
 	assert.ok(
 		manifestResponse.ok,
@@ -198,7 +218,7 @@ try {
 	const sourcePackage = manifest.packages.find(
 		(pkg) =>
 			pkg.sourceArchive &&
-			new URL(pkg.sourceArchive, licenseFrame.url()).href === sourceUrl,
+			new URL(pkg.sourceArchive, sourcePage.url()).href === sourceUrl,
 	);
 	assert.ok(sourcePackage?.selectedLicense.includes("MPL-2.0"));
 	assert.match(sourcePackage.checksum ?? "", /^[a-f0-9]{64}$/);
@@ -214,6 +234,7 @@ try {
 		sourcePackage.checksum,
 		"The downloadable source must match the runtime's pinned source checksum",
 	);
+	await sourcePage.close();
 	await page.screenshot({ path: join(directory, "license-dialog.png") });
 	await page.click(
 		'[role="dialog"]:has(> iframe[title="Flows Audio third-party licenses and source"]) > [data-slot="dialog-close"]',

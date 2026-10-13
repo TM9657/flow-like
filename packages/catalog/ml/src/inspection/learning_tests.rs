@@ -98,6 +98,23 @@ fn only_stopped_experiments_settle_after_a_failed_resume() {
     ));
 }
 
+#[test]
+fn audit_replay_budget_counts_from_the_first_recorded_prediction() {
+    let pause = || std::thread::sleep(std::time::Duration::from_millis(2));
+    let cancel = CancelFlag::default();
+    let mut budget = ReplayBudget::new("Champion audit replay", &cancel, 0);
+    pause();
+    budget.check().unwrap();
+    budget.recorded();
+    pause();
+    let error = budget.check().unwrap_err().to_string();
+    assert!(error.contains("exceeded its 0 ms step budget"), "{error}");
+    let unlimited = ReplayBudget::new("Canary replay", &cancel, u64::MAX);
+    cancel.cancel();
+    let error = unlimited.check().unwrap_err().to_string();
+    assert!(error.contains("Canary replay was cancelled"), "{error}");
+}
+
 #[tokio::test]
 async fn dropping_a_cancellable_step_stops_its_blocking_work() {
     let stopped = CancelFlag::default();
@@ -440,6 +457,49 @@ async fn cancelled_cycle_past_its_wall_budget_settles_on_the_next_step() {
 }
 
 #[tokio::test]
+async fn stopped_cycle_settles_when_its_experiment_cannot_resume() {
+    use flow_like_ml_runtime::Error;
+    let mut harness = learning_harness(60).await;
+    let request = project_request(&harness.source);
+    let id = create_project(&mut harness, request)
+        .await
+        .unwrap()
+        .project
+        .id;
+    let prepared = prepare_learning_cycle(&mut harness.context, &id)
+        .await
+        .unwrap();
+    let experiment_id = prepared.experiment.unwrap().experiment_id;
+    let repo = project_repository(&harness.context, &id).unwrap();
+    repo.cancel_experiment(&experiment_id, flow_like_ml_runtime::now_ms())
+        .unwrap();
+    let project_id = || LearningProjectId {
+        project_id: id.clone(),
+    };
+    let error = step_with(&mut harness.context, project_id(), |_, _| {
+        Err(Error::Io(std::io::Error::other("disk unavailable")).into())
+    })
+    .await
+    .err()
+    .expect("a storage failure must reach the caller");
+    assert!(error.to_string().contains("disk unavailable"), "{error}");
+    assert!(
+        repo.get_learning_project(&id)
+            .unwrap()
+            .active_cycle_id
+            .is_some()
+    );
+    let settled = step_with(&mut harness.context, project_id(), |_, _| {
+        Err(Error::Conflict("experiment must be stopped before resuming".into()).into())
+    })
+    .await
+    .unwrap();
+    assert!(settled.project.active_cycle_id.is_none());
+    assert_eq!(settled.project.state, LearningState::Collecting);
+    assert_eq!(settled.cycles[0].state, LearningCycleState::Settled);
+}
+
+#[tokio::test]
 async fn overlapping_preparation_reports_the_project_without_reserving_a_cycle() {
     let mut harness = learning_harness(240).await;
     let request = project_request(&harness.source);
@@ -485,11 +545,182 @@ async fn rejected_candidate_keeps_the_champion_and_seals_its_canary() {
     run_learning_project(CanaryReviewScenario::Rejected).await;
 }
 
+#[tokio::test]
+async fn corrected_audit_review_removes_the_waiting_canary_candidate() {
+    run_learning_project(CanaryReviewScenario::CorrectedAudit).await;
+}
+
+#[tokio::test]
+async fn champion_replay_records_a_prediction_per_call_past_its_step_budget() {
+    run_learning_project(CanaryReviewScenario::ChampionReplayBudget).await;
+}
+
 enum CanaryReviewScenario {
     Unchanged,
     CorrectedAutomatic,
     CorrectedManual,
     Rejected,
+    CorrectedAudit,
+    ChampionReplayBudget,
+}
+
+/// Replays the first cycle's audit for `model` under a zero step budget; every call must still
+/// record a prediction until the audit is complete.
+fn replay_champion_past_its_budget(
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    waiting: &LearningProjectResult,
+    model: &str,
+) {
+    let mut project = waiting.project.clone();
+    project.champion_artifact_id = Some(model.into());
+    project.request.source["training"]["budget"]["worker_limits"]["maximum_duration_ms"] = json!(0);
+    let audit = &waiting.cycles[0];
+    let unrecorded = || {
+        let recorded: std::collections::HashSet<_> = repo
+            .predictions(model)
+            .unwrap()
+            .into_iter()
+            .map(|prediction| prediction.sample_id)
+            .collect();
+        audit
+            .audit_sample_ids
+            .iter()
+            .filter(|sample| !recorded.contains(*sample))
+            .count()
+    };
+    let mut remaining = unrecorded();
+    assert!(remaining > 0);
+    while remaining > 0 {
+        if let Err(error) = audit_champion(repo, &project, audit, &CancelFlag::default()) {
+            assert!(error.to_string().contains("0 ms step budget"), "{error}");
+        }
+        let left = unrecorded();
+        assert!(left < remaining, "a replay call recorded no prediction");
+        remaining = left;
+    }
+}
+
+/// The current time once the millisecond clock has passed `at_ms`.
+fn after(at_ms: i64) -> i64 {
+    loop {
+        let now = flow_like_ml_runtime::now_ms();
+        if now > at_ms {
+            return now;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+}
+
+/// Observes one of the waiting candidate's sealed audit samples, other than the reviewed "240",
+/// and returns a review confirming its source label that becomes available after the comparison.
+fn confirming_audit_review(
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    id: &str,
+    waiting: &LearningProjectResult,
+) -> LearningReview {
+    let sample = waiting.cycles[1]
+        .audit_sample_ids
+        .iter()
+        .find(|sample| *sample != "240")
+        .unwrap()
+        .clone();
+    let index: usize = sample.parse().unwrap();
+    repo.record_learning_observation(
+        id,
+        &LearningObservation {
+            sample_id: sample.clone(),
+            group_id: (index / 2).to_string(),
+            captured_at_ms: index as i64 + 1,
+            student: None,
+            teacher: None,
+            embedding: vec![],
+            slices: Default::default(),
+            sample: json!({}),
+        },
+    )
+    .unwrap();
+    LearningReview {
+        sample_id: sample,
+        annotation: json!({"kind":"class","class_id":index % 2}),
+        source: flow_like_ml_runtime::LabelSource::ObservedOutcome,
+        reviewer: "gauge".into(),
+        available_at_ms: after(waiting.comparison.as_ref().unwrap().evaluated_at_ms),
+        revision: 1,
+        outcome: None,
+    }
+}
+
+/// A comparison that a concurrent review aborts leaves the waiting candidate on its sealed
+/// comparison until the next step.
+async fn finish_while_reviews_race_compare(
+    context: &mut ExecutionContext,
+    id: &str,
+    compared: &LearningComparison,
+) {
+    let raced = finish_with(context, id, |_, _, _| {
+        Err(flow_like_ml_runtime::Error::Conflict(
+            "learning project generation or clock changed".into(),
+        ))
+    })
+    .await
+    .unwrap();
+    assert_eq!(raced.project.state, LearningState::Canary);
+    assert_eq!(
+        raced.comparison.unwrap().candidate_evaluation_id,
+        compared.candidate_evaluation_id
+    );
+}
+
+/// Reviews of a sealed audit sample that become available while the candidate waits in Canary
+/// reach compare: confirming truth refreshes the comparison once, contradicting it removes the
+/// candidate.
+async fn review_waiting_audit_sample(
+    context: &mut ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    id: &str,
+    waiting: &LearningProjectResult,
+    champion: &str,
+) {
+    let compared = waiting.comparison.clone().unwrap();
+    let mut review = confirming_audit_review(repo, id, waiting);
+    repo.record_learning_review(id, &review).unwrap();
+    finish_while_reviews_race_compare(context, id, &compared).await;
+    let confirmed = finish_learning_cycle(context, id).await.unwrap();
+    assert_eq!(confirmed.project.state, LearningState::Canary);
+    let refreshed = confirmed.comparison.unwrap();
+    assert!(refreshed.eligible);
+    assert_ne!(
+        refreshed.candidate_evaluation_id,
+        compared.candidate_evaluation_id
+    );
+    let kept = finish_learning_cycle(context, id)
+        .await
+        .unwrap()
+        .comparison
+        .unwrap();
+    assert_eq!(
+        kept.candidate_evaluation_id,
+        refreshed.candidate_evaluation_id
+    );
+
+    review.revision = 2;
+    review.annotation["class_id"] = json!(1 - review.annotation["class_id"].as_u64().unwrap());
+    review.available_at_ms = after(refreshed.evaluated_at_ms);
+    repo.record_learning_review(id, &review).unwrap();
+    let rejected = finish_learning_cycle(context, id).await.unwrap();
+    assert_eq!(rejected.project.state, LearningState::Active);
+    assert_eq!(
+        rejected.project.champion_artifact_id.as_deref(),
+        Some(champion)
+    );
+    assert!(rejected.project.candidate_artifact_id.is_none());
+    let comparison = rejected.comparison.unwrap();
+    assert!(!comparison.eligible);
+    assert!(
+        comparison
+            .reasons
+            .contains(&"audit_review_changed".to_string())
+    );
 }
 
 async fn run_learning_project(scenario: CanaryReviewScenario) {
@@ -613,6 +844,17 @@ async fn run_learning_project(scenario: CanaryReviewScenario) {
     cancelled.cancel();
     let error = audit_champion(&repo, &waiting_project, &audited, &cancelled).unwrap_err();
     assert!(error.to_string().contains("cancelled"), "{error}");
+    match scenario {
+        CanaryReviewScenario::CorrectedAudit => {
+            review_waiting_audit_sample(&mut context, &repo, &id, &second, &champion).await;
+            return;
+        }
+        CanaryReviewScenario::ChampionReplayBudget => {
+            replay_champion_past_its_budget(&repo, &second, &candidate);
+            return;
+        }
+        _ => {}
+    }
 
     let mut observations = Vec::new();
     let mut reviews = Vec::new();
@@ -785,17 +1027,20 @@ async fn run_learning_project(scenario: CanaryReviewScenario) {
         .get_deployment(&second.project.request.deployment_id)
         .unwrap();
     assert_eq!(deployment.previous_artifact_id, Some(champion.clone()));
-    let rollback_candidate = RollbackLearningModelRequest {
+    // Boards saved before the rollback expectations send only the project.
+    let legacy: RollbackLearningModelRequest =
+        flow_like_types::json::from_value(json!({"project_id": id})).unwrap();
+    let rolled = rollback(&mut context, legacy.clone()).await.unwrap();
+    assert_eq!(rolled.project.champion_artifact_id, Some(champion.clone()));
+    // Retried rollbacks must not restore the model they rolled back.
+    let retried = rollback(&mut context, legacy).await.unwrap();
+    assert_eq!(retried.project.champion_artifact_id, Some(champion.clone()));
+    let named = RollbackLearningModelRequest {
         project_id: id.clone(),
         expected_artifact_id: Some(candidate.clone()),
         expected_generation: None,
     };
-    let rolled = rollback(&mut context, rollback_candidate.clone())
-        .await
-        .unwrap();
-    assert_eq!(rolled.project.champion_artifact_id, Some(champion.clone()));
-    // A retried rollback of the same model must not restore it.
-    let retried = rollback(&mut context, rollback_candidate).await.unwrap();
+    let retried = rollback(&mut context, named).await.unwrap();
     assert_eq!(retried.project.champion_artifact_id, Some(champion.clone()));
     assert_eq!(
         repo.get_deployment(&second.project.request.deployment_id)

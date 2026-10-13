@@ -1,9 +1,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { prepareBrowserMedia } from "./media-patch.mjs";
 
 export default function prepare({ directory, original, write, replaceOnce }) {
 	const uiPath = "crates/ui-egui/src/lib.rs";
 	let ui = original(uiPath);
+	ui = replaceOnce(
+		ui,
+		"pub mod media;",
+		'#[cfg(not(target_arch = "wasm32"))]\npub mod media;\n#[cfg(target_arch = "wasm32")]\n#[path = "browser-media.rs"]\npub mod media;',
+		"browser media UI",
+	);
 	ui = replaceOnce(
 		ui,
 		"pub struct Services {",
@@ -90,30 +97,44 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		replaceOnce(
 			original(manifest),
 			"deckcraft-engine = { workspace = true }",
-			"deckcraft-engine = { workspace = true }\ndeckcraft-render = { workspace = true }",
+			"deckcraft-engine = { workspace = true }\ndeckcraft-render = { workspace = true }\ndeckcraft-media = { workspace = true }",
 			"renderer dependency",
 		),
 	);
-	const lock = original("Cargo.lock");
+	let lock = original("Cargo.lock");
 	const packageBlock = lock.match(
 		/\[\[package\]\]\nname = "deckcraft-web"\n[\s\S]*?(?=\n\[\[package\]\]|$)/,
 	)?.[0];
 	if (!packageBlock)
 		throw new Error("The DeckCraft web package changed in Cargo.lock.");
-	write(
-		"Cargo.lock",
+	lock = replaceOnce(
+		lock,
+		packageBlock,
 		replaceOnce(
-			lock,
 			packageBlock,
-			replaceOnce(
-				packageBlock,
-				' "deckcraft-engine",',
-				' "deckcraft-engine",\n "deckcraft-render",',
-				"locked renderer dependency",
-			),
-			"web package",
+			' "deckcraft-engine",',
+			' "deckcraft-engine",\n "deckcraft-media",\n "deckcraft-render",',
+			"locked renderer dependency",
 		),
+		"web package",
 	);
+	const mediaBlock = lock.match(
+		/\[\[package\]\]\nname = "deckcraft-media"\n[\s\S]*?(?=\n\[\[package\]\]|$)/,
+	)?.[0];
+	if (!mediaBlock) throw new Error("Review DeckCraft's media lock entry.");
+	lock = replaceOnce(
+		lock,
+		mediaBlock,
+		replaceOnce(
+			mediaBlock,
+			' "image",',
+			' "image",\n "js-sys",\n "serde_json",\n "wasm-bindgen",\n "wasm-bindgen-futures",',
+			"browser media dependencies",
+		),
+		"media lock entry",
+	);
+	write("Cargo.lock", lock);
+	prepareBrowserMedia({ directory, original, write, replaceOnce });
 	write(
 		"apps/deckcraft-web/src/web.rs",
 		readFileSync(join(directory, "host.rs"), "utf8"),

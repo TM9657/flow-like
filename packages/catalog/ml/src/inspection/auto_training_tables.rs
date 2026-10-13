@@ -5,6 +5,9 @@ use flow_like_ml_core::{
 };
 use flow_like_ml_native::{
     dataset::{DatasetSplit, split_grouped, split_temporal},
+    feature_engineering::{
+        FeaturePipeline, FeatureStep, FittedFeaturePipeline, JoinKind, WindowOperation, WindowSize,
+    },
     preprocessing::{FittedTabularPreprocessor, TabularOptions},
 };
 use flow_like_storage_contracts::database::DatabaseReference;
@@ -12,7 +15,7 @@ use flow_like_types::{Result, Value, anyhow, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     sync::Arc,
 };
 
@@ -180,12 +183,16 @@ pub struct TableProfile {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TablePreprocessing {
     Engineered {
-        pipeline: flow_like_ml_native::feature_engineering::FittedFeaturePipeline,
+        pipeline: FittedFeaturePipeline,
         preprocessing: Box<TablePreprocessing>,
         #[serde(default)]
         projection: Option<flow_like_ml_native::reduction::FittedPca>,
         #[serde(default)]
         plan: Option<Box<super::feature_engineering::FeaturePlan>>,
+        /// Source columns the pipeline reads as clock times whose rows store another unit. The
+        /// pipeline sees them in epoch milliseconds; its output keeps the source cells.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        temporal_units: BTreeMap<String, TemporalUnit>,
     },
     Tabular {
         fitted: FittedTabularPreprocessor,
@@ -474,6 +481,17 @@ pub(crate) fn mapped_columns(mapping: &TableMapping) -> Vec<String> {
     columns.extend(profiled_columns(mapping));
     let mut seen = HashSet::new();
     columns.retain(|column| seen.insert(column.clone()));
+    columns
+}
+
+/// Columns preparation reads: the mapped ones plus the source's own `sample_id`, which
+/// materialization checks against the mapped row ID before writing rows keyed by it.
+#[cfg(feature = "execute")]
+pub(crate) fn prepared_columns(mapping: &TableMapping) -> Vec<String> {
+    let mut columns = mapped_columns(mapping);
+    if !columns.iter().any(|column| column == "sample_id") {
+        columns.push("sample_id".into());
+    }
     columns
 }
 
@@ -896,11 +914,12 @@ pub fn transform_table_rows(
             pipeline,
             preprocessing,
             projection,
+            temporal_units,
             ..
         } => {
             let inputs = transform_table_rows(
                 preprocessing,
-                &pipeline.transform_rows(rows)?,
+                &transform_feature_rows(pipeline, rows, temporal_units)?,
                 maximum_elements,
             )?;
             if let Some(projection) = projection {
@@ -961,6 +980,7 @@ pub fn transform_table_rows_with_state(
         pipeline,
         preprocessing,
         projection,
+        temporal_units,
         ..
     } = preprocessing
     {
@@ -988,7 +1008,15 @@ pub fn transform_table_rows_with_state(
                     {
                         return Err(anyhow!("Feature batch exceeds its byte or time budget"));
                     }
-                    let output = stream.transform_row(row)?;
+                    let output = if temporal_units.is_empty() {
+                        stream.transform_row(row)?
+                    } else {
+                        let mut output = stream
+                            .transform_row(&row_in_milliseconds(row, temporal_units)?)
+                            .map_err(|error| converted_clock_error(error, temporal_units))?;
+                        restore_source_cells(&mut output, row, temporal_units);
+                        output
+                    };
                     output_bytes = output_bytes
                         .checked_add(serialized_json_size(&output)?)
                         .ok_or_else(|| anyhow!("Feature byte budget overflow"))?;
@@ -1024,18 +1052,182 @@ pub fn base_preprocessing(preprocessing: &TablePreprocessing) -> &TablePreproces
     }
 }
 
+/// Units of the main-row columns a pipeline reads as clock times: window timestamps of steps
+/// with duration windows or rates, and as-of join timestamps. Feature pipelines count epoch
+/// milliseconds; lag and row-count windows only need the order, which every unit keeps.
+pub(crate) fn pipeline_time_units(
+    pipeline: &FeaturePipeline,
+    units: &BTreeMap<String, TemporalUnit>,
+) -> BTreeMap<String, TemporalUnit> {
+    let mut clocks = BTreeSet::new();
+    for step in &pipeline.steps {
+        match step {
+            FeatureStep::WindowFeatures {
+                timestamp_column,
+                features,
+                ..
+            } => {
+                let elapsed = features.iter().any(|feature| {
+                    matches!(
+                        feature.operation,
+                        WindowOperation::Rate { .. }
+                            | WindowOperation::Rolling {
+                                window: WindowSize::DurationMs { .. },
+                                ..
+                            }
+                    )
+                });
+                if elapsed {
+                    clocks.insert(timestamp_column.as_str());
+                }
+            }
+            FeatureStep::JoinSources {
+                join: JoinKind::BackwardAsOf { left_timestamp, .. },
+                ..
+            } => {
+                clocks.insert(left_timestamp.as_str());
+            }
+            _ => {}
+        }
+    }
+    units
+        .iter()
+        .filter(|(column, _)| clocks.contains(column.as_str()))
+        .map(|(column, unit)| (column.clone(), *unit))
+        .collect()
+}
+
+/// Units of the columns of join source `alias` that its as-of joins read as clock times.
+pub(crate) fn side_time_units(
+    pipeline: &FeaturePipeline,
+    alias: &str,
+    units: &BTreeMap<String, TemporalUnit>,
+) -> BTreeMap<String, TemporalUnit> {
+    let mut clocks = BTreeSet::new();
+    for step in &pipeline.steps {
+        if let FeatureStep::JoinSources {
+            alias: joined,
+            join:
+                JoinKind::BackwardAsOf {
+                    right_timestamp,
+                    right_available_at,
+                    ..
+                },
+            ..
+        } = step
+            && joined == alias
+        {
+            clocks.insert(right_timestamp.as_str());
+            clocks.extend(right_available_at.as_deref());
+        }
+    }
+    units
+        .iter()
+        .filter(|(column, _)| clocks.contains(column.as_str()))
+        .map(|(column, unit)| (column.clone(), *unit))
+        .collect()
+}
+
+/// `row` with its integer `units` cells in epoch milliseconds.
+pub(crate) fn row_in_milliseconds(
+    row: &Value,
+    units: &BTreeMap<String, TemporalUnit>,
+) -> Result<Value> {
+    let mut converted = row.clone();
+    if let Some(cells) = converted.as_object_mut() {
+        for (column, unit) in units {
+            let Some(cell) = cells.get_mut(column) else {
+                continue;
+            };
+            let Some(value) = cell.as_i64() else {
+                continue;
+            };
+            let milliseconds = unit.to_milliseconds(value).ok_or_else(|| {
+                anyhow!("Timestamp '{column}' value {value} in {unit:?} overflows epoch milliseconds")
+            })?;
+            *cell = json!(milliseconds);
+        }
+    }
+    Ok(converted)
+}
+
+fn restore_source_cells(output: &mut Value, row: &Value, units: &BTreeMap<String, TemporalUnit>) {
+    let (Some(output), Some(row)) = (output.as_object_mut(), row.as_object()) else {
+        return;
+    };
+    for column in units.keys() {
+        if let Some(cell) = row.get(column) {
+            output.insert(column.clone(), cell.clone());
+        }
+    }
+}
+
+fn converted_clock_error(
+    error: impl std::fmt::Display,
+    units: &BTreeMap<String, TemporalUnit>,
+) -> flow_like_types::Error {
+    anyhow!(
+        "{error} (the pipeline reads columns {:?} in epoch milliseconds, converted from their storage units)",
+        units.keys().collect::<Vec<_>>()
+    )
+}
+
+/// Runs a fitted pipeline with the `units` columns in epoch milliseconds; the output keeps
+/// the source cells of those columns, so later steps and table writes see stored values.
+pub(crate) fn transform_feature_rows(
+    pipeline: &FittedFeaturePipeline,
+    rows: &[Value],
+    units: &BTreeMap<String, TemporalUnit>,
+) -> Result<Vec<Value>> {
+    if units.is_empty() {
+        return Ok(pipeline.transform_rows(rows)?);
+    }
+    let converted = rows
+        .iter()
+        .map(|row| row_in_milliseconds(row, units))
+        .collect::<Result<Vec<_>>>()?;
+    let mut output = pipeline
+        .transform_rows(&converted)
+        .map_err(|error| converted_clock_error(error, units))?;
+    for (transformed, row) in output.iter_mut().zip(rows) {
+        restore_source_cells(transformed, row, units);
+    }
+    Ok(output)
+}
+
+/// Rows the next read page may hold. A page decodes before its rows are measured, so it holds
+/// at most twice the previous page, bounding one page of rows larger than any seen before,
+/// and at most what the page share and the remaining byte budget hold at the largest row seen.
+#[cfg(any(feature = "execute", test))]
+fn next_page_rows(
+    previous: usize,
+    largest: usize,
+    remaining_bytes: usize,
+    page_bytes: usize,
+    maximum: usize,
+) -> usize {
+    let largest = largest.max(1);
+    previous
+        .saturating_mul(2)
+        .min(page_bytes / largest)
+        .min(remaining_bytes / largest)
+        .clamp(1, maximum.max(1))
+}
+
 #[cfg(feature = "execute")]
 mod table_io {
     use super::*;
     use flow_like::flow::execution::context::{ExecutionContext, ExecutionContextCache};
     use flow_like_catalog_core::{CachedDB, CachedDBRefreshHook, CachedDBRefresher};
     use flow_like_storage::{
+        arrow_array::{Array, Int64Array, RecordBatchIterator, RecordBatchReader},
         arrow_schema::{DataType, Schema, TimeUnit},
-        arrow_utils::value_to_record_batch,
+        arrow_utils::{value_to_record_batch, value_to_record_batch_for_schema},
         contracts::database::DatabaseSelector,
         databases::vector::{
             VectorStore, buffered::BufferedVectorStore, lancedb::LanceDBVectorStore,
         },
+        datafusion::prelude::SessionContext,
         lancedb::Connection,
     };
     use flow_like_types::{async_trait, sync::RwLock};
@@ -1119,6 +1311,36 @@ mod table_io {
         );
         Ok(NodeDBConnection { cache_key })
     }
+    /// The temporal unit contract of the pin a connection reopened. Pinning that connection
+    /// keeps it, so a project's recorded sample times never change units between cycles.
+    struct CarriedTemporalUnits(BTreeMap<String, TemporalUnit>);
+    impl flow_like_types::Cacheable for CarriedTemporalUnits {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+    }
+    fn carried_units_key(cache_key: &str) -> String {
+        format!("inspection::table::units::{cache_key}")
+    }
+    async fn carried_temporal_units(
+        context: &ExecutionContext,
+        database: &NodeDBConnection,
+    ) -> Option<BTreeMap<String, TemporalUnit>> {
+        context
+            .cache
+            .read()
+            .await
+            .get(&carried_units_key(&database.cache_key))
+            .and_then(|value| {
+                value
+                    .as_any()
+                    .downcast_ref::<CarriedTemporalUnits>()
+                    .map(|units| units.0.clone())
+            })
+    }
     pub async fn pin_table_source(
         context: &mut ExecutionContext,
         source: &NodeDBConnection,
@@ -1145,7 +1367,10 @@ mod table_io {
             })
             .await?;
         let reference = snapshot.reference().await?;
-        let temporal_units = schema_temporal_units(&VectorStore::schema(&snapshot).await?);
+        let temporal_units = match carried_temporal_units(context, source).await {
+            Some(units) => units,
+            None => schema_temporal_units(&VectorStore::schema(&snapshot).await?),
+        };
         let database = cache_view(context, source.clone(), snapshot).await?;
         Ok(PinnedTableSource {
             database,
@@ -1189,8 +1414,8 @@ mod table_io {
             .collect();
         Ok(SourceTableSchema { source, columns })
     }
-    /// Reads the pinned table in pages sized from the largest row seen so far. Unfiltered
-    /// list queries let Lance push each page's offset into the scan instead of rescanning.
+    /// Reads the pinned table in pages sized by `next_page_rows`. Unfiltered list queries let
+    /// Lance push each page's offset into the scan instead of rescanning.
     async fn read_pages(
         context: &mut ExecutionContext,
         source: &PinnedTableSource,
@@ -1219,12 +1444,8 @@ mod table_io {
         let mut rows = Vec::with_capacity(total);
         let mut bytes = 0usize;
         let mut largest = 0usize;
+        let mut page_rows = 1usize;
         loop {
-            let page_rows = if largest == 0 {
-                1
-            } else {
-                (page_bytes / largest).clamp(1, maximum_page_rows.max(1))
-            };
             let limit = page_rows.min(
                 budget
                     .maximum_rows
@@ -1256,6 +1477,13 @@ mod table_io {
                 }
                 rows.push(row);
             }
+            page_rows = next_page_rows(
+                page_rows,
+                largest,
+                budget.maximum_bytes.saturating_sub(bytes),
+                page_bytes,
+                maximum_page_rows,
+            );
         }
         Ok(rows)
     }
@@ -1323,7 +1551,7 @@ mod table_io {
         request: &TableDatasetRequest,
     ) -> Result<PreparedTableDataset> {
         let source = pin_table_source(context, &request.source).await?;
-        let columns = mapped_columns(&request.mapping);
+        let columns = prepared_columns(&request.mapping);
         let rows = read_columns(context, &source, &request.budget, &columns).await?;
         let request = request.clone();
         tokio::task::spawn_blocking(move || prepare_rows_owned(source, &request, rows)).await?
@@ -1556,7 +1784,8 @@ mod table_io {
         })
     }
     /// Opens the head of the pinned table's branch without opening the pinned version,
-    /// which version cleanup may have removed.
+    /// which version cleanup may have removed. Pinning the result keeps `source`'s temporal
+    /// unit contract; a legacy pin without one keeps reading stored units.
     pub async fn reopen_latest_source(
         context: &mut ExecutionContext,
         source: &PinnedTableSource,
@@ -1568,18 +1797,24 @@ mod table_io {
             tag: None,
             read_only: true,
         };
-        if let Some(store) = cached_source(context, source, locator).await? {
+        let reopened = if let Some(store) = cached_source(context, source, locator).await? {
             let latest = store.checkout(head).await?;
-            return cache_view(context, source.database.clone(), latest).await;
-        }
-        let connection = locate_source_connection(context, &scope, locator).await?;
-        let latest = LanceDBVectorStore::from_connection_with_selector(
-            connection,
-            source.reference.table.clone(),
-            head,
-        )
-        .await?;
-        Ok(cache_reopened(context, latest).await)
+            cache_view(context, source.database.clone(), latest).await?
+        } else {
+            let connection = locate_source_connection(context, &scope, locator).await?;
+            let latest = LanceDBVectorStore::from_connection_with_selector(
+                connection,
+                source.reference.table.clone(),
+                head,
+            )
+            .await?;
+            cache_reopened(context, latest).await
+        };
+        context.cache.write().await.insert(
+            carried_units_key(&reopened.cache_key),
+            Arc::new(CarriedTemporalUnits(source.temporal_units.clone())),
+        );
+        Ok(reopened)
     }
     fn table_name(
         experiment_id: &str,
@@ -1696,6 +1931,99 @@ mod table_io {
         }
         Ok(pinned)
     }
+    /// Upserts `rows` by `sample_id` into an existing table and writes only the visible
+    /// columns they carry, so every column this write does not produce keeps its values; the
+    /// store's own upsert writes every table column and would null the rest. Carried columns
+    /// the table lacks are skipped. While a non-nullable column is not produced, rows can only
+    /// update existing ones, so all of them must already exist.
+    async fn merge_produced_columns(store: &LanceDBVectorStore, rows: &[Value]) -> Result<()> {
+        let table_name = store.table_name();
+        let visible = VectorStore::schema(store).await?;
+        let mut produced = Vec::with_capacity(rows.len());
+        let mut carried = HashSet::new();
+        for row in rows {
+            let mut cells = row
+                .as_object()
+                .cloned()
+                .ok_or_else(|| anyhow!("Experiment rows must be JSON objects"))?;
+            cells.retain(|name, _| visible.field_with_name(name).is_ok());
+            carried.extend(cells.keys().cloned());
+            produced.push(Value::Object(cells));
+        }
+        let table = store.raw().await.map_err(|error| {
+            anyhow!("Experiment rows cannot be merged into table '{table_name}': {error}")
+        })?;
+        let schema = table.schema().await?;
+        let required: Vec<&str> = schema
+            .fields()
+            .iter()
+            .filter(|field| !field.is_nullable() && !carried.contains(field.name()))
+            .map(|field| field.name().as_str())
+            .collect();
+        let count = produced.len();
+        if !required.is_empty() {
+            let existing = existing_destination_rows(store, &produced, &visible).await?;
+            if existing != count {
+                let named: Vec<&str> = required
+                    .iter()
+                    .copied()
+                    .filter(|name| visible.field_with_name(name).is_ok())
+                    .collect();
+                return Err(anyhow!(
+                    "{} of {count} rows have no row with their sample_id in table '{table_name}' and cannot be added, because its non-nullable columns {named:?} are not produced by this write; the table was not changed",
+                    count - existing
+                ));
+            }
+        }
+        let batch = value_to_record_batch_for_schema(produced, &visible, table_name)?;
+        let batch_schema = batch.schema();
+        let reader: Box<dyn RecordBatchReader + Send> = Box::new(RecordBatchIterator::new(
+            vec![Ok(batch)],
+            batch_schema,
+        ));
+        let mut merge = table.merge_insert(&["sample_id"]);
+        merge.when_matched_update_all(None);
+        if required.is_empty() {
+            merge.when_not_matched_insert_all();
+        }
+        let merged = merge.execute(reader).await.map_err(|error| {
+            anyhow!("Merging experiment rows into table '{table_name}' failed: {error}")
+        })?;
+        if !required.is_empty() && merged.num_updated_rows != count as u64 {
+            return Err(anyhow!(
+                "Table '{table_name}' changed during the write: {} of {count} existing rows were updated",
+                merged.num_updated_rows
+            ));
+        }
+        Ok(())
+    }
+    /// How many `rows` already have a row with their `sample_id` in the table of `store`.
+    async fn existing_destination_rows(
+        store: &LanceDBVectorStore,
+        rows: &[Value],
+        schema: &Schema,
+    ) -> Result<usize> {
+        let ids: Vec<Value> = rows
+            .iter()
+            .map(|row| json!({"sample_id": row.get("sample_id").cloned().unwrap_or(Value::Null)}))
+            .collect();
+        let ids = value_to_record_batch_for_schema(ids, schema, store.table_name())?;
+        let session = SessionContext::new();
+        session.register_table("destination", store.to_datafusion().await?)?;
+        session.register_batch("produced", ids)?;
+        let counted = session
+            .sql("SELECT COUNT(*) FROM destination JOIN produced ON destination.sample_id = produced.sample_id")
+            .await?
+            .collect()
+            .await?;
+        let existing = counted
+            .first()
+            .filter(|batch| batch.num_rows() == 1)
+            .and_then(|batch| batch.column(0).as_any().downcast_ref::<Int64Array>())
+            .map(|counts| counts.value(0))
+            .ok_or_else(|| anyhow!("Counting existing destination rows returned no count"))?;
+        Ok(usize::try_from(existing)?)
+    }
     pub async fn write_experiment_rows(
         context: &mut ExecutionContext,
         source: &PinnedTableSource,
@@ -1741,24 +2069,22 @@ mod table_io {
             })?;
             let cached = destination.load(context).await?;
             cached.ensure_flushed().await?;
-            let store = cached.db.read().await;
-            store.inner().ensure_writable()?;
-            let actual = store.inner().reference().await?;
+            let guard = cached.db.write().await;
+            let store = guard.inner();
+            store.ensure_writable()?;
+            let actual = store.reference().await?;
             if &actual != expected {
                 return Err(anyhow!("Destination changed since write authorization"));
             }
             let escaped = "sample_id";
-            let duplicate=store.inner().sql("destination",&format!("SELECT {escaped} FROM destination GROUP BY {escaped} HAVING {escaped} IS NULL OR COUNT(*) > 1 LIMIT 1")).await?.collect().await?;
+            let duplicate=store.sql("destination",&format!("SELECT {escaped} FROM destination GROUP BY {escaped} HAVING {escaped} IS NULL OR COUNT(*) > 1 LIMIT 1")).await?.collect().await?;
             if duplicate.iter().any(|batch| batch.num_rows() > 0) {
                 return Err(anyhow!(
                     "Destination sample_id values must be unique and non-null"
                 ));
             }
-            drop(store);
-            cached
-                .upsert_from(context, rows.clone(), "sample_id".into())
-                .await?;
-            cached.ensure_flushed().await?;
+            merge_produced_columns(store, &rows).await?;
+            drop(guard);
             destination.clone()
         } else {
             if !policy.create_tables {
@@ -1816,6 +2142,23 @@ mod table_io {
             return Ok(vec![]);
         }
         prepared.split.validate(&prepared.samples)?;
+        let mut pinned = prepared.source.clone();
+        let cached = context
+            .cache
+            .read()
+            .await
+            .contains_key(&pinned.database.cache_key);
+        if !cached {
+            pinned.database = reopen_pinned_source(context, &prepared.source).await?;
+        }
+        // Preparation reads only mapped columns. Metadata still yields to every source column,
+        // so a write into an existing table never lands on an unread column of the same name.
+        let schema = pinned.database.load(context).await?.db.read().await.schema().await?;
+        let source_columns: HashSet<&str> = schema
+            .fields()
+            .iter()
+            .map(|field| field.name().as_str())
+            .collect();
         let preprocessing = flow_like_types::json::to_string(&prepared.preprocessing)?;
         let preprocessing_digest = content_digest(preprocessing.as_bytes());
         let source = flow_like_types::json::to_string(&prepared.source.reference)?;
@@ -1836,8 +2179,10 @@ mod table_io {
                 row.entry("sample_id".to_owned()).or_insert_with(||json!(sample.id));
                 let metadata=json!({"group_id":sample.group_id,"timestamp_ms":sample.timestamp_ms,"partition":partition,"input":sample.input.values,"shape":sample.input.shape,"sample":flow_like_types::json::to_string(sample)?,"source_reference":source,"preprocessing_digest":preprocessing_digest,"experiment_id":experiment_id});
                 for (name,value) in metadata.as_object().expect("metadata is an object") {
-                    let name = if row.contains_key(name) {format!("__ml_{name}")}else{name.clone()};
-                    if row.insert(name,value.clone()).is_some() {return Err(anyhow!("Source columns collide with reserved training metadata"));}
+                    let reserved = |column: &str| row.contains_key(column) || source_columns.contains(column);
+                    let column = if reserved(name.as_str()) {format!("__ml_{name}")}else{name.clone()};
+                    let collides = column != *name && reserved(column.as_str());
+                    if collides || row.insert(column,value.clone()).is_some() {return Err(anyhow!("Source columns collide with reserved training metadata"));}
                 }
                 Ok(Value::Object(row))
             }).collect::<Result<Vec<_>>>()?;
@@ -1847,7 +2192,7 @@ mod table_io {
                 tables.push(
                     write_experiment_rows(
                         context,
-                        &prepared.source,
+                        &pinned,
                         rows,
                         experiment_id,
                         partition,
@@ -1862,7 +2207,7 @@ mod table_io {
             tables.push(
                 write_experiment_rows(
                     context,
-                    &prepared.source,
+                    &pinned,
                     combined,
                     experiment_id,
                     "prepared",
@@ -2480,6 +2825,172 @@ mod tests {
         assert!(error.to_string().contains("Transformed feature batch"));
     }
 
+    #[test]
+    fn read_pages_grow_at_most_twofold_within_the_remaining_budget() {
+        let page_bytes = 16 * 1024 * 1024;
+        let budget = 256 * 1024 * 1024;
+        assert_eq!(next_page_rows(1, 10, budget, page_bytes, 4096), 2);
+        assert_eq!(next_page_rows(2048, 10, budget, page_bytes, 4096), 4096);
+        assert_eq!(next_page_rows(64, 1_000_000, 3_500_000, page_bytes, 4096), 3);
+        assert_eq!(next_page_rows(64, 1_000_000, 500_000, page_bytes, 4096), 1);
+        assert_eq!(next_page_rows(64, 0, 0, page_bytes, 4096), 1);
+    }
+
+    fn window_plan(
+        group_by: &str,
+        operation: Value,
+        limits: Value,
+    ) -> super::super::feature_engineering::FeaturePlan {
+        flow_like_types::json::from_value(json!({
+            "pipeline":{"steps":[{"kind":"window_features","group_by":[group_by],"timestamp_column":"time","features":[{"name":"window_x","column":"x","operation":operation}]}]},
+            "numeric_columns":["x","window_x"],"categorical_columns":[],"standardize":false,
+            "imputation":{"kind":"constant","value":0.0},"limits":limits
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn an_expired_preparation_deadline_stops_before_the_transform() {
+        use super::super::feature_engineering::{prepare_feature_rows, prepare_feature_rows_within};
+        let (source, request, mut rows) = fixture();
+        for row in &mut rows {
+            row["time"] = json!(0);
+        }
+        let lag = json!({"kind":"lag","steps":1});
+        let relaxed = window_plan("category", lag.clone(), json!({}));
+        let error = prepare_feature_rows(
+            source.clone(),
+            &request,
+            &rows,
+            &relaxed,
+            vec![],
+            &BTreeMap::new(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("strictly increase"), "{error}");
+        let plan = window_plan("category", lag, json!({"maximum_duration_ms":40}));
+        let started = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_millis(50))
+            .unwrap();
+        let error = prepare_feature_rows_within(
+            started,
+            source,
+            &request,
+            rows,
+            &plan,
+            vec![],
+            &BTreeMap::new(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            error.contains("Feature preparation exceeded its 40 ms duration budget"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn the_single_window_pass_holds_every_group_beyond_the_serving_limits() {
+        let (source, request, rows) = fixture();
+        let plan = window_plan(
+            "group",
+            json!({"kind":"lag","steps":1}),
+            json!({"maximum_groups":10,"maximum_history_rows":10}),
+        );
+        let prepared = super::super::feature_engineering::prepare_feature_rows(
+            source,
+            &request,
+            &rows,
+            &plan,
+            vec![],
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let TablePreprocessing::Engineered { pipeline, .. } = &prepared.preprocessing else {
+            unreachable!()
+        };
+        assert_eq!(pipeline.limits, plan.limits);
+        for (index, row) in prepared.rows.iter().enumerate() {
+            let previous = if index % 2 == 1 {
+                json!((index - 1) as f64)
+            } else {
+                Value::Null
+            };
+            assert_eq!(row["window_x"], previous, "row {index}");
+        }
+    }
+
+    #[test]
+    fn duration_windows_read_second_columns_in_epoch_milliseconds() {
+        let (mut source, request, rows) = fixture();
+        source
+            .temporal_units
+            .insert("time".into(), TemporalUnit::Seconds);
+        assert!(pipeline_time_units(&feature_plan().pipeline, &source.temporal_units).is_empty());
+        let as_of: FeaturePipeline = flow_like_types::json::from_value(json!({"steps":[{
+            "kind":"join_sources","alias":"calibration","keys":[{"left":"category","right":"category"}],
+            "join":{"kind":"backward_as_of","left_timestamp":"time","right_timestamp":"valid_from","right_available_at":"published"},
+            "columns":[{"source":"offset","name":"calibration_offset"}]
+        }]}))
+        .unwrap();
+        assert_eq!(
+            pipeline_time_units(&as_of, &source.temporal_units),
+            source.temporal_units
+        );
+        let side_units = BTreeMap::from([
+            ("valid_from".to_string(), TemporalUnit::Microseconds),
+            ("published".to_string(), TemporalUnit::Seconds),
+            ("offset".to_string(), TemporalUnit::Days),
+        ]);
+        let clocks = side_time_units(&as_of, "calibration", &side_units);
+        assert_eq!(clocks.keys().collect::<Vec<_>>(), ["published", "valid_from"]);
+        assert_eq!(
+            row_in_milliseconds(&json!({"valid_from":2_500_999,"published":3,"offset":4}), &clocks)
+                .unwrap(),
+            json!({"valid_from":2_500,"published":3_000,"offset":4})
+        );
+        let plan = window_plan(
+            "category",
+            json!({"kind":"rolling","statistic":"mean","window":{"kind":"duration_ms","milliseconds":2500},"min_periods":1,"include_current":false}),
+            json!({}),
+        );
+        let prepared = super::super::feature_engineering::prepare_feature_rows(
+            source,
+            &request,
+            &rows,
+            &plan,
+            vec![],
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        assert_eq!(prepared.rows[10]["window_x"], json!(8.5));
+        assert_eq!(prepared.rows[10]["time"], json!(10));
+        assert_eq!(*prepared.raw_rows, rows);
+        assert_eq!(prepared.samples[10].timestamp_ms, 10_000);
+        let TablePreprocessing::Engineered { temporal_units, .. } = &prepared.preprocessing else {
+            unreachable!()
+        };
+        assert_eq!(
+            temporal_units,
+            &BTreeMap::from([("time".to_string(), TemporalUnit::Seconds)])
+        );
+        let replay = transform_table_rows(&prepared.preprocessing, &rows, 1_000).unwrap();
+        let (streamed, _) =
+            transform_table_rows_with_state(&prepared.preprocessing, &rows, 1_000, None, true)
+                .unwrap();
+        for index in prepared
+            .split
+            .train
+            .iter()
+            .chain(&prepared.split.validation)
+            .chain(&prepared.split.test)
+        {
+            assert_eq!(replay[*index], prepared.samples[*index].input);
+            assert_eq!(streamed[*index], prepared.samples[*index].input);
+        }
+    }
+
     #[cfg(feature = "execute")]
     struct TestDirectory(std::path::PathBuf);
     #[cfg(feature = "execute")]
@@ -2969,6 +3480,295 @@ mod tests {
             .unwrap();
         assert_eq!(rows[0]["captured"], json!(1_500_000));
         assert_eq!(rows[1]["day"], json!(2));
+    }
+
+    /// Writes `batch` to a new table and caches it as a writable run database.
+    #[cfg(feature = "execute")]
+    async fn cached_batch_table(
+        context: &mut flow_like::flow::execution::context::ExecutionContext,
+        connection: flow_like_storage::lancedb::Connection,
+        name: &str,
+        batch: flow_like_storage::arrow_array::RecordBatch,
+    ) -> NodeDBConnection {
+        use flow_like_catalog_core::CachedDB;
+        use flow_like_storage::databases::vector::{
+            buffered::BufferedVectorStore, lancedb::LanceDBVectorStore,
+        };
+        use flow_like_types::sync::RwLock;
+        let mut store = LanceDBVectorStore::from_connection(connection, name.into()).await;
+        store.insert_record_batch(batch).await.unwrap();
+        let database = NodeDBConnection {
+            cache_key: format!("batch::{name}"),
+        };
+        context.cache.write().await.insert(
+            database.cache_key.clone(),
+            Arc::new(CachedDB {
+                db: Arc::new(RwLock::new(BufferedVectorStore::new(store, 0))),
+            }),
+        );
+        database
+    }
+
+    #[cfg(feature = "execute")]
+    fn kept_comment(index: usize) -> Option<String> {
+        (index % 3 != 0).then(|| format!("comment {index}"))
+    }
+
+    /// The fixture rows plus the source's own `sample_id` and two unmapped columns: notes
+    /// that cannot be null and comments that may be.
+    #[cfg(feature = "execute")]
+    async fn annotated_table(
+        context: &mut flow_like::flow::execution::context::ExecutionContext,
+        connection: flow_like_storage::lancedb::Connection,
+        name: &str,
+    ) -> NodeDBConnection {
+        use flow_like_storage::{
+            arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray},
+            arrow_schema::{DataType, Field, Schema},
+        };
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("group", DataType::Int64, false),
+            Field::new("time", DataType::Int64, false),
+            Field::new("x", DataType::Int64, false),
+            Field::new("z", DataType::Int64, false),
+            Field::new("category", DataType::Utf8, false),
+            Field::new("target", DataType::Utf8, false),
+            Field::new("sample_id", DataType::Utf8, false),
+            Field::new("operator_notes", DataType::Utf8, false),
+            Field::new("comment", DataType::Utf8, true),
+        ]));
+        let integers = |values: Vec<i64>| -> ArrayRef { Arc::new(Int64Array::from(values)) };
+        let texts = |values: Vec<String>| -> ArrayRef { Arc::new(StringArray::from(values)) };
+        let indices = || 0..30i64;
+        let columns = vec![
+            integers(indices().collect()),
+            integers(indices().map(|index| index / 2).collect()),
+            integers(indices().collect()),
+            integers(indices().collect()),
+            integers(indices().map(|index| index * 2).collect()),
+            texts(indices().map(|_| "shared".to_string()).collect()),
+            texts(
+                indices()
+                    .map(|index| ["good", "bad"][(index % 2) as usize].to_string())
+                    .collect(),
+            ),
+            texts(indices().map(|index| index.to_string()).collect()),
+            texts(indices().map(|index| format!("note {index}")).collect()),
+            Arc::new(StringArray::from(
+                (0..30).map(kept_comment).collect::<Vec<_>>(),
+            )) as ArrayRef,
+        ];
+        let batch = RecordBatch::try_new(schema, columns).unwrap();
+        cached_batch_table(context, connection, name, batch).await
+    }
+
+    /// An existing feature table that holds every fixture sample but the last one, with a
+    /// nullable column of its own.
+    #[cfg(feature = "execute")]
+    async fn feature_destination(
+        context: &mut flow_like::flow::execution::context::ExecutionContext,
+        connection: flow_like_storage::lancedb::Connection,
+        name: &str,
+    ) -> NodeDBConnection {
+        use flow_like_storage::{
+            arrow_array::{ArrayRef, Float64Array, RecordBatch, StringArray},
+            arrow_schema::{DataType, Field, Schema},
+        };
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("sample_id", DataType::Utf8, false),
+            Field::new("x_squared", DataType::Float64, true),
+            Field::new("partition", DataType::Utf8, true),
+            Field::new("comment", DataType::Utf8, true),
+        ]));
+        let columns: Vec<ArrayRef> = vec![
+            Arc::new(StringArray::from(
+                (0..29).map(|index: usize| index.to_string()).collect::<Vec<_>>(),
+            )),
+            Arc::new(Float64Array::from(vec![None::<f64>; 29])),
+            Arc::new(StringArray::from(vec![Some("stale"); 29])),
+            Arc::new(StringArray::from(
+                (0..29).map(kept_comment).collect::<Vec<_>>(),
+            )),
+        ];
+        let batch = RecordBatch::try_new(schema, columns).unwrap();
+        cached_batch_table(context, connection, name, batch).await
+    }
+
+    #[cfg(feature = "execute")]
+    async fn rows_by_sample(
+        context: &mut flow_like::flow::execution::context::ExecutionContext,
+        database: &NodeDBConnection,
+    ) -> BTreeMap<String, Value> {
+        use flow_like_storage::databases::vector::VectorStore;
+        let rows = database
+            .load(context)
+            .await
+            .unwrap()
+            .db
+            .read()
+            .await
+            .filter("true", None, 100, 0)
+            .await
+            .unwrap();
+        rows.into_iter()
+            .map(|row| (row["sample_id"].as_str().unwrap().to_owned(), row))
+            .collect()
+    }
+
+    #[cfg(feature = "execute")]
+    async fn writable_reference(
+        context: &mut flow_like::flow::execution::context::ExecutionContext,
+        database: &NodeDBConnection,
+    ) -> DatabaseReference {
+        database
+            .load(context)
+            .await
+            .unwrap()
+            .db
+            .read()
+            .await
+            .inner()
+            .reference()
+            .await
+            .unwrap()
+    }
+
+    #[cfg(feature = "execute")]
+    #[tokio::test]
+    async fn materializing_into_the_source_table_keeps_its_unmapped_columns() {
+        let (_directory, mut context, connection) = table_context().await;
+        let (_, mut request, _) = fixture();
+        let database = annotated_table(&mut context, connection, "annotated").await;
+        request.source = database.clone();
+        let before = rows_by_sample(&mut context, &database).await;
+        let prepared = prepare_table_dataset(&mut context, &request).await.unwrap();
+        assert!(
+            prepared
+                .raw_rows
+                .iter()
+                .all(|row| row["sample_id"].is_string() && row.get("operator_notes").is_none())
+        );
+        let policy = TableWritePolicy {
+            create_tables: false,
+            allowed_destination: Some(database.clone()),
+            expected_destination: Some(writable_reference(&mut context, &database).await),
+            ..TableWritePolicy::default()
+        };
+        let written = materialize_prepared_tables(&mut context, &prepared, "write-back", &policy)
+            .await
+            .unwrap();
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].rows, before.len());
+        assert_eq!(rows_by_sample(&mut context, &database).await, before);
+        let reference = writable_reference(&mut context, &database).await;
+        let policy = TableWritePolicy {
+            expected_destination: Some(reference.clone()),
+            ..policy
+        };
+        let error = write_experiment_rows(
+            &mut context,
+            &prepared.source,
+            vec![json!({"sample_id":"new","x":1})],
+            "write-back",
+            "prepared",
+            "digest",
+            &policy,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("cannot be added"), "{error}");
+        assert_eq!(writable_reference(&mut context, &database).await, reference);
+        assert_eq!(rows_by_sample(&mut context, &database).await, before);
+    }
+
+    #[cfg(feature = "execute")]
+    #[tokio::test]
+    async fn feature_tables_written_into_an_existing_table_keep_its_other_columns() {
+        use super::super::feature_engineering::{
+            FeatureTransformRequest, prepare_feature_dataset, transform_and_materialize,
+        };
+        let (_directory, mut context, connection) = table_context().await;
+        let (_, mut request, _) = fixture();
+        request.source = annotated_table(&mut context, connection.clone(), "feature_source").await;
+        let destination = feature_destination(&mut context, connection, "feature_table").await;
+        let mut plan = feature_plan();
+        plan.pipeline.steps.truncate(1);
+        plan.numeric_columns = vec!["x".into(), "x_squared".into()];
+        let policy = |reference: DatabaseReference| TableWritePolicy {
+            create_tables: false,
+            allowed_destination: Some(destination.clone()),
+            expected_destination: Some(reference),
+            ..TableWritePolicy::default()
+        };
+        let check = |rows: &BTreeMap<String, Value>| {
+            assert_eq!(rows.len(), 30);
+            for index in 0..30usize {
+                let row = &rows[&index.to_string()];
+                assert_eq!(row["x_squared"], json!((index * index) as f64));
+                let partition = row["partition"].as_str().unwrap();
+                assert!(["train", "validation", "test"].contains(&partition));
+                let comment = if index < 29 { kept_comment(index) } else { None };
+                assert_eq!(row["comment"], json!(comment), "sample {index}");
+            }
+        };
+        let reference = writable_reference(&mut context, &destination).await;
+        let derived = transform_and_materialize(
+            &mut context,
+            FeatureTransformRequest {
+                dataset: request.clone(),
+                plan: plan.clone(),
+                sources: vec![],
+                output_id: "derived".into(),
+                tables: policy(reference),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(derived.tables[0].rows, 30);
+        check(&rows_by_sample(&mut context, &destination).await);
+        let prepared = prepare_feature_dataset(&mut context, &request, &plan, &[])
+            .await
+            .unwrap();
+        let reference = writable_reference(&mut context, &destination).await;
+        materialize_prepared_tables(&mut context, &prepared, "fitted", &policy(reference))
+            .await
+            .unwrap();
+        check(&rows_by_sample(&mut context, &destination).await);
+    }
+
+    #[cfg(feature = "execute")]
+    #[tokio::test]
+    async fn latest_reopens_keep_the_temporal_contract_of_the_pin_they_reopen() {
+        use flow_like_storage::{
+            arrow_array::{ArrayRef, Int64Array, RecordBatch, TimestampSecondArray},
+            arrow_schema::{DataType, Field, Schema, TimeUnit},
+        };
+        let (_directory, mut context, connection) = table_context().await;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new(
+                "captured",
+                DataType::Timestamp(TimeUnit::Second, None),
+                false,
+            ),
+        ]));
+        let columns: Vec<ArrayRef> = vec![
+            Arc::new(Int64Array::from(vec![1, 2])),
+            Arc::new(TimestampSecondArray::from(vec![1_500, 2_500])),
+        ];
+        let batch = RecordBatch::try_new(schema, columns).unwrap();
+        let database = cached_batch_table(&mut context, connection, "seconds", batch).await;
+        let current = pin_table_source(&mut context, &database).await.unwrap();
+        let seconds = BTreeMap::from([("captured".to_string(), TemporalUnit::Seconds)]);
+        assert_eq!(current.temporal_units, seconds);
+        let mut legacy = current.clone();
+        legacy.temporal_units.clear();
+        for (pinned, expected) in [(current, seconds), (legacy, BTreeMap::new())] {
+            let reopened = reopen_latest_source(&mut context, &pinned).await.unwrap();
+            let repinned = pin_table_source(&mut context, &reopened).await.unwrap();
+            assert_eq!(repinned.temporal_units, expected);
+        }
     }
 
     /// An auto-training request over the fixture columns; `dataset` adds stream and split.

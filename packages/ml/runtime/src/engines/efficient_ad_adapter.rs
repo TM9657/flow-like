@@ -97,23 +97,14 @@ impl TrainingEngine for EfficientAdEngine {
             )
         };
         let cancellation_reason = cancellation_monitor.finish();
-        if trained.is_err() && directory.path().join(MANIFEST).exists() {
-            let state: Value = serde_json::from_slice(&fs::read(directory.path().join(MANIFEST))?)?;
-            let step = state
-                .pointer("/report/steps")
-                .and_then(Value::as_u64)
-                .unwrap_or(0);
-            let bytes = burn_adapter::pack_named(
+        if trained.is_err() {
+            let _ = burn_adapter::publish_stop_checkpoint(
+                work,
+                control,
                 directory.path(),
                 MANIFEST,
-                true,
-                control.limits().maximum_checkpoint_bytes,
-            )?;
-            control.checkpoint_after_stop(
-                &bytes,
-                step,
-                serde_json::json!({"engine":"efficient_ad","steps":step}),
-            )?;
+                serde_json::json!({"engine":"efficient_ad"}),
+            );
         }
         if let Some(error) = error.or(cancellation_reason) {
             return Err(error);

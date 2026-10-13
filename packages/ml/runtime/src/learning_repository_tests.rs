@@ -466,23 +466,21 @@ fn fresh_audit_cycles_promote_compare_same_cohort_and_rollback() {
     );
 }
 
-#[test]
-fn absent_reviews_are_reported_instead_of_retriggering_and_future_reviews_stay_fresh() {
-    let (_directory, repo, project, budget) = setup();
-    review(&repo, &project, 0, 105);
-    review(&repo, &project, 50, 500);
-    review(&repo, &project, 51, 106);
-    let cycle = repo
-        .reserve_learning_cycle(&project.id, "first", budget, 110)
-        .unwrap();
-    let data = snapshot(&repo, &project, &[0, 1], &[2, 3], &[4, 5]);
-    let exp = experiment(&repo, &project, &cycle, &data, 111);
-    let attached = repo
-        .attach_learning_experiment(&cycle.id, &exp.id, 112)
-        .unwrap();
+/// Reviews of samples 0 and 51 are available when the first cycle reserves; review 50 matures
+/// at 500. The cycle's source lacks sample-51, so it settles with that review unmatched.
+fn settle_with_unmatched_review(
+    repo: &TrainingRepository,
+    project: &LearningProject,
+    budget: &ExperimentBudget,
+) {
+    review(repo, project, 0, 105);
+    review(repo, project, 50, 500);
+    review(repo, project, 51, 106);
+    let (cycle, data, exp) = attached_cycle(repo, project, budget, "first", &[4, 5], 110);
+    let attached = repo.get_learning_cycle(&cycle.id).unwrap();
     assert_eq!(attached.reviewed_sample_ids, vec!["sample-0"]);
     assert_eq!(attached.unmatched_review_ids, vec!["sample-51"]);
-    finish(&repo, &exp, &data, false, 113);
+    finish(repo, &exp, &data, false, 113);
     repo.settle_learning_cycle(&cycle.id, 121).unwrap();
     assert!(
         !repo
@@ -490,6 +488,51 @@ fn absent_reviews_are_reported_instead_of_retriggering_and_future_reviews_stay_f
             .unwrap()
             .eligible
     );
+}
+
+fn revise_review(
+    repo: &TrainingRepository,
+    project: &LearningProject,
+    sample_id: &str,
+    available_at_ms: i64,
+) {
+    repo.record_learning_review(
+        &project.id,
+        &LearningReview {
+            sample_id: sample_id.into(),
+            annotation: json!({"kind":"class","class_id":1}),
+            source: LabelSource::Reviewed,
+            reviewer: "operator".into(),
+            available_at_ms,
+            revision: 2,
+            outcome: None,
+        },
+    )
+    .unwrap();
+}
+fn training_revision(
+    repo: &TrainingRepository,
+    project: &LearningProject,
+    sample_id: &str,
+    at_ms: i64,
+) -> u64 {
+    repo.learning_training_reviews_at(&project.id, at_ms)
+        .unwrap()
+        .into_iter()
+        .find(|review| review.sample_id == sample_id)
+        .unwrap()
+        .revision
+}
+fn new_reviews(repo: &TrainingRepository, project: &LearningProject, at_ms: i64) -> usize {
+    repo.learning_next_actions(&project.id, at_ms)
+        .unwrap()
+        .new_reviews
+}
+
+#[test]
+fn absent_reviews_are_reported_instead_of_retriggering_and_future_reviews_stay_fresh() {
+    let (_directory, repo, project, budget) = setup();
+    settle_with_unmatched_review(&repo, &project, &budget);
     let after = repo.learning_next_actions(&project.id, 123).unwrap();
     assert_eq!(after.new_reviews, 0);
     assert!(
@@ -497,72 +540,56 @@ fn absent_reviews_are_reported_instead_of_retriggering_and_future_reviews_stay_f
             .blocking
             .contains(&"reviews_missing_from_source".into())
     );
-    assert_eq!(
-        repo.learning_next_actions(&project.id, 501)
-            .unwrap()
-            .new_reviews,
-        1
-    );
-    repo.record_learning_review(
-        &project.id,
-        &LearningReview {
-            sample_id: "sample-0".into(),
-            annotation: json!({"kind":"class","class_id":1}),
-            source: LabelSource::Reviewed,
-            reviewer: "operator".into(),
-            available_at_ms: 600,
-            revision: 2,
-            outcome: None,
-        },
-    )
-    .unwrap();
-    assert_eq!(
-        repo.learning_training_reviews_at(&project.id, 550)
-            .unwrap()
-            .iter()
-            .find(|r| r.sample_id == "sample-0")
-            .unwrap()
-            .revision,
-        1
-    );
-    assert_eq!(
-        repo.learning_next_actions(&project.id, 550)
-            .unwrap()
-            .new_reviews,
-        1
-    );
-    assert_eq!(
-        repo.learning_training_reviews_at(&project.id, 600)
-            .unwrap()
-            .iter()
-            .find(|r| r.sample_id == "sample-0")
-            .unwrap()
-            .revision,
-        2
-    );
-    assert_eq!(
-        repo.learning_next_actions(&project.id, 600)
-            .unwrap()
-            .new_reviews,
-        2
-    );
-    repo.record_learning_review(
-        &project.id,
-        &LearningReview {
-            sample_id: "sample-51".into(),
-            annotation: json!({"kind":"class","class_id":1}),
-            source: LabelSource::Reviewed,
-            reviewer: "operator".into(),
-            available_at_ms: 601,
-            revision: 2,
-            outcome: None,
-        },
-    )
-    .unwrap();
+    assert_eq!(new_reviews(&repo, &project, 501), 1);
+    revise_review(&repo, &project, "sample-0", 600);
+    assert_eq!(training_revision(&repo, &project, "sample-0", 550), 1);
+    assert_eq!(new_reviews(&repo, &project, 550), 1);
+    assert_eq!(training_revision(&repo, &project, "sample-0", 600), 2);
+    assert_eq!(new_reviews(&repo, &project, 600), 2);
+    revise_review(&repo, &project, "sample-51", 601);
     let revised = repo.learning_next_actions(&project.id, 601).unwrap();
     assert_eq!(revised.new_reviews, 3);
     assert!(
         !revised
+            .blocking
+            .contains(&"reviews_missing_from_source".into())
+    );
+}
+
+#[test]
+fn unmatched_reviews_match_again_once_a_later_source_contains_their_sample() {
+    let (_directory, repo, project, budget) = setup();
+    settle_with_unmatched_review(&repo, &project, &budget);
+    review(&repo, &project, 8, 124);
+    review(&repo, &project, 9, 124);
+    let second = repo
+        .reserve_learning_cycle(&project.id, "second", budget, 125)
+        .unwrap();
+    // sample-51 arrives in the source without a new review revision.
+    let data = snapshot(&repo, &project, &[0, 1, 51], &[2, 3], &[8, 9]);
+    let exp = experiment(&repo, &project, &second, &data, 126);
+    let attached = repo
+        .attach_learning_experiment(&second.id, &exp.id, 127)
+        .unwrap();
+    assert!(attached.reviewed_sample_ids.contains(&"sample-51".into()));
+    assert!(attached.unmatched_review_ids.is_empty());
+    assert_eq!(attached.reviewed_revisions.get("sample-51"), Some(&1));
+    finish(&repo, &exp, &data, true, 128);
+    repo.settle_learning_cycle(&second.id, 136).unwrap();
+    let matched: bool = repo
+        .connection()
+        .unwrap()
+        .query_row(
+            "SELECT matched FROM learning_consumed_reviews WHERE project_id=? AND sample_id='sample-51'",
+            [&project.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(matched);
+    let after = repo.learning_next_actions(&project.id, 137).unwrap();
+    assert!(after.blocking.contains(&"insufficient_new_reviews".into()));
+    assert!(
+        !after
             .blocking
             .contains(&"reviews_missing_from_source".into())
     );
@@ -587,6 +614,112 @@ fn stable_prepared_samples_allow_only_input_transform_changes() {
         repo.record_prepared_sample(&project.request.stream, &transformed)
             .is_err()
     );
+}
+
+/// A row as the catalog prepares it: the raw digest covers its mapped `temperature` feature.
+fn prepared(index: usize, temperature: i64) -> TrainingSample {
+    let mut row = sample(index);
+    row.content_digest = digest(format!("{index}:{temperature}").as_bytes());
+    row.payload["feature_row"] = json!({"part":index,"temperature":temperature});
+    row.payload["input"] = json!({"shape":[1],"values":[temperature]});
+    row
+}
+/// Records prepared rows and imports them as two training, two validation and two audit rows.
+fn prepared_snapshot(
+    repo: &TrainingRepository,
+    project: &LearningProject,
+    rows: &[TrainingSample],
+    inserted: [bool; 6],
+    as_of_ms: i64,
+) -> DatasetSnapshot {
+    assert_eq!(
+        repo.record_prepared_samples(&project.request.stream, rows)
+            .unwrap(),
+        inserted
+    );
+    repo.import_experiment_snapshot(DatasetSnapshot {
+        id: String::new(),
+        digest: String::new(),
+        stream: project.request.stream.clone(),
+        as_of_ms,
+        cutoff_sequence: 100,
+        policy: SplitPolicy::Group {
+            train_fraction: 0.5,
+            validation_fraction: 0.25,
+            seed: 42,
+        },
+        train: rows[..2].to_vec(),
+        validation: rows[2..4].to_vec(),
+        test: rows[4..].to_vec(),
+        excluded: vec![],
+    })
+    .unwrap()
+}
+
+/// The first cycle trains on prepared rows 0 to 5 and promotes its model.
+fn promote_prepared_cycle(
+    repo: &TrainingRepository,
+    project: &LearningProject,
+    budget: &ExperimentBudget,
+) {
+    let first = repo
+        .reserve_learning_cycle(&project.id, "first", budget.clone(), 101)
+        .unwrap();
+    let rows: Vec<_> = (0..6).map(|index| prepared(index, 20)).collect();
+    let data = prepared_snapshot(repo, project, &rows, [true; 6], 101);
+    let exp = experiment(repo, project, &first, &data, 102);
+    repo.attach_learning_experiment(&first.id, &exp.id, 103)
+        .unwrap();
+    finish(repo, &exp, &data, true, 104);
+    repo.settle_learning_cycle(&first.id, 112).unwrap();
+    repo.promote_learning_cycle(&first.id, 0, 113).unwrap();
+}
+
+#[test]
+fn edited_feature_values_are_recorded_and_the_next_cycle_starts() {
+    let (_directory, repo, project, budget) = setup();
+    promote_prepared_cycle(&repo, &project, &budget);
+    for index in [1, 8, 9] {
+        review(&repo, &project, index, 114);
+    }
+    let second = repo
+        .reserve_learning_cycle(&project.id, "second", budget, 115)
+        .unwrap();
+    // Trained row 0 had its temperature corrected; reviewed row 1 changed as well.
+    let mut reviewed = prepared(1, 22);
+    reviewed.annotation_revision = 2;
+    reviewed.label_available_at_ms = 114;
+    reviewed.payload["provenance"]["reviewed_at_ms"] = json!(114);
+    let rows = [
+        prepared(0, 21),
+        reviewed,
+        prepared(2, 20),
+        prepared(3, 20),
+        prepared(8, 20),
+        prepared(9, 20),
+    ];
+    let data = prepared_snapshot(
+        &repo,
+        &project,
+        &rows,
+        [false, true, false, false, true, true],
+        115,
+    );
+    let exp = experiment(&repo, &project, &second, &data, 116);
+    let attached = repo
+        .attach_learning_experiment(&second.id, &exp.id, 117)
+        .unwrap();
+    assert_eq!(attached.state, LearningCycleState::Attached);
+    let connection = repo.connection().unwrap();
+    for row in &rows[..2] {
+        assert_eq!(&accepted_truth(&connection, &project, &row.id).unwrap(), row);
+    }
+    let mut relabelled = rows[0].clone();
+    relabelled.payload["label"] = json!("bad");
+    assert!(matches!(
+        repo.record_prepared_samples(&project.request.stream, &[relabelled]),
+        Err(Error::Conflict(_))
+    ));
 }
 
 #[test]
@@ -1402,6 +1535,54 @@ fn aborted_reservations_back_off_without_spending_cycles() {
 }
 
 #[test]
+fn reopening_counts_aborts_that_projects_saved_before_abort_accounting_missed() {
+    let (directory, repo, project, budget) = setup();
+    let mut at = 101;
+    for attempt in 0..5 {
+        let cycle = repo
+            .reserve_learning_cycle(&project.id, &format!("cycle:{attempt}"), budget.clone(), at)
+            .unwrap();
+        repo.abort_learning_cycle(&cycle.id, "source unavailable", at)
+            .unwrap();
+        at += 60_000 << attempt;
+    }
+    // Such projects kept every aborted reservation in `cycles_started` and had no backoff.
+    repo.connection()
+        .unwrap()
+        .execute(
+            "UPDATE learning_projects SET body=json_remove(body,'$.usage.cycles_aborted','$.consecutive_aborts','$.last_abort_at_ms') WHERE id=?",
+            [&project.id],
+        )
+        .unwrap();
+    let legacy = repo.get_learning_project(&project.id).unwrap();
+    assert_eq!(
+        (legacy.usage.cycles_started, legacy.usage.cycles_aborted),
+        (5, 0)
+    );
+    assert!(
+        repo.learning_next_actions(&project.id, at)
+            .unwrap()
+            .blocking
+            .contains(&"aggregate_budget_exhausted".into())
+    );
+    let reopened = TrainingRepository::open(directory.path().join("learning.sqlite")).unwrap();
+    assert_eq!(
+        reopened
+            .get_learning_project(&project.id)
+            .unwrap()
+            .usage
+            .cycles_aborted,
+        5
+    );
+    assert!(
+        reopened
+            .learning_next_actions(&project.id, at)
+            .unwrap()
+            .ready_to_train
+    );
+}
+
+#[test]
 fn review_outcomes_are_validated_when_recorded() {
     let (_directory, repo, project, _) = setup();
     repo.record_learning_observation(&project.id, &observation(0, "good", 0.9, 0.))
@@ -1433,6 +1614,51 @@ fn review_outcomes_are_validated_when_recorded() {
         repo.record_learning_review(
             &project.id,
             &measured(json!({"available_at_ms":140,"target_start_ms":100,"target_end_ms":120})),
+        )
+        .unwrap()
+    );
+}
+
+#[test]
+fn forecast_reviews_need_an_outcome_after_the_feature_window_within_the_horizon() {
+    let (_directory, repo, initial, _) = setup();
+    let mut request = initial.request.clone();
+    request.stream.stream_id = "forecast".into();
+    request.deployment_id = "forecast".into();
+    request.spec = json!({"task":"sequence_forecast","labels":[],"input_shape":[1],"prediction_horizon_ms":500});
+    let project = repo.create_learning_project(request, 100).unwrap();
+    let mut row = observation(0, "good", 0.9, 0.);
+    row.sample = json!({"window_end_ms":1_000});
+    repo.record_learning_observation(&project.id, &row)
+        .unwrap();
+    let measured = |outcome: Option<Value>| LearningReview {
+        sample_id: "sample-0".into(),
+        annotation: json!({"kind":"scalar","value":1.5}),
+        source: LabelSource::ObservedOutcome,
+        reviewer: "gauge".into(),
+        available_at_ms: 3_000,
+        revision: 1,
+        outcome,
+    };
+    for refused in [
+        None,
+        Some(json!({"available_at_ms":1_500,"target_start_ms":900,"target_end_ms":1_200})),
+        Some(json!({"available_at_ms":2_000,"target_start_ms":1_100,"target_end_ms":1_600})),
+    ] {
+        let error = repo
+            .record_learning_review(&project.id, &measured(refused))
+            .unwrap_err();
+        assert!(
+            matches!(&error, Error::Invalid(message) if message.contains("sample-0")),
+            "{error}"
+        );
+    }
+    assert!(
+        repo.record_learning_review(
+            &project.id,
+            &measured(Some(
+                json!({"available_at_ms":1_500,"target_start_ms":1_100,"target_end_ms":1_500})
+            )),
         )
         .unwrap()
     );

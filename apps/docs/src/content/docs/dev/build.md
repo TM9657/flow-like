@@ -135,6 +135,14 @@ container builds prepare these same assets before building the Next.js export.
 WASM payloads are compressed and split into files below the static hosting size
 limit; the host verifies their hashes before loading them.
 
+Audio, Slides and Video use browser/OS codecs for compressed media. Audio imports
+decode through Web Audio into PCM. Slides use browser media elements for embedded
+audio and video. Video uses browser media decoding and WebCodecs encoders for MP4
+export. Codec availability depends on the browser or desktop system webview. An
+unsupported format produces an error and leaves the document open; these editors
+have no bundled software codec fallback. PCM handling and lossless file writers
+remain in Rust.
+
 Each integration keeps its source pin and adapter separate from the upstream
 repository. WordCraft lives in `packages/wordcraft`; the other adapters live in
 `packages/craft-viewers/<runtime>`. To upgrade one, update its `upstream.json`
@@ -164,11 +172,19 @@ those points have changed, so upgrades require review. `CRAFT_SOURCE_GRIDCRAFT`
 at the pinned revision. Builds rewrite the adapter-owned integration files in
 that checkout. Leave it unset for an isolated checkout under `target`.
 
+The media adapters also check the selected WASM dependency graph with
+`packages/craft-viewers/codec-policy.mjs`. Keep the software codec exclusion when
+upgrading. If an adapter needs Cargo to reconcile removed dependency edges, its
+`reconcileLock` option permits only package versions and checksums already in the
+upstream pin's lockfile.
+
 Each runtime includes a license page at `/craft/<runtime>/licenses/index.html`
 or `/wordcraft/licenses/index.html`, available from its **About** button. Keep
 the complete `licenses` directory with the runtime in both web and desktop
 distributions. It contains dependency and asset notices, license texts, and
 exact MPL source archives as `.crate` files (gzip-compressed tar archives).
+Desktop source links use the native Save dialog to copy these bundled archives
+to a user-selected folder. They work without fetching source from an upstream site.
 MPL-covered files retain those terms; other files keep their stated licenses.
 Flow-Like's license does not restrict rights granted by third-party licenses.
 

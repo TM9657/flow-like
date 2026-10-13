@@ -233,6 +233,33 @@ fn anomaly_search_trains_only_normal_samples_but_scores_both_validation_classes(
         .unwrap();
     assert_eq!(evaluation.audited_samples, 16);
     assert!(evaluation.metrics.contains_key("auroc"));
+    assert_goal_metrics_reach_the_final_audit(&repo, &result);
+}
+
+/// Every goal metric validation measured for the winner is also a metric of its final audit.
+fn assert_goal_metrics_reach_the_final_audit(repo: &TrainingRepository, result: &Experiment) {
+    let spec: InspectionSpec = serde_json::from_value(result.request.spec.clone()).unwrap();
+    let winner = repo
+        .get_experiment_trial(result.selected_trial_id.as_ref().unwrap())
+        .unwrap();
+    let evaluation = repo
+        .get_evaluation(result.final_evaluation_id.as_ref().unwrap())
+        .unwrap();
+    let mut goals = result.request.goals.clone();
+    for name in winner.validation_metrics.keys() {
+        goals.bounds = vec![MetricBound {
+            name: name.clone(),
+            minimum: Some(0.0),
+            maximum: None,
+        }];
+        if validate_goals(&spec, &goals).is_ok() {
+            assert!(
+                evaluation.metrics.contains_key(name),
+                "goal metric {name} is missing from the final audit: {:?}",
+                evaluation.metrics.keys().collect::<Vec<_>>()
+            );
+        }
+    }
 }
 
 fn worker(repo: &TrainingRepository, limits: &WorkerLimits) -> TrainingWorker {
@@ -273,6 +300,7 @@ fn search_uses_validation_then_freezes_one_winner_for_real_final_evidence() {
     let completed = controller.finalize(&experiment.id).unwrap();
     assert_eq!(completed.status, ExperimentStatus::Completed);
     assert!(!completed.target_met);
+    assert_goal_metrics_reach_the_final_audit(&repo, &completed);
     let evaluation = repo
         .get_evaluation(completed.final_evaluation_id.as_ref().unwrap())
         .unwrap();
@@ -733,6 +761,7 @@ fn single_step_forecasts_search_boosting_but_wider_horizons_do_not() {
         .get_evaluation(result.final_evaluation_id.as_ref().unwrap())
         .unwrap();
     assert_eq!(evaluation.audited_samples, 2);
+    assert_goal_metrics_reach_the_final_audit(&repo, &result);
 }
 
 #[test]
@@ -1229,34 +1258,37 @@ fn a_search_bound_by_wall_time_keeps_its_final_audit() {
 }
 
 #[test]
-fn a_goal_bound_validation_never_measures_fails_before_any_training() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
-    let (mut request, _) = setup(&repo);
-    request.goals.bounds.push(MetricBound {
-        name: "teacher_agreement".into(),
-        minimum: Some(0.9),
-        maximum: None,
-    });
-    let limits = request.budget.worker_limits.clone();
-    let experiment = repo.create_experiment(request, now_ms()).unwrap();
-    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
-        .run(&experiment.id)
-        .unwrap();
-    assert_eq!(result.status, ExperimentStatus::Failed);
-    assert!(
-        result
-            .stop_reason
-            .as_deref()
-            .is_some_and(|reason| reason.contains("teacher_agreement")),
-        "{:?}",
-        result.stop_reason
-    );
-    assert!(
-        repo.list_experiment_trials(&experiment.id)
-            .unwrap()
-            .is_empty()
-    );
+fn a_goal_bound_validation_or_the_final_audit_never_measures_fails_before_any_training() {
+    // Validation never measures the first; the final audit never reports the second.
+    for name in ["teacher_agreement", "audited_samples"] {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+        let (mut request, _) = setup(&repo);
+        request.goals.bounds.push(MetricBound {
+            name: name.into(),
+            minimum: Some(0.9),
+            maximum: None,
+        });
+        let limits = request.budget.worker_limits.clone();
+        let experiment = repo.create_experiment(request, now_ms()).unwrap();
+        let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+            .run(&experiment.id)
+            .unwrap();
+        assert_eq!(result.status, ExperimentStatus::Failed, "{name}");
+        assert!(
+            result
+                .stop_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains(name)),
+            "{:?}",
+            result.stop_reason
+        );
+        assert!(
+            repo.list_experiment_trials(&experiment.id)
+                .unwrap()
+                .is_empty()
+        );
+    }
 }
 
 #[test]
@@ -1370,6 +1402,51 @@ fn failed_test_predictions_count_as_failures_and_settle_the_experiment() {
     }
 }
 
+/// Validates normally, fails the final audit's first predictor load as a full disk would, then
+/// loads normally again.
+struct StorageFailureAtAudit {
+    loads: AtomicUsize,
+}
+impl SearchPredictorFactory for StorageFailureAtAudit {
+    fn load(
+        &self,
+        repository: &TrainingRepository,
+        artifact_id: &str,
+        compute: &ComputeConfig,
+    ) -> Result<Box<dyn SearchPredictor>> {
+        if self.loads.fetch_add(1, Ordering::SeqCst) == 1 {
+            return Err(Error::Io(std::io::Error::other("no space left on device")));
+        }
+        NativeSearchPredictorFactory.load(repository, artifact_id, compute)
+    }
+}
+
+#[test]
+fn a_storage_failure_in_the_final_audit_leaves_it_to_a_later_finalize() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (request, _) = setup(&repo);
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let controller = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .with_predictor_factory(Arc::new(StorageFailureAtAudit {
+            loads: AtomicUsize::new(0),
+        }));
+    let error = controller.run(&experiment.id).unwrap_err();
+    assert!(matches!(error, Error::Io(_)), "{error}");
+    let waiting = repo.get_experiment(&experiment.id).unwrap();
+    assert_eq!(waiting.status, ExperimentStatus::Evaluating);
+    assert!(waiting.stop_reason.is_none(), "{:?}", waiting.stop_reason);
+    let result = controller.finalize(&experiment.id).unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    assert!(result.final_evaluation_id.is_some());
+}
+
 #[test]
 fn the_final_audit_never_reuses_predictions_it_did_not_record() {
     let dir = tempfile::tempdir().unwrap();
@@ -1412,29 +1489,58 @@ fn the_final_audit_never_reuses_predictions_it_did_not_record() {
     );
 }
 
-struct CancellingPredictor {
+/// What the fifth prediction of the final audit does to the experiment.
+#[derive(Clone)]
+enum Interruption {
+    Cancel { experiment_id: String },
+    AdvanceClock { offset: Arc<AtomicI64>, by_ms: i64 },
+}
+impl Interruption {
+    fn apply(&self, repository: &TrainingRepository) -> Result<()> {
+        match self {
+            Self::Cancel { experiment_id } => repository
+                .cancel_experiment(experiment_id, now_ms())
+                .map(drop),
+            Self::AdvanceClock { offset, by_ms } => {
+                offset.fetch_add(*by_ms, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+    }
+}
+
+struct InterruptingPredictor {
     inner: Box<dyn SearchPredictor>,
     repository: TrainingRepository,
-    experiment_id: String,
     remaining: usize,
+    interruption: Option<Interruption>,
 }
-impl SearchPredictor for CancellingPredictor {
+impl SearchPredictor for InterruptingPredictor {
     fn predict(&mut self, input: &TensorData) -> Result<serde_json::Value> {
-        if self.remaining == 0 {
-            self.repository
-                .cancel_experiment(&self.experiment_id, now_ms())?;
+        if self.remaining == 0
+            && let Some(interruption) = self.interruption.take()
+        {
+            interruption.apply(&self.repository)?;
         }
         self.remaining = self.remaining.saturating_sub(1);
         self.inner.predict(input)
     }
 }
 
-/// Cancels the experiment after a few final-audit predictions on the second load.
-struct CancelDuringAudit {
+/// Interrupts the final audit (the second load) once, during its fifth prediction.
+struct InterruptedAudit {
     loads: AtomicUsize,
-    experiment_id: String,
+    interruption: Interruption,
 }
-impl SearchPredictorFactory for CancelDuringAudit {
+impl InterruptedAudit {
+    fn new(interruption: Interruption) -> Self {
+        Self {
+            loads: AtomicUsize::new(0),
+            interruption,
+        }
+    }
+}
+impl SearchPredictorFactory for InterruptedAudit {
     fn load(
         &self,
         repository: &TrainingRepository,
@@ -1445,13 +1551,61 @@ impl SearchPredictorFactory for CancelDuringAudit {
         if self.loads.fetch_add(1, Ordering::SeqCst) != 1 {
             return Ok(inner);
         }
-        Ok(Box::new(CancellingPredictor {
+        Ok(Box::new(InterruptingPredictor {
             inner,
             repository: repository.clone(),
-            experiment_id: self.experiment_id.clone(),
             remaining: 4,
+            interruption: Some(self.interruption.clone()),
         }))
     }
+}
+
+#[test]
+fn an_audit_cut_off_by_the_wall_budget_keeps_its_predictions_without_final_evidence() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (request, _) = setup(&repo);
+    let limits = request.budget.worker_limits.clone();
+    // Past the wall budget and the audit allowance that follows the frozen winner.
+    let jump_ms = 2 * request.budget.maximum_wall_time_ms as i64;
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let offset = Arc::new(AtomicI64::new(0));
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .with_clock(shifted_clock(&offset))
+        .with_predictor_factory(Arc::new(InterruptedAudit::new(
+            Interruption::AdvanceClock {
+                offset: offset.clone(),
+                by_ms: jump_ms,
+            },
+        )))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::BudgetExhausted,
+        "{:?}",
+        result.stop_reason
+    );
+    assert_eq!(
+        result.stop_reason.as_deref(),
+        Some("wall_time_budget_exhausted")
+    );
+    assert!(result.final_evaluation_id.is_none());
+    assert!(
+        result
+            .unmet_constraints
+            .iter()
+            .any(|constraint| constraint == "final independent evaluation is unavailable"),
+        "{:?}",
+        result.unmet_constraints
+    );
+    let winner = repo
+        .get_experiment_trial(result.selected_trial_id.as_ref().unwrap())
+        .unwrap();
+    let recorded = repo
+        .predictions(winner.artifact_id.as_ref().unwrap())
+        .unwrap();
+    assert_eq!(recorded.len(), 5, "the audit stops at the next holdout row");
 }
 
 #[test]
@@ -1462,10 +1616,9 @@ fn a_resumed_final_audit_reuses_only_its_own_recorded_predictions() {
     let limits = request.budget.worker_limits.clone();
     let experiment = repo.create_experiment(request, now_ms()).unwrap();
     let controller = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
-        .with_predictor_factory(Arc::new(CancelDuringAudit {
-            loads: AtomicUsize::new(0),
+        .with_predictor_factory(Arc::new(InterruptedAudit::new(Interruption::Cancel {
             experiment_id: experiment.id.clone(),
-        }));
+        })));
     controller.run_next(&experiment.id).unwrap();
     assert!(matches!(
         controller.finalize(&experiment.id),
@@ -1606,11 +1759,12 @@ fn generated_vision_batches_are_the_largest_halving_that_fits_the_memory_limit()
     );
 }
 
-#[test]
-fn an_oversized_candidate_trains_with_the_largest_batch_that_fits_the_worker() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
-    let (mut request, spec) = setup(&repo);
+/// The fixture search with one generated Burn MLP at batch 8, its config, and the serialized
+/// size of the worker view, which every experiment over the fixture snapshot shares.
+fn generated_mlp_search(
+    repo: &TrainingRepository,
+) -> (ExperimentRequest, burn::TrainingConfig, u64) {
+    let (mut request, spec) = setup(repo);
     let search = AutoSearchConfig {
         min_epochs: 1,
         max_epochs: 1,
@@ -1626,7 +1780,6 @@ fn an_oversized_candidate_trains_with_the_largest_batch_that_fits_the_worker() {
         serde_json::from_value(candidate.recipe["config"].clone()).unwrap();
     assert_eq!(config.batch_size, 8);
     request.candidates = vec![candidate];
-    // Every experiment over this snapshot gets a worker view of the same serialized size.
     let probe = repo.create_experiment(request.clone(), now_ms()).unwrap();
     let view = repo
         .experiment_result(&probe.id)
@@ -1637,6 +1790,85 @@ fn an_oversized_candidate_trains_with_the_largest_batch_that_fits_the_worker() {
     let view_bytes = serde_json::to_vec(&repo.get_snapshot(&view).unwrap())
         .unwrap()
         .len() as u64;
+    (request, config, view_bytes)
+}
+
+#[test]
+fn a_full_candidate_list_names_the_slot_a_resized_copy_needs() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, config, view_bytes) = generated_mlp_search(&repo);
+    request.budget.maximum_trials = 1;
+    request.budget.worker_limits.memory_budget_bytes =
+        config.recipe.estimated_training_bytes(&[1], 1).unwrap() + 12 * view_bytes;
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::BudgetExhausted,
+        "{:?}",
+        result.stop_reason
+    );
+    let reason = result.stop_reason.unwrap_or_default();
+    assert!(
+        reason.contains("batch 1") && reason.contains("maximum_trials"),
+        "{reason}"
+    );
+    assert!(
+        repo.list_experiment_trials(&experiment.id)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_worker_view_beyond_a_twelfth_of_the_budget_reports_what_training_needs() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, config, view_bytes) = generated_mlp_search(&repo);
+    let budget = 12 * view_bytes - 1;
+    request.budget.worker_limits.memory_budget_bytes = budget;
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::BudgetExhausted,
+        "{:?}",
+        result.stop_reason
+    );
+    let needed = config.recipe.estimated_training_bytes(&[1], 1).unwrap() + 12 * view_bytes;
+    let reason = result.stop_reason.unwrap_or_default();
+    assert!(
+        reason.contains(&format!(
+            "budget of {budget} bytes; the smallest estimate is {needed} bytes"
+        )) && reason.contains(&format!("{view_bytes} byte training view")),
+        "{reason}"
+    );
+    let skipped = repo
+        .experiment_events(&experiment.id)
+        .unwrap()
+        .into_iter()
+        .find(|event| event["kind"] == "candidate_skipped")
+        .unwrap();
+    assert_eq!(skipped["body"]["view_bytes"], view_bytes);
+    assert!(
+        repo.list_experiment_trials(&experiment.id)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn an_oversized_candidate_trains_with_the_largest_batch_that_fits_the_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, config, view_bytes) = generated_mlp_search(&repo);
     request.budget.worker_limits.memory_budget_bytes =
         config.recipe.estimated_training_bytes(&[1], 1).unwrap() + 12 * view_bytes;
     let limits = request.budget.worker_limits.clone();

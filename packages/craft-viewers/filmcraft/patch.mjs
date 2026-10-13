@@ -1,12 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import prepareBrowserCodecs from "./codec-patch.mjs";
 
 export default function prepare({ directory, original, write, replaceOnce }) {
+	prepareBrowserCodecs({ directory, original, write, replaceOnce });
 	let lib = original("apps/filmcraft-web/src/lib.rs");
 	lib = replaceOnce(
 		lib,
 		"pub mod api;",
-		"mod host;\npub mod api;",
+		"mod host;\nmod browser_export;\npub mod api;",
 		"host module",
 	);
 	lib = replaceOnce(
@@ -49,6 +51,43 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 	);
 	menus = menus.replaceAll('"About FilmCraft"', '"About Flows Video"');
 	write("crates/ui-egui/src/menus.rs", menus);
+	let exportPanel = original("crates/ui-egui/src/panels/export_mode.rs");
+	exportPanel = replaceOnce(
+		exportPanel,
+		"pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {",
+		`pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
+    if app.session.host_command.is_some() {
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+        child.vertical_centered(|ui| {
+            ui.add_space(32.0);
+            ui.heading("Save video");
+            ui.label("Save the edited timeline as MP4 using your browser's H.264 and AAC encoders.");
+            if ui.button("Save MP4").clicked() {
+                if let Err(error) = app.session.execute("file.save", json!({})) {
+                    app.ui.status = error.to_string();
+                }
+            }
+        });
+        return;
+    }`,
+		"host export format controls",
+	);
+	exportPanel = replaceOnce(
+		exportPanel,
+		"pub fn quick_export(app: &mut FilmcraftApp, ctx: &egui::Context, anchor: egui::Pos2) {",
+		`pub fn quick_export(app: &mut FilmcraftApp, ctx: &egui::Context, anchor: egui::Pos2) {
+    if app.session.host_command.is_some() {
+        if app.ui.export.quick_open {
+            app.ui.export.quick_open = false;
+            if let Err(error) = app.session.execute("file.save", json!({})) {
+                app.ui.status = error.to_string();
+            }
+        }
+        return;
+    }`,
+		"host quick export controls",
+	);
+	write("crates/ui-egui/src/panels/export_mode.rs", exportPanel);
 	write(
 		"crates/ui-egui/src/brand.rs",
 		`pub fn paint_wordmark(ui: &egui::Ui, left_center: egui::Pos2, height: f32, _dark: bool) -> Option<egui::Rect> {
@@ -77,6 +116,7 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 	);
 	write("crates/ui-egui/src/header.rs", header);
 	return {
+		reconcileLock: true,
 		assets: [
 			{
 				from: "apps/filmcraft-web/web/audio-worklet.js",

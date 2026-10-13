@@ -37,6 +37,11 @@ pub struct AutoTrainRequest {
     pub feature_sources: Vec<super::feature_engineering::FeatureSourceInput>,
     #[serde(default)]
     pub learning_cycle_id: Option<String>,
+    /// PatchCore and PaDiM only: the extractor that computed the embedding column, as Extract
+    /// Image Features, Extract Pretrained Image Features or Feature Map to Patches output it. The
+    /// model records it, so Predict Auto Model refuses embeddings from another extractor.
+    #[serde(default)]
+    pub feature_extractor: Option<super::lifecycle::FeatureExtractorRef>,
 }
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -56,8 +61,8 @@ pub struct PredictAutoModelRequest {
     pub feature_state: Option<flow_like_ml_native::feature_engineering::FeatureStreamState>,
     /// The extractor of PatchCore or PaDiM embeddings, as Extract Image Features, Extract
     /// Pretrained Image Features or Feature Map to Patches output it. Rows may instead carry it
-    /// as `feature_extractor` inside their tensor value. Prediction fails when it differs from
-    /// the extractor the model was fitted on.
+    /// as `feature_extractor` inside their tensor value. A model that recorded the extractor it
+    /// was fitted on refuses embeddings that name no extractor or another one.
     #[serde(default)]
     pub feature_extractor: Option<super::lifecycle::FeatureExtractorRef>,
 }
@@ -242,13 +247,15 @@ macro_rules! task_node {
         #[flow_like_types::async_trait]
         impl NodeLogic for $node {
             fn get_node(&self) -> Node {
-                super::operation_node::<AutoTrainRequest, AutoTrainingResult>(
+                let mut node = super::operation_node::<AutoTrainRequest, AutoTrainingResult>(
                     $id,
                     $name,
                     "Pin a dataset and start a durable, bounded model search",
                     $function,
                     "AI/ML/Auto Training",
-                )
+                );
+                node.set_version(1);
+                node
             }
             async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
                 #[cfg(feature = "training")]
@@ -495,6 +502,7 @@ pub async fn start_auto_training_scoped(
 ) -> Result<AutoTrainingResult> {
     use flow_like_ml_runtime::auto_training::{default_goals, validate_goals, validate_search};
     use flow_like_types::json::json;
+    validate_request_rules(&request)?;
     let (repo, project) = super::lifecycle::repository(context)?;
     let original_spec = request.dataset.spec.clone();
     let scoped_stream = stream
@@ -555,14 +563,16 @@ pub async fn start_auto_training_scoped(
     .key(project)?;
     let stream = scoped_stream.unwrap_or(expected_stream);
     let split = table_split_policy(&request.dataset.split)?;
-    let (prepared, snapshot, extractor) = {
+    let PreparedSplit {
+        prepared,
+        snapshot,
+        extractor,
+        dataset_bytes,
+    } = {
         let stream = stream.clone();
-        tokio::task::spawn_blocking(move || -> Result<_> {
-            let snapshot = snapshot_from_table(&prepared, stream, split)?;
-            let extractor = requested_extractor(&prepared.preprocessing, &prepared.raw_rows, None)?;
-            Ok((prepared, snapshot, extractor))
-        })
-        .await??
+        let named = request.feature_extractor.clone();
+        tokio::task::spawn_blocking(move || prepare_split(prepared, stream, split, named.as_ref()))
+            .await??
     };
     request.search.maximum_candidates = request
         .search
@@ -580,7 +590,8 @@ pub async fn start_auto_training_scoped(
         };
     }
     validate_search(&prepared.spec, &request.search, &request.compute)?;
-    let mut candidates = start_candidates(&repo, &stream.project_id, &prepared.spec, &request)?;
+    let (mut candidates, unchecked) =
+        start_candidates(&repo, &stream.project_id, &prepared.spec, &request)?;
     record_feature_extractor(&mut candidates, extractor.as_ref())?;
     let mut goals = request
         .goals
@@ -592,11 +603,9 @@ pub async fn start_auto_training_scoped(
     }
     validate_goals(&prepared.spec, &goals)?;
     validate_table_policy(&prepared, &request.tables)?;
-    // The split and its training view are both charged to the dataset budget.
-    let snapshot_bytes = super::auto_training_tables::serialized_json_size(&snapshot)? as u64;
-    if snapshot_bytes.saturating_mul(2) > request.budget.maximum_dataset_bytes {
+    if dataset_bytes > request.budget.maximum_dataset_bytes {
         return Err(anyhow!(
-            "The prepared split serializes to {snapshot_bytes} bytes and is stored twice, which exceeds budget.maximum_dataset_bytes ({}); raise the dataset budget or select fewer rows or columns",
+            "The prepared split and its training view serialize to {dataset_bytes} bytes, which exceeds budget.maximum_dataset_bytes ({}); raise the dataset budget or select fewer rows or columns",
             request.budget.maximum_dataset_bytes
         ));
     }
@@ -634,6 +643,9 @@ pub async fn start_auto_training_scoped(
             let _ = repo.cancel_experiment(&id, flow_like_ml_runtime::now_ms());
         }
     });
+    for (index, note) in unchecked {
+        note_unchecked_preprocessing(&repo, &experiment.id, index, Some(note));
+    }
     let activated = activate_experiment(
         context,
         &repo,
@@ -662,14 +674,14 @@ pub async fn start_auto_training_scoped(
 }
 
 /// Explicit, pretrained, classical and generated candidates, validated before anything is
-/// written to the ledger.
+/// written to the ledger, and by index the fine-tunes whose input normalization went unchecked.
 #[cfg(feature = "training")]
 fn start_candidates(
     repo: &flow_like_ml_runtime::TrainingRepository,
     project_id: &str,
     spec: &flow_like_ml_core::InspectionSpec,
     request: &AutoTrainRequest,
-) -> Result<Vec<flow_like_ml_runtime::TrainingRequest>> {
+) -> Result<(Vec<flow_like_ml_runtime::TrainingRequest>, Vec<(usize, Value)>)> {
     let mut candidates = request.initial_candidates.clone();
     if let Some(pretrained) = &request.pretrained {
         candidates.insert(
@@ -684,33 +696,13 @@ fn start_candidates(
             )?,
         );
     }
-    for candidate in &candidates {
-        if candidate.engine == "burn" {
-            let config: flow_like_ml_burn::TrainingConfig = flow_like_types::json::from_value(
-                candidate
-                    .recipe
-                    .get("config")
-                    .cloned()
-                    .ok_or_else(|| anyhow!("Burn candidate needs a training config"))?,
-            )?;
-            // A fine-tune keeps its source architecture; explicit recipes rely on validate().
-            if candidate
-                .recipe
-                .get("pretrained")
-                .is_some_and(|pretrained| !pretrained.is_null())
-            {
-                config.validate_fine_tune_planning_budget()?;
-            }
-            flow_like_ml_burn::validate_inspection_config(spec, &config)?;
-            validate_candidate_pretrained(
-                repo,
-                project_id,
-                candidate,
-                &spec.labels,
-                request.budget.worker_limits.memory_budget_bytes,
-            )?;
-        }
-    }
+    let mut unchecked = validate_burn_candidates(
+        repo,
+        project_id,
+        spec,
+        &candidates,
+        request.budget.worker_limits.memory_budget_bytes,
+    )?;
     if spec.task == TaskKind::SensorClassification && spec.input_shape.len() == 1 {
         candidates.extend(legacy_candidates(
             spec,
@@ -730,7 +722,400 @@ fn start_candidates(
         Err(_) => {}
     }
     candidates.truncate(request.search.maximum_candidates);
-    Ok(candidates)
+    unchecked.retain(|(index, _)| *index < candidates.len());
+    Ok((candidates, unchecked))
+}
+
+/// Burn candidates must fit the task and, when fine-tuned, their source. Returns by index the
+/// fine-tunes whose input normalization could not be compared with their source's.
+#[cfg(feature = "training")]
+fn validate_burn_candidates(
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    project_id: &str,
+    spec: &flow_like_ml_core::InspectionSpec,
+    candidates: &[flow_like_ml_runtime::TrainingRequest],
+    worker_memory_bytes: u64,
+) -> Result<Vec<(usize, Value)>> {
+    let mut unchecked = Vec::new();
+    let burn = candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, candidate)| candidate.engine == "burn");
+    for (index, candidate) in burn {
+        flow_like_ml_burn::validate_inspection_config(spec, &burn_candidate_config(candidate)?)?;
+        if let Some(note) = validate_candidate_pretrained(
+            repo,
+            project_id,
+            candidate,
+            &spec.labels,
+            worker_memory_bytes,
+        )? {
+            unchecked.push((index, note));
+        }
+    }
+    Ok(unchecked)
+}
+
+#[cfg(feature = "training")]
+fn burn_candidate_config(
+    candidate: &flow_like_ml_runtime::TrainingRequest,
+) -> Result<flow_like_ml_burn::TrainingConfig> {
+    let config: flow_like_ml_burn::TrainingConfig = flow_like_types::json::from_value(
+        candidate
+            .recipe
+            .get("config")
+            .cloned()
+            .ok_or_else(|| anyhow!("Burn candidate needs a training config"))?,
+    )?;
+    // A fine-tune keeps its source architecture; explicit recipes rely on validate().
+    if candidate
+        .recipe
+        .get("pretrained")
+        .is_some_and(|pretrained| !pretrained.is_null())
+    {
+        config.validate_fine_tune_planning_budget()?;
+    }
+    Ok(config)
+}
+
+/// Records a fine-tune whose input normalization could not be compared with its source's.
+#[cfg(feature = "training")]
+fn note_unchecked_preprocessing(
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    id: &str,
+    candidate_index: usize,
+    note: Option<Value>,
+) {
+    let Some(mut note) = note else {
+        return;
+    };
+    note["candidate_index"] = flow_like_types::json::json!(candidate_index);
+    note_experiment(repo, id, "pretrained_preprocessing_unchecked", note);
+}
+
+/// Request rules the ledger enforces only after every sample is recorded, checked before any
+/// table is read.
+#[cfg(feature = "training")]
+fn validate_request_rules(request: &AutoTrainRequest) -> Result<()> {
+    validate_budget(&request.budget)?;
+    if let Some(goals) = &request.goals {
+        validate_goal_rules(goals)?;
+    }
+    validate_candidate_requests(&request.initial_candidates)
+}
+
+/// The split as the ledger will record it, checked against the rules the ledger applies only
+/// after recording, with the extractor its embeddings name and the bytes it is charged.
+#[cfg(feature = "training")]
+struct PreparedSplit {
+    prepared: super::auto_training_tables::PreparedTableDataset,
+    snapshot: flow_like_ml_runtime::DatasetSnapshot,
+    extractor: Option<flow_like_ml_runtime::engines::FeatureExtractor>,
+    dataset_bytes: u64,
+}
+
+#[cfg(feature = "training")]
+fn prepare_split(
+    prepared: super::auto_training_tables::PreparedTableDataset,
+    stream: flow_like_ml_runtime::StreamKey,
+    split: flow_like_ml_runtime::SplitPolicy,
+    named: Option<&super::lifecycle::FeatureExtractorRef>,
+) -> Result<PreparedSplit> {
+    let snapshot = snapshot_from_table(&prepared, stream, split)?;
+    ensure_labels_available(&snapshot)?;
+    ensure_training_ready(&prepared)?;
+    let extractor = training_extractor(&prepared.preprocessing, &prepared.raw_rows, named)?;
+    let dataset_bytes = dataset_charge(&snapshot, &prepared.spec.task)?;
+    Ok(PreparedSplit {
+        prepared,
+        snapshot,
+        extractor,
+        dataset_bytes,
+    })
+}
+
+/// The ledger's experiment budget rules.
+#[cfg(feature = "training")]
+fn validate_budget(budget: &ExperimentBudget) -> Result<()> {
+    let limits = &budget.worker_limits;
+    let rules = [
+        (
+            (1..=10_000).contains(&budget.maximum_trials),
+            "maximum_trials must be 1 to 10,000",
+        ),
+        (
+            (1..=budget.maximum_trials).contains(&budget.maximum_parallel_trials),
+            "maximum_parallel_trials must be 1 to maximum_trials",
+        ),
+        (
+            budget.maximum_wall_time_ms > 0
+                && budget.maximum_training_time_ms > 0
+                && budget.maximum_dataset_bytes > 0
+                && budget.maximum_artifact_bytes > 0,
+            "wall time, training time, dataset and artifact budgets must be positive",
+        ),
+        (
+            limits.maximum_duration_ms <= budget.maximum_training_time_ms,
+            "worker_limits.maximum_duration_ms, the time reserved per trial, must not exceed maximum_training_time_ms",
+        ),
+        (
+            limits.maximum_artifact_bytes <= budget.maximum_artifact_bytes,
+            "worker_limits.maximum_artifact_bytes must not exceed maximum_artifact_bytes",
+        ),
+        (
+            limits.memory_budget_bytes > 0
+                && limits.maximum_artifact_bytes > 0
+                && limits.maximum_checkpoint_bytes > 0
+                && limits.maximum_duration_ms > 0,
+            "worker_limits memory, artifact, checkpoint and duration limits must be positive",
+        ),
+        (
+            limits.lease_duration_ms >= 300,
+            "worker_limits.lease_duration_ms must be at least 300",
+        ),
+    ];
+    if let Some((_, rule)) = rules.iter().find(|(holds, _)| !holds) {
+        return Err(anyhow!(
+            "Invalid experiment budget: {rule}; the budget is {}",
+            flow_like_types::json::json!(budget)
+        ));
+    }
+    Ok(())
+}
+
+/// The ledger's goal rules that `validate_goals` leaves out.
+#[cfg(feature = "training")]
+fn validate_goal_rules(goals: &ExperimentGoals) -> Result<()> {
+    if goals.primary_metric.trim().is_empty() || goals.minimum_audited_samples == 0 {
+        return Err(anyhow!(
+            "Goals need a primary metric and a positive minimum_audited_samples, not '{}' and {}",
+            goals.primary_metric,
+            goals.minimum_audited_samples
+        ));
+    }
+    if let Some(bound) = goals.bounds.iter().find(|bound| !valid_bound(bound)) {
+        return Err(anyhow!(
+            "Goal bound '{}' needs a finite minimum or maximum, with the minimum at most the maximum; it has {:?} and {:?}",
+            bound.name,
+            bound.minimum,
+            bound.maximum
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "training")]
+fn valid_bound(bound: &flow_like_ml_runtime::MetricBound) -> bool {
+    let finite = |value: Option<f64>| value.is_none_or(f64::is_finite);
+    !bound.name.trim().is_empty()
+        && (bound.minimum.is_some() || bound.maximum.is_some())
+        && finite(bound.minimum)
+        && finite(bound.maximum)
+        && !bound
+            .minimum
+            .zip(bound.maximum)
+            .is_some_and(|(minimum, maximum)| minimum > maximum)
+}
+
+#[cfg(feature = "training")]
+fn validate_candidate_requests(candidates: &[flow_like_ml_runtime::TrainingRequest]) -> Result<()> {
+    if let Some(index) = candidates.iter().position(|candidate| {
+        candidate.engine.trim().is_empty()
+            || !candidate.recipe.is_object()
+            || !candidate.compute.is_object()
+    }) {
+        return Err(anyhow!(
+            "Initial candidate {index} needs an engine name and object-valued recipe and compute"
+        ));
+    }
+    Ok(())
+}
+
+/// Labels the dataset's as-of time cannot see would be refused once every sample is recorded.
+#[cfg(feature = "training")]
+fn ensure_labels_available(snapshot: &flow_like_ml_runtime::DatasetSnapshot) -> Result<()> {
+    if let Some(sample) = snapshot
+        .train
+        .iter()
+        .chain(&snapshot.validation)
+        .chain(&snapshot.test)
+        .find(|sample| sample.label_available_at_ms > snapshot.as_of_ms)
+    {
+        return Err(anyhow!(
+            "The label of row {} becomes available at {} ms, after the dataset was prepared at {} ms; exclude the row until its label is available",
+            sample.id,
+            sample.label_available_at_ms,
+            snapshot.as_of_ms
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "training")]
+fn is_anomaly_task(task: &TaskKind) -> bool {
+    matches!(
+        task,
+        TaskKind::SensorAnomaly | TaskKind::VisualAnomaly | TaskKind::SequenceAutoencoder
+    )
+}
+
+/// The ledger's readiness rule for the worker view, which keeps only normal examples of anomaly
+/// tasks: enough training examples, normal examples to validate on, and each label's support.
+#[cfg(feature = "training")]
+fn ensure_training_ready(
+    prepared: &super::auto_training_tables::PreparedTableDataset,
+) -> Result<()> {
+    ensure_enough_examples(prepared)?;
+    let spec = &prepared.spec;
+    if is_anomaly_task(&spec.task)
+        || spec.labels.is_empty()
+        || matches!(
+            spec.task,
+            TaskKind::SensorRegression | TaskKind::SequenceForecast
+        )
+    {
+        return Ok(());
+    }
+    ensure_label_support(prepared)
+}
+
+#[cfg(feature = "training")]
+fn ensure_enough_examples(
+    prepared: &super::auto_training_tables::PreparedTableDataset,
+) -> Result<()> {
+    let spec = &prepared.spec;
+    let normals = |indices: &[usize]| {
+        indices
+            .iter()
+            .filter(|&&index| {
+                matches!(
+                    prepared.samples[index].annotation,
+                    flow_like_ml_core::Annotation::Anomaly { is_anomaly: false }
+                )
+            })
+            .count()
+    };
+    let (train, required) = if is_anomaly_task(&spec.task) {
+        let (train, validation) = (
+            normals(&prepared.split.train),
+            normals(&prepared.split.validation),
+        );
+        if train == 0 || validation == 0 {
+            return Err(anyhow!(
+                "Anomaly training needs normal examples in training and validation; the split has {train} and {validation}"
+            ));
+        }
+        (
+            train,
+            spec.minimum_examples.max(spec.minimum_examples_per_class),
+        )
+    } else {
+        (prepared.split.train.len(), spec.minimum_examples)
+    };
+    if train < required {
+        return Err(anyhow!(
+            "The training partition has {train} usable examples but the specification requires {required} (minimum_examples, and minimum_examples_per_class for anomaly tasks); add rows or lower the minimum"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "training")]
+fn ensure_label_support(
+    prepared: &super::auto_training_tables::PreparedTableDataset,
+) -> Result<()> {
+    let spec = &prepared.spec;
+    let mut support = vec![0usize; spec.labels.len()];
+    for &index in &prepared.split.train {
+        for class in annotation_classes(&prepared.samples[index].annotation) {
+            if let Some(count) = support.get_mut(class as usize) {
+                *count += 1;
+            }
+        }
+    }
+    if let Some((label, count)) = spec
+        .labels
+        .iter()
+        .zip(support)
+        .find(|(_, count)| *count < spec.minimum_examples_per_class)
+    {
+        return Err(anyhow!(
+            "Label '{label}' has {count} training examples, below minimum_examples_per_class ({}); add examples of it or lower the minimum",
+            spec.minimum_examples_per_class
+        ));
+    }
+    Ok(())
+}
+
+/// Each class an annotation shows, once, as the ledger counts a label's support.
+#[cfg(feature = "training")]
+fn annotation_classes(
+    annotation: &flow_like_ml_core::Annotation,
+) -> std::collections::BTreeSet<u32> {
+    use flow_like_ml_core::Annotation;
+    match annotation {
+        Annotation::Class { class_id } => std::iter::once(*class_id).collect(),
+        Annotation::Boxes { boxes } => boxes.iter().map(|value| value.class_id).collect(),
+        Annotation::Mask { classes, .. } => classes.iter().copied().collect(),
+        Annotation::InstanceMasks { instances } => instances
+            .iter()
+            .map(|instance| instance.bounds.class_id)
+            .collect(),
+        _ => Default::default(),
+    }
+}
+
+/// The ledger keeps an example in an anomaly task's worker view only when it is labelled normal.
+#[cfg(feature = "training")]
+fn labelled_normal(sample: &flow_like_ml_runtime::TrainingSample) -> bool {
+    let payload = sample.payload.get("sample").unwrap_or(&sample.payload);
+    payload
+        .pointer("/annotation/is_anomaly")
+        .and_then(Value::as_bool)
+        == Some(false)
+}
+
+/// Bytes the ledger charges to register a split: the split plus its worker view, which drops
+/// the final test partition and, for anomaly tasks, every example not labelled normal. Both are
+/// stored with a UUID, unless the split already has an ID, and a hex SHA-256 digest.
+#[cfg(feature = "training")]
+fn dataset_charge(
+    snapshot: &flow_like_ml_runtime::DatasetSnapshot,
+    task: &TaskKind,
+) -> Result<u64> {
+    use super::auto_training_tables::serialized_json_size as size;
+    // JSON string lengths, quotes included.
+    const UUID: usize = 38;
+    const DIGEST: usize = 66;
+    let id = if snapshot.id.is_empty() {
+        UUID
+    } else {
+        size(&snapshot.id)?
+    };
+    let shared = size(snapshot)? - size(&snapshot.id)? - size(&snapshot.digest)?;
+    let view = shared - size(&snapshot.test)? + "[]".len() + UUID + DIGEST
+        - dropped_example_bytes(snapshot, task)?;
+    Ok((shared + id + DIGEST + view) as u64)
+}
+
+/// The training and validation examples an anomaly task's worker view drops, with their commas.
+#[cfg(feature = "training")]
+fn dropped_example_bytes(
+    snapshot: &flow_like_ml_runtime::DatasetSnapshot,
+    task: &TaskKind,
+) -> Result<usize> {
+    if !is_anomaly_task(task) {
+        return Ok(0);
+    }
+    snapshot
+        .train
+        .iter()
+        .chain(&snapshot.validation)
+        .filter(|sample| !labelled_normal(sample))
+        .map(|sample| -> Result<usize> {
+            Ok(super::auto_training_tables::serialized_json_size(sample)? + ",".len())
+        })
+        .sum()
 }
 
 /// Generated batches are fitted to the memory a trial can actually reserve.
@@ -796,7 +1181,8 @@ fn validate_table_policy(
 }
 
 /// Record the samples and create the experiment off the async executor. A cancelled run, or a
-/// node future the executor dropped, stops between sample batches.
+/// node future the executor dropped, stops between sample batches; a future dropped after the
+/// experiment exists, before the caller can guard it, cancels that experiment.
 #[cfg(feature = "training")]
 async fn create_started_experiment(
     token: Option<flow_like_types::tokio_util::sync::CancellationToken>,
@@ -805,22 +1191,43 @@ async fn create_started_experiment(
     snapshot: flow_like_ml_runtime::DatasetSnapshot,
     request: flow_like_ml_runtime::experiment::ExperimentRequest,
 ) -> Result<Experiment> {
+    use std::sync::{Arc, Mutex, PoisonError};
     let stop = super::cancellation::CancelFlag::default();
+    let created = Arc::new(Mutex::new(None::<String>));
     let guard = super::cancellation::CancelOnDrop::new({
-        let stop = stop.clone();
-        move || stop.cancel()
+        let (stop, created, repo) = (stop.clone(), created.clone(), repo.clone());
+        move || {
+            stop.cancel();
+            let id = created
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take();
+            if let Some(id) = id {
+                let _ = repo.cancel_experiment(&id, flow_like_ml_runtime::now_ms());
+            }
+        }
     });
     let (repo, stream) = (repo.clone(), stream.clone());
     let work = tokio::task::spawn_blocking(move || {
         let cancelled =
             || stop.is_cancelled() || token.as_ref().is_some_and(|token| token.is_cancelled());
-        record_and_create(&repo, &stream, snapshot, request, &cancelled)
+        let publish =
+            |id: &str| *created.lock().unwrap_or_else(PoisonError::into_inner) = Some(id.into());
+        record_and_create(&repo, &stream, snapshot, request, &cancelled, &publish)
     });
-    let created = work.await;
-    guard.disarm();
-    created?
+    match work.await {
+        Ok(outcome) => {
+            guard.disarm();
+            outcome
+        }
+        // The guard cancels an experiment the work created before it panicked.
+        Err(failed) => Err(anyhow!(
+            "Recording the training samples stopped unexpectedly: {failed}"
+        )),
+    }
 }
 
+/// `created` receives the experiment ID as soon as the experiment exists.
 #[cfg(feature = "training")]
 fn record_and_create(
     repo: &flow_like_ml_runtime::TrainingRepository,
@@ -828,26 +1235,24 @@ fn record_and_create(
     snapshot: flow_like_ml_runtime::DatasetSnapshot,
     request: flow_like_ml_runtime::experiment::ExperimentRequest,
     cancelled: &dyn Fn() -> bool,
+    created: &dyn Fn(&str),
 ) -> Result<Experiment> {
     const SAMPLE_BATCH: usize = 256;
     let stopped = || anyhow!("Auto training start was cancelled before its experiment was created");
-    for (index, sample) in snapshot
-        .train
-        .iter()
-        .chain(&snapshot.validation)
-        .chain(&snapshot.test)
-        .enumerate()
-    {
-        if index % SAMPLE_BATCH == 0 && cancelled() {
-            return Err(stopped());
+    for partition in [&snapshot.train, &snapshot.validation, &snapshot.test] {
+        for batch in partition.chunks(SAMPLE_BATCH) {
+            if cancelled() {
+                return Err(stopped());
+            }
+            repo.record_prepared_samples(stream, batch)?;
         }
-        repo.record_prepared_sample(stream, sample)?;
     }
     if cancelled() {
         return Err(stopped());
     }
     let experiment =
         repo.create_experiment_with_snapshot(snapshot, request, flow_like_ml_runtime::now_ms())?;
+    created(&experiment.id);
     if cancelled() {
         let _ = repo.cancel_experiment(&experiment.id, flow_like_ml_runtime::now_ms());
         return Err(anyhow!(
@@ -933,6 +1338,8 @@ fn bounded_text(text: &str) -> String {
     format!("{} [truncated]", &text[..end])
 }
 
+/// A fine-tune's source must be authorized and fit its recipe. The note reports a recipe whose
+/// input normalization could not be compared with the source's.
 #[cfg(feature = "training")]
 fn validate_candidate_pretrained(
     repo: &flow_like_ml_runtime::TrainingRepository,
@@ -940,26 +1347,56 @@ fn validate_candidate_pretrained(
     candidate: &flow_like_ml_runtime::TrainingRequest,
     labels: &[String],
     worker_memory_bytes: u64,
-) -> Result<()> {
+) -> Result<Option<Value>> {
     let recipe: flow_like_ml_runtime::engines::BurnEngineRecipe =
         flow_like_types::json::from_value(candidate.recipe.clone())?;
-    if let Some(pretrained) = &recipe.pretrained {
-        let compute: ComputeConfig = flow_like_types::json::from_value(candidate.compute.clone())?;
-        compute.validate()?;
-        let source = flow_like_ml_runtime::engines::validate_burn_pretrained_source(
-            repo,
-            project_id,
-            pretrained,
-            &recipe.config,
-            labels,
-            (compute.memory_limit_bytes.min(worker_memory_bytes) / 4).min(512 * 1024 * 1024),
-        )?;
-        flow_like_ml_runtime::engines::validate_burn_pretrained_preprocessing(
-            &source,
-            &recipe.preprocessing,
-        )?;
+    let Some(pretrained) = &recipe.pretrained else {
+        return Ok(None);
+    };
+    let compute: ComputeConfig = flow_like_types::json::from_value(candidate.compute.clone())?;
+    compute.validate()?;
+    let source = flow_like_ml_runtime::engines::validate_burn_pretrained_source(
+        repo,
+        project_id,
+        pretrained,
+        &recipe.config,
+        labels,
+        (compute.memory_limit_bytes.min(worker_memory_bytes) / 4).min(512 * 1024 * 1024),
+    )?;
+    flow_like_ml_runtime::engines::validate_burn_pretrained_preprocessing(
+        &source,
+        &recipe.preprocessing,
+    )?;
+    unchecked_pretrained_preprocessing(&source, &recipe.preprocessing)
+}
+
+/// Normalization is only compared when the recipe declares image steps. Without them, the steps
+/// the source's weights expect are reported, since differently prepared inputs degrade the
+/// fine-tune without failing it.
+#[cfg(feature = "training")]
+fn unchecked_pretrained_preprocessing(
+    source: &flow_like_ml_runtime::PretrainedSource,
+    declared: &[flow_like_ml_core::PreprocessingStep],
+) -> Result<Option<Value>> {
+    use flow_like_ml_core::PreprocessingStep;
+    if declared.iter().any(|step| {
+        matches!(
+            step,
+            PreprocessingStep::Resize { .. } | PreprocessingStep::Normalize { .. }
+        )
+    }) {
+        return Ok(None);
     }
-    Ok(())
+    let expected =
+        flow_like_ml_runtime::engines::FeatureExtractor::from_source(source)?.image_steps;
+    if expected.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(flow_like_types::json::json!({
+        "source_id": source.id,
+        "recommended_preprocessing": expected,
+        "reason": "the candidate declares no image preprocessing, so its input normalization was not compared with the source's; prepare inputs with the recommended steps",
+    })))
 }
 
 #[cfg(feature = "training")]
@@ -1496,14 +1933,17 @@ pub fn append_burn_candidate_with_pretrained(
         recipe: flow_like_types::json::json!({"config":config,"labels":spec.labels,"preprocessing":[],"pretrained":pretrained,"inspection_task":spec.task,"minimum_examples":spec.minimum_examples,"minimum_examples_per_class":spec.minimum_examples_per_class,"dataset_snapshot_id":dataset_id}),
         compute: flow_like_types::json::json!(compute),
     };
-    validate_candidate_pretrained(
+    let unchecked = validate_candidate_pretrained(
         repo,
         &experiment.request.stream.project_id,
         &candidate,
         &spec.labels,
         experiment.request.budget.worker_limits.memory_budget_bytes,
     )?;
-    repo.append_experiment_candidates(id, vec![candidate], flow_like_ml_runtime::now_ms())?;
+    let appended =
+        repo.append_experiment_candidates(id, vec![candidate], flow_like_ml_runtime::now_ms())?;
+    let index = appended.request.candidates.len().saturating_sub(1);
+    note_unchecked_preprocessing(repo, id, index, unchecked);
     Ok(())
 }
 
@@ -1619,18 +2059,7 @@ pub(crate) async fn register_prepared_candidate(
         policy.allowed_destination = None;
         policy.expected_destination = None;
     }
-    if experiment.status != ExperimentStatus::Running || experiment.selected_trial_id.is_some() {
-        return Err(anyhow!(
-            "Experiment {id} no longer accepts candidates; its status is {:?}",
-            experiment.status
-        ));
-    }
-    if experiment.request.candidates.len() >= experiment.request.budget.maximum_trials {
-        return Err(anyhow!(
-            "Experiment {id} already holds {} candidates, its maximum_trials budget",
-            experiment.request.candidates.len()
-        ));
-    }
+    ensure_accepts_derived(&experiment, None)?;
     let mut search: AutoSearchConfig = flow_like_types::json::from_value(setting("search"))?;
     search.maximum_candidates = 1;
     let compute: ComputeConfig = flow_like_types::json::from_value(setting("compute"))?;
@@ -1643,7 +2072,7 @@ pub(crate) async fn register_prepared_candidate(
     for candidate in &mut candidates {
         candidate.recipe["dataset_snapshot_id"] = json!(derived_id);
     }
-    let (prepared, derived) = {
+    let (prepared, derived, dataset_bytes) = {
         let repo = repo.clone();
         let snapshot_id = experiment.request.snapshot_id.clone();
         let maximum_bytes = experiment.request.budget.maximum_dataset_bytes;
@@ -1651,10 +2080,13 @@ pub(crate) async fn register_prepared_candidate(
         tokio::task::spawn_blocking(move || -> Result<_> {
             let derived =
                 derived_snapshot(&repo, &snapshot_id, maximum_bytes, &prepared, derived_id)?;
-            Ok((prepared, derived))
+            let bytes = dataset_charge(&derived, &prepared.spec.task)?;
+            Ok((prepared, derived, bytes))
         })
         .await??
     };
+    // The ledger refuses these only after the tables exist, so they are checked before writing.
+    ensure_accepts_derived(&repo.get_experiment(id)?, Some(dataset_bytes))?;
     let tables = super::auto_training_tables::materialize_prepared_tables(
         context,
         &prepared,
@@ -1662,16 +2094,101 @@ pub(crate) async fn register_prepared_candidate(
         &policy,
     )
     .await?;
-    repo.register_experiment_candidates(
+    let references: Vec<Value> = tables.into_iter().map(|table| json!(table)).collect();
+    let manifest = json!(prepared.preprocessing);
+    let (repo, id) = (repo.clone(), id.to_owned());
+    tokio::task::spawn_blocking(move || {
+        register_derived(&repo, &id, derived, manifest, candidates, references)
+    })
+    .await?
+}
+
+/// What the ledger checks when it registers a derived dataset: the experiment still runs, has
+/// room for a candidate and wall time left, and, once its size is known, budget for the dataset.
+#[cfg(feature = "training")]
+fn ensure_accepts_derived(experiment: &Experiment, dataset_bytes: Option<u64>) -> Result<()> {
+    let (id, budget) = (&experiment.id, &experiment.request.budget);
+    if experiment.status != ExperimentStatus::Running || experiment.selected_trial_id.is_some() {
+        return Err(anyhow!(
+            "Experiment {id} no longer accepts candidates; its status is {:?}",
+            experiment.status
+        ));
+    }
+    if experiment.request.candidates.len() >= budget.maximum_trials {
+        return Err(anyhow!(
+            "Experiment {id} already holds {} candidates, its maximum_trials budget",
+            experiment.request.candidates.len()
+        ));
+    }
+    let elapsed = experiment.wall_elapsed_ms(flow_like_ml_runtime::now_ms());
+    if elapsed > budget.maximum_wall_time_ms {
+        return Err(anyhow!(
+            "Experiment {id} has used {elapsed} ms of its {} ms budget.maximum_wall_time_ms and accepts no more candidates",
+            budget.maximum_wall_time_ms
+        ));
+    }
+    let used = experiment.usage.dataset_bytes;
+    if let Some(bytes) =
+        dataset_bytes.filter(|bytes| used.saturating_add(*bytes) > budget.maximum_dataset_bytes)
+    {
+        return Err(anyhow!(
+            "The derived dataset and its training view need {bytes} bytes, but experiment {id} already uses {used} of its {} byte budget.maximum_dataset_bytes",
+            budget.maximum_dataset_bytes
+        ));
+    }
+    Ok(())
+}
+
+/// Register a derived dataset with its candidates and list its tables. Tables written for a
+/// dataset the ledger then refuses stay listed in created_tables, next to an event naming the
+/// refusal, so they can be found and removed.
+#[cfg(feature = "training")]
+fn register_derived(
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    id: &str,
+    derived: flow_like_ml_runtime::DatasetSnapshot,
+    preprocessing_manifest: Value,
+    candidates: Vec<flow_like_ml_runtime::TrainingRequest>,
+    tables: Vec<Value>,
+) -> Result<()> {
+    use flow_like_ml_runtime::now_ms;
+    let derived_id = derived.id.clone();
+    let registered = repo.register_experiment_candidates(
         id,
         derived,
-        json!(prepared.preprocessing),
+        preprocessing_manifest,
         candidates,
-        flow_like_ml_runtime::now_ms(),
-    )?;
-    let references = tables.into_iter().map(|table| json!(table)).collect();
-    repo.update_experiment_tables(id, references, vec![], flow_like_ml_runtime::now_ms())?;
-    Ok(())
+        now_ms(),
+    );
+    let error = match registered {
+        Ok(_) if tables.is_empty() => return Ok(()),
+        Ok(_) => {
+            repo.update_experiment_tables(id, tables, vec![], now_ms())?;
+            return Ok(());
+        }
+        Err(error) => error,
+    };
+    if tables.is_empty() {
+        return Err(anyhow!(
+            "Experiment {id} refused the derived dataset {derived_id}: {error}"
+        ));
+    }
+    note_experiment(
+        repo,
+        id,
+        "derived_dataset_rejected",
+        flow_like_types::json::json!({
+            "dataset_snapshot_id": derived_id,
+            "error": bounded_text(&error.to_string()),
+            "tables": tables,
+        }),
+    );
+    if let Err(listed) = repo.update_experiment_tables(id, tables, vec![], now_ms()) {
+        tracing::warn!(experiment_id = %id, error = %listed, "Could not list the tables of a refused derived dataset");
+    }
+    Err(anyhow!(
+        "Experiment {id} refused the derived dataset {derived_id}: {error}; its written tables are listed in created_tables"
+    ))
 }
 
 /// The experiment's split with every input replaced by the derived features. Membership,
@@ -2070,7 +2587,7 @@ impl NodeLogic for PredictAutoModelNode {
             "predictAutoModel",
             "AI/ML/Auto Training",
         );
-        node.set_version(2);
+        node.set_version(3);
         node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
@@ -2170,7 +2687,8 @@ pub async fn predict_auto_model(
     tokio::task::spawn_blocking(move || -> Result<AutoModelPredictions> {
         let preprocessing: super::auto_training_tables::TablePreprocessing =
             flow_like_types::json::from_value(preprocessing)?;
-        let extractor = requested_extractor(
+        let extractor = prediction_extractor(
+            &artifact,
             &preprocessing,
             &request.rows,
             request.feature_extractor.as_ref(),
@@ -2250,13 +2768,42 @@ fn anomaly_decisions(
     })
 }
 
-/// Embeddings name their extractor on the request or as `feature_extractor` inside each row's
-/// tensor value; every named extractor must be the same one.
+/// The extractor that prediction embeddings name; every named extractor must be the same one.
 #[cfg(feature = "training")]
 fn requested_extractor(
     preprocessing: &super::auto_training_tables::TablePreprocessing,
     rows: &[Value],
     explicit: Option<&super::lifecycle::FeatureExtractorRef>,
+) -> Result<Option<flow_like_ml_runtime::engines::FeatureExtractor>> {
+    named_extractor(preprocessing, rows, explicit, |first, other| {
+        anyhow!(
+            "Embeddings come from different feature extractors ({first} and {other}); predict each extractor's rows separately"
+        )
+    })
+}
+
+/// The extractor that training embeddings name; every named extractor must be the same one.
+#[cfg(feature = "training")]
+fn training_extractor(
+    preprocessing: &super::auto_training_tables::TablePreprocessing,
+    rows: &[Value],
+    explicit: Option<&super::lifecycle::FeatureExtractorRef>,
+) -> Result<Option<flow_like_ml_runtime::engines::FeatureExtractor>> {
+    named_extractor(preprocessing, rows, explicit, |first, other| {
+        anyhow!(
+            "Training embeddings come from different feature extractors ({first} and {other}); train one model per extractor"
+        )
+    })
+}
+
+/// Embeddings name their extractor on the request or as `feature_extractor` inside each row's
+/// tensor value. `mixed` describes two different extractors by their source IDs.
+#[cfg(feature = "training")]
+fn named_extractor(
+    preprocessing: &super::auto_training_tables::TablePreprocessing,
+    rows: &[Value],
+    explicit: Option<&super::lifecycle::FeatureExtractorRef>,
+    mixed: impl FnOnce(&str, &str) -> flow_like_types::Error,
 ) -> Result<Option<flow_like_ml_runtime::engines::FeatureExtractor>> {
     let mut named = explicit
         .map(super::lifecycle::FeatureExtractorRef::to_runtime)
@@ -2285,13 +2832,47 @@ fn requested_extractor(
         return Ok(None);
     };
     if let Some(other) = named.find(|extractor| extractor != &first) {
-        return Err(anyhow!(
-            "Embeddings come from different feature extractors ({} and {}); predict each extractor's rows separately",
-            first.source_id,
-            other.source_id
-        ));
+        return Err(mixed(&first.source_id, &other.source_id));
     }
     Ok(Some(first))
+}
+
+/// The extractor prediction embeddings name, which a model that recorded one requires.
+#[cfg(feature = "training")]
+fn prediction_extractor(
+    artifact: &flow_like_ml_runtime::ModelArtifact,
+    preprocessing: &super::auto_training_tables::TablePreprocessing,
+    rows: &[Value],
+    explicit: Option<&super::lifecycle::FeatureExtractorRef>,
+) -> Result<Option<flow_like_ml_runtime::engines::FeatureExtractor>> {
+    let named = requested_extractor(preprocessing, rows, explicit)?;
+    ensure_extractor_named(&artifact.id, &artifact.manifest, named.as_ref())?;
+    Ok(named)
+}
+
+/// A model that recorded the extractor of its training embeddings cannot check embeddings that
+/// name none, so it refuses them instead of scoring a possibly different feature space.
+#[cfg(feature = "training")]
+fn ensure_extractor_named(
+    artifact_id: &str,
+    manifest: &Value,
+    named: Option<&flow_like_ml_runtime::engines::FeatureExtractor>,
+) -> Result<()> {
+    let Some(recorded) = manifest
+        .get("feature_extractor")
+        .filter(|value| !value.is_null())
+    else {
+        return Ok(());
+    };
+    if named.is_some() {
+        return Ok(());
+    }
+    let recorded = super::lifecycle::runtime_extractor(recorded)?;
+    Err(anyhow!(
+        "Model {artifact_id} was fitted on embeddings from feature extractor {} ({}); pass that extractor as feature_extractor, or inside each row's tensor value, to predict with it",
+        recorded.source_id,
+        recorded.blob_sha256
+    ))
 }
 
 /// PatchCore and PaDiM memory banks only score embeddings from the feature space they were
@@ -2462,7 +3043,9 @@ pub fn enqueue_experiment(
 #[cfg(feature = "training")]
 mod background {
     use super::{bounded_text, controller, note_experiment};
-    use flow_like_ml_runtime::{ExperimentStatus, ExperimentTrialStatus, TrainingRepository};
+    use flow_like_ml_runtime::{
+        ExperimentStatus, ExperimentTrialStatus, JobStatus, TrainingRepository,
+    };
     use flow_like_types::{Result, anyhow, json::json};
     use std::{
         collections::HashSet,
@@ -2475,19 +3058,34 @@ mod background {
 
     const CAPACITY: usize = 32;
     /// Waiting for a busy device or another controller is retried this many times in total.
-    const ATTEMPTS: u32 = 5;
+    pub(super) const ATTEMPTS: u32 = 5;
 
-    struct Work {
+    pub(super) struct Work {
         repo: TrainingRepository,
         id: String,
-        key: String,
+        pub(super) key: String,
         attempt: u32,
+    }
+
+    impl Work {
+        pub(super) fn new(repo: TrainingRepository, id: String, attempt: u32) -> Result<Self> {
+            let key = flow_like_ml_core::content_digest(&flow_like_types::json::to_vec(&(
+                repo.path(),
+                &id,
+            ))?);
+            Ok(Self {
+                repo,
+                id,
+                key,
+                attempt,
+            })
+        }
     }
 
     static QUEUED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
     static WORKER: LazyLock<Mutex<Option<SyncSender<Work>>>> = LazyLock::new(Default::default);
 
-    fn queued() -> MutexGuard<'static, HashSet<String>> {
+    pub(super) fn queued() -> MutexGuard<'static, HashSet<String>> {
         QUEUED.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -2502,19 +3100,13 @@ mod background {
     }
 
     pub(super) fn enqueue(repo: TrainingRepository, id: String, attempt: u32) -> Result<()> {
-        let key =
-            flow_like_ml_core::content_digest(&flow_like_types::json::to_vec(&(repo.path(), &id))?);
+        let work = Work::new(repo.clone(), id.clone(), attempt)?;
+        let key = work.key.clone();
         let ahead = {
             let mut queued = queued();
             if !queued.insert(key.clone()) {
                 return Ok(());
             }
-            let work = Work {
-                repo: repo.clone(),
-                id: id.clone(),
-                key: key.clone(),
-                attempt,
-            };
             let mut worker = WORKER.lock().unwrap_or_else(PoisonError::into_inner);
             let sent = send_or_respawn(&mut *worker, work, || {
                 // Work buffered for a stopped thread is gone; its keys must not block Resume.
@@ -2578,19 +3170,24 @@ mod background {
 
     fn run_worker(receiver: Receiver<Work>) {
         while let Ok(work) = receiver.recv() {
-            let _queued = QueuedKey(work.key.clone());
-            let driven = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                drive(&work.repo, &work.id)
-            }))
-            .unwrap_or_else(|payload| {
-                Driven::Failed(format!(
-                    "the background training worker panicked: {}",
-                    panic_text(&*payload)
-                ))
-            });
-            // Recording the outcome must not stop the worker either.
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| settle(work, driven)));
+            process(work, drive);
         }
+    }
+
+    /// Drive one queued experiment and settle the outcome. Neither a panic while driving nor one
+    /// while settling stops the worker, and the queue key is released however the item ends.
+    pub(super) fn process(work: Work, drive: impl FnOnce(&TrainingRepository, &str) -> Driven) {
+        let _queued = QueuedKey(work.key.clone());
+        let driven = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            drive(&work.repo, &work.id)
+        }))
+        .unwrap_or_else(|payload| {
+            Driven::Failed(format!(
+                "the background training worker panicked: {}",
+                panic_text(&*payload)
+            ))
+        });
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| settle(work, driven)));
     }
 
     /// Releases the queue key however the work item ends, so Resume can queue it again.
@@ -2601,9 +3198,12 @@ mod background {
         }
     }
 
-    enum Driven {
+    pub(super) enum Driven {
         Settled,
+        /// Nothing progresses: a trial waits for a device or a reservation, or the ledger is busy.
         Waiting(String),
+        /// Another controller or worker drives the experiment.
+        Held(String),
         Failed(String),
     }
 
@@ -2623,7 +3223,7 @@ mod background {
                     ExperimentStatus::Running | ExperimentStatus::Evaluating
                 ) =>
             {
-                Driven::Waiting(waiting_reason(repo, id))
+                unsettled(repo, id, None)
             }
             Ok(_) | Err(flow_like_ml_runtime::Error::Cancelled) => Driven::Settled,
             // Another holder, a lost lease or a busy ledger clears up without intervention.
@@ -2631,28 +3231,52 @@ mod background {
                 error @ (flow_like_ml_runtime::Error::Conflict(_)
                 | flow_like_ml_runtime::Error::LeaseLost
                 | flow_like_ml_runtime::Error::Sql(_)),
-            ) => Driven::Waiting(error.to_string()),
+            ) => unsettled(repo, id, Some(error.to_string())),
             Err(error) => Driven::Failed(error.to_string()),
         }
     }
 
-    /// Why an unsettled experiment stopped: usually a scheduled trial whose job waits for a
-    /// device or is owned by another worker.
-    fn waiting_reason(repo: &TrainingRepository, id: &str) -> String {
-        let scheduled = repo
-            .list_experiment_trials(id)
-            .unwrap_or_default()
+    /// Why the controller left an experiment unsettled. Without a scheduled trial it returns only
+    /// when another controller holds the experiment, and a scheduled trial whose job holds a live
+    /// lease trains under another worker. Anything else, including an error the controller kept
+    /// meeting, waits for a device, a reservation or the ledger.
+    pub(super) fn unsettled(repo: &TrainingRepository, id: &str, error: Option<String>) -> Driven {
+        let trials = match repo.list_experiment_trials(id) {
+            Ok(trials) => trials,
+            Err(read) => {
+                return Driven::Waiting(
+                    error.unwrap_or_else(|| format!("its trials could not be read: {read}")),
+                );
+            }
+        };
+        let scheduled = trials
             .into_iter()
             .find(|trial| trial.status == ExperimentTrialStatus::Scheduled);
         let Some(trial) = scheduled else {
-            return "another controller holds this experiment".into();
+            return match error {
+                Some(error) => Driven::Waiting(error),
+                None => Driven::Held("another controller holds this experiment".into()),
+            };
         };
-        match repo.get_job(&trial.job_id) {
-            Ok(job) => match job.error {
-                Some(error) => format!("trial {} is waiting: {error}", trial.id),
-                None => format!("trial {} has a {:?} job", trial.id, job.status),
-            },
-            Err(error) => format!("trial {} job could not be read: {error}", trial.id),
+        let job = match repo.get_job(&trial.job_id) {
+            Ok(job) => job,
+            Err(read) => {
+                return Driven::Waiting(format!("trial {} job could not be read: {read}", trial.id));
+            }
+        };
+        let leased = matches!(job.status, JobStatus::Running | JobStatus::CancelRequested)
+            && job
+                .lease_expires_at_ms
+                .is_some_and(|expiry| expiry > flow_like_ml_runtime::now_ms());
+        let reason = match (error, job.error) {
+            (Some(error), _) => format!("trial {}: {error}", trial.id),
+            (None, Some(waiting)) => format!("trial {} is waiting: {waiting}", trial.id),
+            (None, None) => format!("trial {} has a {:?} job", trial.id, job.status),
+        };
+        if leased {
+            Driven::Held(reason)
+        } else {
+            Driven::Waiting(reason)
         }
     }
 
@@ -2662,7 +3286,7 @@ mod background {
         } = work;
         match driven {
             Driven::Settled => {}
-            Driven::Waiting(reason) if attempt + 1 < ATTEMPTS => {
+            Driven::Waiting(reason) | Driven::Held(reason) if attempt + 1 < ATTEMPTS => {
                 let delay = retry_delay(attempt);
                 note_experiment(
                     &repo,
@@ -2676,8 +3300,8 @@ mod background {
                 );
                 retry_later(repo, id, attempt + 1, delay);
             }
-            // Another controller may still drive it, so the experiment is left as it is.
-            Driven::Waiting(reason) => note_experiment(
+            // Another controller or worker drives it, so the experiment is left as it is.
+            Driven::Held(reason) => note_experiment(
                 &repo,
                 &id,
                 "background_worker_stopped",
@@ -2687,6 +3311,20 @@ mod background {
                     "resume": "Resume Auto Training queues the experiment again",
                 }),
             ),
+            Driven::Waiting(reason) => {
+                note_experiment(
+                    &repo,
+                    &id,
+                    "background_worker_stopped",
+                    json!({
+                        "attempts": attempt + 1,
+                        "reason": bounded_text(&reason),
+                        "cancelled": true,
+                        "resume": "Resume Auto Training continues it within its remaining budget",
+                    }),
+                );
+                stop(&repo, &id);
+            }
             Driven::Failed(error) => {
                 note_experiment(
                     &repo,
@@ -2694,11 +3332,16 @@ mod background {
                     "background_worker_failed",
                     json!({ "error": bounded_text(&error) }),
                 );
-                // A cancelled experiment shows that nothing drives it and stays resumable.
-                if let Err(cancel) = repo.cancel_experiment(&id, flow_like_ml_runtime::now_ms()) {
-                    tracing::warn!(experiment_id = %id, error = %cancel, "Could not stop an experiment its background worker failed on");
-                }
+                stop(&repo, &id);
             }
+        }
+    }
+
+    /// Nothing drives the experiment any more. Cancelled, it shows that, stops charging wall
+    /// time and stays resumable.
+    fn stop(repo: &TrainingRepository, id: &str) {
+        if let Err(cancel) = repo.cancel_experiment(id, flow_like_ml_runtime::now_ms()) {
+            tracing::warn!(experiment_id = %id, error = %cancel, "Could not stop an experiment its background worker gave up on");
         }
     }
 
@@ -2810,6 +3453,27 @@ mod tests {
         assert!(validate_task(AutoTrainTask::Vision, &TaskKind::ObjectDetection).is_ok());
         assert!(validate_task(AutoTrainTask::Anomaly, &TaskKind::SequenceAutoencoder).is_ok());
         assert!(validate_task(AutoTrainTask::Tabular, &TaskKind::ObjectDetection).is_err());
+    }
+
+    #[test]
+    fn auto_train_requests_take_the_extractor_that_feature_nodes_output() {
+        for node in [
+            AutoTrainTabularNode.get_node(),
+            AutoTrainForecastNode.get_node(),
+            AutoTrainVisionNode.get_node(),
+            AutoTrainAnomalyNode.get_node(),
+        ] {
+            assert_eq!(node.version, Some(1), "{}", node.name);
+            let request = node.get_pin_by_name("request").unwrap();
+            let schema: Value =
+                flow_like_types::json::from_str(request.schema.as_deref().unwrap()).unwrap();
+            assert!(
+                schema["properties"].get("feature_extractor").is_some()
+                    && schema["$defs"].get("FeatureExtractorRef").is_some(),
+                "{}",
+                node.name
+            );
+        }
     }
 
     #[cfg(feature = "training")]
@@ -2944,7 +3608,8 @@ mod tests {
         };
         use flow_like_catalog_core::{FlowPath, NodeDBConnection};
         use flow_like_ml_runtime::{
-            EvaluationTask, PredictionRecord, StreamKey, TrainingRepository, TrainingSample,
+            DatasetSnapshot, EvaluationTask, PredictionRecord, StreamKey, TrainingRepository,
+            TrainingSample, now_ms,
         };
         use flow_like_types::json::{from_slice, from_value, json};
         use std::collections::BTreeMap;
@@ -3148,13 +3813,17 @@ mod tests {
             (request, prepared)
         }
 
-        fn create_experiment(
-            repo: &TrainingRepository,
+        /// The stream and split of `prepared` in `project`, and the request creating them.
+        fn experiment_parts(
             project: &str,
             request: &AutoTrainRequest,
             prepared: &PreparedTableDataset,
             context: Value,
-        ) -> Experiment {
+        ) -> (
+            StreamKey,
+            DatasetSnapshot,
+            flow_like_ml_runtime::experiment::ExperimentRequest,
+        ) {
             let stream = StreamKey {
                 project_id: project.into(),
                 stream_id: request.dataset.stream_id.clone(),
@@ -3166,26 +3835,32 @@ mod tests {
                 table_split_policy(&request.dataset.split).unwrap(),
             )
             .unwrap();
-            record_and_create(
-                repo,
-                &stream,
-                snapshot,
-                flow_like_ml_runtime::experiment::ExperimentRequest {
-                    stream: stream.clone(),
-                    snapshot_id: String::new(),
-                    spec: json!(prepared.spec),
-                    candidates: request.initial_candidates.clone(),
-                    goals: flow_like_ml_runtime::auto_training::default_goals(&prepared.spec),
-                    budget: request.budget.clone(),
-                    source_table_versions: vec![],
-                    created_tables: vec![],
-                    updated_table_versions: vec![],
-                    preprocessing_manifest: json!(prepared.preprocessing),
-                    context,
-                },
-                &|| false,
-            )
-            .unwrap()
+            let experiment = flow_like_ml_runtime::experiment::ExperimentRequest {
+                stream: stream.clone(),
+                snapshot_id: String::new(),
+                spec: json!(prepared.spec),
+                candidates: request.initial_candidates.clone(),
+                goals: flow_like_ml_runtime::auto_training::default_goals(&prepared.spec),
+                budget: request.budget.clone(),
+                source_table_versions: vec![],
+                created_tables: vec![],
+                updated_table_versions: vec![],
+                preprocessing_manifest: json!(prepared.preprocessing),
+                context,
+            };
+            (stream, snapshot, experiment)
+        }
+
+        fn create_experiment(
+            repo: &TrainingRepository,
+            project: &str,
+            request: &AutoTrainRequest,
+            prepared: &PreparedTableDataset,
+            context: Value,
+        ) -> Experiment {
+            let (stream, snapshot, experiment) =
+                experiment_parts(project, request, prepared, context);
+            record_and_create(repo, &stream, snapshot, experiment, &|| false, &|_| {}).unwrap()
         }
 
         async fn run_to_completion(
@@ -3492,28 +4167,45 @@ mod tests {
             assert_eq!(status.status, ExperimentStatus::Running);
         }
 
-        #[tokio::test]
-        async fn rejected_starts_leave_no_experiment_or_ledger_samples() {
-            let mut harness = harness(anomaly_rows()).await;
-            let mut destination = anomaly_request(&harness.source);
-            destination.tables.allowed_destination = Some(harness.source.clone());
-            let mut small_budget = anomaly_request(&harness.source);
-            small_budget.budget.maximum_dataset_bytes = 4096;
-            let mut unmeasured = anomaly_request(&harness.source);
-            unmeasured.goals = Some(ExperimentGoals {
+        /// Starts the ledger would refuse only after recording every sample, with the error
+        /// text the earlier refusal names.
+        fn rejected_start_cases(source: &NodeDBConnection) -> Vec<(AutoTrainRequest, &str)> {
+            let anomaly_goals = |primary_metric: &str, minimum_audited_samples| ExperimentGoals {
                 task: EvaluationTask::Anomaly { threshold: 0.5 },
-                primary_metric: "mean_iou".into(),
+                primary_metric: primary_metric.into(),
                 direction: MetricDirection::Maximize,
-                minimum_audited_samples: 1,
+                minimum_audited_samples,
                 bounds: vec![],
-            });
-            let (repo, project) =
-                crate::inspection::lifecycle::repository(&harness.context).unwrap();
-            for (request, expected) in [
+            };
+            let mut destination = anomaly_request(source);
+            destination.tables.allowed_destination = Some(source.clone());
+            let mut small_budget = anomaly_request(source);
+            small_budget.budget.maximum_dataset_bytes = 4096;
+            let mut unmeasured = anomaly_request(source);
+            unmeasured.goals = Some(anomaly_goals("mean_iou", 1));
+            // The default per-trial reservation of 60 s exceeds this training budget.
+            let mut short_training = anomaly_request(source);
+            short_training.budget.maximum_training_time_ms = 30_000;
+            let mut unready = anomaly_request(source);
+            unready.dataset.spec.minimum_examples = 1_000;
+            let mut unaudited = anomaly_request(source);
+            unaudited.goals = Some(anomaly_goals("auroc", 0));
+            vec![
                 (destination, "expected durable reference"),
                 (small_budget, "maximum_dataset_bytes"),
                 (unmeasured, "not measured"),
-            ] {
+                (short_training, "maximum_duration_ms"),
+                (unready, "minimum_examples"),
+                (unaudited, "minimum_audited_samples"),
+            ]
+        }
+
+        #[tokio::test]
+        async fn rejected_starts_leave_no_experiment_or_ledger_samples() {
+            let mut harness = harness(anomaly_rows()).await;
+            let (repo, project) =
+                crate::inspection::lifecycle::repository(&harness.context).unwrap();
+            for (request, expected) in rejected_start_cases(&harness.source) {
                 let stream = crate::inspection::lifecycle::InspectionContext {
                     stream_id: request.dataset.stream_id.clone(),
                     spec: request.dataset.spec.clone(),
@@ -3825,6 +4517,624 @@ mod tests {
             assert_eq!(candidates[0].recipe["feature_extractor"], extractor);
             assert_eq!(candidates[1].recipe["feature_extractor"], extractor);
             assert!(candidates[2].recipe.get("feature_extractor").is_none());
+        }
+
+        /// Polls `ready` until it yields a value, for at most ten seconds.
+        async fn eventually<T>(mut ready: impl FnMut() -> Option<T>) -> T {
+            for _ in 0..1000 {
+                if let Some(value) = ready() {
+                    return value;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            panic!("the condition did not hold within ten seconds");
+        }
+
+        fn scoped_stream(project: &str, request: &AutoTrainRequest) -> StreamKey {
+            crate::inspection::lifecycle::InspectionContext {
+                stream_id: request.dataset.stream_id.clone(),
+                spec: request.dataset.spec.clone(),
+            }
+            .key(project.into())
+            .unwrap()
+        }
+
+        #[test]
+        fn a_cancelled_start_stops_between_sample_batches() {
+            let scratch = Scratch::new("batched-start");
+            let repo = TrainingRepository::open(scratch.0.join("training.sqlite")).unwrap();
+            let (request, prepared) = distance_dataset();
+            let (stream, snapshot, experiment) =
+                experiment_parts("project", &request, &prepared, json!({}));
+            let train = snapshot.train.len();
+            let checks = std::cell::Cell::new(0);
+            let cancelled = || {
+                checks.set(checks.get() + 1);
+                checks.get() > 1
+            };
+            let error = record_and_create(&repo, &stream, snapshot, experiment, &cancelled, &|_| {})
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("before its experiment was created"), "{error}");
+            assert!(repo.list_experiments(&stream).unwrap().is_empty());
+            assert_eq!(
+                repo.count_new_training_samples(&stream, now_ms()).unwrap(),
+                train
+            );
+        }
+
+        #[tokio::test]
+        async fn a_start_dropped_after_its_experiment_exists_cancels_it() {
+            let scratch = Scratch::new("dropped-start");
+            let repo = TrainingRepository::open(scratch.0.join("training.sqlite")).unwrap();
+            let (request, prepared) = distance_dataset();
+            let (stream, snapshot, experiment) =
+                experiment_parts("project", &request, &prepared, json!({}));
+            let mut start = Box::pin(create_started_experiment(
+                None, &repo, &stream, snapshot, experiment,
+            ));
+            let pending = std::future::poll_fn(|cx| {
+                std::task::Poll::Ready(std::future::Future::poll(start.as_mut(), cx).is_pending())
+            })
+            .await;
+            assert!(pending);
+            let created =
+                eventually(|| repo.list_experiments(&stream).unwrap().into_iter().next()).await;
+            // The blocking work returns right after creating it; the start is never polled again.
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            drop(start);
+            eventually(|| {
+                (repo.get_experiment(&created.id).unwrap().status == ExperimentStatus::Cancelled)
+                    .then_some(())
+            })
+            .await;
+        }
+
+        #[tokio::test]
+        async fn the_dataset_budget_covers_the_split_and_its_training_view_exactly() {
+            let mut harness = harness(anomaly_rows()).await;
+            let (repo, project) =
+                crate::inspection::lifecycle::repository(&harness.context).unwrap();
+            // Stream IDs of one length give splits of one size.
+            let scoped = |stream_id: &str, maximum_dataset_bytes: Option<u64>| {
+                let mut request = anomaly_request(&harness.source);
+                request.dataset.stream_id = stream_id.into();
+                if let Some(bytes) = maximum_dataset_bytes {
+                    request.budget.maximum_dataset_bytes = bytes;
+                }
+                let stream = scoped_stream(&project, &request);
+                (request, stream)
+            };
+            let (request, stream) = scoped("sensors", None);
+            let charged =
+                start_auto_training_scoped(&mut harness.context, request, false, Some(stream))
+                    .await
+                    .unwrap()
+                    .budget_used
+                    .dataset_bytes;
+            let (request, stream) = scoped("sensorz", Some(charged));
+            let exact =
+                start_auto_training_scoped(&mut harness.context, request, false, Some(stream))
+                    .await
+                    .unwrap();
+            assert_eq!(exact.budget_used.dataset_bytes, charged);
+            let (request, stream) = scoped("sensorx", Some(charged - 1));
+            let error = start_auto_training_scoped(
+                &mut harness.context,
+                request,
+                false,
+                Some(stream.clone()),
+            )
+            .await
+            .err()
+            .expect("a budget one byte short is refused")
+            .to_string();
+            assert!(error.contains("training view"), "{error}");
+            assert!(repo.list_experiments(&stream).unwrap().is_empty());
+            assert_eq!(
+                repo.count_new_training_samples(&stream, now_ms()).unwrap(),
+                0
+            );
+        }
+
+        #[test]
+        fn readiness_needs_examples_per_label_and_normal_examples_to_validate() {
+            let (_, mut distance) = distance_dataset();
+            ensure_training_ready(&distance).unwrap();
+            distance.spec.minimum_examples_per_class = 1_000;
+            let error = ensure_training_ready(&distance).unwrap_err().to_string();
+            assert!(error.contains("Label 'near'"), "{error}");
+            let source: PinnedTableSource = from_value(json!({"database":{"cache_key":"source"},"reference":{"table":"measurements","branch":"main","version":1,"read_only":true,"pinned":true},"locator":null})).unwrap();
+            let request = anomaly_request(&source.database);
+            let mut sensors = prepare_rows(source, &request.dataset, &anomaly_rows()).unwrap();
+            ensure_training_ready(&sensors).unwrap();
+            for index in sensors.split.validation.clone() {
+                sensors.samples[index].annotation =
+                    flow_like_ml_core::Annotation::Anomaly { is_anomaly: true };
+            }
+            let error = ensure_training_ready(&sensors).unwrap_err().to_string();
+            assert!(error.contains("normal examples"), "{error}");
+        }
+
+        #[tokio::test]
+        async fn a_derived_dataset_over_the_dataset_budget_writes_no_tables() {
+            let mut harness = harness(distance_rows()).await;
+            let (repo, project) =
+                crate::inspection::lifecycle::repository(&harness.context).unwrap();
+            let mut request = distance_request(&harness.source);
+            let prepared = crate::inspection::auto_training_tables::prepare_table_dataset(
+                &mut harness.context,
+                &request.dataset,
+            )
+            .await
+            .unwrap();
+            let (_, split, _) = experiment_parts(&project, &request, &prepared, json!({}));
+            let charge = dataset_charge(&split, &prepared.spec.task).unwrap();
+            // The split fits; a second dataset of its size does not.
+            request.budget.maximum_dataset_bytes = charge + charge / 2;
+            let experiment = create_experiment(
+                &repo,
+                &project,
+                &request,
+                &prepared,
+                json!({
+                    "search":request.search,"compute":request.compute,"dataset_request":request.dataset,
+                    "pinned_source":prepared.source,"table_policy":{"create_tables":true},
+                }),
+            );
+            assert_eq!(experiment.usage.dataset_bytes, charge);
+            let error =
+                register_prepared_candidate(&mut harness.context, &experiment.id, prepared.clone())
+                    .await
+                    .unwrap_err()
+                    .to_string();
+            assert!(error.contains("maximum_dataset_bytes"), "{error}");
+            let state = repo.experiment_result(&experiment.id).unwrap();
+            assert_eq!(state.datasets.len(), 1);
+            assert!(state.experiment.request.created_tables.is_empty());
+            let database = harness._scratch.0.join("database");
+            let tables = flow_like_storage::lancedb::connect(&database.to_string_lossy())
+                .execute()
+                .await
+                .unwrap()
+                .table_names()
+                .execute()
+                .await
+                .unwrap();
+            assert_eq!(tables, ["measurements"]);
+        }
+
+        #[test]
+        fn tables_of_a_refused_derived_dataset_stay_listed() {
+            let scratch = Scratch::new("refused-derived");
+            let repo = TrainingRepository::open(scratch.0.join("training.sqlite")).unwrap();
+            let (request, prepared) = distance_dataset();
+            let experiment = create_experiment(&repo, "project", &request, &prepared, json!({}));
+            repo.cancel_experiment(&experiment.id, now_ms()).unwrap();
+            let derived_id = uuid::Uuid::new_v4().to_string();
+            let derived = derived_snapshot(
+                &repo,
+                &experiment.request.snapshot_id,
+                u64::MAX,
+                &prepared,
+                derived_id.clone(),
+            )
+            .unwrap();
+            let mut candidate = request.initial_candidates[0].clone();
+            candidate.recipe["dataset_snapshot_id"] = json!(derived_id);
+            let table = json!({"partition":"train","rows":72});
+            let error = register_derived(
+                &repo,
+                &experiment.id,
+                derived,
+                json!(prepared.preprocessing),
+                vec![candidate],
+                vec![table.clone()],
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("created_tables"), "{error}");
+            let state = repo.experiment_result(&experiment.id).unwrap();
+            assert_eq!(state.datasets.len(), 1);
+            assert_eq!(state.experiment.request.created_tables, [table]);
+            assert!(state.events.iter().any(|event| {
+                event["kind"] == "derived_dataset_rejected"
+                    && event["body"]["dataset_snapshot_id"] == json!(derived_id)
+            }));
+        }
+
+        #[tokio::test]
+        async fn a_background_worker_that_gives_up_stops_the_clock_unless_another_drives() {
+            let mut harness = harness(anomaly_rows()).await;
+            let started = start_auto_training(
+                &mut harness.context,
+                anomaly_request(&harness.source),
+                false,
+            )
+            .await
+            .unwrap();
+            let id = started.experiment_id;
+            let repo = experiment_repository(&harness.context, &id).unwrap();
+            assert!(matches!(
+                background::unsettled(&repo, &id, None),
+                background::Driven::Held(_)
+            ));
+            // A queued trial that nobody leases waits, here for a device another job holds.
+            repo.submit_experiment_trial(&id, 0, "candidate-0", now_ms())
+                .unwrap();
+            assert!(matches!(
+                background::unsettled(&repo, &id, None),
+                background::Driven::Waiting(_)
+            ));
+            let last = background::ATTEMPTS - 1;
+            background::process(
+                background::Work::new(repo.clone(), id.clone(), last).unwrap(),
+                |_, _| background::Driven::Held("another controller holds this experiment".into()),
+            );
+            let held = repo.get_experiment(&id).unwrap();
+            assert_eq!(held.status, ExperimentStatus::Running);
+            assert!(held.clock.unwrap().active_since_ms.is_some());
+            background::process(
+                background::Work::new(repo.clone(), id.clone(), last).unwrap(),
+                |repo, id| background::unsettled(repo, id, None),
+            );
+            let stopped = repo.experiment_result(&id).unwrap();
+            assert_eq!(stopped.experiment.status, ExperimentStatus::Cancelled);
+            assert!(stopped.experiment.clock.unwrap().active_since_ms.is_none());
+            let cancelled: Vec<_> = stopped
+                .events
+                .iter()
+                .filter(|event| event["kind"] == "background_worker_stopped")
+                .map(|event| event["body"]["cancelled"].as_bool())
+                .collect();
+            assert_eq!(cancelled, [None, Some(true)]);
+        }
+
+        #[tokio::test]
+        async fn a_panicking_background_drive_cancels_its_experiment_and_frees_its_slot() {
+            let mut harness = harness(anomaly_rows()).await;
+            let started = start_auto_training(
+                &mut harness.context,
+                anomaly_request(&harness.source),
+                false,
+            )
+            .await
+            .unwrap();
+            let id = started.experiment_id;
+            let repo = experiment_repository(&harness.context, &id).unwrap();
+            let work = background::Work::new(repo.clone(), id.clone(), 0).unwrap();
+            let key = work.key.clone();
+            background::queued().insert(key.clone());
+            background::process(work, |_, _| panic!("drive failed on purpose"));
+            assert!(!background::queued().contains(&key));
+            let state = repo.experiment_result(&id).unwrap();
+            assert_eq!(state.experiment.status, ExperimentStatus::Cancelled);
+            assert!(state.events.iter().any(|event| {
+                event["kind"] == "background_worker_failed"
+                    && event["body"]["error"]
+                        .as_str()
+                        .is_some_and(|error| error.contains("drive failed on purpose"))
+            }));
+        }
+
+        #[tokio::test]
+        async fn an_unwritable_predictions_table_is_reported_once_while_get_succeeds() {
+            let mut harness = harness(anomaly_rows()).await;
+            let mut request = anomaly_request(&harness.source);
+            request.tables.create_tables = true;
+            let started = start_auto_training(&mut harness.context, request, false)
+                .await
+                .unwrap();
+            let (repo, experiment) =
+                run_to_completion(&harness.context, &started.experiment_id).await;
+            assert_eq!(
+                experiment.status,
+                ExperimentStatus::Completed,
+                "{:?}",
+                experiment.stop_reason
+            );
+            // The pinned view now holds the live table, whose reference differs from the pin.
+            let pinned = experiment.request.context["pinned_source"]["database"]["cache_key"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            {
+                let mut cache = harness.context.cache.write().await;
+                let live = cache.get(&harness.source.cache_key).unwrap().clone();
+                cache.insert(pinned, live);
+            }
+            for _ in 0..2 {
+                let result =
+                    lifecycle(&mut harness.context, &experiment.id, LifecycleAction::Status)
+                        .await
+                        .unwrap();
+                assert!(result.predictions_table.is_none());
+            }
+            let failures = repo
+                .experiment_events(&experiment.id)
+                .unwrap()
+                .iter()
+                .filter(|event| event["kind"] == "predictions_table_failed")
+                .count();
+            assert_eq!(failures, 1);
+        }
+
+        /// The execution scopes of another board of the same app and of another app.
+        const FOREIGN_SCOPES: [(&str, &str); 2] =
+            [("auto-test", "other-board"), ("other-app", "board")];
+
+        fn enter_scope(harness: &mut Harness, app: &str, board: &str) {
+            let scope = harness.context.execution_cache.as_mut().unwrap();
+            scope.app_id = app.into();
+            scope.board_id = board.into();
+        }
+
+        /// A learning project of the harness board over the anomaly readings.
+        fn create_learning_project(harness: &Harness) -> String {
+            let (repo, project) =
+                crate::inspection::lifecycle::repository(&harness.context).unwrap();
+            let mut training = anomaly_request(&harness.source);
+            training.dataset.stream_id = "learning:scope".into();
+            let mut goals =
+                flow_like_ml_runtime::auto_training::default_goals(&training.dataset.spec);
+            goals.bounds = vec![flow_like_ml_runtime::MetricBound {
+                name: "auroc".into(),
+                minimum: Some(0.5),
+                maximum: None,
+            }];
+            repo.create_learning_project(
+                flow_like_ml_runtime::LearningProjectRequest {
+                    stream: scoped_stream(&project, &training),
+                    spec: json!(training.dataset.spec),
+                    source: json!({}),
+                    goals,
+                    policy: Default::default(),
+                    budget: Default::default(),
+                    deployment_id: "deployment:scope".into(),
+                },
+                now_ms(),
+            )
+            .unwrap()
+            .id
+        }
+
+        #[tokio::test]
+        async fn learning_projects_stay_in_their_app_and_board() {
+            use crate::inspection::learning;
+            let mut harness = harness(anomaly_rows()).await;
+            let project_id = create_learning_project(&harness);
+            learning::project_repository(&harness.context, &project_id).unwrap();
+            for (app, board) in FOREIGN_SCOPES {
+                enter_scope(&mut harness, app, board);
+                let refusals = [
+                    refusal(
+                        "project",
+                        learning::project_repository(&harness.context, &project_id),
+                    ),
+                    refusal(
+                        "prepare cycle",
+                        learning::prepare_learning_cycle(&mut harness.context, &project_id).await,
+                    ),
+                    refusal(
+                        "finish cycle",
+                        learning::finish_learning_cycle(&mut harness.context, &project_id).await,
+                    ),
+                ];
+                for (entry, error) in refusals {
+                    assert!(
+                        error.contains("Learning project belongs to a different app or board"),
+                        "{entry} from {app}:{board}: {error}"
+                    );
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn pinned_sources_reopen_only_in_their_app_and_board() {
+            use crate::inspection::auto_training_tables::reopen_pinned_source;
+            let mut harness = harness(anomaly_rows()).await;
+            let started = start_auto_training(
+                &mut harness.context,
+                anomaly_request(&harness.source),
+                false,
+            )
+            .await
+            .unwrap();
+            let repo = experiment_repository(&harness.context, &started.experiment_id).unwrap();
+            let pinned: PinnedTableSource = from_value(
+                repo.get_experiment(&started.experiment_id)
+                    .unwrap()
+                    .request
+                    .context["pinned_source"]
+                    .clone(),
+            )
+            .unwrap();
+            reopen_pinned_source(&mut harness.context, &pinned)
+                .await
+                .unwrap();
+            for (app, board) in FOREIGN_SCOPES {
+                enter_scope(&mut harness, app, board);
+                let (_, error) = refusal(
+                    "reopen source",
+                    reopen_pinned_source(&mut harness.context, &pinned).await,
+                );
+                assert!(
+                    error.contains("different execution scope"),
+                    "{app}:{board}: {error}"
+                );
+            }
+        }
+
+        #[cfg(unix)]
+        #[tokio::test]
+        async fn a_ledger_directory_linked_outside_app_storage_is_refused() {
+            let harness = harness(anomaly_rows()).await;
+            let storage = harness._scratch.0.join("board").join("storage");
+            std::fs::create_dir_all(&storage).unwrap();
+            let outside = Scratch::new("outside-app-storage");
+            let link = storage.join("inspection");
+            std::os::unix::fs::symlink(&outside.0, &link).unwrap();
+            let (_, error) = refusal(
+                "escape",
+                crate::inspection::lifecycle::repository(&harness.context),
+            );
+            assert!(error.contains("escapes app storage"), "{error}");
+            std::fs::remove_file(&link).unwrap();
+            std::os::unix::fs::symlink(outside.0.join("missing"), &link).unwrap();
+            let (_, error) = refusal(
+                "dangling",
+                crate::inspection::lifecycle::repository(&harness.context),
+            );
+            assert!(error.contains("dangling symlink"), "{error}");
+            assert!(!outside.0.join("jobs.sqlite").exists());
+        }
+
+        #[test]
+        fn training_embeddings_must_name_one_feature_extractor() {
+            use crate::inspection::lifecycle::FeatureExtractorRef;
+            let preprocessing = TablePreprocessing::Tensor {
+                column: "features".into(),
+                input_shape: vec![4, 8],
+            };
+            let extractor = |source: &str| FeatureExtractorRef {
+                source_id: source.into(),
+                blob_sha256: "c".repeat(64),
+                image_steps: vec![],
+            };
+            let row = |source: &str| json!({"features":{"shape":[4,8],"values":[],"feature_extractor":extractor(source)}});
+            let named = training_extractor(
+                &preprocessing,
+                &[json!({"features":{}})],
+                Some(&extractor("dino")),
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(named.source_id, "dino");
+            for (rows, requested) in [
+                (vec![row("dino"), row("resnet")], None),
+                (vec![row("resnet")], Some(extractor("dino"))),
+            ] {
+                let error = training_extractor(&preprocessing, &rows, requested.as_ref())
+                    .unwrap_err()
+                    .to_string();
+                assert!(
+                    error.contains("train one model per extractor") && !error.contains("predict"),
+                    "{error}"
+                );
+            }
+        }
+
+        /// Normal and anomalous [4, 8] patch embeddings, stored as tensor JSON text.
+        fn embedding_rows() -> Vec<Value> {
+            (0..48)
+                .map(|i| {
+                    let anomaly = i % 4 == 3;
+                    let values: Vec<f32> = (0..32)
+                        .map(|j| {
+                            if anomaly {
+                                4.0
+                            } else {
+                                ((i + j) % 5) as f32 / 10.0
+                            }
+                        })
+                        .collect();
+                    json!({"id":i.to_string(),"group":(i / 4).to_string(),"features":json!({"shape":[4,8],"values":values}).to_string(),"anomaly":anomaly})
+                })
+                .collect()
+        }
+
+        #[tokio::test]
+        async fn patch_models_record_the_extractor_the_request_names() {
+            use crate::inspection::lifecycle::FeatureExtractorRef;
+            let mut harness = harness(embedding_rows()).await;
+            let extractor = FeatureExtractorRef {
+                source_id: "dino".into(),
+                blob_sha256: "d".repeat(64),
+                image_steps: vec![],
+            };
+            let request: AutoTrainRequest = from_value(json!({
+                "dataset":{"source":harness.source,"stream_id":"patches",
+                    "spec":{"id":"patch-anomaly","description":"Detect anomalous patch embeddings","task":"visual_anomaly","labels":[],"input_shape":[4,8],"prediction_horizon_ms":null,"minimum_examples":2,"minimum_examples_per_class":1},
+                    "mapping":{"row_id":"id","group_id":"group","features":{"kind":"tensor","column":"features"},"target":{"kind":"column","column":"anomaly"},"provenance":{"kind":"measured","source":"gauge"}},
+                    "split":{"kind":"group","train_fraction":0.6,"validation_fraction":0.2,"seed":11}},
+                "compute":{"backend":"cpu"},"search":{"maximum_candidates":1},"budget":{"maximum_trials":1},
+                "tables":{"create_tables":false},
+                "initial_candidates":[{"engine":"patchcore","recipe":{"labels":[],"inspection_task":"visual_anomaly","coreset_size":16},"compute":{"backend":"cpu"}}],
+                "feature_extractor":extractor
+            }))
+            .unwrap();
+            let started = start_auto_training(&mut harness.context, request, false)
+                .await
+                .unwrap();
+            let candidates = experiment_repository(&harness.context, &started.experiment_id)
+                .unwrap()
+                .get_experiment(&started.experiment_id)
+                .unwrap()
+                .request
+                .candidates;
+            assert_eq!(candidates[0].engine, "patchcore");
+            assert_eq!(candidates[0].recipe["feature_extractor"], json!(extractor));
+        }
+
+        #[test]
+        fn a_model_that_recorded_its_extractor_refuses_unnamed_embeddings() {
+            let recorded = json!({"source_id":"dino","blob_sha256":"e".repeat(64),"image_steps":[]});
+            let manifest = json!({"engine":"patchcore","feature_extractor":recorded});
+            let error = ensure_extractor_named("artifact", &manifest, None)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("dino"), "{error}");
+            let named = crate::inspection::lifecycle::runtime_extractor(&recorded).unwrap();
+            ensure_extractor_named("artifact", &manifest, Some(&named)).unwrap();
+            ensure_extractor_named("artifact", &json!({"engine":"patchcore"}), None).unwrap();
+            ensure_extractor_named(
+                "artifact",
+                &json!({"engine":"patchcore","feature_extractor":null}),
+                None,
+            )
+            .unwrap();
+        }
+
+        #[test]
+        fn fine_tunes_without_image_steps_report_the_source_preprocessing() {
+            use flow_like_ml_core::PreprocessingStep;
+            let source = |manifest: Value| flow_like_ml_runtime::PretrainedSource {
+                id: "pretrained:fixture".into(),
+                project_id: "project".into(),
+                source_kind: flow_like_ml_runtime::PretrainedSourceKind::Imported,
+                blob: flow_like_ml_runtime::BlobRef {
+                    sha256: "0".repeat(64),
+                    bytes: 1,
+                    path: "fixture.blob".into(),
+                },
+                manifest,
+                origin: json!({}),
+                created_at_ms: 0,
+            };
+            let steps = json!([
+                {"kind":"resize","width":8,"height":8},
+                {"kind":"normalize","mean":[0.5],"std":[0.25]}
+            ]);
+            let recommending = source(json!({ "recommended_preprocessing": steps }));
+            let note = unchecked_pretrained_preprocessing(&recommending, &[])
+                .unwrap()
+                .expect("an unchecked normalization is reported");
+            assert_eq!(note["source_id"], "pretrained:fixture");
+            assert_eq!(note["recommended_preprocessing"], steps);
+            let declared = [PreprocessingStep::Resize {
+                width: 8,
+                height: 8,
+            }];
+            assert!(
+                unchecked_pretrained_preprocessing(&recommending, &declared)
+                    .unwrap()
+                    .is_none()
+            );
+            assert!(
+                unchecked_pretrained_preprocessing(&source(json!({})), &[])
+                    .unwrap()
+                    .is_none()
+            );
         }
     }
 }

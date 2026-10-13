@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS deployment_history(id TEXT NOT NULL, generation INTEG
 pub struct TrainingRepository {
     path: PathBuf,
     blob_dir: PathBuf,
+    /// Canonical directory of the ledger, as resolved when it was opened.
+    root: PathBuf,
     shadow: bool,
 }
 
@@ -65,12 +67,13 @@ impl TrainingRepository {
         let root = parent.canonicalize()?;
         let blob_dir = path.with_extension("artifacts");
         std::fs::create_dir_all(&blob_dir)?;
-        verify_storage_entries(&root, &path, &blob_dir)?;
         let repo = Self {
             path,
             blob_dir,
+            root,
             shadow: false,
         };
+        repo.verify_storage()?;
         let mut connection = repo.connection()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -101,6 +104,12 @@ impl TrainingRepository {
     }
     pub fn path(&self) -> &Path {
         &self.path
+    }
+    /// Checks that the ledger, its blob and lock directories and its journal files are still
+    /// real entries of the ledger's directory. Hosts that reuse an open handle can call it
+    /// instead of reopening; blob writes and sweeps check their own directory every time.
+    pub fn verify_storage(&self) -> Result<()> {
+        verify_storage_entries(&self.root, &self.path, &self.blob_dir)
     }
     pub(crate) fn writable(&self) -> Result<()> {
         if self.shadow {
@@ -398,6 +407,19 @@ impl TrainingRepository {
         at_ms: i64,
         resources: Option<ResourceRequest>,
     ) -> Result<JobLease> {
+        self.claim_job_state(job_id, owner, lease_ms, at_ms, resources)
+            .map(|(lease, _)| lease)
+    }
+
+    /// Like `claim_job_with_resources`, also returning the job as the claim committed it.
+    pub(crate) fn claim_job_state(
+        &self,
+        job_id: &str,
+        owner: &str,
+        lease_ms: i64,
+        at_ms: i64,
+        resources: Option<ResourceRequest>,
+    ) -> Result<(JobLease, TrainingJob)> {
         self.writable()?;
         if owner.is_empty() || lease_ms <= 0 {
             return Err(invalid("owner and positive lease duration are required"));
@@ -414,7 +436,7 @@ impl TrainingRepository {
         let mut reclaimed = false;
         loop {
             match self.claim_once(job_id, owner, lease_ms, at_ms, resources.as_ref())? {
-                Ok(lease) => return Ok(lease),
+                Ok(claimed) => return Ok(claimed),
                 Err(occupied)
                     if !reclaimed && self.reclaim_stopped_holders(&occupied.holders, at_ms) =>
                 {
@@ -432,7 +454,7 @@ impl TrainingRepository {
         lease_ms: i64,
         at_ms: i64,
         resources: Option<&ResourceRequest>,
-    ) -> Result<std::result::Result<JobLease, Occupied>> {
+    ) -> Result<std::result::Result<(JobLease, TrainingJob), Occupied>> {
         let mut conn = self.connection()?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut job: TrainingJob = read_json(&tx, "SELECT body FROM jobs WHERE id=?", job_id)?;
@@ -482,11 +504,12 @@ impl TrainingRepository {
         job.updated_at_ms = at_ms;
         save_job(&tx, &job)?;
         tx.commit()?;
-        Ok(Ok(JobLease {
-            job_id: job.id,
+        let lease = JobLease {
+            job_id: job.id.clone(),
             owner: owner.into(),
             generation: job.generation,
-        }))
+        };
+        Ok(Ok((lease, job)))
     }
 
     fn reclaim_stopped_holders(&self, holders: &[String], at_ms: i64) -> bool {
@@ -1146,11 +1169,13 @@ impl TrainingRepository {
         Ok(bytes)
     }
 
-    /// The caller keeps `_writer` until the returned reference is committed.
+    /// The caller keeps `_writer` until the returned reference is committed. The blob
+    /// directory is checked on every write, because a handle outlives the checks of `open`.
     fn put_blob(&self, _writer: &LocalRunLock, bytes: &[u8]) -> Result<BlobRef> {
         if bytes.is_empty() {
             return Err(invalid("empty checkpoint/model artifact"));
         }
+        verify_storage_entry(&self.root, &self.blob_dir, true)?;
         let hash = digest(bytes);
         let blob = BlobRef {
             path: format!("{hash}.blob"),
@@ -1213,12 +1238,16 @@ impl TrainingRepository {
         Ok(self.sweep_blob_store(&exclusive, Some(&referenced)))
     }
 
-    /// Without `referenced` only staging files are removed.
+    /// Without `referenced` only staging files are removed. A blob directory that is no
+    /// longer a real directory of the ledger is left alone.
     fn sweep_blob_store(
         &self,
         _exclusive: &LocalRunLock,
         referenced: Option<&HashSet<String>>,
     ) -> u64 {
+        if verify_storage_entry(&self.root, &self.blob_dir, true).is_err() {
+            return 0;
+        }
         let Ok(entries) = std::fs::read_dir(&self.blob_dir) else {
             return 0;
         };
@@ -2322,26 +2351,53 @@ fn verify_storage_entries(root: &Path, ledger: &Path, blob_dir: &Path) -> Result
         entries.push((PathBuf::from(journal), false));
     }
     for (entry, directory) in entries {
-        let metadata = match std::fs::symlink_metadata(&entry) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(error.into()),
-        };
-        let real = if directory {
-            metadata.is_dir()
-        } else {
-            metadata.is_file()
-        };
-        if !real || entry.canonicalize()?.parent() != Some(root) {
-            return Err(invalid(format!(
-                "training storage entry {} must be a real {} inside {}",
-                entry.display(),
-                if directory { "directory" } else { "file" },
-                root.display()
-            )));
-        }
+        verify_storage_entry(root, &entry, directory)?;
     }
     Ok(())
+}
+
+/// An absent entry passes.
+fn verify_storage_entry(root: &Path, entry: &Path, directory: bool) -> Result<()> {
+    match present(std::fs::symlink_metadata(entry))? {
+        Some(metadata) => verify_present_entry(root, entry, directory, &metadata),
+        None => Ok(()),
+    }
+}
+
+/// SQLite deletes its -wal and -shm files when its last connection closes, so an entry can
+/// vanish after its metadata was read; it then counts as absent.
+fn verify_present_entry(
+    root: &Path,
+    entry: &Path,
+    directory: bool,
+    metadata: &std::fs::Metadata,
+) -> Result<()> {
+    let real = if directory {
+        metadata.is_dir()
+    } else {
+        metadata.is_file()
+    };
+    if real
+        && present(entry.canonicalize())?
+            .is_none_or(|canonical| canonical.parent() == Some(root))
+    {
+        return Ok(());
+    }
+    Err(invalid(format!(
+        "training storage entry {} must be a real {} inside {}",
+        entry.display(),
+        if directory { "directory" } else { "file" },
+        root.display()
+    )))
+}
+
+/// `None` when the path does not exist.
+fn present<T>(result: std::io::Result<T>) -> Result<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
 /// A received ledger must not carry triggers, views or other objects this runtime does not
@@ -2882,6 +2938,52 @@ mod blob_store_tests {
             repo.collect_unreferenced_blobs().unwrap(),
             b"orphan".len() as u64
         );
+    }
+
+    #[test]
+    fn journal_files_that_vanish_during_the_storage_check_count_as_absent() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let wal = root.join("jobs.sqlite-wal");
+        std::fs::write(&wal, b"").unwrap();
+        let metadata = std::fs::symlink_metadata(&wal).unwrap();
+        // The last connection closes between the two lookups.
+        std::fs::remove_file(&wal).unwrap();
+        verify_present_entry(&root, &wal, false, &metadata).unwrap();
+        std::fs::create_dir(&wal).unwrap();
+        let metadata = std::fs::symlink_metadata(&wal).unwrap();
+        assert!(matches!(
+            verify_present_entry(&root, &wal, false, &metadata),
+            Err(Error::Invalid(_))
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_blob_directory_replaced_by_a_symlink_after_open_is_neither_written_nor_swept() {
+        let directory = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        std::fs::remove_dir(&repo.blob_dir).unwrap();
+        std::os::unix::fs::symlink(outside.path(), &repo.blob_dir).unwrap();
+        let staged = outside.path().join("unrelated.part");
+        std::fs::write(&staged, b"not the ledger's").unwrap();
+        let written = repo.register_pretrained_source(
+            "project",
+            b"weights",
+            json!({"engine":"burn","format_version":1,"config":{},"input_shape":[1]}),
+            json!({}),
+            1024,
+            now_ms(),
+        );
+        assert!(matches!(written, Err(Error::Invalid(_))), "{written:?}");
+        assert_eq!(repo.collect_unreferenced_blobs().unwrap(), 0);
+        let names: Vec<_> = std::fs::read_dir(outside.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("unrelated.part")]);
+        assert!(matches!(repo.verify_storage(), Err(Error::Invalid(_))));
     }
 
     #[test]

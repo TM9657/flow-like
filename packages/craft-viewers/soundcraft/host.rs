@@ -1,15 +1,23 @@
 use serde_json::{Value, json};
 use soundcraft_engine::{Engine, io};
+use soundcraft_ui_egui::dialogs::Dialog;
 use soundcraft_ui_egui::{Services, SoundApp};
-use std::{cell::RefCell, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    sync::Arc,
+};
 use wasm_bindgen::prelude::*;
 
 const MAX_BYTES: usize = 100 * 1024 * 1024;
+const MAX_PCM_BYTES: usize = 256 * 1024 * 1024;
 
 #[wasm_bindgen(module = "/src/audio.js")]
 extern "C" {
     #[wasm_bindgen(js_name = installAudioUnlock)]
     fn install_audio_unlock();
+    #[wasm_bindgen(catch, js_name = decodeAudio)]
+    async fn decode_audio(bytes: &[u8]) -> Result<JsValue, JsValue>;
 }
 
 #[wasm_bindgen]
@@ -23,6 +31,99 @@ extern "C" {
 thread_local! {
     static CONTEXT: RefCell<Option<egui::Context>> = const { RefCell::new(None) };
     static OUTPUT: RefCell<Option<Vec<u8>>> = const { RefCell::new(None) };
+    static PENDING: RefCell<Vec<Pending>> = const { RefCell::new(Vec::new()) };
+    static IMPORT_REQUESTED: Cell<bool> = const { Cell::new(false) };
+}
+
+#[derive(Clone, Copy)]
+enum Purpose {
+    Open,
+    Import { at: i64 },
+}
+enum Prepared {
+    Audio(Vec<u8>),
+    Midi(Vec<u8>),
+    Session {
+        bytes: Vec<u8>,
+        decoded: HashMap<String, Vec<u8>>,
+    },
+}
+struct Pending {
+    name: String,
+    purpose: Purpose,
+    result: Result<Option<Prepared>, String>,
+}
+
+async fn prepare_audio(name: &str, bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+    let ext = name.rsplit('.').next();
+    // The WASM reader only handles PCM WAV/AIFF. Preserve their BWF metadata.
+    if let Ok(size) = io::decoded_audio_byte_length(&bytes, ext) {
+        if size > MAX_PCM_BYTES as u64 {
+            return Err("The decoded audio exceeds the editor's 256 MiB PCM limit.".into());
+        }
+        return Ok(bytes);
+    }
+    let decoded = decode_audio(&bytes).await.map_err(|error| {
+        field(&error, "message").as_string().unwrap_or_else(|| {
+            "This browser could not decode the audio. Convert it to PCM WAV or AIFF.".into()
+        })
+    })?;
+    if !decoded.is_instance_of::<js_sys::Uint8Array>() {
+        return Err("The browser did not return decoded audio.".into());
+    }
+    let data = js_sys::Uint8Array::new(&decoded);
+    if data.length() < 44 || data.length() as usize > MAX_PCM_BYTES + 44 {
+        return Err("The decoded audio exceeds the editor's 256 MiB PCM limit.".into());
+    }
+    Ok(data.to_vec())
+}
+
+async fn prepare_file(name: &str, bytes: Vec<u8>, purpose: &Purpose) -> Result<Prepared, String> {
+    if bytes.is_empty() || bytes.len() > MAX_BYTES {
+        return Err("Audio files must be between 1 byte and 100 MiB.".into());
+    }
+    let ext = name
+        .rsplit('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match (purpose, ext.as_str()) {
+        (Purpose::Open, "scraft" | "scraftz") => {
+            let mut decoded = HashMap::new();
+            if bytes.starts_with(b"PK\x03\x04") {
+                let (text, mut media) = io::read_bundle(&bytes).map_err(|e| e.to_string())?;
+                let session =
+                    soundcraft_model::Session::from_json(&text).map_err(|e| e.to_string())?;
+                let mut total = 0usize;
+                for source in &session.sources {
+                    if let Some(audio) = media.remove(&source.path) {
+                        let audio = prepare_audio(&source.path, audio).await?;
+                        total = total.saturating_add(audio.len());
+                        if total > MAX_PCM_BYTES {
+                            return Err(
+                                "This session exceeds the editor's 256 MiB audio limit.".into()
+                            );
+                        }
+                        decoded.insert(source.path.clone(), audio);
+                    }
+                }
+            }
+            Ok(Prepared::Session { bytes, decoded })
+        }
+        (Purpose::Open, "mid" | "midi" | "smf") => Ok(Prepared::Midi(bytes)),
+        _ => prepare_audio(name, bytes).await.map(Prepared::Audio),
+    }
+}
+
+fn complete_later(name: String, purpose: Purpose, result: Result<Option<Prepared>, String>) {
+    PENDING.with(|pending| {
+        pending.borrow_mut().push(Pending {
+            name,
+            purpose,
+            result,
+        })
+    });
+    request_repaint();
 }
 
 #[wasm_bindgen]
@@ -76,6 +177,10 @@ async fn start_app() -> Result<(), String> {
                 let player = soundcraft_playback::Player::new(Arc::new(engine.session().clone()));
                 let services = Services {
                     host_command: Some(Box::new(|id| {
+                        if id == "file.import_audio" {
+                            IMPORT_REQUESTED.with(|requested| requested.set(true));
+                            return Some(Ok(json!({"pending": "browserImport"})));
+                        }
                         if id.starts_with("session.save")
                             || id == "file.bounce_mix"
                             || id == "file.export_midi"
@@ -102,6 +207,7 @@ async fn start_app() -> Result<(), String> {
                 Ok(Box::new(Host {
                     app: SoundApp::new(engine, Some(player), services),
                     opened: false,
+                    busy: false,
                     read_only: true,
                     reported_dirty: false,
                     last_exported: None,
@@ -117,16 +223,113 @@ async fn start_app() -> Result<(), String> {
 struct Host {
     app: SoundApp,
     opened: bool,
+    busy: bool,
     read_only: bool,
     reported_dirty: bool,
     last_exported: Option<u64>,
 }
 
 impl Host {
+    fn start_import_picker(&mut self) {
+        if !self.opened || self.read_only || self.busy {
+            return;
+        }
+        self.busy = true;
+        let purpose = Purpose::Import {
+            at: self.app.engine.session().edit.selection.start.max(0),
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            let picked = rfd::AsyncFileDialog::new()
+                .add_filter(
+                    "Audio",
+                    &[
+                        "wav", "wave", "bwf", "aif", "aiff", "aifc", "flac", "mp3", "ogg", "oga",
+                        "m4a", "aac", "caf", "webm", "mp4",
+                    ],
+                )
+                .pick_file()
+                .await;
+            let Some(file) = picked else {
+                complete_later(String::new(), purpose, Ok(None));
+                return;
+            };
+            let name = file.file_name();
+            let result = prepare_file(&name, file.read().await, &purpose)
+                .await
+                .map(Some);
+            complete_later(name, purpose, result);
+        });
+    }
+
+    fn receive_prepared(&mut self, pending: Pending) -> Result<(), String> {
+        self.busy = false;
+        let Some(prepared) = pending.result? else {
+            return Ok(());
+        };
+        let at = match pending.purpose {
+            Purpose::Open => 0,
+            Purpose::Import { at } => {
+                if self.read_only {
+                    return Err("Enable editing before importing audio.".into());
+                }
+                at
+            }
+        };
+        let before = self.app.engine.session_arc();
+        match prepared {
+            Prepared::Audio(bytes) => {
+                io::import_audio_bytes(&mut self.app.engine, &pending.name, &bytes, None, None, at)
+                    .map_err(|e| e.to_string())?;
+            }
+            Prepared::Midi(bytes) => {
+                io::import_midi_bytes(&mut self.app.engine, &bytes, 0, true)
+                    .map_err(|e| e.to_string())?;
+            }
+            Prepared::Session { bytes, decoded } => {
+                let missing = io::open_session_bytes_with_audio(
+                    &mut self.app.engine,
+                    &pending.name,
+                    &bytes,
+                    decoded,
+                )
+                .map_err(|e| e.to_string())?;
+                if !missing.is_empty() {
+                    return Err("This session references missing media. Open a bundled .scraftz session with its audio included.".into());
+                }
+            }
+        }
+        match pending.purpose {
+            Purpose::Open => {
+                self.app.engine.mark_clean();
+                self.opened = true;
+                event(
+                    "opened",
+                    json!({"revision": self.app.engine.revision, "readOnly": self.read_only}),
+                );
+            }
+            Purpose::Import { .. } => {
+                self.app.engine.push_undo("Import Audio", before);
+                self.app.ui.status = format!("Imported {}", pending.name);
+            }
+        }
+        Ok(())
+    }
+
+    fn take_import_prompt(&mut self) {
+        if matches!(&self.app.dialogs.open, Some(Dialog::PathPrompt { cmd, .. }) if cmd == "file.import_audio")
+        {
+            self.app.dialogs.open = None;
+            self.start_import_picker();
+        }
+        if IMPORT_REQUESTED.with(|requested| requested.replace(false)) {
+            self.start_import_picker();
+        }
+    }
+
     fn receive(&mut self, message: JsValue) -> Result<(), String> {
         match field(&message, "type").as_string().as_deref() {
             Some("open") => {
-                if self.opened {
+                if self.opened || self.busy {
                     return Err("An audio file is already open.".into());
                 }
                 let name = field(&message, "name")
@@ -141,41 +344,21 @@ impl Host {
                     return Err("Audio files must be between 1 byte and 100 MiB.".into());
                 }
                 let bytes = data.to_vec();
-                let ext = name
-                    .rsplit('.')
-                    .next()
-                    .unwrap_or_default()
-                    .to_ascii_lowercase();
-                match ext.as_str() {
-                    "scraft" | "scraftz" => {
-                        let missing = io::open_session_bytes(&mut self.app.engine, &name, &bytes)
-                            .map_err(|e| e.to_string())?;
-                        if !missing.is_empty() {
-                            return Err("This session references missing media. Open a bundled .scraftz session with its audio included.".into());
-                        }
-                    }
-                    "mid" | "midi" | "smf" => {
-                        io::import_midi_bytes(&mut self.app.engine, &bytes, 0, true)
-                            .map_err(|e| e.to_string())?;
-                    }
-                    _ => {
-                        io::import_audio_bytes(&mut self.app.engine, &name, &bytes, None, None, 0)
-                            .map_err(|e| e.to_string())?;
-                    }
-                }
-                self.app.engine.mark_clean();
                 self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
-                self.opened = true;
-                event(
-                    "opened",
-                    json!({"revision": self.app.engine.revision, "readOnly": self.read_only}),
-                );
+                self.busy = true;
+                wasm_bindgen_futures::spawn_local(async move {
+                    let result = prepare_file(&name, bytes, &Purpose::Open).await.map(Some);
+                    complete_later(name, Purpose::Open, result);
+                });
             }
             Some("set-read-only") => {
                 self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
                 self.app.dialogs.open = None;
             }
             Some("export") => {
+                if self.busy {
+                    return Err("Wait for the audio import to finish before saving.".into());
+                }
                 if !self.opened || self.read_only {
                     return Err("Enable editing before saving.".into());
                 }
@@ -239,7 +422,7 @@ impl Host {
 impl eframe::App for Host {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
         raw.dropped_files.clear();
-        if self.read_only {
+        if self.read_only || self.busy {
             raw.events.retain(|event| {
                 !matches!(
                     event,
@@ -253,6 +436,13 @@ impl eframe::App for Host {
         self.app.raw_input_hook(raw);
     }
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let pending = PENDING.with(|queue| std::mem::take(&mut *queue.borrow_mut()));
+        for message in pending {
+            if let Err(error) = self.receive_prepared(message) {
+                self.app.ui.status = error.clone();
+                event("error", json!({"error": error}));
+            }
+        }
         loop {
             let message = take();
             if message.is_null() || message.is_undefined() {
@@ -264,6 +454,7 @@ impl eframe::App for Host {
             }
         }
         self.app.logic(ctx);
+        self.take_import_prompt();
         let dirty = self.opened && self.app.engine.is_dirty();
         if dirty != self.reported_dirty {
             self.reported_dirty = dirty;
@@ -274,6 +465,9 @@ impl eframe::App for Host {
         }
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if self.busy {
+            ui.label("Preparing audio…");
+        }
         if self.read_only {
             ui.horizontal(|ui| {
                 ui.label("Flows Audio preview");
@@ -298,6 +492,8 @@ impl eframe::App for Host {
                 input.pointer = Default::default();
             });
         }
-        ui.add_enabled_ui(self.opened && !self.read_only, |ui| self.app.ui(ui));
+        ui.add_enabled_ui(self.opened && !self.read_only && !self.busy, |ui| {
+            self.app.ui(ui)
+        });
     }
 }

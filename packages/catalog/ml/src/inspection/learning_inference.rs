@@ -223,21 +223,11 @@ pub(super) fn audit_canary(
     let template = super::training_template(project)?;
     let budget = &template.dataset.budget;
     budget.validate()?;
-    let started = Instant::now();
-    let check = || -> Result<()> {
-        if cancel.is_cancelled() {
-            return Err(anyhow!(
-                "Canary replay was cancelled; saved predictions will resume next tick"
-            ));
-        }
-        if started.elapsed().as_millis() > template.budget.worker_limits.maximum_duration_ms as u128
-        {
-            return Err(anyhow!(
-                "Canary replay reached its per-tick duration budget; saved predictions will resume next tick"
-            ));
-        }
-        Ok(())
-    };
+    let mut replay = super::ReplayBudget::new(
+        "Canary replay",
+        cancel,
+        template.budget.worker_limits.maximum_duration_ms,
+    );
     let observations = repo.learning_observations(&project.id)?;
     let reviews: BTreeMap<_, _> = repo
         .learning_training_reviews_at(&project.id, at_ms)?
@@ -278,7 +268,7 @@ pub(super) fn audit_canary(
     .into_iter()
     .flatten()
     {
-        check()?;
+        replay.check()?;
         let artifact = repo.get_artifact(artifact_id)?;
         if artifact.stream != project.request.stream {
             return Err(anyhow!(
@@ -312,7 +302,7 @@ pub(super) fn audit_canary(
         let mut bytes = 0usize;
         let mut rows = Vec::with_capacity(history.len());
         for observation in &history {
-            check()?;
+            replay.check()?;
             validate_canary_sample(
                 observation,
                 &template.dataset.mapping,
@@ -339,7 +329,7 @@ pub(super) fn audit_canary(
             if !cohort.contains(&observation.sample_id) {
                 continue;
             }
-            check()?;
+            replay.check()?;
             let review = reviews.get(&observation.sample_id).ok_or_else(|| {
                 anyhow!(
                     "Canary sample '{}' needs an available independent review",
@@ -381,6 +371,7 @@ pub(super) fn audit_canary(
             )?;
             record.details["learning_review_revision"] = json!(review.revision);
             repo.record_prediction(&record)?;
+            replay.recorded();
         }
     }
     repo.reconcile_learning_canary_reviews(&project.id, at_ms)?;

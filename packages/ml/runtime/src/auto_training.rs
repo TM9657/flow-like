@@ -10,6 +10,7 @@ use flow_like_ml_core::{
     TensorData,
 };
 use flow_like_ml_native::evaluation as metrics;
+use rusqlite::OptionalExtension;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     sync::Arc,
@@ -144,24 +145,30 @@ pub fn validate_search(
     Ok(())
 }
 
-/// Reject a selection metric or bound that validation never measures for this task. Selection
-/// would otherwise rank every trial as ineligible and leave the bound to the final audit.
+/// Reject a selection metric or bound that validation or the final audit never reports for
+/// this task. Selection would otherwise rank every trial as ineligible, or the final audit
+/// would leave the target unmet whatever the model scores.
 pub fn validate_goals(spec: &InspectionSpec, goals: &ExperimentGoals) -> Result<()> {
     for name in std::iter::once(&goals.primary_metric).chain(goals.bounds.iter().map(|b| &b.name)) {
-        if !validation_measures(&goals.task, &spec.labels, name) {
+        if !goal_metric(&goals.task, &spec.labels, name) {
+            let hint = if name == "audited_samples" {
+                "; set minimum_audited_samples instead"
+            } else {
+                ""
+            };
             return Err(invalid(format!(
-                "goal metric {name} is not measured on the validation partition for this task"
+                "goal metric {name} is not measured on both the validation partition and the final audit for this task{hint}"
             )));
         }
     }
     Ok(())
 }
 
-fn validation_measures(task: &EvaluationTask, labels: &[String], name: &str) -> bool {
-    if matches!(
-        name,
-        "audited_samples" | "mean_latency_ms" | "failure_rate" | "artifact_bytes"
-    ) {
+/// Names that validation and the final audit both report. Validation also records
+/// `audited_samples`, which gates eligibility through `minimum_audited_samples`, and
+/// `anomaly_scale`, which calibrates anomaly scores; the final audit reports neither.
+fn goal_metric(task: &EvaluationTask, labels: &[String], name: &str) -> bool {
+    if matches!(name, "mean_latency_ms" | "failure_rate" | "artifact_bytes") {
         return true;
     }
     let class = |value: &str, classes: usize| value.parse::<usize>().is_ok_and(|c| c < classes);
@@ -206,7 +213,6 @@ fn validation_measures(task: &EvaluationTask, labels: &[String], name: &str) -> 
                 | "false_positive_rate"
                 | "support/normal"
                 | "support/anomaly"
-                | "anomaly_scale"
         ),
         EvaluationTask::Detection { classes, .. } => {
             name == "mean_average_precision"
@@ -521,6 +527,24 @@ fn unfit_message(budget: u64, estimate: u64) -> String {
         "no candidate fits the memory budget of {budget} bytes; \
          the smallest estimate is {estimate} bytes"
     )
+}
+
+/// Skip event for a candidate that does not fit the worker memory even at batch 1.
+fn unfit_event(index: usize, estimate: u64, budget: u64, view_bytes: Option<u64>) -> Value {
+    let reason = match view_bytes {
+        Some(view) => format!(
+            "the {view} byte training view alone needs {} bytes of worker memory",
+            view.saturating_mul(SNAPSHOT_MEMORY_FACTOR)
+        ),
+        None => "training does not fit the worker memory budget at batch 1".into(),
+    };
+    serde_json::json!({
+        "candidate_index": index,
+        "reason": reason,
+        "estimated_bytes": estimate,
+        "memory_budget_bytes": budget,
+        "view_bytes": view_bytes,
+    })
 }
 
 /// Halve `batch` until the training estimate plus `fixed_bytes` fits `budget`. Returns the
@@ -1194,7 +1218,7 @@ impl AutoTrainingController {
                         self.now(),
                     )
                     .map(Some),
-                Ok(None) if trials.is_empty() => match self.unfit_memory_reason(experiment_id)? {
+                Ok(None) if trials.is_empty() => match self.skip_reason(&experiment)? {
                     Some(reason) => {
                         return self.repository.stop_experiment_budget(
                             experiment_id,
@@ -1429,7 +1453,7 @@ impl AutoTrainingController {
     /// Freeze the validation winner before opening its final test partition. Repeated calls
     /// reuse durable prediction evidence and the final evaluation, never select another winner.
     /// Once the winner is frozen every outcome settles the experiment, except a cancellation or
-    /// a busy ledger, which a later call retries.
+    /// a file or ledger storage failure, which a later call retries.
     pub fn finalize(&self, experiment_id: &str) -> Result<Experiment> {
         let _lock =
             match LocalRunLock::acquire(&self.repository, &format!("experiment:{experiment_id}")) {
@@ -1488,7 +1512,7 @@ impl AutoTrainingController {
             }
         });
         match outcome {
-            Err(error) if !matches!(error, Error::Cancelled) && !ledger_busy(&error) => {
+            Err(error) if !retryable_after_freeze(&error) => {
                 self.repository.finalize_experiment(
                     experiment_id,
                     None,
@@ -1747,6 +1771,7 @@ impl AutoTrainingController {
                             );
                             experiment = updated;
                         }
+                        // The resized batch marks a skip for a missing slot, not for memory.
                         Err(Error::Invalid(message)) if message.contains("candidate count") => {
                             self.note(
                                 &experiment.id,
@@ -1754,6 +1779,7 @@ impl AutoTrainingController {
                                 serde_json::json!({
                                     "candidate_index": index,
                                     "reason": format!("batch {batch} would fit, but {message}"),
+                                    "resized_batch_size": batch,
                                 }),
                             );
                         }
@@ -1761,16 +1787,15 @@ impl AutoTrainingController {
                     }
                     skipped.insert(index);
                 }
-                Admission::Unfit { estimate, budget } => {
+                Admission::Unfit {
+                    estimate,
+                    budget,
+                    view_bytes,
+                } => {
                     self.note(
                         &experiment.id,
                         "candidate_skipped",
-                        serde_json::json!({
-                            "candidate_index": index,
-                            "reason": "training does not fit the worker memory budget at batch 1",
-                            "estimated_bytes": estimate,
-                            "memory_budget_bytes": budget,
-                        }),
+                        unfit_event(index, estimate, budget, view_bytes),
                     );
                     skipped.insert(index);
                 }
@@ -1834,13 +1859,8 @@ impl AutoTrainingController {
         }
         let (dataset_bytes, shape) = match &data[&key] {
             TrainingData::Measured { bytes, shape } => (*bytes, shape.clone()),
-            TrainingData::Exceeds => {
-                return Ok(Admission::Unfit {
-                    estimate: limit
-                        .saturating_add(1)
-                        .saturating_mul(SNAPSHOT_MEMORY_FACTOR),
-                    budget,
-                });
+            TrainingData::Exceeds { bytes } => {
+                return Ok(self.oversized_view(experiment, &key.0, &recipe, *bytes, budget));
             }
             TrainingData::Unknown => return Ok(Admission::Fits),
         };
@@ -1886,9 +1906,46 @@ impl AutoTrainingController {
                         budget,
                     }
                 }
-                Some(Err(estimate)) => Admission::Unfit { estimate, budget },
+                Some(Err(estimate)) => Admission::Unfit {
+                    estimate,
+                    budget,
+                    view_bytes: None,
+                },
             },
         )
+    }
+
+    /// The worker refuses a view beyond a twelfth of its budget before parsing it. Charge what
+    /// it would need at batch 1, with the model sized at the inspection's declared input shape;
+    /// derived datasets may reshape samples, so their model term is left out.
+    fn oversized_view(
+        &self,
+        experiment: &Experiment,
+        dataset_id: &str,
+        recipe: &BurnEngineRecipe,
+        view_bytes: u64,
+        budget: u64,
+    ) -> Admission {
+        let model = if dataset_id == experiment.request.snapshot_id {
+            serde_json::from_value::<Vec<usize>>(experiment.request.spec["input_shape"].clone())
+                .ok()
+                .and_then(|shape| recipe.config.recipe.estimated_training_bytes(&shape, 1).ok())
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let source = recipe
+            .pretrained
+            .as_ref()
+            .and_then(|reference| self.pretrained_source_bytes(reference))
+            .unwrap_or(0);
+        Admission::Unfit {
+            estimate: model
+                .saturating_add(view_bytes.saturating_mul(SNAPSHOT_MEMORY_FACTOR))
+                .saturating_add(source),
+            budget,
+            view_bytes: Some(view_bytes),
+        }
     }
 
     /// Serialized size and sample shape of a dataset's worker view, read only up to `limit`.
@@ -1912,7 +1969,11 @@ impl AutoTrainingController {
             .get_snapshot_limited(&dataset.training_snapshot_id, limit)
         {
             Ok(snapshot) => snapshot,
-            Err(Error::Invalid(_)) => return Ok(TrainingData::Exceeds),
+            Err(Error::Invalid(_)) => {
+                return Ok(TrainingData::Exceeds {
+                    bytes: self.stored_snapshot_bytes(&dataset.training_snapshot_id)?,
+                });
+            }
             Err(error) => return Err(error),
         };
         let Some(first) = snapshot.train.first() else {
@@ -1933,6 +1994,22 @@ impl AutoTrainingController {
         })
     }
 
+    /// Stored size of a snapshot body, which the worker checks before parsing it, read
+    /// without loading the body.
+    fn stored_snapshot_bytes(&self, snapshot_id: &str) -> Result<u64> {
+        let bytes: Option<i64> = self
+            .repository
+            .connection()?
+            .query_row(
+                "SELECT length(CAST(body AS BLOB)) FROM snapshots WHERE id=?",
+                [snapshot_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let bytes = bytes.ok_or_else(|| Error::NotFound(snapshot_id.into()))?;
+        u64::try_from(bytes).map_err(|_| invalid("stored snapshot size is negative"))
+    }
+
     fn pretrained_source_bytes(&self, reference: &PretrainedSourceRef) -> Option<u64> {
         let source = self
             .repository
@@ -1951,23 +2028,41 @@ impl AutoTrainingController {
         )
     }
 
-    /// Explain an experiment whose every candidate was skipped for memory.
-    fn unfit_memory_reason(&self, experiment_id: &str) -> Result<Option<String>> {
-        let mut smallest: Option<(u64, u64)> = None;
-        for event in self.repository.experiment_events(experiment_id)? {
+    /// Explain an experiment whose every candidate was skipped: a resized copy without a free
+    /// candidate slot, otherwise the smallest memory estimate.
+    fn skip_reason(&self, experiment: &Experiment) -> Result<Option<String>> {
+        let mut smallest: Option<(u64, u64, Option<u64>)> = None;
+        for event in self.repository.experiment_events(&experiment.id)? {
             if event["kind"] != "candidate_skipped" {
                 continue;
             }
             let body = &event["body"];
+            if let Some(batch) = body["resized_batch_size"].as_u64() {
+                return Ok(Some(format!(
+                    "candidate {} fits the worker memory only at batch {batch}, but the trial \
+                     budget of {} leaves no candidate slot for its resized copy; raise \
+                     maximum_trials",
+                    body["candidate_index"], experiment.request.budget.maximum_trials
+                )));
+            }
             if let (Some(estimate), Some(budget)) = (
                 body["estimated_bytes"].as_u64(),
                 body["memory_budget_bytes"].as_u64(),
-            ) && smallest.is_none_or(|(least, _)| estimate < least)
+            ) && smallest.is_none_or(|(least, ..)| estimate < least)
             {
-                smallest = Some((estimate, budget));
+                smallest = Some((estimate, budget, body["view_bytes"].as_u64()));
             }
         }
-        Ok(smallest.map(|(estimate, budget)| unfit_message(budget, estimate)))
+        Ok(smallest.map(|(estimate, budget, view)| {
+            let message = unfit_message(budget, estimate);
+            match view {
+                Some(view) => format!(
+                    "{message}; its {view} byte training view alone needs {} bytes",
+                    view.saturating_mul(SNAPSHOT_MEMORY_FACTOR)
+                ),
+                None => message,
+            }
+        }))
     }
 
     fn next_halving_trial(
@@ -2231,15 +2326,26 @@ impl Backoff {
     }
 }
 
-fn ledger_busy(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::Sql(rusqlite::Error::SqliteFailure(failure, _))
-            if matches!(
-                failure.code,
-                rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
-            )
-    )
+/// Failures a later finalize can outlast: a cancellation, file I/O, and SQLite contention,
+/// storage or memory errors. Every other error is evidence about the frozen winner and
+/// settles its audit.
+fn retryable_after_freeze(error: &Error) -> bool {
+    match error {
+        Error::Cancelled | Error::Io(_) => true,
+        Error::Sql(rusqlite::Error::SqliteFailure(failure, _)) => matches!(
+            failure.code,
+            rusqlite::ErrorCode::DatabaseBusy
+                | rusqlite::ErrorCode::DatabaseLocked
+                | rusqlite::ErrorCode::DiskFull
+                | rusqlite::ErrorCode::SystemIoFailure
+                | rusqlite::ErrorCode::CannotOpen
+                | rusqlite::ErrorCode::OutOfMemory
+                | rusqlite::ErrorCode::ReadOnly
+                | rusqlite::ErrorCode::OperationInterrupted
+                | rusqlite::ErrorCode::FileLockingProtocolFailed
+        ),
+        _ => false,
+    }
 }
 
 /// Evidence for a failed test prediction where the task scores a failure as a miss.
@@ -2292,15 +2398,18 @@ enum Admission {
         estimate: u64,
         budget: u64,
     },
+    /// Even batch 1 does not fit; `view_bytes` is set when the training view alone is too large.
     Unfit {
         estimate: u64,
         budget: u64,
+        view_bytes: Option<u64>,
     },
 }
 
 enum TrainingData {
     Measured { bytes: u64, shape: Vec<usize> },
-    Exceeds,
+    /// Stored size of a view beyond the worker's snapshot limit.
+    Exceeds { bytes: u64 },
     Unknown,
 }
 
@@ -2600,13 +2709,20 @@ mod tests {
                     "{task:?} validation lacks {name}"
                 );
             }
+            // The audited sample count gates eligibility; the final audit has no such metric.
             for name in metrics.keys() {
-                assert!(
-                    validation_measures(&task, &labels, name),
-                    "{task:?} goal check rejects measured {name}"
+                assert_eq!(
+                    goal_metric(&task, &labels, name),
+                    name != "audited_samples",
+                    "{task:?} goal check of measured {name}"
                 );
             }
         }
+        assert!(!goal_metric(
+            &EvaluationTask::Anomaly { threshold: 0.5 },
+            &labels,
+            "anomaly_scale"
+        ));
     }
 
     #[test]
@@ -2645,9 +2761,20 @@ mod tests {
             goals.bounds = vec![bound(name)];
             assert!(validate_goals(&spec, &goals).is_err(), "{name}");
         }
+        goals.bounds = vec![bound("audited_samples")];
+        let error = validate_goals(&spec, &goals).unwrap_err().to_string();
+        assert!(error.contains("minimum_audited_samples"), "{error}");
         goals.bounds.clear();
         goals.primary_metric = "mean_iou".into();
         assert!(validate_goals(&spec, &goals).is_err());
+        let anomaly = InspectionSpec {
+            task: TaskKind::SensorAnomaly,
+            ..spec
+        };
+        let mut goals = default_goals(&anomaly);
+        validate_goals(&anomaly, &goals).unwrap();
+        goals.bounds = vec![bound("anomaly_scale")];
+        assert!(validate_goals(&anomaly, &goals).is_err());
     }
 
     #[test]
@@ -2728,5 +2855,35 @@ mod tests {
                 .all(|pause| *pause == MAXIMUM_RETRY_DELAY_MS)
         );
         assert!(long.iter().sum::<u64>() <= 60_000);
+    }
+
+    #[test]
+    fn only_storage_failures_keep_a_frozen_audit_retryable() {
+        let sqlite = |code| {
+            Error::Sql(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(code),
+                None,
+            ))
+        };
+        for error in [
+            Error::Cancelled,
+            Error::Io(std::io::Error::other("no space left on device")),
+            sqlite(rusqlite::ffi::SQLITE_BUSY),
+            sqlite(rusqlite::ffi::SQLITE_FULL),
+            sqlite(rusqlite::ffi::SQLITE_IOERR),
+            sqlite(rusqlite::ffi::SQLITE_CANTOPEN),
+        ] {
+            assert!(retryable_after_freeze(&error), "{error}");
+        }
+        for error in [
+            invalid("holdout below the audited minimum"),
+            Error::Engine("malformed prediction output".into()),
+            Error::Conflict("final evaluation evidence changed".into()),
+            Error::NotFound("artifact".into()),
+            sqlite(rusqlite::ffi::SQLITE_CONSTRAINT),
+            Error::Sql(rusqlite::Error::QueryReturnedNoRows),
+        ] {
+            assert!(!retryable_after_freeze(&error), "{error}");
+        }
     }
 }

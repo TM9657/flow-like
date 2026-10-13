@@ -36,6 +36,12 @@ pub(crate) fn initialize_learning(connection: &Connection) -> Result<()> {
             [],
         )?;
     }
+    // Projects saved before aborts were counted keep each aborted reservation in
+    // `cycles_started`; every aborted cycle row is one of them.
+    connection.execute(
+        "UPDATE learning_projects SET body=json_set(body,'$.usage.cycles_aborted',(SELECT count(*) FROM learning_cycles c WHERE c.project_id=learning_projects.id AND json_extract(c.body,'$.state')='aborted')) WHERE COALESCE(json_extract(body,'$.usage.cycles_aborted'),0)<(SELECT count(*) FROM learning_cycles c WHERE c.project_id=learning_projects.id AND json_extract(c.body,'$.state')='aborted')",
+        [],
+    )?;
     Ok(())
 }
 
@@ -294,6 +300,7 @@ impl TrainingRepository {
                 "review outcome was unavailable before its feature or target window ended",
             ));
         }
+        validate_predictive_outcome(&value.request.spec, review, outcome.as_ref(), feature_end)?;
         validate_annotation(&value, &review.annotation)?;
         let latest:Option<String>=tx.query_row("SELECT body FROM learning_reviews WHERE project_id=? AND sample_id=? ORDER BY revision DESC LIMIT 1",params![project_id,review.sample_id],|r|r.get(0)).optional()?;
         if let Some(latest) = latest {
@@ -2076,6 +2083,43 @@ fn review_outcome(review: &LearningReview) -> Result<Option<ReviewOutcome>> {
         )));
     }
     Ok(Some(outcome))
+}
+/// Preparation replaces a row's outcome with its review's, even with none, and then validates
+/// the sample against the task. Predictive tasks need an outcome window that starts after the
+/// feature window and ends within the prediction horizon.
+fn validate_predictive_outcome(
+    spec: &Value,
+    review: &LearningReview,
+    outcome: Option<&ReviewOutcome>,
+    feature_end: i64,
+) -> Result<()> {
+    let horizon = spec.get("prediction_horizon_ms").and_then(Value::as_u64);
+    if spec.get("task").and_then(Value::as_str) != Some("sequence_forecast")
+        && horizon.is_none_or(|horizon| horizon == 0)
+    {
+        return Ok(());
+    }
+    let sample = &review.sample_id;
+    let outcome = outcome.ok_or_else(|| {
+        invalid(format!(
+            "review for sample '{sample}' needs an outcome window because its task predicts future targets"
+        ))
+    })?;
+    if outcome.target_start_ms <= feature_end {
+        return Err(invalid(format!(
+            "review outcome for sample '{sample}' starts at {} ms, inside its feature window ending at {feature_end} ms",
+            outcome.target_start_ms
+        )));
+    }
+    if let Some(horizon) = horizon
+        && i128::from(outcome.target_end_ms) > i128::from(feature_end) + i128::from(horizon)
+    {
+        return Err(invalid(format!(
+            "review outcome for sample '{sample}' ends at {} ms, beyond the {horizon} ms prediction horizon after {feature_end} ms",
+            outcome.target_end_ms
+        )));
+    }
+    Ok(())
 }
 fn reserve_collection_bytes(value: &mut LearningProject, bytes: u64) -> Result<()> {
     let total = value

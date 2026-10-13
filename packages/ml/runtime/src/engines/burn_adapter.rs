@@ -293,6 +293,47 @@ fn channels_text(values: &[f64]) -> String {
         .join(", ")
 }
 
+/// Multiple of the largest value a source's normalization gives an image scaled to [0, 1]
+/// beyond which inputs cannot have been prepared for it, such as raw 0-255 pixels.
+const INPUT_SCALE_TOLERANCE: f64 = 8.0;
+
+/// Tensors carry no record of their preprocessing, but inputs far outside the range the
+/// source's normalization produces were not scaled for it, whatever the run declares.
+fn validate_pretrained_input_range(
+    source: &PretrainedSource,
+    inputs: &[&burn::TensorData],
+) -> Result<()> {
+    let steps = expected_image_steps(&source.manifest)?;
+    if !steps
+        .iter()
+        .any(|step| matches!(step, PreprocessingStep::Normalize { .. }))
+    {
+        return Ok(());
+    }
+    let Some((mean, deviation)) = input_normalization(&steps)? else {
+        return Ok(());
+    };
+    let bound = (0..mean.len().max(deviation.len()))
+        .filter_map(|index| {
+            let (mean, deviation) = (channel(&mean, index)?, channel(&deviation, index)?);
+            Some(mean.abs().max((1.0 - mean).abs()) / deviation.abs())
+        })
+        .fold(0.0, f64::max);
+    let largest = inputs
+        .iter()
+        .flat_map(|input| &input.values)
+        .fold(0.0, |largest: f64, value| largest.max(f64::from(value.abs())));
+    if largest > bound * INPUT_SCALE_TOLERANCE {
+        return Err(invalid(format!(
+            "pretrained source {} expects images scaled to [0, 1] and normalized with mean [{}] and std [{}], which keeps values within ±{bound:.2}, but the training inputs reach {largest:.1}; they look unscaled, for example raw 0-255 pixels; prepare inputs with the source's recommended preprocessing",
+            source.id,
+            channels_text(&mean),
+            channels_text(&deviation),
+        )));
+    }
+    Ok(())
+}
+
 /// Fine-tuning from an in-project model must not select on data that model's lineage was
 /// fitted on, nor audit on any of its lineage's data, or the metrics stop being independent.
 fn ensure_independent_initialization(work: &TrainingWork, source: &PretrainedSource) -> Result<()> {
@@ -390,8 +431,40 @@ struct BurnEngine {
     observer: Option<CheckpointObserver>,
 }
 
-/// Publish a resumable checkpoint. A job's latest checkpoint stays retained after training,
-/// so it must fit the artifact reservation of an experiment trial.
+/// Packs a resumable checkpoint. An experiment trial's final artifact must fit its artifact
+/// reservation, so the model weights a checkpoint resumes must fit it as well. The optimizer
+/// state is bounded by the checkpoint limit and charged to the experiment once the trial
+/// settles.
+fn pack_checkpoint(
+    repository: &TrainingRepository,
+    job_id: &str,
+    directory: &Path,
+    manifest: &str,
+    maximum_bytes: u64,
+) -> Result<Vec<u8>> {
+    let bytes = pack_named(directory, manifest, true, maximum_bytes)?;
+    let weights = checkpoint_model_bytes(&bytes);
+    repository
+        .check_experiment_artifact_budget(job_id, weights)
+        .map_err(|error| match error {
+            Error::Invalid(_) => invalid(format!(
+                "model weights of {weights} bytes exceed the experiment trial's artifact reservation"
+            )),
+            other => other,
+        })?;
+    Ok(bytes)
+}
+
+/// Size of the inference artifact a packed checkpoint holds: the envelope without its
+/// optimizer state.
+fn checkpoint_model_bytes(checkpoint: &[u8]) -> u64 {
+    let optimizer = checkpoint
+        .get(24..32)
+        .and_then(|length| <[u8; 8]>::try_from(length).ok())
+        .map_or(0, u64::from_le_bytes);
+    (checkpoint.len() as u64).saturating_sub(optimizer)
+}
+
 pub(super) fn publish_checkpoint(
     work: &TrainingWork,
     control: &WorkerControl,
@@ -400,22 +473,45 @@ pub(super) fn publish_checkpoint(
     step: u64,
     metadata: Value,
 ) -> Result<()> {
-    let bytes = pack_named(
+    let bytes = pack_checkpoint(
+        &work.repository,
+        &work.job.id,
         directory,
         manifest,
-        true,
         control.limits().maximum_checkpoint_bytes,
     )?;
-    work.repository
-        .check_experiment_artifact_budget(&work.job.id, bytes.len() as u64)
-        .map_err(|error| match error {
-            Error::Invalid(_) => invalid(format!(
-                "checkpoint of {} bytes exceeds the experiment trial's artifact reservation",
-                bytes.len()
-            )),
-            other => other,
-        })?;
     control.checkpoint(&bytes, step, metadata)?;
+    Ok(())
+}
+
+/// After a run stopped, persists the last completed batch that the engine checkpointed
+/// before returning, under the checks of an epoch checkpoint. Callers report why the run
+/// stopped, so they ignore a failure here.
+pub(super) fn publish_stop_checkpoint(
+    work: &TrainingWork,
+    control: &WorkerControl,
+    directory: &Path,
+    manifest: &str,
+    mut metadata: Value,
+) -> Result<()> {
+    let state_path = directory.join(manifest);
+    if !state_path.exists() {
+        return Ok(());
+    }
+    let state: Value = serde_json::from_slice(&fs::read(state_path)?)?;
+    let step = state
+        .pointer("/report/steps")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let bytes = pack_checkpoint(
+        &work.repository,
+        &work.job.id,
+        directory,
+        manifest,
+        control.limits().maximum_checkpoint_bytes,
+    )?;
+    metadata["steps"] = step.into();
+    control.checkpoint_after_stop(&bytes, step, metadata)?;
     Ok(())
 }
 
@@ -573,6 +669,7 @@ impl TrainingEngine for BurnEngine {
             .transpose()?;
         if let Some(source) = &pretrained {
             validate_burn_pretrained_preprocessing(source, &recipe.preprocessing)?;
+            validate_pretrained_input_range(source, &[&training.inputs, &validation.inputs])?;
             ensure_independent_initialization(work, source)?;
         }
         let source_directory = if work.resume_checkpoint.is_none() {
@@ -613,6 +710,11 @@ impl TrainingEngine for BurnEngine {
                     latest_published = progress.steps;
                     if let Some(observer) = &self.observer {
                         observer(&work.job, progress.steps as u64);
+                        // An observer may have stopped the job; honor that before the next batch.
+                        if let Err(error) = control.check_cancel_now() {
+                            interruption = Some(error);
+                            cancellation.cancel();
+                        }
                     }
                 }
             }
@@ -648,23 +750,14 @@ impl TrainingEngine for BurnEngine {
             )
         };
         let cancellation_reason = cancellation_monitor.finish();
-        if trained.is_err() && directory.path().join(burn::MANIFEST_FILE).exists() {
+        if trained.is_err() {
             // Burn checkpoints the last completed batch on cooperative cancellation.
-            let state: Value =
-                serde_json::from_slice(&fs::read(directory.path().join(burn::MANIFEST_FILE))?)?;
-            let step = state
-                .pointer("/report/steps")
-                .and_then(Value::as_u64)
-                .unwrap_or(0);
-            let bytes = pack(
+            let _ = publish_stop_checkpoint(
+                work,
+                control,
                 directory.path(),
-                true,
-                control.limits().maximum_checkpoint_bytes,
-            )?;
-            let _ = control.checkpoint_after_stop(
-                &bytes,
-                step,
-                serde_json::json!({"engine":"burn","format_version":1,"steps":step}),
+                burn::MANIFEST_FILE,
+                serde_json::json!({"engine":"burn","format_version":1}),
             );
         }
         if let Some(error) = interruption.or(checkpoint_error).or(cancellation_reason) {
@@ -1333,6 +1426,301 @@ mod tests {
         .unwrap();
         validate_burn_pretrained_preprocessing(&source_with(serde_json::json!({})), &[resize])
             .unwrap();
+    }
+
+    #[test]
+    fn fine_tune_inputs_far_outside_the_source_normalization_are_rejected() {
+        let imagenet = source_with(serde_json::json!({"recommended_preprocessing":[
+            {"kind":"resize","width":2,"height":1},
+            {"kind":"normalize","mean":[0.485,0.456,0.406],"std":[0.229,0.224,0.225]}
+        ]}));
+        let images = |values: Vec<f32>| burn::TensorData {
+            shape: vec![1, 3, 1, 2],
+            values,
+        };
+        let normalized = images(vec![-2.1, 2.2, -2.0, 2.4, -1.8, 2.6]);
+        // Unnormalized [0, 1] pixels stay in range; the probe only rejects what cannot fit.
+        let unit = images(vec![0.0, 1.0, 0.2, 0.8, 0.5, 0.5]);
+        validate_pretrained_input_range(&imagenet, &[&normalized, &unit]).unwrap();
+        let raw = images(vec![0.0, 255.0, 12.0, 200.0, 90.0, 30.0]);
+        let error = validate_pretrained_input_range(&imagenet, &[&normalized, &raw])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("raw 0-255 pixels"), "{error}");
+        let identity = source_with(serde_json::json!({"recommended_preprocessing":[
+            {"kind":"normalize","mean":[0.0],"std":[1.0]}
+        ]}));
+        assert!(validate_pretrained_input_range(&identity, &[&raw]).is_err());
+        validate_pretrained_input_range(&identity, &[&normalized]).unwrap();
+        let unnormalized = source_with(serde_json::json!({"recommended_preprocessing":[
+            {"kind":"resize","width":2,"height":1}
+        ]}));
+        validate_pretrained_input_range(&unnormalized, &[&raw]).unwrap();
+        validate_pretrained_input_range(&source_with(serde_json::json!({})), &[&raw]).unwrap();
+    }
+
+    fn reserve_trial(repository: &TrainingRepository, job_id: &str, reserved_artifact_bytes: u64) {
+        let trial = ExperimentTrial {
+            id: format!("trial-{job_id}"),
+            experiment_id: format!("experiment-{job_id}"),
+            candidate_index: 0,
+            idempotency_key: "candidate".into(),
+            job_id: job_id.into(),
+            dataset_snapshot_id: "dataset".into(),
+            snapshot_id: "training".into(),
+            artifact_id: None,
+            status: ExperimentTrialStatus::Scheduled,
+            validation_metrics: Default::default(),
+            training_time_ms: 0,
+            reserved_training_time_ms: 0,
+            reserved_artifact_bytes,
+            error: None,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+        repository
+            .connection()
+            .unwrap()
+            .execute(
+                "INSERT INTO experiment_trials(id,experiment_id,job_id,idempotency_key,candidate_index,body) VALUES (?,?,?,?,0,?)",
+                rusqlite::params![
+                    trial.id,
+                    trial.experiment_id,
+                    trial.job_id,
+                    trial.idempotency_key,
+                    serde_json::to_string(&trial).unwrap()
+                ],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn trial_checkpoints_charge_only_their_model_weights_to_the_artifact_reservation() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let state = tempfile::tempdir().unwrap();
+        let checkpoint = state.path().join("checkpoint-3");
+        fs::create_dir(&checkpoint).unwrap();
+        fs::write(checkpoint.join("model.bpk"), vec![1u8; 1000]).unwrap();
+        fs::write(checkpoint.join("optimizer.bpk"), vec![2u8; 2000]).unwrap();
+        fs::write(
+            state.path().join(burn::MANIFEST_FILE),
+            br#"{"checkpoint":"checkpoint-3"}"#,
+        )
+        .unwrap();
+        let weights = pack(state.path(), false, u64::MAX).unwrap().len() as u64;
+        let pack_for = |job_id: &str, maximum_bytes: u64| {
+            pack_checkpoint(
+                &repository,
+                job_id,
+                state.path(),
+                burn::MANIFEST_FILE,
+                maximum_bytes,
+            )
+        };
+        let whole = pack_for("lifecycle", u64::MAX).unwrap();
+        assert_eq!(checkpoint_model_bytes(&whole), weights);
+        assert_eq!(whole.len() as u64, weights + 2000);
+        reserve_trial(&repository, "fits", weights);
+        assert_eq!(pack_for("fits", u64::MAX).unwrap(), whole);
+        reserve_trial(&repository, "oversized", weights - 1);
+        let error = pack_for("oversized", u64::MAX).unwrap_err().to_string();
+        assert!(error.contains("artifact reservation"), "{error}");
+        assert!(
+            pack_for("fits", whole.len() as u64 - 1).is_err(),
+            "the checkpoint limit still bounds the optimizer state"
+        );
+    }
+
+    /// Records a reviewed sample at time `index`, which also names its own group.
+    fn record(
+        repository: &TrainingRepository,
+        stream: &StreamKey,
+        index: i64,
+        input: TensorData,
+        annotation: Annotation,
+    ) {
+        let sample = Sample {
+            id: format!("{}-{index}", stream.stream_id),
+            group_id: format!("{}-group-{index}", stream.stream_id),
+            stream_id: stream.stream_id.clone(),
+            timestamp_ms: index,
+            window_start_ms: index,
+            window_end_ms: index,
+            input,
+            annotation,
+            provenance: flow_like_ml_core::LabelProvenance::Reviewed {
+                reviewer: "fixture".into(),
+                reviewed_at_ms: index,
+            },
+            outcome: None,
+        };
+        repository
+            .record_sample(
+                stream,
+                &TrainingSample {
+                    id: sample.id.clone(),
+                    annotation_revision: 1,
+                    group_id: sample.group_id.clone(),
+                    captured_at_ms: index,
+                    label_available_at_ms: index,
+                    content_digest: format!("{index:064x}"),
+                    source: LabelSource::Reviewed,
+                    accepted: true,
+                    payload: serde_json::to_value(sample).unwrap(),
+                },
+            )
+            .unwrap();
+    }
+
+    /// Queues `engine` on the recorded samples, split at times 5 and 8, as an experiment trial
+    /// whose artifact reservation cannot hold the model.
+    fn undersized_trial(
+        repository: &TrainingRepository,
+        stream: &StreamKey,
+        samples: usize,
+        engine: &str,
+        config: Value,
+    ) -> TrainingJob {
+        let job = repository
+            .trigger_after_n(
+                stream,
+                samples,
+                TrainingRequest {
+                    engine: engine.into(),
+                    recipe: serde_json::json!({"config":config,"labels":[]}),
+                    compute: serde_json::to_value(ComputeConfig {
+                        backend: ComputeBackend::Cpu,
+                        ..Default::default()
+                    })
+                    .unwrap(),
+                },
+                SplitPolicy::Time {
+                    train_end_ms: 5,
+                    validation_end_ms: 8,
+                    embargo_ms: 0,
+                },
+                100,
+            )
+            .unwrap()
+            .unwrap();
+        reserve_trial(repository, &job.id, 64);
+        job
+    }
+
+    fn assert_failed_without_checkpoint(repository: &TrainingRepository, job_id: &str) {
+        let mut worker = TrainingWorker::new(repository.clone(), WorkerLimits::default()).unwrap();
+        register_burn_engine(&mut worker).unwrap();
+        register_efficient_ad_engine(&mut worker).unwrap();
+        let error = worker.run(job_id).unwrap_err().to_string();
+        assert!(error.contains("artifact reservation"), "{error}");
+        let failed = repository.get_job(job_id).unwrap();
+        assert_eq!(failed.status, JobStatus::Failed);
+        assert!(
+            failed.checkpoint.is_none(),
+            "the stop path retained the checkpoint the epoch publish refused"
+        );
+    }
+
+    #[test]
+    fn trials_whose_weights_exceed_their_reservation_fail_without_retaining_a_checkpoint() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let stream = StreamKey {
+            project_id: "project".into(),
+            stream_id: "line".into(),
+            inspection_version: "v1".into(),
+        };
+        for index in 0..12 {
+            let x = index as f32 / 12.0;
+            let input = TensorData {
+                shape: vec![1],
+                values: vec![x],
+            };
+            let target = Annotation::Scalar {
+                value: f64::from(2.0 * x),
+            };
+            record(&repository, &stream, index, input, target);
+        }
+        let config = burn::TrainingConfig {
+            recipe: burn::Recipe::Mlp {
+                input_features: 1,
+                hidden: 4,
+                outputs: 1,
+                objective: burn::Objective::Regression,
+            },
+            backend: burn::BackendChoice::Cpu,
+            epochs: 2,
+            batch_size: 4,
+            learning_rate: 0.01,
+            seed: 3,
+            gradient_clip: 1.0,
+        };
+        let job = undersized_trial(
+            &repository,
+            &stream,
+            12,
+            "burn",
+            serde_json::to_value(config).unwrap(),
+        );
+        assert_failed_without_checkpoint(&repository, &job.id);
+    }
+
+    /// The smallest valid EfficientAD model: a one-channel PDN-small teacher.
+    fn smallest_efficient_ad() -> burn::EfficientAdConfig {
+        let convolution = |shape: [usize; 4]| burn::ConvWeights {
+            weight: burn::TensorData {
+                shape: shape.to_vec(),
+                values: vec![0.01; shape.iter().product()],
+            },
+            bias: burn::TensorData {
+                shape: vec![shape[0]],
+                values: vec![0.01; shape[0]],
+            },
+        };
+        burn::EfficientAdConfig {
+            teacher: burn::PdnTeacherWeights {
+                input_channels: 1,
+                base_channels: 1,
+                feature_channels: 1,
+                convolutions: [[1, 1, 4, 4], [2, 1, 4, 4], [2, 2, 3, 3], [1, 2, 4, 4]]
+                    .into_iter()
+                    .map(convolution)
+                    .collect(),
+            },
+            backend: burn::BackendChoice::Cpu,
+            epochs: 1,
+            batch_size: 1,
+            learning_rate: 0.001,
+            seed: 42,
+            autoencoder_channels: 2,
+            hard_quantile: 0.99,
+            gradient_clip: 5.0,
+        }
+    }
+
+    #[test]
+    fn efficient_ad_trials_whose_weights_exceed_their_reservation_retain_no_checkpoint() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let stream = StreamKey {
+            project_id: "project".into(),
+            stream_id: "surface".into(),
+            inspection_version: "v1".into(),
+        };
+        for index in [1, 6, 9] {
+            let input = TensorData {
+                shape: vec![1, 256, 256],
+                values: (0..256 * 256)
+                    .map(|i| ((i % 256) as f32 * 0.03 + index as f32).sin())
+                    .collect(),
+            };
+            let normal = Annotation::Anomaly { is_anomaly: false };
+            record(&repository, &stream, index, input, normal);
+        }
+        let config = serde_json::to_value(smallest_efficient_ad()).unwrap();
+        let job = undersized_trial(&repository, &stream, 3, "efficient_ad", config);
+        assert_failed_without_checkpoint(&repository, &job.id);
     }
 
     #[test]

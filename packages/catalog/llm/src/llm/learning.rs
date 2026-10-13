@@ -358,9 +358,116 @@ mod tests {
 
 #[cfg(all(test, feature = "training"))]
 mod agent_tests {
-    use super::super::auto_training::test_support::{fixture, start};
+    use super::super::auto_training::test_support::{Fixture, fixture, run_node, start};
     use super::*;
-    use flow_like_ml_runtime::{ExperimentStatus, now_ms};
+    use flow_like_catalog_ml::inspection::learning::{
+        CreateLearningProjectNode, prepare_learning_cycle, project_repository,
+    };
+    use flow_like_ml_runtime::{
+        ExperimentStatus,
+        learning::{LearningCycleState, LearningState},
+        now_ms,
+    };
+    use std::sync::Arc;
+
+    /// A learning project over the fixture's table with its first cycle experiment prepared.
+    /// Returns the project and experiment IDs.
+    async fn prepared_cycle(fixture: &mut Fixture) -> (String, String) {
+        let request = json!({
+            "training": fixture.request.training,
+            "policy": {"minimum_new_reviews": 1, "minimum_audit_samples": 4, "cooldown_ms": 0}
+        });
+        let created: LearningProjectResult = flow_like_types::json::from_value(
+            run_node(
+                &fixture.context,
+                Arc::new(CreateLearningProjectNode),
+                request,
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        let project_id = created.project.id;
+        let prepared = prepare_learning_cycle(&mut fixture.context, &project_id)
+            .await
+            .unwrap();
+        (project_id, prepared.experiment.unwrap().experiment_id)
+    }
+
+    async fn run_learning_agent(fixture: &Fixture, project_id: &str) -> LearningAgentResult {
+        let result = run_node(
+            &fixture.context,
+            Arc::new(LearningProjectAgentNode),
+            json!({"project_id": project_id}),
+        )
+        .await
+        .unwrap();
+        flow_like_types::json::from_value(result).unwrap()
+    }
+
+    #[tokio::test]
+    async fn agent_settles_a_cycle_cancelled_past_its_wall_budget() {
+        let mut fixture = fixture(1).await;
+        fixture.request.training.budget.maximum_wall_time_ms = 1;
+        let (project_id, experiment_id) = prepared_cycle(&mut fixture).await;
+        let repo = project_repository(&fixture.context, &project_id).unwrap();
+        repo.mark_experiment_active(&experiment_id, now_ms())
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        assert_eq!(
+            repo.cancel_experiment(&experiment_id, now_ms())
+                .unwrap()
+                .status,
+            ExperimentStatus::Cancelled
+        );
+
+        let result = run_learning_agent(&fixture, &project_id).await;
+        let training = result
+            .training
+            .expect("the resumed cycle experiment runs through the agent")
+            .training;
+        assert_eq!(training.status, ExperimentStatus::BudgetExhausted);
+        assert_eq!(
+            training.stop_reason.as_deref(),
+            Some("wall_time_budget_exhausted")
+        );
+        let project = result.project;
+        assert!(project.project.active_cycle_id.is_none());
+        assert_eq!(project.project.state, LearningState::Collecting);
+        assert_eq!(project.cycles[0].state, LearningCycleState::Settled);
+        assert!(
+            !project
+                .next_actions
+                .blocking
+                .contains(&"cycle_in_progress".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_leaves_a_cycle_experiment_that_cannot_resume_to_its_worker() {
+        let mut fixture = fixture(1).await;
+        let (project_id, experiment_id) = prepared_cycle(&mut fixture).await;
+        let repo = project_repository(&fixture.context, &project_id).unwrap();
+        let trial = repo
+            .submit_experiment_trial(&experiment_id, 0, "candidate-0", now_ms())
+            .unwrap();
+        repo.claim_job(&trial.job_id, "another-worker", 600_000, now_ms())
+            .unwrap();
+        assert_eq!(
+            repo.cancel_experiment(&experiment_id, now_ms())
+                .unwrap()
+                .status,
+            ExperimentStatus::CancelRequested
+        );
+
+        let result = run_learning_agent(&fixture, &project_id).await;
+        assert!(result.training.is_none());
+        assert!(result.project.project.active_cycle_id.is_some());
+        assert_eq!(
+            repo.get_experiment(&experiment_id).unwrap().status,
+            ExperimentStatus::CancelRequested
+        );
+    }
 
     #[tokio::test]
     async fn refused_resume_leaves_the_cycle_experiment_for_settlement() {

@@ -171,6 +171,23 @@ impl LeaseKeeper {
         Ok(())
     }
 
+    fn retry_delay(&self) -> Duration {
+        Duration::from_millis((self.duration_ms / 10).clamp(10, 1000) as u64)
+    }
+
+    /// Repeats an operation that failed on storage while the known lease is still current, so
+    /// a write lock held past SQLite's busy timeout does not fail the job.
+    fn retry_transient<T>(&self, mut operation: impl FnMut() -> Result<T>) -> Result<T> {
+        loop {
+            match operation() {
+                Err(error) if transient(&error) && self.ensure_current().is_ok() => {
+                    std::thread::sleep(self.retry_delay());
+                }
+                result => return result,
+            }
+        }
+    }
+
     /// Reads only the status column. A stop is final for this lease.
     fn poll_status(&self) -> Result<()> {
         let mut poll = lock(&self.status);
@@ -332,17 +349,28 @@ impl WorkerControl {
         self.publish(bytes, step, metadata)
     }
 
+    /// The blob is content addressed, so committing its reference again after a storage error
+    /// is idempotent.
     fn publish(&self, bytes: &[u8], step: u64, metadata: Value) -> Result<CheckpointRef> {
-        let checkpoint = self.keeper.repository.publish_checkpoint(
-            &self.keeper.lease,
-            bytes,
-            step,
-            metadata,
-            false,
-            now_ms(),
-        )?;
+        let checkpoint = self.keeper.retry_transient(|| {
+            self.keeper.repository.publish_checkpoint(
+                &self.keeper.lease,
+                bytes,
+                step,
+                metadata.clone(),
+                false,
+                now_ms(),
+            )
+        })?;
         self.keeper.sweep_superseded();
         Ok(checkpoint)
+    }
+
+    /// Reads the job status now instead of at the next poll, after the caller changed it.
+    #[cfg(feature = "burn")]
+    pub(crate) fn check_cancel_now(&self) -> Result<()> {
+        lock(&self.keeper.status).checked = None;
+        self.check_cancel()
     }
 }
 
@@ -510,7 +538,7 @@ impl TrainingWorker {
                 )
             })
             .transpose()?;
-        let work = TrainingWork {
+        let mut work = TrainingWork {
             repository: self.repository.clone(),
             snapshot,
             job,
@@ -523,7 +551,7 @@ impl TrainingWorker {
             )));
         }
         let claimed_at_ms = now_ms();
-        let lease = self.repository.claim_job_with_resources(
+        let (lease, claimed) = self.repository.claim_job_state(
             job_id,
             &format!("{}:{}", std::process::id(), id()),
             self.limits.lease_duration_ms,
@@ -534,6 +562,8 @@ impl TrainingWorker {
                 budget_bytes: self.limits.memory_budget_bytes,
             }),
         )?;
+        // Experiment controllers rewrite the deadline of a queued trial until it is claimed.
+        work.job = claimed;
         Ok(Admitted {
             engine,
             work,
@@ -622,7 +652,7 @@ impl Heartbeat {
         let signal = stop.clone();
         let thread = std::thread::spawn(move || {
             let interval = Duration::from_millis((keeper.duration_ms / 3) as u64);
-            let retry = Duration::from_millis((keeper.duration_ms / 10).clamp(10, 1000) as u64);
+            let retry = keeper.retry_delay();
             let mut delay = interval;
             loop {
                 let (guard, _) = signal
@@ -726,23 +756,131 @@ mod lock_tests {
             .unwrap()
     }
 
-    #[cfg(feature = "burn")]
-    fn monitor_control(repository: &TrainingRepository, job_id: &str) -> WorkerControl {
+    fn claimed_keeper(
+        repository: &TrainingRepository,
+        job_id: &str,
+        lease_ms: i64,
+    ) -> Arc<LeaseKeeper> {
         let claimed_at_ms = now_ms();
         let lease = repository
-            .claim_job(job_id, "monitor-test", 30_000, claimed_at_ms)
+            .claim_job(job_id, "monitor-test", lease_ms, claimed_at_ms)
             .unwrap();
+        Arc::new(LeaseKeeper::new(
+            repository.clone(),
+            lease,
+            lease_ms,
+            claimed_at_ms,
+        ))
+    }
+
+    #[cfg(feature = "burn")]
+    fn monitor_control(repository: &TrainingRepository, job_id: &str) -> WorkerControl {
+        let keeper = claimed_keeper(repository, job_id, 30_000);
         let request = repository.get_job(job_id).unwrap().request;
-        WorkerControl::new(
-            Arc::new(LeaseKeeper::new(
-                repository.clone(),
-                lease,
-                30_000,
-                claimed_at_ms,
-            )),
-            WorkerLimits::default(),
-            &request,
-        )
+        WorkerControl::new(keeper, WorkerLimits::default(), &request)
+    }
+
+    /// Moves the queued job's deadline after admission read it, as an experiment controller
+    /// does when it restarts a paused wall clock.
+    struct DeadlineMovedBeforeClaim;
+    impl TrainingEngine for DeadlineMovedBeforeClaim {
+        fn estimated_memory_bytes(&self, work: &TrainingWork) -> Result<u64> {
+            let mut job = work.repository.get_job(&work.job.id)?;
+            job.request.recipe["experiment_deadline_ms"] = json!(now_ms() + 60_000);
+            work.repository.connection()?.execute(
+                "UPDATE jobs SET body=? WHERE id=?",
+                rusqlite::params![serde_json::to_string(&job)?, job.id],
+            )?;
+            Ok(1024)
+        }
+        fn train(&self, _: &TrainingWork, control: &WorkerControl) -> Result<EngineOutput> {
+            control.check_cancel()?;
+            Ok(EngineOutput {
+                model_bytes: b"fixture".to_vec(),
+                manifest: json!({}),
+            })
+        }
+    }
+
+    #[test]
+    fn workers_stop_at_the_deadline_their_claim_committed() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let job = job(&repository);
+        let mut expired = repository.get_job(&job.id).unwrap();
+        expired.request.recipe["experiment_deadline_ms"] = json!(now_ms() - 1);
+        repository
+            .connection()
+            .unwrap()
+            .execute(
+                "UPDATE jobs SET body=? WHERE id=?",
+                rusqlite::params![serde_json::to_string(&expired).unwrap(), job.id],
+            )
+            .unwrap();
+        let mut worker = TrainingWorker::new(repository.clone(), WorkerLimits::default()).unwrap();
+        worker
+            .register("fixture", Arc::new(DeadlineMovedBeforeClaim))
+            .unwrap();
+        worker.run(&job.id).unwrap();
+        assert_eq!(
+            repository.get_job(&job.id).unwrap().status,
+            JobStatus::Succeeded
+        );
+    }
+
+    #[test]
+    fn checkpoint_storage_errors_are_retried_only_while_the_lease_is_current() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let job = job(&repository);
+        let keeper = claimed_keeper(&repository, &job.id, 2_000);
+        let busy = || {
+            Error::Sql(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                Some("database is locked".into()),
+            ))
+        };
+        let mut attempts = 0;
+        let published = keeper.retry_transient(|| {
+            attempts += 1;
+            if attempts < 3 {
+                return Err(busy());
+            }
+            repository.publish_checkpoint(&keeper.lease, b"epoch-1", 1, json!({}), false, now_ms())
+        });
+        assert_eq!(published.unwrap().step, 1);
+        assert_eq!(attempts, 3);
+        let mut attempts = 0;
+        let rejected = keeper.retry_transient(|| -> Result<()> {
+            attempts += 1;
+            Err(invalid("checkpoint rejected"))
+        });
+        assert!(matches!(rejected, Err(Error::Invalid(_))));
+        assert_eq!(attempts, 1);
+        keeper.lost.store(true, Ordering::Release);
+        let mut attempts = 0;
+        let abandoned = keeper.retry_transient(|| -> Result<()> {
+            attempts += 1;
+            Err(busy())
+        });
+        assert!(matches!(abandoned, Err(Error::Sql(_))));
+        assert_eq!(attempts, 1);
+    }
+
+    #[cfg(feature = "burn")]
+    #[test]
+    fn a_forced_status_read_sees_a_cancellation_requested_since_the_last_poll() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let job = job(&repository);
+        let control = monitor_control(&repository, &job.id);
+        control.check_cancel().unwrap();
+        repository.request_cancel(&job.id, now_ms()).unwrap();
+        assert!(matches!(control.check_cancel_now(), Err(Error::Cancelled)));
+        assert!(matches!(control.check_cancel(), Err(Error::Cancelled)));
     }
 
     #[cfg(feature = "burn")]

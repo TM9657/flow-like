@@ -1782,3 +1782,241 @@ fn snapshot_validation_fails_without_waiting_for_the_write_lock() {
     ));
     drop(lock);
 }
+
+/// A corrected mapped feature (new raw digest at the same revision), a review revision whose
+/// source row changed as well, and a new row.
+fn edited_sources(snapshot: &DatasetSnapshot) -> [TrainingSample; 3] {
+    let mut edited = snapshot.train[0].clone();
+    edited.content_digest = "e".repeat(64);
+    edited.payload["feature_row"] = json!({"x":41});
+    let mut revised = snapshot.train[1].clone();
+    revised.annotation_revision = 2;
+    revised.content_digest = "f".repeat(64);
+    revised.payload["label"] = json!("bad");
+    revised.payload["feature_row"] = json!({"x":42});
+    let mut added = snapshot.train[2].clone();
+    added.id = "sample-added".into();
+    added.group_id = "lot-added".into();
+    added.content_digest = "a".repeat(64);
+    [edited, revised, added]
+}
+
+fn stored(
+    repo: &TrainingRepository,
+    stream: &StreamKey,
+    sample: &TrainingSample,
+) -> Option<TrainingSample> {
+    let scope = serde_json::to_string(stream).unwrap();
+    recorded_annotation(&repo.connection().unwrap(), &scope, sample).unwrap()
+}
+
+#[test]
+fn prepared_batches_record_edited_source_content() {
+    let (_directory, repo, snapshot, _request) = setup();
+    let stream = &snapshot.stream;
+    let batch = edited_sources(&snapshot);
+    assert_eq!(
+        repo.record_prepared_samples(stream, &batch).unwrap(),
+        [false, true, true]
+    );
+    for sample in &batch {
+        assert_eq!(stored(&repo, stream, sample).as_ref(), Some(sample));
+    }
+    assert!(
+        repo.record_prepared_sample(stream, &batch[2])
+            .unwrap()
+            .accepted_sequence
+            .is_some()
+    );
+    assert_eq!(
+        repo.record_prepared_samples(stream, &batch).unwrap(),
+        [false; 3]
+    );
+}
+
+#[test]
+fn a_refused_prepared_sample_records_none_of_its_batch() {
+    let (_directory, repo, snapshot, _request) = setup();
+    let stream = &snapshot.stream;
+    let [edited, revised, _] = edited_sources(&snapshot);
+    repo.record_prepared_samples(stream, &[edited.clone(), revised.clone()])
+        .unwrap();
+    let mut again = edited.clone();
+    again.content_digest = "d".repeat(64);
+    let mut relabelled = revised.clone();
+    relabelled.payload["label"] = json!("good");
+    let error = repo
+        .record_prepared_samples(stream, &[again.clone(), relabelled])
+        .unwrap_err();
+    assert!(
+        matches!(&error, Error::Conflict(reason) if reason.contains(revised.id.as_str())),
+        "{error}"
+    );
+    assert_eq!(stored(&repo, stream, &again), Some(edited));
+    let mut regrouped = revised;
+    regrouped.annotation_revision = 3;
+    regrouped.group_id = "lot-elsewhere".into();
+    assert!(matches!(
+        repo.record_prepared_samples(stream, &[regrouped]),
+        Err(Error::Conflict(_))
+    ));
+}
+
+#[test]
+fn re_prepared_holdout_content_voids_the_final_audit() {
+    let (_directory, repo, snapshot, request) = setup();
+    let (experiment, artifact) = frozen_winner(&repo, request);
+    for sample in &snapshot.test {
+        repo.record_prediction(&reviewed_prediction(&artifact, sample))
+            .unwrap();
+    }
+    let report = repo.evaluate_classification(&artifact.id, 107).unwrap();
+    let mut edited = snapshot.test[0].clone();
+    edited.content_digest = "e".repeat(64);
+    edited.payload["feature_row"] = json!({"x":-1});
+    assert!(
+        !repo
+            .record_prepared_sample(&snapshot.stream, &edited)
+            .unwrap()
+            .inserted
+    );
+    assert!(matches!(
+        repo.finalize_experiment(&experiment.id, Some(&report.id), "completed", 108),
+        Err(Error::Conflict(reason)) if reason.contains("evidence changed")
+    ));
+}
+
+#[test]
+fn resume_does_not_charge_requeued_trials_for_their_own_checkpoints() {
+    let (_directory, repo, _snapshot, mut request) = setup();
+    request.budget.maximum_parallel_trials = 2;
+    request.budget.maximum_artifact_bytes = 60;
+    let experiment = repo.create_experiment(request, 100).unwrap();
+    let mut stopped = vec![];
+    for (index, key) in ["first", "second"].into_iter().enumerate() {
+        let trial = repo
+            .submit_experiment_trial(&experiment.id, index, key, 101)
+            .unwrap();
+        let lease = repo.claim_job(&trial.job_id, "worker", 1000, 102).unwrap();
+        repo.publish_checkpoint(&lease, &[index as u8; 16], 1, json!({}), false, 103)
+            .unwrap();
+        stopped.push((trial, lease));
+    }
+    repo.cancel_experiment(&experiment.id, 104).unwrap();
+    for (trial, lease) in &stopped {
+        repo.acknowledge_cancel(lease, 105).unwrap();
+        repo.fail_experiment_trial(&trial.id, "cancelled", 0, 106)
+            .unwrap();
+    }
+    let usage = repo.get_experiment(&experiment.id).unwrap().usage;
+    assert_eq!((usage.artifact_bytes, usage.checkpoint_bytes), (32, 32));
+    // Each 30 byte slice covers its own trial's checkpoint, so both fit the 60 bytes exactly.
+    let resumed = repo.resume_experiment(&experiment.id, 107).unwrap();
+    assert_eq!(resumed.status, ExperimentStatus::Running);
+    let usage = &resumed.usage;
+    assert_eq!(
+        (
+            usage.artifact_bytes,
+            usage.checkpoint_bytes,
+            usage.reserved_artifact_bytes
+        ),
+        (0, 0, 60)
+    );
+    for (trial, _) in &stopped {
+        let job = repo.get_job(&trial.job_id).unwrap();
+        let trial = repo.get_experiment_trial(&trial.id).unwrap();
+        assert_eq!(
+            (trial.status, job.status),
+            (ExperimentTrialStatus::Scheduled, JobStatus::Queued)
+        );
+    }
+}
+
+#[test]
+fn resume_that_cannot_fit_keeps_charging_the_retained_checkpoint() {
+    let (_directory, repo, _snapshot, mut request) = setup();
+    request.budget.maximum_parallel_trials = 2;
+    request.budget.maximum_artifact_bytes = 60;
+    let experiment = repo.create_experiment(request, 100).unwrap();
+    let winner = repo
+        .submit_experiment_trial(&experiment.id, 0, "winner", 101)
+        .unwrap();
+    let stopped = repo
+        .submit_experiment_trial(&experiment.id, 1, "stopped", 101)
+        .unwrap();
+    let lease = repo.claim_job(&winner.job_id, "worker", 1000, 102).unwrap();
+    repo.publish_checkpoint(&lease, &[1; 25], 1, json!({}), false, 103)
+        .unwrap();
+    repo.finish_training(&lease, b"weights", json!({}), 104)
+        .unwrap();
+    validate(&repo, &winner, 1., 105);
+    let lease = repo.claim_job(&stopped.job_id, "worker", 1000, 106).unwrap();
+    repo.publish_checkpoint(&lease, &[2; 15], 1, json!({}), false, 107)
+        .unwrap();
+    repo.cancel_experiment(&experiment.id, 108).unwrap();
+    repo.acknowledge_cancel(&lease, 109).unwrap();
+    repo.fail_experiment_trial(&stopped.id, "cancelled", 0, 110)
+        .unwrap();
+    let before = repo.get_experiment(&experiment.id).unwrap().usage;
+    assert_eq!((before.artifact_bytes, before.checkpoint_bytes), (47, 40));
+    // The winner's 7 byte model and 25 byte checkpoint leave 28 bytes, short of a 30 byte slice.
+    let settled = repo.resume_experiment(&experiment.id, 111).unwrap();
+    assert_eq!(settled.status, ExperimentStatus::BudgetExhausted);
+    assert_eq!(
+        settled.stop_reason.as_deref(),
+        Some("resource_budget_exhausted")
+    );
+    let usage = &settled.usage;
+    assert_eq!(
+        (
+            usage.artifact_bytes,
+            usage.checkpoint_bytes,
+            usage.reserved_artifact_bytes,
+            usage.reserved_training_time_ms
+        ),
+        (47, 40, 0, 0)
+    );
+    let trial = repo.get_experiment_trial(&stopped.id).unwrap();
+    assert_eq!(trial.status, ExperimentTrialStatus::Failed);
+    assert_eq!(trial.reserved_artifact_bytes, 0);
+    assert_eq!(
+        repo.get_job(&stopped.job_id).unwrap().status,
+        JobStatus::Cancelled
+    );
+}
+
+#[test]
+fn resume_inside_the_audit_allowance_ends_the_search() {
+    let (_directory, repo, _snapshot, request) = setup();
+    // The 10_000 ms wall budget keeps 1_000 ms for the final audit.
+    let stopped_at = |cancel_at: i64| {
+        let experiment = repo.create_experiment(request.clone(), 100).unwrap();
+        let trial = repo
+            .submit_experiment_trial(&experiment.id, 0, "candidate", 1_000)
+            .unwrap();
+        repo.cancel_experiment(&experiment.id, cancel_at).unwrap();
+        (experiment, trial)
+    };
+    let (open, open_trial) = stopped_at(9_999);
+    let resumed = repo.resume_experiment(&open.id, 20_000).unwrap();
+    assert_eq!(resumed.status, ExperimentStatus::Running);
+    assert_eq!(
+        repo.get_job(&open_trial.job_id).unwrap().request.recipe["experiment_deadline_ms"],
+        json!(20_001)
+    );
+    let (closed, closed_trial) = stopped_at(10_000);
+    let settled = repo.resume_experiment(&closed.id, 20_000).unwrap();
+    assert_eq!(settled.status, ExperimentStatus::BudgetExhausted);
+    assert_eq!(
+        settled.stop_reason.as_deref(),
+        Some("wall_time_budget_exhausted")
+    );
+    assert_eq!(settled.usage.reserved_training_time_ms, 0);
+    let trial = repo.get_experiment_trial(&closed_trial.id).unwrap();
+    assert_eq!(trial.status, ExperimentTrialStatus::Failed);
+    assert_eq!(trial.error.as_deref(), Some("budget exhausted on resume"));
+    assert_eq!(
+        repo.get_job(&closed_trial.job_id).unwrap().status,
+        JobStatus::Cancelled
+    );
+}

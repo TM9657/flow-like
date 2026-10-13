@@ -346,7 +346,7 @@ mod join_cancellable_tests {
         move || flag.cancel()
     }
 
-    fn wait_for_cancel(flag: &CancelFlag) -> Result<()> {
+    pub(super) fn wait_for_cancel(flag: &CancelFlag) -> Result<()> {
         let deadline = Instant::now() + Duration::from_secs(30);
         while Instant::now() < deadline {
             if flag.is_cancelled() {
@@ -401,5 +401,174 @@ mod join_cancellable_tests {
             .unwrap_err();
         assert_eq!(error.to_string(), "handler failed");
         assert!(!flag.is_cancelled());
+    }
+}
+
+#[cfg(all(test, feature = "execute"))]
+mod cancellable_operation_tests {
+    use super::{
+        join_cancellable_tests::wait_for_cancel, models::TrainGradientBoostedTreesNode,
+        run_cancellable_operation,
+    };
+    use ahash::AHashMap;
+    use flow_like::{
+        flow::{
+            board::ExecutionStage,
+            execution::{
+                LogLevel, Run, context::ExecutionContext, internal_node::InternalNode,
+                internal_pin::InternalPin,
+            },
+            node::NodeLogic,
+        },
+        profile::Profile,
+        state::{FlowLikeConfig, FlowLikeState},
+        utils::http::HTTPClient,
+    };
+    use flow_like_types::{
+        Value,
+        json::json,
+        sync::{Mutex, RwLock},
+        tokio_util::sync::CancellationToken,
+    };
+    use futures::FutureExt;
+    use std::{
+        sync::{Arc, Weak, mpsc},
+        time::Duration,
+    };
+
+    fn boost_request(rows: usize, estimators: usize) -> Value {
+        let features: Vec<Vec<f64>> = (0..rows).map(|row| vec![row as f64]).collect();
+        let targets: Vec<f64> = (0..rows).map(|row| (row % 7) as f64).collect();
+        json!({
+            "rows": features,
+            "targets": targets,
+            "config": {
+                "objective": "squared_error",
+                "estimators": estimators,
+                "max_depth": 16,
+                "max_bins": 256,
+                "min_leaf": 1,
+                "learning_rate": 0.001,
+                "l2": 1.0
+            }
+        })
+    }
+
+    /// A detached run of the Train Gradient Boosted Trees node with `request` on its input.
+    async fn boost_context(request: Value) -> ExecutionContext {
+        let logic: Arc<dyn NodeLogic> = Arc::new(TrainGradientBoostedTreesNode);
+        let node = logic.get_node();
+        let pins = node
+            .pins
+            .values()
+            .map(|pin| (pin.id.clone(), Arc::new(InternalPin::new(pin, false))))
+            .collect();
+        let node = Arc::new(InternalNode::new(node, pins, logic, AHashMap::new()));
+        node.get_pin_by_name("request")
+            .await
+            .unwrap()
+            .set_value(request)
+            .await;
+        let state = Arc::new(FlowLikeState::new(
+            FlowLikeConfig::new(),
+            HTTPClient::new_without_refetch(),
+        ));
+        let run: Weak<Mutex<Run>> = Weak::new();
+        ExecutionContext::new(
+            Arc::new(AHashMap::from_iter([(
+                node.node_id().to_string(),
+                node.clone(),
+            )])),
+            &run,
+            &state,
+            &node,
+            &Arc::new(Mutex::new(AHashMap::new())),
+            &Arc::new(RwLock::new(AHashMap::new())),
+            LogLevel::Debug,
+            ExecutionStage::Dev,
+            Arc::new(Profile::default()),
+            None,
+            Arc::new(RwLock::new(Vec::new())),
+            None,
+            None,
+            Arc::new(AHashMap::new()),
+            None,
+        )
+        .await
+    }
+
+    fn cancel_run(context: &mut ExecutionContext) {
+        let token = CancellationToken::new();
+        token.cancel();
+        context.set_cancellation_token(token);
+    }
+
+    async fn pin_value(context: &ExecutionContext, name: &str) -> Option<Value> {
+        context
+            .get_pin_by_name(name)
+            .await
+            .unwrap()
+            .get_raw_value()
+            .await
+    }
+
+    #[tokio::test]
+    async fn dropping_a_node_run_cancels_its_handler() {
+        let mut context = boost_context(boost_request(4, 1)).await;
+        let (stopped, observed) = mpsc::channel();
+        let run = run_cancellable_operation::<Value, (), _>(&mut context, move |_, cancel| {
+            let result = wait_for_cancel(&cancel);
+            let _ = stopped.send(result.is_err());
+            result
+        });
+        // The executor drops a cancelled run's node future without polling it again.
+        assert!(run.now_or_never().is_none());
+        assert!(observed.recv_timeout(Duration::from_secs(30)).unwrap());
+        assert_eq!(pin_value(&context, "exec_out").await, Some(json!(false)));
+        assert_eq!(pin_value(&context, "result").await, None);
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_run_token_stops_the_handler() {
+        let mut context = boost_context(boost_request(4, 1)).await;
+        cancel_run(&mut context);
+        let error = run_cancellable_operation::<Value, (), _>(&mut context, |_, cancel| {
+            wait_for_cancel(&cancel)
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(error.to_string(), "worker stopped after cancellation");
+        assert_eq!(pin_value(&context, "exec_out").await, Some(json!(false)));
+        assert_eq!(pin_value(&context, "result").await, None);
+    }
+
+    #[tokio::test]
+    async fn boosted_tree_node_publishes_its_model() {
+        let mut context = boost_context(boost_request(8, 2)).await;
+        TrainGradientBoostedTreesNode
+            .run(&mut context)
+            .await
+            .unwrap();
+        let model = pin_value(&context, "result").await.unwrap();
+        assert_eq!(model["architecture"], "histogram_gradient_boosting");
+        assert_eq!(pin_value(&context, "exec_out").await, Some(json!(true)));
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_run_stops_boosted_tree_training() {
+        // Enough estimators that the cancel arrives long before training could finish.
+        let mut context = boost_context(boost_request(1_000, 10_000)).await;
+        cancel_run(&mut context);
+        let error = TrainGradientBoostedTreesNode
+            .run(&mut context)
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .starts_with("Gradient boosted tree training was cancelled at step"),
+            "{error}"
+        );
+        assert_eq!(pin_value(&context, "exec_out").await, Some(json!(false)));
     }
 }

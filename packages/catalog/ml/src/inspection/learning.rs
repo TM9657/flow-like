@@ -114,8 +114,9 @@ pub struct LearningRouteRequest {
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RollbackLearningModelRequest {
     pub project_id: String,
-    /// The active model to roll back. Repeating the request after it was rolled back returns the
-    /// current deployment instead of restoring that model again.
+    /// The active model to roll back. Defaults to the more recently trained of the deployment's
+    /// active and previous model. Repeating the request after that model was rolled back returns
+    /// the current deployment instead of restoring it.
     #[serde(default)]
     pub expected_artifact_id: Option<String>,
     /// Deployment generation the caller observed. The rollback fails when the deployment changed.
@@ -394,14 +395,44 @@ async fn rollback(
         }
         (None, None) => {
             let project = repo.get_learning_project(&request.project_id)?;
-            repo.rollback_learning_project(
-                &request.project_id,
-                deployment_generation(&repo, &project)?,
-                at_ms,
-            )?;
+            let model = newest_deployed_model(&repo, &project)?;
+            repo.rollback_learning_project_from(&request.project_id, &model, at_ms)?;
         }
     }
     result(&repo, &request.project_id)
+}
+
+/// Whichever of the deployment's active and previous model the project trained last: the active
+/// one after a promotion, the previous one after a rollback. Rolling it back is retry-safe.
+#[cfg(feature = "training")]
+fn newest_deployed_model(
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    project: &LearningProject,
+) -> Result<String> {
+    let deployment = match repo.get_deployment(&project.request.deployment_id) {
+        Ok(deployment) => deployment,
+        Err(flow_like_ml_runtime::Error::NotFound(_)) => {
+            return Err(anyhow!(
+                "Learning project {} has no deployed model to roll back",
+                project.id
+            ));
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let cycles = repo.learning_cycles(&project.id)?;
+    let trained = |artifact_id: &str| {
+        cycles
+            .iter()
+            .position(|cycle| cycle.artifact_id.as_deref() == Some(artifact_id))
+    };
+    Ok(match deployment.previous_artifact_id {
+        Some(previous)
+            if trained(previous.as_str()) > trained(deployment.active_artifact_id.as_str()) =>
+        {
+            previous
+        }
+        _ => deployment.active_artifact_id,
+    })
 }
 
 #[cfg(feature = "training")]
@@ -685,22 +716,12 @@ fn audit_champion(
         return Ok(());
     }
     let template = training_template(project)?;
-    let limit_ms = template.budget.worker_limits.maximum_duration_ms;
-    let started = std::time::Instant::now();
-    let check = || -> Result<()> {
-        if cancel.is_cancelled() {
-            return Err(anyhow!(
-                "Champion audit replay was cancelled; recorded predictions resume on the next step"
-            ));
-        }
-        if started.elapsed().as_millis() > u128::from(limit_ms) {
-            return Err(anyhow!(
-                "Champion audit replay exceeded its {limit_ms} ms step budget; recorded predictions resume on the next step"
-            ));
-        }
-        Ok(())
-    };
-    check()?;
+    let mut budget = ReplayBudget::new(
+        "Champion audit replay",
+        cancel,
+        template.budget.worker_limits.maximum_duration_ms,
+    );
+    budget.check()?;
     let experiment_id = cycle
         .experiment_id
         .as_ref()
@@ -766,7 +787,7 @@ fn audit_champion(
         if recorded.contains(&row.id) {
             continue;
         }
-        check()?;
+        budget.check()?;
         let mut prepared = row.clone();
         spec.input_shape = input.shape.clone();
         let sample_payload = if prepared.payload.get("sample").is_some() {
@@ -801,8 +822,56 @@ fn audit_champion(
             predicted.elapsed().as_secs_f64() * 1000.,
         )?;
         repo.record_prediction(&record)?;
+        budget.recorded();
     }
     Ok(())
+}
+
+/// Bounds one audit replay call. Cancellation stops it before its next prediction. The step
+/// budget counts from the call's first recorded prediction, so setup and model loading slower
+/// than the budget still let every call record one.
+#[cfg(feature = "training")]
+struct ReplayBudget<'a> {
+    replay: &'static str,
+    cancel: &'a CancelFlag,
+    limit_ms: u64,
+    first_recorded: Option<std::time::Instant>,
+}
+
+#[cfg(feature = "training")]
+impl<'a> ReplayBudget<'a> {
+    fn new(replay: &'static str, cancel: &'a CancelFlag, limit_ms: u64) -> Self {
+        Self {
+            replay,
+            cancel,
+            limit_ms,
+            first_recorded: None,
+        }
+    }
+
+    fn check(&self) -> Result<()> {
+        if self.cancel.is_cancelled() {
+            return Err(anyhow!(
+                "{} was cancelled; recorded predictions resume on the next step",
+                self.replay
+            ));
+        }
+        if self
+            .first_recorded
+            .is_some_and(|at| at.elapsed().as_millis() > u128::from(self.limit_ms))
+        {
+            return Err(anyhow!(
+                "{} exceeded its {} ms step budget; recorded predictions resume on the next step",
+                self.replay,
+                self.limit_ms
+            ));
+        }
+        Ok(())
+    }
+
+    fn recorded(&mut self) {
+        self.first_recorded.get_or_insert_with(std::time::Instant::now);
+    }
 }
 
 /// The executor drops a node future when its run is cancelled, before a select on the token
@@ -864,10 +933,47 @@ fn settles_after_failed_resume(
     )
 }
 
+/// Whether a review of one of the cycle's audit samples became available after `since_ms`.
+#[cfg(feature = "training")]
+fn audit_reviewed_since(
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    cycle: &LearningCycle,
+    since_ms: i64,
+    at_ms: i64,
+) -> Result<bool> {
+    let audit: std::collections::HashSet<&str> =
+        cycle.audit_sample_ids.iter().map(String::as_str).collect();
+    Ok(repo
+        .learning_training_reviews_at(&cycle.project_id, at_ms)?
+        .iter()
+        .any(|review| {
+            review.available_at_ms > since_ms && audit.contains(review.sample_id.as_str())
+        }))
+}
+
 #[cfg(feature = "training")]
 pub async fn finish_learning_cycle(
     context: &mut ExecutionContext,
     id: &str,
+) -> Result<LearningProjectResult> {
+    finish_with(
+        context,
+        id,
+        flow_like_ml_runtime::TrainingRepository::compare_learning_cycle,
+    )
+    .await
+}
+
+/// `compare` evaluates the settled candidate and the champion on the cycle's sealed audit.
+#[cfg(feature = "training")]
+async fn finish_with(
+    context: &mut ExecutionContext,
+    id: &str,
+    compare: fn(
+        &flow_like_ml_runtime::TrainingRepository,
+        &str,
+        i64,
+    ) -> flow_like_ml_runtime::Result<LearningComparison>,
 ) -> Result<LearningProjectResult> {
     use flow_like_ml_runtime::{ExperimentStatus, now_ms};
     let repo = project_repository(context, id)?;
@@ -912,12 +1018,18 @@ pub async fn finish_learning_cycle(
         Err(flow_like_ml_runtime::Error::NotFound(_)) => None,
         Err(error) => return Err(error.into()),
     };
-    // A waiting candidate keeps its sealed comparison; promotion compares again before deciding.
-    let comparison = match saved
-        .filter(|_| matches!(fresh.state, LearningState::Shadow | LearningState::Canary))
-    {
-        Some(saved) => saved,
-        None => {
+    // A waiting candidate keeps its sealed comparison until a review of one of its audit samples
+    // becomes available after it; compare checks that review against the truth the cycle sealed.
+    // Promotion compares again before deciding.
+    let waiting =
+        saved.filter(|_| matches!(fresh.state, LearningState::Shadow | LearningState::Canary));
+    let reviewed = match &waiting {
+        Some(saved) => audit_reviewed_since(&repo, &cycle, saved.evaluated_at_ms, now_ms())?,
+        None => false,
+    };
+    let comparison = match waiting {
+        Some(saved) if !reviewed => saved,
+        waiting => {
             let work_repo = repo.clone();
             let work_project = fresh.clone();
             let work_cycle = cycle.clone();
@@ -925,7 +1037,22 @@ pub async fn finish_learning_cycle(
                 audit_champion(&work_repo, &work_project, &work_cycle, &cancel)
             })
             .await?;
-            repo.compare_learning_cycle(&cycle.id, now_ms())?
+            match (compare(&repo, &cycle.id, now_ms()), waiting) {
+                (Ok(comparison), _) => comparison,
+                // Any review recorded while compare ran moves the project generation. The sealed
+                // comparison keeps the canary audit going until the next step compares again.
+                (Err(flow_like_ml_runtime::Error::Conflict(reason)), Some(saved)) => {
+                    context.log_message(
+                        &format!(
+                            "Learning cycle {} keeps its sealed comparison until the next step compares again: {reason}",
+                            cycle.id
+                        ),
+                        LogLevel::Warn,
+                    );
+                    saved
+                }
+                (Err(error), _) => return Err(error.into()),
+            }
         }
     };
     if comparison.eligible && fresh.state == LearningState::Canary {
@@ -972,6 +1099,21 @@ async fn step(
     context: &mut ExecutionContext,
     request: LearningProjectId,
 ) -> Result<LearningProjectResult> {
+    step_with(
+        context,
+        request,
+        super::auto_training::resume_saved_experiment,
+    )
+    .await
+}
+
+/// `resume` readies the active cycle's saved experiment before its controller runs again.
+#[cfg(feature = "training")]
+async fn step_with(
+    context: &mut ExecutionContext,
+    request: LearningProjectId,
+    resume: fn(&flow_like_ml_runtime::TrainingRepository, &str) -> Result<()>,
+) -> Result<LearningProjectResult> {
     use flow_like_ml_runtime::{ExperimentStatus, now_ms};
     let prepared = prepare_learning_cycle(context, &request.project_id).await?;
     if prepared.project.state == LearningState::Paused {
@@ -990,7 +1132,7 @@ async fn step(
     {
         let repo = project_repository(context, &request.project_id)?;
         let id = experiment.experiment_id;
-        match super::auto_training::resume_saved_experiment(&repo, &id) {
+        match resume(&repo, &id) {
             Ok(()) => {
                 let budget = repo.get_experiment(&id)?.request.budget;
                 let controller = super::auto_training::controller(repo.clone(), &budget)?;
@@ -1244,7 +1386,7 @@ learning_node!(
     RollbackLearningModelNode,
     "ml_rollback_learning_model",
     "Rollback Learning Model",
-    "Restore the previous model in the project deployment. Pass the model being rolled back as expected_artifact_id so a repeated request cannot restore it",
+    "Restore the previous model in the project deployment. By default it rolls back the more recently trained of the active and previous model, so a repeated request keeps the restored model serving",
     "rollbackLearningModel",
     RollbackLearningModelRequest,
     LearningProjectResult,

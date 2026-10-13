@@ -305,16 +305,21 @@ fn fine_tuning_resumes_its_own_checkpoint_without_reloading_the_source_blob() {
     );
     // Interrupt from inside the run after its first durable epoch checkpoint.
     let cancelling = repo.clone();
+    let observed = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let steps = observed.clone();
     let mut first = TrainingWorker::new(repo.clone(), WorkerLimits::default()).unwrap();
     register_observed_burn_engine(
         &mut first,
-        Arc::new(move |job: &TrainingJob, _step: u64| {
+        Arc::new(move |job: &TrainingJob, step: u64| {
+            steps.lock().unwrap().push(step);
             cancelling.request_cancel(&job.id, now_ms()).unwrap();
         }),
     )
     .unwrap();
     assert!(matches!(first.run(&target.id), Err(Error::Cancelled)));
     let checkpoint = repo.get_job(&target.id).unwrap().checkpoint.unwrap();
+    // The run stops before its next batch, however long the status poll interval is.
+    assert_eq!(*observed.lock().unwrap(), vec![checkpoint.step]);
     std::fs::remove_file(
         repo.path()
             .with_extension("artifacts")

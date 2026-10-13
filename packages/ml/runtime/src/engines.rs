@@ -4,7 +4,7 @@ use crate::{worker::*, *};
 use flow_like_ml_core::ComputeBackend;
 use flow_like_ml_core::{Annotation, ComputeConfig, PreprocessingStep, Sample, TensorData};
 use rusqlite::{Connection, OptionalExtension};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 mod inference;
 pub use inference::LoadedArtifactPredictor;
@@ -250,15 +250,55 @@ fn initialization_artifact(manifest: &Value) -> Result<Option<String>> {
 /// Content that a training artifact, and every training artifact it was initialized from,
 /// was fitted on, and content those models were only validated on.
 pub(crate) struct LineageContent {
-    trained: HashSet<String>,
-    validated: HashSet<String>,
+    trained: Consumption,
+    validated: Consumption,
+}
+
+/// Content digests link a lineage to the groups of any stream. Group IDs name the same lot
+/// or part across the snapshots of one stream, so there the lineage's own groups count even
+/// when none of its samples remain.
+#[derive(Default)]
+struct Consumption {
+    digests: HashSet<String>,
+    groups: HashMap<GroupScope, HashSet<String>>,
+}
+
+/// Project and stream ID: group IDs keep their meaning across inspection versions.
+type GroupScope = (String, String);
+
+fn group_scope(stream: &StreamKey) -> GroupScope {
+    (stream.project_id.clone(), stream.stream_id.clone())
+}
+
+impl Consumption {
+    fn record(&mut self, stream: &StreamKey, samples: &[SampleIdentity]) {
+        let groups = self.groups.entry(group_scope(stream)).or_default();
+        for sample in samples {
+            self.digests.insert(sample.content_digest.clone());
+            groups.insert(sample.group_id.clone());
+        }
+    }
+
+    /// Consumed groups of `stream`: groups of `samples` holding consumed content, and every
+    /// group consumed in `stream` itself.
+    fn occupied<'a>(
+        &'a self,
+        stream: &StreamKey,
+        samples: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> HashSet<&'a str> {
+        let mut occupied: HashSet<&'a str> = linked_groups(samples, &self.digests).collect();
+        if let Some(groups) = self.groups.get(&group_scope(stream)) {
+            occupied.extend(groups.iter().map(String::as_str));
+        }
+        occupied
+    }
 }
 
 impl LineageContent {
     pub(crate) fn load(connection: &Connection, artifact_id: &str) -> Result<Self> {
         let mut lineage = Self {
-            trained: HashSet::new(),
-            validated: HashSet::new(),
+            trained: Consumption::default(),
+            validated: Consumption::default(),
         };
         let mut visited = HashSet::new();
         let mut next = Some(artifact_id.to_owned());
@@ -277,9 +317,8 @@ impl LineageContent {
             let artifact: ModelArtifact = serde_json::from_str(&body)?;
             let own = stored_partitions(connection, &artifact.snapshot_id)?;
             for run in run_partitions(connection, &artifact.job_id, &artifact.snapshot_id, own)? {
-                let digest = |sample: &SampleIdentity| sample.content_digest.clone();
-                lineage.trained.extend(run.train.iter().map(digest));
-                lineage.validated.extend(run.validation.iter().map(digest));
+                lineage.trained.record(&artifact.stream, &run.train);
+                lineage.validated.record(&artifact.stream, &run.validation);
             }
             next = initialization_artifact(&artifact.manifest)?;
         }
@@ -287,15 +326,17 @@ impl LineageContent {
     }
 
     #[cfg(feature = "native")]
-    fn consumed(self) -> HashSet<String> {
+    fn consumed(self) -> Consumption {
         let mut consumed = self.trained;
-        consumed.extend(self.validated);
+        consumed.digests.extend(self.validated.digests);
+        for (scope, groups) in self.validated.groups {
+            consumed.groups.entry(scope).or_default().extend(groups);
+        }
         consumed
     }
 }
 
-/// Group IDs belong to one stream, so lineage from other streams links into this stream's
-/// groups through identical content digests.
+/// Groups of `samples` holding any of the `lineage` content digests.
 fn linked_groups<'a>(
     samples: impl IntoIterator<Item = (&'a str, &'a str)>,
     lineage: &HashSet<String>,
@@ -306,9 +347,9 @@ fn linked_groups<'a>(
         .map(|(group, _)| group)
 }
 
-/// Groups that fitting or selecting an artifact consumed, including groups holding content
-/// its initialization lineage consumed. Snapshots are immutable and can be large, so load
-/// this before taking a write lock.
+/// Groups that fitting or selecting an artifact consumed, including the groups its
+/// initialization lineage consumed. Snapshots are immutable and can be large, so load this
+/// before taking a write lock.
 #[cfg(feature = "native")]
 pub(crate) struct ConsumedGroups {
     groups: HashSet<String>,
@@ -330,17 +371,24 @@ impl ConsumedGroups {
         )?;
         let lineage = match initialization_artifact(&artifact.manifest)? {
             Some(source) => LineageContent::load(connection, &source)?.consumed(),
-            None => HashSet::new(),
+            None => Consumption::default(),
         };
         let mut groups: HashSet<String> = runs
             .iter()
             .flat_map(|run| run.fitted())
             .map(|sample| sample.group_id.clone())
             .collect();
+        // Audited samples come from the artifact's own stream.
         groups.extend(
-            linked_groups(runs.iter().flat_map(|run| run.links()), &lineage).map(str::to_owned),
+            lineage
+                .occupied(&artifact.stream, runs.iter().flat_map(|run| run.links()))
+                .into_iter()
+                .map(str::to_owned),
         );
-        Ok(Self { groups, lineage })
+        Ok(Self {
+            groups,
+            lineage: lineage.digests,
+        })
     }
 
     /// Audited samples must lie outside every consumed group. An audited sample holding
@@ -370,8 +418,8 @@ impl ConsumedGroups {
 }
 
 /// Held-out groups of a run, including an experiment trial's full snapshot, that would make
-/// its metrics dependent on the lineage: validation groups holding content the lineage was
-/// fitted on, and audit groups holding any lineage content.
+/// its metrics dependent on the lineage: validation groups the lineage was fitted on, and
+/// audit groups it consumed in any way.
 #[cfg(feature = "burn")]
 fn contaminated_groups(
     connection: &Connection,
@@ -385,10 +433,9 @@ fn contaminated_groups(
         &snapshot.id,
         PartitionIdentities::of(snapshot),
     )?;
-    let trained: HashSet<&str> =
-        linked_groups(runs.iter().flat_map(|run| run.links()), &lineage.trained).collect();
-    let validated: HashSet<&str> =
-        linked_groups(runs.iter().flat_map(|run| run.links()), &lineage.validated).collect();
+    let links = || runs.iter().flat_map(|run| run.links());
+    let trained = lineage.trained.occupied(&snapshot.stream, links());
+    let validated = lineage.validated.occupied(&snapshot.stream, links());
     let validation = runs
         .iter()
         .flat_map(|run| &run.validation)
@@ -984,6 +1031,86 @@ mod independence_tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("late-mate"), "{error}");
+    }
+
+    fn in_stream(stream_id: &str, inspection_version: &str, artifact: ModelArtifact) -> ModelArtifact {
+        ModelArtifact {
+            stream: StreamKey {
+                inspection_version: inspection_version.into(),
+                ..stream(stream_id)
+            },
+            ..artifact
+        }
+    }
+
+    #[test]
+    fn same_stream_lineage_groups_stay_consumed_after_their_samples_leave_the_snapshot() {
+        let (_directory, connection) = repository();
+        let origin = snapshot(
+            "origin",
+            vec![sample("s1", "lot-7", 1)],
+            vec![sample("v1", "lot-8", 2)],
+            Vec::new(),
+        );
+        store_snapshot(&connection, &origin);
+        let origin_model = artifact("origin-model", "origin", serde_json::json!({}));
+        store_artifact(&connection, &in_stream("camera", "v1", origin_model));
+        // s1 was withdrawn, so the fine-tune's snapshot only holds new images of its lot.
+        let target = snapshot(
+            "target",
+            vec![sample("t1", "lot-1", 10)],
+            vec![sample("t2", "lot-2", 11)],
+            vec![sample("s2", "lot-7", 3)],
+        );
+        let fine_tuned = artifact("target-model", "target", fine_tuned_from("origin-model"));
+        let model = in_stream("camera", "v2", fine_tuned);
+        for audited in [sample("s2", "lot-7", 3), sample("v2", "lot-8", 4)] {
+            assert!(
+                ensure_independent_audit(&connection, &model, &target, &[&audited]).is_err(),
+                "{} belongs to a lot the origin model consumed",
+                audited.id
+            );
+        }
+        ensure_independent_audit(&connection, &model, &target, &[&sample("n1", "lot-9", 5)])
+            .unwrap();
+        // Lot names of another stream are unrelated without shared content.
+        let elsewhere = in_stream("press", "v1", model);
+        ensure_independent_audit(&connection, &elsewhere, &target, &[&sample("s2", "lot-7", 3)])
+            .unwrap();
+    }
+
+    #[test]
+    #[cfg(feature = "burn")]
+    fn same_stream_lineage_groups_contaminate_held_out_partitions_without_shared_content() {
+        let (_directory, connection) = repository();
+        let origin = snapshot(
+            "origin",
+            vec![sample("o1", "lot-1", 10)],
+            vec![sample("o2", "lot-2", 11)],
+            Vec::new(),
+        );
+        store_snapshot(&connection, &origin);
+        let origin_model = artifact("origin-model", "origin", serde_json::json!({}));
+        store_artifact(&connection, &in_stream("camera", "v1", origin_model));
+        let lineage = LineageContent::load(&connection, "origin-model").unwrap();
+        let held_out = |stream_id: &str| DatasetSnapshot {
+            stream: stream(stream_id),
+            ..snapshot(
+                "run",
+                vec![sample("r1", "lot-3", 20)],
+                vec![sample("r2", "lot-1", 21)],
+                vec![sample("r3", "lot-2", 22), sample("r4", "lot-4", 23)],
+            )
+        };
+        assert_eq!(
+            contaminated_groups(&connection, "job-run", &held_out("camera"), &lineage).unwrap(),
+            std::collections::BTreeSet::from(["lot-1".to_owned(), "lot-2".to_owned()])
+        );
+        assert!(
+            contaminated_groups(&connection, "job-run", &held_out("press"), &lineage)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

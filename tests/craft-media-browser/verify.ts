@@ -17,6 +17,12 @@ interface CraftEvent {
 declare global {
 	interface Window {
 		events: CraftEvent[];
+		codecProbe?: {
+			audioDecodes: number;
+			videoLoads: number;
+			videoEncodes: number;
+			audioEncodes: number;
+		};
 		audioProbe?: {
 			contexts: AudioContext[];
 			nonSilentBuffers: number;
@@ -103,6 +109,41 @@ let failed = false;
 try {
 	for (const runtime of selected) {
 		const page = await browser.newPage();
+		if (runtime === "soundcraft" || runtime === "filmcraft") {
+			await page.evaluateOnNewDocument(() => {
+				const probe = {
+					audioDecodes: 0,
+					videoLoads: 0,
+					videoEncodes: 0,
+					audioEncodes: 0,
+				};
+				window.codecProbe = probe;
+				const decode = BaseAudioContext.prototype.decodeAudioData;
+				BaseAudioContext.prototype.decodeAudioData = function (...args) {
+					probe.audioDecodes++;
+					return decode.apply(this, args);
+				};
+				const load = HTMLMediaElement.prototype.load;
+				HTMLMediaElement.prototype.load = function () {
+					if (this instanceof HTMLVideoElement) probe.videoLoads++;
+					return load.call(this);
+				};
+				if (typeof VideoEncoder !== "undefined") {
+					const encode = VideoEncoder.prototype.encode;
+					VideoEncoder.prototype.encode = function (...args) {
+						probe.videoEncodes++;
+						return encode.apply(this, args);
+					};
+				}
+				if (typeof AudioEncoder !== "undefined") {
+					const encode = AudioEncoder.prototype.encode;
+					AudioEncoder.prototype.encode = function (...args) {
+						probe.audioEncodes++;
+						return encode.apply(this, args);
+					};
+				}
+			});
+		}
 		if (runtime === "soundcraft") {
 			await page.evaluateOnNewDocument(() => {
 				const probe = { contexts: [] as AudioContext[], nonSilentBuffers: 0 };
@@ -311,11 +352,52 @@ try {
 					} else await page.keyboard.press("ArrowRight");
 					await settle();
 					await page.keyboard.down(modifier);
-					await page.keyboard.press(runtime === "soundcraft" ? "KeyB" : "KeyK");
+					await page.keyboard.press(runtime === "soundcraft" ? "KeyD" : "KeyK");
 					await page.keyboard.up(modifier);
+				}
+				if (runtime === "filmcraft") {
+					// Mark the current frame and extract it from the edited timeline.
+					for (const key of ["KeyI", "KeyO", "Quote"]) {
+						await page.keyboard.press(key);
+						await settle();
+					}
 				}
 				await settle();
 				assert.equal((await waitEvent("dirty")).dirty, true);
+			}
+			if (runtime === "filmcraft") {
+				const frame = await (await page.$("iframe"))?.contentFrame();
+				assert.ok(frame);
+				const originalSupport = await frame.evaluateHandle(
+					() => VideoEncoder.isConfigSupported,
+				);
+				try {
+					await frame.evaluate(() => {
+						VideoEncoder.isConfigSupported = async (config) => ({
+							config,
+							supported: false,
+						});
+					});
+					await send({ type: "export", requestId: "unsupported", format });
+					assert.match(
+						(await waitEvent("error", "unsupported")).error ?? "",
+						/codec|browser|H\.?264|support/i,
+					);
+					assert.equal(
+						await page.evaluate(() =>
+							window.events.some(
+								(event) => event.type === "dirty" && event.dirty === false,
+							),
+						),
+						false,
+						"Unsupported encoding must preserve unsaved changes",
+					);
+				} finally {
+					await frame.evaluate((original) => {
+						VideoEncoder.isConfigSupported = original;
+					}, originalSupport);
+					await originalSupport.dispose();
+				}
 			}
 			await send({ type: "export", requestId: "save", format });
 			const exported = await waitEvent("exported", "save");
@@ -356,6 +438,52 @@ try {
 					),
 					runtime === "soundcraft" ? "RIFF" : "ftyp",
 				);
+			if (runtime === "soundcraft") {
+				const outputPath = join(directory, "exported.wav");
+				await writeFile(outputPath, output);
+				const probe = JSON.parse(
+					execFileSync(
+						"ffprobe",
+						["-v", "error", "-show_streams", "-of", "json", outputPath],
+						{ encoding: "utf8" },
+					),
+				);
+				const audio = probe.streams.find(
+					(stream: { codec_type: string }) => stream.codec_type === "audio",
+				);
+				assert.match(audio?.codec_name ?? "", /^pcm_/);
+				assert.ok(
+					Number(audio?.duration) > 5.9 && Number(audio.duration) < 6.1,
+					"Saved audio must contain the original and duplicated three-second clip",
+				);
+				const pcm = execFileSync(
+					"ffmpeg",
+					[
+						"-v",
+						"error",
+						"-i",
+						outputPath,
+						"-f",
+						"f32le",
+						"-ac",
+						"1",
+						"pipe:1",
+					],
+					{ maxBuffer: 4 * 1024 * 1024 },
+				);
+				for (const half of [
+					pcm.subarray(0, pcm.length / 2),
+					pcm.subarray(pcm.length / 2),
+				]) {
+					let energy = 0;
+					for (let offset = 0; offset < half.length; offset += 4)
+						energy += half.readFloatLE(offset) ** 2;
+					assert.ok(
+						Math.sqrt(energy / (half.length / 4)) > 0.01,
+						"Both saved clips must contain audible samples",
+					);
+				}
+			}
 			if (runtime === "filmcraft") {
 				const outputPath = join(directory, "exported.mp4");
 				await writeFile(outputPath, output);
@@ -377,6 +505,87 @@ try {
 						(stream: { codec_name: string }) => stream.codec_name === "aac",
 					),
 				);
+				const video = probe.streams.find(
+					(stream: { codec_type: string }) => stream.codec_type === "video",
+				);
+				assert.ok(
+					Number(video?.duration) > 0 && Number(video.duration) < 0.3,
+					"The encoded video must reflect the extracted timeline frame",
+				);
+				const pixels = execFileSync("ffmpeg", [
+					"-v",
+					"error",
+					"-i",
+					outputPath,
+					"-f",
+					"rawvideo",
+					"-pix_fmt",
+					"rgb24",
+					"pipe:1",
+				]);
+				const expectedPixels =
+					32 * 32 * Math.round(Number(video.duration) * 10);
+				assert.equal(pixels.length, expectedPixels * 3);
+				let blue = 0;
+				for (let offset = 0; offset < pixels.length; offset += 3)
+					if (
+						pixels[offset] < 30 &&
+						pixels[offset + 1] < 30 &&
+						pixels[offset + 2] > 220
+					)
+						blue++;
+				assert.ok(
+					blue > expectedPixels * 0.95,
+					"Saved video must contain the decoded source image",
+				);
+				const pcm = execFileSync("ffmpeg", [
+					"-v",
+					"error",
+					"-i",
+					outputPath,
+					"-vn",
+					"-f",
+					"f32le",
+					"-ac",
+					"1",
+					"pipe:1",
+				]);
+				let energy = 0;
+				for (let offset = 0; offset < pcm.length; offset += 4)
+					energy += pcm.readFloatLE(offset) ** 2;
+				assert.ok(
+					Math.sqrt(energy / (pcm.length / 4)) > 0.01,
+					"Saved video must retain audible source audio",
+				);
+				let initialEnergy = 0;
+				for (let sample = 0; sample < 480; sample++)
+					initialEnergy += pcm.readFloatLE(sample * 4) ** 2;
+				assert.ok(
+					Math.sqrt(initialEnergy / 480) > 0.01,
+					"Saved audio must begin with the video, without encoder priming silence",
+				);
+				const intendedSamples = Math.round(Number(video.duration) * 48000);
+				let finalEnergy = 0;
+				for (
+					let sample = intendedSamples - 480;
+					sample < intendedSamples;
+					sample++
+				)
+					finalEnergy += pcm.readFloatLE(sample * 4) ** 2;
+				assert.ok(
+					Math.sqrt(finalEnergy / 480) > 0.01,
+					"Correcting encoder delay must preserve the final edited audio samples",
+				);
+			}
+			if (runtime === "soundcraft" || runtime === "filmcraft") {
+				const frame = await (await page.$("iframe"))?.contentFrame();
+				assert.ok(frame);
+				const codecs = await frame.evaluate(() => window.codecProbe);
+				assert.ok(codecs && codecs.audioDecodes > 0);
+				if (runtime === "filmcraft") {
+					assert.ok(codecs.videoLoads > 0);
+					assert.ok(codecs.videoEncodes > 0 && codecs.audioEncodes > 0);
+				}
 			}
 			await closeAudio();
 			await page.goto(server.url.origin);
@@ -402,6 +611,14 @@ try {
 				{ bytes: [...output], format },
 			);
 			assert.equal((await waitEvent("opened")).readOnly, true);
+			if (runtime === "soundcraft") {
+				const frame = await (await page.$("iframe"))?.contentFrame();
+				assert.equal(
+					await frame?.evaluate(() => window.codecProbe?.audioDecodes),
+					0,
+					"Saved PCM WAV reopens without a compressed-audio decoder",
+				);
+			}
 			assert.deepEqual(errors, []);
 			console.log(
 				`${runtime}: ready, readonly open, readonly save rejected, edit enabled, ${output.length} byte ${format} export, saved acknowledgement, reopen`,

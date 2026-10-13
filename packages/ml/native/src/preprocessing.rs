@@ -112,6 +112,19 @@ fn category(value: &Value, name: &str, canonical: bool) -> Result<Option<String>
     Ok(Some(key))
 }
 
+/// The other version 1 spelling of an integral code within 2^53: `3` for `3.0` and `3.0` for `3`.
+fn legacy_alternate_key(value: &Value) -> Option<String> {
+    let number = value.as_f64()?;
+    if number.fract() != 0.0 || number.abs() > MAX_EXACT_INTEGER {
+        return None;
+    }
+    if value.is_f64() {
+        Some((number as i64).to_string())
+    } else {
+        serde_json::to_string(&Value::from(number)).ok()
+    }
+}
+
 /// Sums in sorted order so the statistic depends only on the training values, not on row order.
 fn average(values: &[f64]) -> f64 {
     let mut sorted = values.to_vec();
@@ -368,15 +381,18 @@ impl FittedTabularPreprocessor {
                     values.push(value);
                 }
                 FittedColumn::Categorical { name, vocabulary } => {
-                    let value = category(
-                        cell(row, name)?,
-                        name,
-                        self.format_version != LEGACY_FORMAT_VERSION,
-                    )?;
-                    let index = match value {
+                    let legacy = self.format_version == LEGACY_FORMAT_VERSION;
+                    let raw = cell(row, name)?;
+                    let index = match category(raw, name, !legacy)? {
                         None => 0,
                         Some(value) => vocabulary
                             .binary_search(&value)
+                            .or_else(|miss| {
+                                match legacy.then(|| legacy_alternate_key(raw)).flatten() {
+                                    Some(alternate) => vocabulary.binary_search(&alternate),
+                                    None => Err(miss),
+                                }
+                            })
                             .map_or(1, |index| index + 2),
                     };
                     let start = values.len();
@@ -589,25 +605,37 @@ mod tests {
         assert_eq!(refitted.columns, fitted.columns);
     }
 
-    #[test]
-    fn legacy_manifests_keep_their_training_time_category_keys() {
-        let legacy = FittedTabularPreprocessor {
+    fn legacy_codes(vocabulary: &[&str]) -> FittedTabularPreprocessor {
+        let mut output_features = vec!["code:missing".to_string(), "code:unknown".to_string()];
+        output_features.extend(vocabulary.iter().map(|value| format!("code:{value}")));
+        FittedTabularPreprocessor {
             format_version: LEGACY_FORMAT_VERSION,
             columns: vec![FittedColumn::Categorical {
                 name: "code".into(),
-                vocabulary: vec!["1.0".into(), "3.0".into()],
+                vocabulary: vocabulary.iter().map(|value| value.to_string()).collect(),
             }],
-            output_features: ["code:missing", "code:unknown", "code:1.0", "code:3.0"]
-                .map(String::from)
-                .to_vec(),
+            output_features,
             training_rows: 2,
             training_digest: "0".repeat(64),
-        };
+        }
+    }
+
+    #[test]
+    fn legacy_manifests_match_the_other_spelling_of_an_integral_code() {
+        let legacy = legacy_codes(&["\"7\"", "-2", "1.0", "3.0"]);
         let restored: FittedTabularPreprocessor =
             serde_json::from_value(serde_json::to_value(&legacy).unwrap()).unwrap();
-        assert_eq!(hot_slot(&restored, json!(3.0)), 3);
-        assert_eq!(hot_slot(&restored, json!(1.0)), 2);
-        assert_eq!(hot_slot(&restored, json!(3)), 1);
+        assert_eq!(hot_slot(&restored, json!(3.0)), 5);
+        assert_eq!(hot_slot(&restored, json!(3)), 5);
+        assert_eq!(hot_slot(&restored, json!(1)), 4);
+        assert_eq!(hot_slot(&restored, json!(-2.0)), 3);
+        assert_eq!(hot_slot(&restored, json!(-2)), 3);
+        assert_eq!(hot_slot(&restored, json!(7)), 1);
+        assert_eq!(hot_slot(&restored, json!(3.5)), 1);
+        assert_eq!(hot_slot(&restored, json!(1e300)), 1);
+        let both = legacy_codes(&["3", "3.0"]);
+        assert_eq!(hot_slot(&both, json!(3)), 2);
+        assert_eq!(hot_slot(&both, json!(3.0)), 3);
         let unsupported = FittedTabularPreprocessor {
             format_version: FORMAT_VERSION + 1,
             ..legacy

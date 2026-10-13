@@ -1025,10 +1025,12 @@ const MAX_COPIED_NODES: usize = 1_000_000;
 /// memory.
 const MAX_COPIED_BYTES: usize = 64 << 20;
 
-/// Most stack entries, open marks and memo slots held at once.
+/// Most stack entries, open marks, memo slots and objects inside the stack's containers held
+/// at once.
 ///
-/// A stack entry takes about 90 bytes however little pickle made it (`N` is one byte), so
-/// the pickle's length alone would let it ask for almost a hundred times its size.
+/// A stack entry takes about 90 bytes however little pickle made it (`N` is one byte), and
+/// moving it into a list keeps about 70, so the pickle's length alone would let it ask for
+/// almost a hundred times its size.
 const MAX_LIVE_ENTRIES: usize = 1 << 22;
 
 /// Longest module or attribute name a `GLOBAL` or `STACK_GLOBAL` may give. Python names
@@ -1047,9 +1049,42 @@ const MAX_NESTING_DEPTH: u32 = 1000;
 struct Entry {
     object: Object,
     depth: u32,
+    /// Objects inside `object`, at most: a call or `BUILD` that drops some of its inputs keeps
+    /// them counted, and so do dict keys.
+    nested: usize,
     /// The memo slot holding a copy of this object, once memoized. CPython's memo aliases
     /// the object itself, so `BUILD` refreshes the copy to keep a later fetch in step.
     memo: Option<u32>,
+}
+
+/// Values popped to go into one container.
+struct Items {
+    objects: Vec<Object>,
+    /// Deepest nesting among them.
+    depth: u32,
+    /// The values and the objects inside them.
+    held: usize,
+}
+
+impl Items {
+    fn from_entries(entries: Vec<Entry>) -> Self {
+        let depth = entries.iter().map(|entry| entry.depth).max().unwrap_or(0);
+        let held = entries.len() + entries.iter().map(|entry| entry.nested).sum::<usize>();
+        Self {
+            objects: entries.into_iter().map(|entry| entry.object).collect(),
+            depth,
+            held,
+        }
+    }
+}
+
+/// What a container built from `inputs` can hold: a call or `BUILD` result keeps no more
+/// than its inputs held, and a scalar result holds nothing.
+fn held_by(object: &Object, inputs: usize) -> usize {
+    match object {
+        Object::Tuple(_) | Object::List(_) | Object::Dict(_) => inputs,
+        _ => 0,
+    }
 }
 
 struct Unpickler<'a> {
@@ -1057,6 +1092,9 @@ struct Unpickler<'a> {
     /// Stack heights at each open `MARK`, innermost last, as in CPython.
     marks: Vec<usize>,
     memo: HashMap<u32, Entry>,
+    /// Sum of the stack entries' `nested`: values moved into a container leave the stack
+    /// but stay held.
+    nested: usize,
     copied_nodes: usize,
     copied_bytes: usize,
     ids: &'a PersistentIds,
@@ -1068,24 +1106,28 @@ impl<'a> Unpickler<'a> {
             stack: Vec::new(),
             marks: Vec::new(),
             memo: HashMap::new(),
+            nested: 0,
             copied_nodes: 0,
             copied_bytes: 0,
             ids,
         }
     }
 
-    /// Refuse another stack entry, mark or memo slot once [`MAX_LIVE_ENTRIES`] are held.
-    fn ensure_room(&self) -> Result<()> {
-        if self.stack.len() + self.marks.len() + self.memo.len() >= MAX_LIVE_ENTRIES {
+    /// Refuse to hold `adding` more stack entries, nested objects, marks or memo slots once
+    /// that would pass [`MAX_LIVE_ENTRIES`].
+    fn ensure_room(&self, adding: usize) -> Result<()> {
+        let held = self.stack.len() + self.marks.len() + self.memo.len() + self.nested;
+        if held.saturating_add(adding) > MAX_LIVE_ENTRIES {
             return Err(PickleError::InvalidData(format!(
-                "pickle needs more than {MAX_LIVE_ENTRIES} stack, mark and memo entries at once"
+                "pickle holds more than {MAX_LIVE_ENTRIES} objects, marks and memo entries at once"
             )));
         }
         Ok(())
     }
 
     fn push_entry(&mut self, entry: Entry) -> Result<()> {
-        self.ensure_room()?;
+        self.ensure_room(1 + entry.nested)?;
+        self.nested += entry.nested;
         self.stack.push(entry);
         Ok(())
     }
@@ -1094,11 +1136,12 @@ impl<'a> Unpickler<'a> {
         self.push_entry(Entry {
             object,
             depth: 0,
+            nested: 0,
             memo: None,
         })
     }
 
-    fn push(&mut self, object: Object, depth: u32) -> Result<()> {
+    fn push(&mut self, object: Object, depth: u32, nested: usize) -> Result<()> {
         if depth > MAX_NESTING_DEPTH {
             return Err(PickleError::InvalidData(format!(
                 "pickle nesting exceeds {MAX_NESTING_DEPTH} levels"
@@ -1107,6 +1150,7 @@ impl<'a> Unpickler<'a> {
         self.push_entry(Entry {
             object,
             depth,
+            nested,
             memo: None,
         })
     }
@@ -1122,7 +1166,9 @@ impl<'a> Unpickler<'a> {
                 "expected a value on the stack, found MARK".to_string(),
             ));
         }
-        self.stack.pop().ok_or(PickleError::StackUnderflow)
+        let entry = self.stack.pop().ok_or(PickleError::StackUnderflow)?;
+        self.nested -= entry.nested;
+        Ok(entry)
     }
 
     fn pop_object(&mut self) -> Result<Object> {
@@ -1148,19 +1194,14 @@ impl<'a> Unpickler<'a> {
     }
 
     /// Pop everything above the innermost `MARK`, and the mark itself.
-    ///
-    /// Returns the objects with the deepest nesting among them.
-    fn pop_to_mark(&mut self) -> Result<(Vec<Object>, u32)> {
+    fn pop_to_mark(&mut self) -> Result<Items> {
         let mark = self
             .marks
             .pop()
             .ok_or_else(|| PickleError::InvalidData("MARK not found on stack".to_string()))?;
-        let entries = self.stack.split_off(mark);
-        let depth = entries.iter().map(|entry| entry.depth).max().unwrap_or(0);
-        Ok((
-            entries.into_iter().map(|entry| entry.object).collect(),
-            depth,
-        ))
+        let items = Items::from_entries(self.stack.split_off(mark));
+        self.nested -= items.held - items.objects.len();
+        Ok(items)
     }
 
     /// Account for a deep copy of `object` against the copy budgets.
@@ -1187,7 +1228,7 @@ impl<'a> Unpickler<'a> {
 
     fn memo_put(&mut self, idx: u32) -> Result<()> {
         if !self.memo.contains_key(&idx) {
-            self.ensure_room()?;
+            self.ensure_room(1)?;
         }
         let top = self.top_mut()?;
         top.memo = Some(idx);
@@ -1198,14 +1239,16 @@ impl<'a> Unpickler<'a> {
     }
 
     /// Extend the list on top of the stack.
-    fn append(&mut self, items: Vec<Object>, items_depth: u32, op: OpCode) -> Result<()> {
+    fn append(&mut self, items: Items, op: OpCode) -> Result<()> {
         let top = self.top_mut()?;
         let Object::List(list) = &mut top.object else {
             return Err(PickleError::UnexpectedOpCode(op));
         };
-        list.extend(items);
-        let depth = top.depth.max(items_depth + 1);
+        list.extend(items.objects);
+        top.nested += items.held;
+        let depth = top.depth.max(items.depth + 1);
         top.depth = depth;
+        self.nested += items.held;
         if depth > MAX_NESTING_DEPTH {
             return Err(PickleError::InvalidData(format!(
                 "pickle nesting exceeds {MAX_NESTING_DEPTH} levels"
@@ -1215,14 +1258,16 @@ impl<'a> Unpickler<'a> {
     }
 
     /// Insert key/value pairs into the dict on top of the stack.
-    fn set_items(&mut self, items: Vec<Object>, items_depth: u32, op: OpCode) -> Result<()> {
+    fn set_items(&mut self, items: Items, op: OpCode) -> Result<()> {
         let top = self.top_mut()?;
         let Object::Dict(dict) = &mut top.object else {
             return Err(PickleError::UnexpectedOpCode(op));
         };
-        insert_pairs(dict, items)?;
-        let depth = top.depth.max(items_depth + 1);
+        insert_pairs(dict, items.objects)?;
+        top.nested += items.held;
+        let depth = top.depth.max(items.depth + 1);
         top.depth = depth;
+        self.nested += items.held;
         if depth > MAX_NESTING_DEPTH {
             return Err(PickleError::InvalidData(format!(
                 "pickle nesting exceeds {MAX_NESTING_DEPTH} levels"
@@ -1341,7 +1386,7 @@ impl<'a> Unpickler<'a> {
 
                 // Containers
                 OpCode::Mark => {
-                    self.ensure_room()?;
+                    self.ensure_room(1)?;
                     self.marks.push(self.stack.len());
                 }
                 OpCode::EmptyTuple => self.push_scalar(Object::Tuple(Vec::new()))?,
@@ -1350,53 +1395,49 @@ impl<'a> Unpickler<'a> {
                 }
                 OpCode::EmptyDict => self.push_scalar(Object::Dict(HashMap::new()))?,
                 OpCode::Tuple => {
-                    let (items, depth) = self.pop_to_mark()?;
-                    self.push(Object::Tuple(items), depth + 1)?;
+                    let items = self.pop_to_mark()?;
+                    self.push(Object::Tuple(items.objects), items.depth + 1, items.held)?;
                 }
-                OpCode::Tuple1 => {
-                    let a = self.pop()?;
-                    self.push(Object::Tuple(vec![a.object]), a.depth + 1)?;
-                }
-                OpCode::Tuple2 => {
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    let depth = a.depth.max(b.depth) + 1;
-                    self.push(Object::Tuple(vec![a.object, b.object]), depth)?;
-                }
-                OpCode::Tuple3 => {
-                    let c = self.pop()?;
-                    let b = self.pop()?;
-                    let a = self.pop()?;
-                    let depth = a.depth.max(b.depth).max(c.depth) + 1;
-                    self.push(Object::Tuple(vec![a.object, b.object, c.object]), depth)?;
+                OpCode::Tuple1 | OpCode::Tuple2 | OpCode::Tuple3 => {
+                    let count = match op {
+                        OpCode::Tuple1 => 1,
+                        OpCode::Tuple2 => 2,
+                        _ => 3,
+                    };
+                    let mut entries = Vec::with_capacity(count);
+                    for _ in 0..count {
+                        entries.push(self.pop()?);
+                    }
+                    entries.reverse();
+                    let items = Items::from_entries(entries);
+                    self.push(Object::Tuple(items.objects), items.depth + 1, items.held)?;
                 }
                 OpCode::List | OpCode::FrozenSet => {
-                    let (items, depth) = self.pop_to_mark()?;
-                    self.push(Object::List(items), depth + 1)?;
+                    let items = self.pop_to_mark()?;
+                    self.push(Object::List(items.objects), items.depth + 1, items.held)?;
                 }
                 OpCode::Append => {
                     let value = self.pop()?;
-                    self.append(vec![value.object], value.depth, op)?;
+                    self.append(Items::from_entries(vec![value]), op)?;
                 }
                 OpCode::Appends | OpCode::AddItems => {
-                    let (items, depth) = self.pop_to_mark()?;
-                    self.append(items, depth, op)?;
+                    let items = self.pop_to_mark()?;
+                    self.append(items, op)?;
                 }
                 OpCode::Dict => {
-                    let (items, depth) = self.pop_to_mark()?;
-                    let mut dict = HashMap::with_capacity(items.len() / 2);
-                    insert_pairs(&mut dict, items)?;
-                    self.push(Object::Dict(dict), depth + 1)?;
+                    let items = self.pop_to_mark()?;
+                    let mut dict = HashMap::with_capacity(items.objects.len() / 2);
+                    insert_pairs(&mut dict, items.objects)?;
+                    self.push(Object::Dict(dict), items.depth + 1, items.held)?;
                 }
                 OpCode::SetItem => {
                     let value = self.pop()?;
                     let key = self.pop()?;
-                    let depth = key.depth.max(value.depth);
-                    self.set_items(vec![key.object, value.object], depth, op)?;
+                    self.set_items(Items::from_entries(vec![key, value]), op)?;
                 }
                 OpCode::SetItems => {
-                    let (items, depth) = self.pop_to_mark()?;
-                    self.set_items(items, depth, op)?;
+                    let items = self.pop_to_mark()?;
+                    self.set_items(items, op)?;
                 }
 
                 // Stack manipulation
@@ -1483,9 +1524,11 @@ impl<'a> Unpickler<'a> {
                 OpCode::Reduce => {
                     let args = self.pop()?;
                     let callable = self.pop_object()?;
-                    // A call's result nests no deeper than its arguments did.
+                    // A call's result nests no deeper, and holds no more, than its arguments
+                    // did without the argument tuple itself.
                     let obj = reduce(callable, args.object)?;
-                    self.push(obj, args.depth)?;
+                    let nested = held_by(&obj, args.nested.saturating_sub(1));
+                    self.push(obj, args.depth, nested)?;
                 }
                 OpCode::NewObj => {
                     let args = self.pop_object()?;
@@ -1527,6 +1570,7 @@ impl<'a> Unpickler<'a> {
                         }
                         (object, state) => (opaque(&object, &state)?, 0),
                     };
+                    let nested = held_by(&built, object.nested + state.nested);
                     // The pickler memoizes an object before writing its state, so the memo
                     // holds it as it was before `BUILD`. CPython's memo aliases the object
                     // and sees the state set on it; here the copy is refreshed, so a module
@@ -1538,11 +1582,12 @@ impl<'a> Unpickler<'a> {
                             Entry {
                                 object: built.clone(),
                                 depth,
+                                nested,
                                 memo: Some(idx),
                             },
                         );
                     }
-                    self.push(built, depth)?;
+                    self.push(built, depth, nested)?;
                 }
 
                 OpCode::Ext1
@@ -2109,6 +2154,43 @@ mod tests {
                 "{tail:?}"
             );
         }
+    }
+
+    /// Runs `pickle` on an unpickler whose open marks leave `free` slots.
+    fn run_with_room(free: usize, pickle: &[u8]) -> Result<Object> {
+        let ids = PersistentIds::Unavailable;
+        let mut unpickler = Unpickler::new(&ids);
+        unpickler.marks.resize(MAX_LIVE_ENTRIES - free, 0);
+        unpickler.run(&mut Cursor::new(pickle))
+    }
+
+    #[test]
+    fn objects_moved_into_containers_stay_counted() {
+        // Each batch holds at most a mark and three values on the stack, which fits ten free
+        // slots; the values a list keeps from earlier batches use the slots up.
+        let batches =
+            |batch: &[u8], count: usize, head: &[u8]| [head, &batch.repeat(count), b"."].concat();
+        let appended = run_with_room(10, &batches(b"(NNNe", 2, b"]")).unwrap();
+        assert!(matches!(appended, Object::List(items) if items.len() == 6));
+        for pickle in [batches(b"(NNNe", 3, b"]"), batches(b"(NNNl", 3, b"")] {
+            assert!(
+                matches!(
+                    run_with_room(10, &pickle).unwrap_err(),
+                    PickleError::InvalidData(msg) if msg.contains("at once")
+                ),
+                "{pickle:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn containers_that_are_consumed_or_discarded_free_their_objects() {
+        let tuple = b"(NNNt0".as_slice();
+        let set_call = b"cbuiltins\nset\n((NNNltR0".as_slice();
+        let dict_state = b"}}(X\x01\x00\x00\x00kNub0".as_slice();
+        let pickle = [tuple, set_call, dict_state].concat().repeat(50);
+        let result = run_with_room(10, &[pickle.as_slice(), b"N."].concat()).unwrap();
+        assert!(matches!(result, Object::None));
     }
 
     #[test]

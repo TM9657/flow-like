@@ -1,10 +1,12 @@
-use filmcraft_engine::{Services, Session};
+use filmcraft_engine::Session;
 use filmcraft_ui_egui::FilmcraftApp;
 use serde_json::{Value, json};
+use std::cell::RefCell;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
 const MAX_BYTES: usize = 200 * 1024 * 1024;
+thread_local! { static OPEN_RESULT: RefCell<Option<Result<(), String>>> = const { RefCell::new(None) }; }
 
 #[wasm_bindgen]
 extern "C" {
@@ -37,7 +39,12 @@ fn host_command(id: &str) -> Option<Result<Value, String>> {
     if id.starts_with("help.")
         || id == "app.about"
         || id == "app.quit"
-        || id.starts_with("export.queue.")
+        || id.starts_with("export.")
+            && !matches!(
+                id,
+                "export.resolve" | "export.presets.list" | "export.presets.get"
+            )
+        || id.starts_with("sequence.render") && id != "sequence.renderBar"
         || id.starts_with("file.")
             && !matches!(
                 id,
@@ -84,6 +91,7 @@ async fn start_app() -> Result<(), String> {
                 let ctx = cc.egui_ctx.clone();
                 crate::fs::set_on_data(move || ctx.request_repaint());
                 crate::webcodecs::install();
+                crate::browser_export::install();
                 let mut session = Session::new(Arc::new(crate::fs::WebServices));
                 session.host_command = Some(host_command);
                 let mut app = FilmcraftApp::new(session);
@@ -108,6 +116,7 @@ async fn start_app() -> Result<(), String> {
                     reported_dirty: false,
                     last_exported: None,
                     pending: None,
+                    opening: None,
                 }))
             }),
         )
@@ -118,10 +127,13 @@ async fn start_app() -> Result<(), String> {
 }
 
 struct Pending {
-    job: u64,
     request: String,
     revision: u64,
+}
+struct Opening {
+    name: String,
     path: String,
+    read_only: bool,
 }
 struct Host {
     web: crate::WebApp,
@@ -130,6 +142,7 @@ struct Host {
     reported_dirty: bool,
     last_exported: Option<u64>,
     pending: Option<Pending>,
+    opening: Option<Opening>,
 }
 
 impl Host {
@@ -148,7 +161,7 @@ impl Host {
     fn receive(&mut self, message: JsValue) -> Result<(), String> {
         match field(&message, "type").as_string().as_deref() {
             Some("open") => {
-                if self.opened {
+                if self.opened || self.opening.is_some() {
                     return Err("A video file is already open.".into());
                 }
                 let name = field(&message, "name")
@@ -167,34 +180,18 @@ impl Host {
                     .map(|c| if c == '/' || c == '\\' { '_' } else { c })
                     .collect();
                 let path = format!("/files/{name}");
-                crate::fs::put(&path, data.to_vec());
-                let imported = self.execute("file.import", json!({"paths": [path]}))?;
-                let errors = imported
-                    .get("errors")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default();
-                if !errors.is_empty() {
-                    return Err(errors
-                        .iter()
-                        .map(|e| e.as_str().unwrap_or("Video import failed."))
-                        .collect::<Vec<_>>()
-                        .join("; "));
-                }
-                let item = imported
-                    .get("items")
-                    .and_then(Value::as_array)
-                    .and_then(|v| v.first())
-                    .and_then(Value::as_u64)
-                    .ok_or("The video has no supported media stream.")?;
-                self.execute("file.newSequence", json!({"name": name, "fromItem": item}))?;
-                self.web.app.session.saved_revision = self.web.app.session.revision;
-                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
-                self.opened = true;
-                event(
-                    "opened",
-                    json!({"revision": self.web.app.session.revision, "readOnly": self.read_only}),
-                );
+                let bytes = data.to_vec();
+                crate::fs::put(&path, bytes.clone());
+                self.opening = Some(Opening {
+                    name: name.clone(),
+                    path,
+                    read_only: field(&message, "readOnly").as_bool().unwrap_or(true),
+                });
+                wasm_bindgen_futures::spawn_local(async move {
+                    let result = crate::webcodecs::prepare(&name, &bytes).await;
+                    OPEN_RESULT.with(|slot| *slot.borrow_mut() = Some(result));
+                    crate::repaint();
+                });
             }
             Some("set-read-only") => {
                 self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true)
@@ -214,18 +211,18 @@ impl Host {
                     .ok_or("A save request identifier is required.")?;
                 self.web.app.stop();
                 let revision = self.web.app.session.revision;
-                let path = format!("/exports/flows-{revision}.mp4");
-                let result = self.execute("file.exportMedia", json!({"path": path, "format": "h264", "audio": true, "range": "entire", "wait": false}))?;
-                let job = result
-                    .get("job")
-                    .and_then(Value::as_u64)
-                    .ok_or("The video export did not start.")?;
-                self.pending = Some(Pending {
-                    job,
-                    request,
-                    revision,
-                    path,
-                });
+                let session = &self.web.app.session;
+                let sequence = session
+                    .state
+                    .active_sequence
+                    .ok_or("There is no active video sequence.")?;
+                crate::browser_export::start(
+                    session.project.clone(),
+                    sequence,
+                    session.media.clone(),
+                    session.services.clone(),
+                );
+                self.pending = Some(Pending { request, revision });
             }
             Some("saved") => {
                 if let Some(revision) = field(&message, "revision").as_f64() {
@@ -243,38 +240,15 @@ impl Host {
     }
 
     fn poll_export(&mut self) {
-        let Some(pending) = &self.pending else { return };
-        let result = self
-            .web
-            .app
-            .session
-            .jobs
-            .iter()
-            .find(|j| j.id == pending.job)
-            .and_then(|j| j.result.lock().unwrap_or_else(|e| e.into_inner()).clone());
-        let Some(result) = result else { return };
+        if self.pending.is_none() {
+            return;
+        }
+        let Some(bytes) = crate::browser_export::take_result() else {
+            return;
+        };
         let Some(pending) = self.pending.take() else {
             return;
         };
-        let offline = self
-            .web
-            .app
-            .session
-            .export_offline
-            .get(&pending.job)
-            .is_some_and(|media| !media.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
-        if offline {
-            event(
-                "error",
-                json!({"error": "Some media could not be decoded. The video was not saved.", "requestId": pending.request}),
-            );
-            return;
-        }
-        let bytes = result.and_then(|_| {
-            crate::fs::WebServices
-                .read_file(&pending.path)
-                .map_err(|e| e.to_string())
-        });
         match bytes {
             Ok(bytes) if bytes.len() <= MAX_BYTES && !bytes.is_empty() => {
                 self.last_exported = Some(pending.revision);
@@ -294,6 +268,46 @@ impl Host {
                 json!({"error": error, "requestId": pending.request}),
             ),
         }
+    }
+
+    fn poll_open(&mut self) -> Result<(), String> {
+        let Some(result) = OPEN_RESULT.with(|slot| slot.borrow_mut().take()) else {
+            return Ok(());
+        };
+        let Some(opening) = self.opening.take() else {
+            return Ok(());
+        };
+        result?;
+        let imported = self.execute("file.import", json!({"paths": [opening.path]}))?;
+        if let Some(errors) = imported
+            .get("errors")
+            .and_then(Value::as_array)
+            .filter(|errors| !errors.is_empty())
+        {
+            return Err(errors
+                .iter()
+                .map(|e| e.as_str().unwrap_or("Video import failed."))
+                .collect::<Vec<_>>()
+                .join("; "));
+        }
+        let item = imported
+            .get("items")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(Value::as_u64)
+            .ok_or("The video has no supported media stream.")?;
+        self.execute(
+            "file.newSequence",
+            json!({"name": opening.name, "fromItem": item}),
+        )?;
+        self.web.app.session.saved_revision = self.web.app.session.revision;
+        self.read_only = opening.read_only;
+        self.opened = true;
+        event(
+            "opened",
+            json!({"revision": self.web.app.session.revision, "readOnly": self.read_only}),
+        );
+        Ok(())
     }
 }
 
@@ -325,6 +339,9 @@ impl eframe::App for Host {
             }
         }
         self.web.logic(ctx, frame);
+        if let Err(error) = self.poll_open() {
+            event("error", json!({"error": error}));
+        }
         self.poll_export();
         let dirty = self.opened && self.web.app.session.is_dirty();
         if dirty != self.reported_dirty {

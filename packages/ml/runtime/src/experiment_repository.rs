@@ -105,48 +105,56 @@ pub(crate) fn reserve_recovered_trial(
 }
 
 impl TrainingRepository {
-    /// Prepared datasets may refit feature transforms while the accepted source row stays fixed.
-    /// An edited raw source row replaces the stored row; identity, provenance and target cannot.
+    /// Prepared datasets refit feature transforms, so the transformed `input` of a recorded
+    /// revision may differ. An edited source row (`feature_row` and its raw `content_digest`)
+    /// replaces the stored content at the same revision or enters with the sample's next
+    /// revision; identity, provenance, target and acceptance of a recorded revision stay fixed.
     pub fn record_prepared_sample(
         &self,
         stream: &StreamKey,
         sample: &TrainingSample,
     ) -> Result<SampleReceipt> {
         self.writable()?;
+        let scope = ledger_scope(stream)?;
         let mut connection = self.connection()?;
-        let scope = serde_json::to_string(stream)?;
-        let Some(existing) = recorded_annotation(&connection, &scope, sample)? else {
-            drop(connection);
-            return self.record_sample(stream, sample);
+        let unchanged = match recorded_annotation(&connection, &scope, sample)? {
+            Some(existing) => {
+                ensure_same_prepared_sample(&existing, sample)?;
+                !prepared_content_changed(&existing, sample)
+            }
+            None => false,
         };
-        ensure_same_prepared_sample(&existing, sample)?;
-        if existing.payload.get("feature_row") != sample.payload.get("feature_row") {
+        let inserted = if unchanged {
+            false
+        } else {
             let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            let current = recorded_annotation(&tx, &scope, sample)?
-                .ok_or_else(|| Error::NotFound(sample.id.clone()))?;
-            ensure_same_prepared_sample(&current, sample)?;
-            tx.execute(
-                "UPDATE annotations SET body=? WHERE scope=? AND sample_id=? AND revision=?",
-                params![
-                    serde_json::to_string(sample)?,
-                    scope,
-                    sample.id,
-                    sample.annotation_revision
-                ],
-            )?;
+            let inserted = record_prepared_in(&tx, stream, &scope, sample)?;
             tx.commit()?;
-        }
-        let accepted_sequence = connection
-            .query_row(
-                "SELECT sequence FROM accepted WHERE scope=? AND sample_id=?",
-                params![scope, sample.id],
-                |row| row.get(0),
-            )
-            .optional()?;
+            inserted
+        };
         Ok(SampleReceipt {
-            inserted: false,
-            accepted_sequence,
+            inserted,
+            accepted_sequence: accepted_sequence_of(&connection, &scope, &sample.id)?,
         })
+    }
+
+    /// `record_prepared_sample` for a batch in one write transaction. Reports, in order,
+    /// whether each sample stored a new revision; a refused sample records none of the batch.
+    pub fn record_prepared_samples(
+        &self,
+        stream: &StreamKey,
+        samples: &[TrainingSample],
+    ) -> Result<Vec<bool>> {
+        self.writable()?;
+        let scope = ledger_scope(stream)?;
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let inserted = samples
+            .iter()
+            .map(|sample| record_prepared_in(&tx, stream, &scope, sample))
+            .collect::<Result<Vec<_>>>()?;
+        tx.commit()?;
+        Ok(inserted)
     }
     pub(crate) fn check_experiment_artifact_budget(&self, job_id: &str, bytes: u64) -> Result<()> {
         let connection = self.connection()?;
@@ -544,9 +552,10 @@ impl TrainingRepository {
         Ok(value)
     }
 
-    /// Requeue cancelled work. Trials the remaining budget cannot cover are settled as failed;
-    /// when nothing can resume for budget reasons the experiment stops as budget-exhausted, so
-    /// its validated candidates can still be selected and audited.
+    /// Requeue cancelled work. Trials the remaining budget cannot cover, including wall time
+    /// beyond the final audit's allowance, are settled as failed; when nothing can resume for
+    /// budget reasons the experiment stops as budget-exhausted, so its validated candidates can
+    /// still be selected and audited.
     pub fn resume_experiment(&self, experiment_id: &str, at_ms: i64) -> Result<Experiment> {
         self.writable()?;
         let mut connection = self.connection()?;
@@ -561,11 +570,9 @@ impl TrainingRepository {
             return Err(Error::Conflict("experiment must be stopped before resuming; a revealed final holdout cannot be reused for search".into()));
         }
         let at_ms = ordered_at(&value, at_ms);
-        let wall_exhausted =
-            value.wall_elapsed_ms(at_ms) > value.request.budget.maximum_wall_time_ms;
+        // Like the controller, start no trial once only the final audit's allowance remains.
+        let wall_exhausted = value.wall_remaining_ms(at_ms) <= value.audit_allowance_ms();
         let deadline = wall_deadline_ms(&value, at_ms)?;
-        let slice_ms = value.request.budget.worker_limits.maximum_duration_ms;
-        let slice_bytes = value.request.budget.worker_limits.maximum_artifact_bytes;
         let mut resumed = false;
         let mut resource_exhausted = false;
         let trials: Vec<ExperimentTrial> = query(
@@ -589,21 +596,11 @@ impl TrainingRepository {
             // A worker that stopped before the controller settled it ran unmeasured.
             let unmeasured = trial.reserved_training_time_ms;
             settle_time(&mut value, &mut trial, unmeasured)?;
-            let used_ms = value
-                .usage
-                .training_time_ms
-                .saturating_add(value.usage.reserved_training_time_ms);
-            let used_bytes = value
-                .usage
-                .artifact_bytes
-                .saturating_add(value.usage.reserved_artifact_bytes);
-            let budget = &value.request.budget;
-            let fits = completed
-                || (used_ms.saturating_add(slice_ms) <= budget.maximum_training_time_ms
-                    && used_bytes.saturating_add(slice_bytes) <= budget.maximum_artifact_bytes);
             trial.updated_at_ms = at_ms;
-            if wall_exhausted || !fits {
-                resource_exhausted |= !fits;
+            let fits = !wall_exhausted
+                && (completed || reserve_resumed_slice(&tx, &mut value, &mut trial)?);
+            if !fits {
+                resource_exhausted |= !wall_exhausted;
                 trial.status = ExperimentTrialStatus::Failed;
                 trial.error = Some("budget exhausted on resume".into());
                 save_trial(&tx, &trial)?;
@@ -613,10 +610,6 @@ impl TrainingRepository {
             trial.status = ExperimentTrialStatus::Scheduled;
             trial.error = None;
             if cancelled {
-                value.usage.reserved_training_time_ms += slice_ms;
-                trial.reserved_training_time_ms = slice_ms;
-                value.usage.reserved_artifact_bytes += slice_bytes;
-                trial.reserved_artifact_bytes = slice_bytes;
                 job.status = JobStatus::Queued;
                 job.generation += 1;
                 job.lease_owner = None;
@@ -1584,6 +1577,54 @@ fn charge_retained_checkpoints(connection: &Connection, experiment: &mut Experim
     };
     set_checkpoint_charge(experiment, retained)
 }
+/// Reserves a requeued trial's slice when the remaining budget covers it. A trial holding a
+/// reservation no longer pays for its retained checkpoint, so the charge is recomputed with
+/// the tentative reservation saved and restored when the slice does not fit.
+fn reserve_resumed_slice(
+    connection: &Connection,
+    experiment: &mut Experiment,
+    trial: &mut ExperimentTrial,
+) -> Result<bool> {
+    let budget = &experiment.request.budget;
+    let (slice_ms, slice_bytes) = (
+        budget.worker_limits.maximum_duration_ms,
+        budget.worker_limits.maximum_artifact_bytes,
+    );
+    let (maximum_ms, maximum_bytes) = (
+        budget.maximum_training_time_ms,
+        budget.maximum_artifact_bytes,
+    );
+    let usage = &mut experiment.usage;
+    if usage
+        .training_time_ms
+        .saturating_add(usage.reserved_training_time_ms)
+        .saturating_add(slice_ms)
+        > maximum_ms
+    {
+        return Ok(false);
+    }
+    usage.reserved_training_time_ms += slice_ms;
+    usage.reserved_artifact_bytes += slice_bytes;
+    trial.reserved_training_time_ms = slice_ms;
+    trial.reserved_artifact_bytes = slice_bytes;
+    save_trial(connection, trial)?;
+    charge_retained_checkpoints(connection, experiment)?;
+    let usage = &mut experiment.usage;
+    if usage
+        .artifact_bytes
+        .saturating_add(usage.reserved_artifact_bytes)
+        <= maximum_bytes
+    {
+        return Ok(true);
+    }
+    usage.reserved_training_time_ms -= slice_ms;
+    usage.reserved_artifact_bytes -= slice_bytes;
+    trial.reserved_training_time_ms = 0;
+    trial.reserved_artifact_bytes = 0;
+    save_trial(connection, trial)?;
+    charge_retained_checkpoints(connection, experiment)?;
+    Ok(false)
+}
 fn set_checkpoint_charge(experiment: &mut Experiment, bytes: u64) -> Result<()> {
     let usage = &mut experiment.usage;
     usage.artifact_bytes = usage
@@ -1859,8 +1900,9 @@ fn validate_snapshot(snapshot: &DatasetSnapshot) -> Result<()> {
     }
     Ok(())
 }
-/// Transformed inputs and the raw source row (`feature_row`) may change between preparations;
-/// identity, provenance, targets and acceptance may not.
+/// What splits and sealed evidence bind: everything but the transformed `input` and the raw
+/// source row (`feature_row`). The source `content_digest` stays bound, so evidence sealed over
+/// earlier content stops verifying once a re-preparation records edited content.
 pub(crate) fn immutable_sample(sample: &TrainingSample) -> Result<Value> {
     let mut value = serde_json::to_value(sample)?;
     let payload = &mut value["payload"];
@@ -1891,16 +1933,213 @@ fn recorded_annotation(
         .optional()?;
     Ok(body.map(|body| serde_json::from_str(&body)).transpose()?)
 }
+/// What a re-prepared sample keeps at its revision: identity, provenance, target and acceptance.
+/// Its source content follows edits to the source row.
+fn prepared_identity(sample: &TrainingSample) -> Result<Value> {
+    let mut value = immutable_sample(sample)?;
+    if let Some(object) = value.as_object_mut() {
+        object.remove("content_digest");
+    }
+    Ok(value)
+}
 fn ensure_same_prepared_sample(recorded: &TrainingSample, sample: &TrainingSample) -> Result<()> {
-    if immutable_sample(recorded)? != immutable_sample(sample)? {
-        return Err(Error::Conflict(
-            "prepared sample changed accepted identity, provenance or target".into(),
-        ));
+    if prepared_identity(recorded)? != prepared_identity(sample)? {
+        return Err(Error::Conflict(format!(
+            "prepared sample '{}' changed accepted identity, provenance or target of revision {}",
+            sample.id, sample.annotation_revision
+        )));
     }
     Ok(())
 }
-/// Annotation revisions are append-only and only their raw `feature_row` can be rewritten, so a
-/// passing check still holds after it; callers run it before taking the write lock.
+/// Only edited source content is written back; every preparation refits the transformed input.
+fn prepared_content_changed(recorded: &TrainingSample, sample: &TrainingSample) -> bool {
+    recorded.content_digest != sample.content_digest
+        || recorded.payload.get("feature_row") != sample.payload.get("feature_row")
+}
+/// Records one prepared sample in the caller's write transaction; true when it stored a new
+/// revision. Edited source content replaces the content of an already recorded revision.
+fn record_prepared_in(
+    connection: &Connection,
+    stream: &StreamKey,
+    scope: &str,
+    sample: &TrainingSample,
+) -> Result<bool> {
+    let Some(existing) = recorded_annotation(connection, scope, sample)? else {
+        insert_prepared_revision(connection, stream, scope, sample)?;
+        return Ok(true);
+    };
+    ensure_same_prepared_sample(&existing, sample)?;
+    if prepared_content_changed(&existing, sample) {
+        if !is_content_digest(&sample.content_digest) {
+            return Err(invalid(format!(
+                "prepared sample '{}' needs a SHA256 content digest",
+                sample.id
+            )));
+        }
+        connection.execute(
+            "UPDATE annotations SET body=? WHERE scope=? AND sample_id=? AND revision=?",
+            params![
+                serde_json::to_string(sample)?,
+                scope,
+                sample.id,
+                sample.annotation_revision
+            ],
+        )?;
+    }
+    Ok(false)
+}
+/// `record_sample` for prepared samples, except that a new revision may carry edited source
+/// content; its group and capture time must still match the earlier revisions.
+fn insert_prepared_revision(
+    connection: &Connection,
+    stream: &StreamKey,
+    scope: &str,
+    sample: &TrainingSample,
+) -> Result<()> {
+    validate_prepared_sample(stream, sample)?;
+    connection.execute("INSERT OR IGNORE INTO streams(scope) VALUES (?)", [scope])?;
+    ensure_follows_recorded_revisions(connection, scope, sample)?;
+    connection.execute(
+        "INSERT INTO annotations(scope,sample_id,revision,accepted,body) VALUES (?,?,?,?,?)",
+        params![
+            scope,
+            sample.id,
+            sample.annotation_revision,
+            sample.accepted,
+            serde_json::to_string(sample)?
+        ],
+    )?;
+    if sample.accepted {
+        accept_sample(connection, scope, &sample.id)?;
+    }
+    Ok(())
+}
+/// A sample's first accepted revision takes the stream's next sequence number.
+fn accept_sample(connection: &Connection, scope: &str, sample_id: &str) -> Result<()> {
+    let sequenced = connection.execute(
+        "INSERT INTO accepted(scope,sample_id,sequence) SELECT ?1,?2,next_sequence+1 FROM streams WHERE scope=?1 AND NOT EXISTS(SELECT 1 FROM accepted WHERE scope=?1 AND sample_id=?2)",
+        params![scope, sample_id],
+    )?;
+    if sequenced == 1 {
+        connection.execute(
+            "UPDATE streams SET next_sequence=next_sequence+1 WHERE scope=?",
+            [scope],
+        )?;
+    }
+    Ok(())
+}
+fn ensure_follows_recorded_revisions(
+    connection: &Connection,
+    scope: &str,
+    sample: &TrainingSample,
+) -> Result<()> {
+    let prior: Option<String> = connection
+        .query_row(
+            "SELECT body FROM annotations WHERE scope=? AND sample_id=? ORDER BY revision DESC LIMIT 1",
+            params![scope, sample.id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(prior) = prior else {
+        return Ok(());
+    };
+    let prior: TrainingSample = serde_json::from_str(&prior)?;
+    if sample.annotation_revision <= prior.annotation_revision
+        || sample.group_id != prior.group_id
+        || sample.captured_at_ms != prior.captured_at_ms
+    {
+        return Err(Error::Conflict(format!(
+            "prepared sample '{}' revision {} must follow revision {} and keep its group and capture time",
+            sample.id, sample.annotation_revision, prior.annotation_revision
+        )));
+    }
+    Ok(())
+}
+/// The checks `record_sample` applies before a revision enters the ledger.
+fn validate_prepared_sample(stream: &StreamKey, sample: &TrainingSample) -> Result<()> {
+    match identity_refusal(sample).or_else(|| payload_refusal(stream, sample)) {
+        Some(refusal) => Err(invalid(format!(
+            "prepared sample '{}' {refusal}",
+            sample.id
+        ))),
+        None => Ok(()),
+    }
+}
+fn identity_refusal(sample: &TrainingSample) -> Option<&'static str> {
+    if sample.id.is_empty()
+        || sample.group_id.is_empty()
+        || !is_content_digest(&sample.content_digest)
+        || sample.annotation_revision > i64::MAX as u64
+    {
+        Some("needs an ID, a group, a SHA256 content digest and a valid revision")
+    } else if sample.label_available_at_ms < sample.captured_at_ms {
+        Some("has a label that precedes its capture")
+    } else {
+        None
+    }
+}
+fn payload_refusal(stream: &StreamKey, sample: &TrainingSample) -> Option<&'static str> {
+    let payload = sample.payload.get("sample").unwrap_or(&sample.payload);
+    let differs = |field: &str, expected: &str| {
+        payload
+            .get(field)
+            .is_some_and(|value| value.as_str() != Some(expected))
+    };
+    let time = |field: &str| {
+        payload
+            .get(field)
+            .and_then(Value::as_i64)
+            .unwrap_or(sample.captured_at_ms)
+    };
+    let outcome_available = payload
+        .pointer("/outcome/available_at_ms")
+        .and_then(Value::as_i64);
+    if differs("id", sample.id.as_str()) || differs("group_id", sample.group_id.as_str()) {
+        Some("has a payload identity that differs from its ledger identity")
+    } else if differs("stream_id", stream.stream_id.as_str()) {
+        Some("has a payload stream that differs from the repository scope")
+    } else if outcome_available.is_some_and(|available| available > sample.label_available_at_ms) {
+        Some("has an outcome that is unavailable at its label time")
+    } else if time("window_start_ms") > time("window_end_ms") {
+        Some("has a feature window that starts after it ends")
+    } else {
+        None
+    }
+}
+fn is_content_digest(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+fn ledger_scope(stream: &StreamKey) -> Result<String> {
+    if [
+        &stream.project_id,
+        &stream.stream_id,
+        &stream.inspection_version,
+    ]
+    .iter()
+    .any(|value| value.trim().is_empty())
+    {
+        return Err(invalid(
+            "project, stream and inspection version must be nonempty",
+        ));
+    }
+    Ok(serde_json::to_string(stream)?)
+}
+fn accepted_sequence_of(
+    connection: &Connection,
+    scope: &str,
+    sample_id: &str,
+) -> Result<Option<i64>> {
+    Ok(connection
+        .query_row(
+            "SELECT sequence FROM accepted WHERE scope=? AND sample_id=?",
+            params![scope, sample_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+/// Annotation revisions are append-only. A concurrent re-preparation may still replace a
+/// revision's source content after this check, which counts as an edit after creation: the
+/// final audit refuses evidence over changed content. Callers run it before the write lock.
 fn validate_snapshot_truth(connection: &Connection, snapshot: &DatasetSnapshot) -> Result<()> {
     let scope = serde_json::to_string(&snapshot.stream)?;
     for sample in snapshot

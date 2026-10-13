@@ -54,6 +54,41 @@ pub struct PretrainedFeaturesRequest {
     pub input: flow_like_ml_core::TensorData,
     #[serde(default)]
     pub compute: flow_like_ml_core::ComputeConfig,
+    /// Image steps applied to `input`, as Preprocess Inspection Image outputs them. They must
+    /// match the input size and the source's normalization, and become the extractor's image
+    /// steps. Left empty, the extractor carries the source's recommendation unverified.
+    #[serde(default)]
+    pub preprocessing: Vec<flow_like_ml_core::PreprocessingStep>,
+}
+
+/// The extractor of features computed from `source` on `input` after `preprocessing`.
+#[cfg(feature = "training")]
+fn applied_extractor(
+    source: &flow_like_ml_runtime::PretrainedSource,
+    input: &flow_like_ml_core::TensorData,
+    preprocessing: &[flow_like_ml_core::PreprocessingStep],
+) -> Result<super::lifecycle::FeatureExtractorRef> {
+    let mut extractor = flow_like_ml_runtime::engines::FeatureExtractor::from_source(source)?;
+    if preprocessing.is_empty() {
+        return Ok(extractor.into());
+    }
+    let resized = preprocessing.iter().rev().find_map(|step| match step {
+        flow_like_ml_core::PreprocessingStep::Resize { width, height } => Some([*height, *width]),
+        _ => None,
+    });
+    if let Some(size) = resized
+        && (input.shape.len() < 2 || input.shape[input.shape.len() - 2..] != size)
+    {
+        return Err(anyhow!(
+            "Declared preprocessing resizes images to {}x{} (width x height), but the input has shape {:?}",
+            size[1],
+            size[0],
+            input.shape
+        ));
+    }
+    flow_like_ml_runtime::engines::validate_burn_pretrained_preprocessing(source, preprocessing)?;
+    extractor.image_steps = preprocessing.to_vec();
+    Ok(extractor.into())
 }
 
 #[crate::register_node]
@@ -76,11 +111,11 @@ impl NodeLogic for ExtractPretrainedFeaturesNode {
         node.add_output_pin(
             "extractor",
             "Feature Extractor",
-            "Source, weights digest and image steps of these features; patch models record it and reject features from other weights",
+            "Source, weights digest and image steps of these features: the declared preprocessing, else the source's unverified recommendation. Patch models record it and reject features from other weights or steps",
             flow_like::flow::variable::VariableType::Struct,
         )
         .set_schema::<super::lifecycle::FeatureExtractorRef>();
-        node.set_version(2);
+        node.set_version(3);
         node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
@@ -101,8 +136,7 @@ impl NodeLogic for ExtractPretrainedFeaturesNode {
                     &request.compute,
                 )?;
                 let source = repo.get_pretrained_source(&request.source_id)?;
-                let extractor: super::lifecycle::FeatureExtractorRef =
-                    flow_like_ml_runtime::engines::FeatureExtractor::from_source(&source)?.into();
+                let extractor = applied_extractor(&source, &request.input, &request.preprocessing)?;
                 Ok((features, extractor))
             })
             .await??;
@@ -331,7 +365,7 @@ mod tests {
         use super::super::lifecycle::FeatureExtractorRef;
         use flow_like::flow::pin::Pin;
         let node = ExtractPretrainedFeaturesNode.get_node();
-        assert_eq!(node.version, Some(2));
+        assert_eq!(node.version, Some(3));
         assert_eq!(
             node.get_pin_by_name("extractor").unwrap().schema,
             Pin::schema_string_for::<FeatureExtractorRef>()
@@ -361,5 +395,69 @@ mod tests {
             ..pinned
         };
         assert!(unverifiable.to_runtime().is_err());
+    }
+
+    #[cfg(feature = "training")]
+    #[test]
+    fn declared_preprocessing_becomes_the_extractor_image_steps() {
+        use flow_like_ml_core::{PreprocessingStep, TensorData};
+        use flow_like_types::json::{from_value, json};
+        let source: flow_like_ml_runtime::PretrainedSource = from_value(json!({
+            "id": "pretrained:resnet",
+            "project_id": "project",
+            "source_kind": "imported",
+            "blob": {"sha256": "a".repeat(64), "bytes": 1, "path": "blobs/resnet"},
+            "manifest": {"recommended_preprocessing": [
+                {"kind": "resize", "width": 4, "height": 4},
+                {"kind": "normalize", "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
+            ]},
+            "origin": {},
+            "created_at_ms": 0
+        }))
+        .unwrap();
+        let input = TensorData {
+            shape: vec![3, 4, 4],
+            values: vec![0.0; 48],
+        };
+        let recommended = applied_extractor(&source, &input, &[]).unwrap();
+        assert_eq!(recommended.image_steps.len(), 2);
+        let resize = PreprocessingStep::Resize {
+            width: 4,
+            height: 4,
+        };
+        let declared = vec![
+            resize.clone(),
+            PreprocessingStep::Normalize {
+                mean: vec![0.5; 3],
+                std: vec![0.25; 3],
+            },
+        ];
+        let applied = applied_extractor(&source, &input, &declared).unwrap();
+        assert_eq!(applied.image_steps, declared);
+        assert_ne!(applied, recommended);
+        let unnormalized = vec![
+            resize,
+            PreprocessingStep::Normalize {
+                mean: vec![0.0; 3],
+                std: vec![1.0; 3],
+            },
+        ];
+        let error = applied_extractor(&source, &input, &unnormalized).unwrap_err();
+        assert!(
+            error.to_string().contains("expects images normalized"),
+            "{error}"
+        );
+        let resized = vec![
+            PreprocessingStep::Resize {
+                width: 8,
+                height: 8,
+            },
+            declared[1].clone(),
+        ];
+        let error = applied_extractor(&source, &input, &resized).unwrap_err();
+        assert!(
+            error.to_string().contains("resizes images to 8x8"),
+            "{error}"
+        );
     }
 }

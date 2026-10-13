@@ -117,6 +117,16 @@ impl MaskRcnn {
         input: Tensor<4>,
         targets: Option<&[Vec<InstanceTarget>]>,
     ) -> Result<MaskRcnnOutput> {
+        self.forward_within(input, targets, MASK_RCNN_ELEMENT_BUDGET)
+    }
+    /// Without targets the ROI heads run in passes whose widest activation stays within
+    /// `head_elements`; training batches are validated against the budget up front instead.
+    fn forward_within(
+        &self,
+        input: Tensor<4>,
+        targets: Option<&[Vec<InstanceTarget>]>,
+        head_elements: usize,
+    ) -> Result<MaskRcnnOutput> {
         let [batch, channels, height, width] = input.dims();
         if batch == 0
             || batch > 32
@@ -198,14 +208,20 @@ impl MaskRcnn {
             }
             rois.extend(proposals.into_iter().map(|bounds| Roi { image, bounds }));
         }
-        let pooled = roi_align(features.clone(), &rois, self.config.roi_size, 2)?;
-        let hidden = relu(
-            self.fc2
-                .forward(relu(self.fc1.forward(pooled.flatten(1, 3)))),
-        );
-        let class_logits = self.classes.forward(hidden.clone());
-        let box_deltas = self.boxes.forward(hidden);
+        let chunk = self.inference_rois_per_pass(head_elements);
+        let (class_logits, box_deltas) = if targets.is_some() {
+            self.box_head(features.clone(), &rois)?
+        } else {
+            let (classes, boxes): (Vec<_>, Vec<_>) = rois
+                .chunks(chunk)
+                .map(|rois| self.box_head(features.clone(), rois))
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .unzip();
+            (Tensor::cat(classes, 0), Tensor::cat(boxes, 0))
+        };
         let mut mask_valid = vec![true; rois.len()];
+        let mut mask_classes = Vec::new();
         let mask_rois = if targets.is_none() {
             let scores = values(class_logits.clone())?;
             let offsets = values(box_deltas.clone())?;
@@ -224,6 +240,7 @@ impl MaskRcnn {
                         })
                         .unwrap_or(1)
                         - 1;
+                    mask_classes.push(class);
                     let at = (i * self.config.classes + class) * 4;
                     let decoded = decode_box(roi.bounds, offsets[at..at + 4].try_into().unwrap());
                     mask_valid[i] = valid_box(decoded);
@@ -239,13 +256,11 @@ impl MaskRcnn {
         let mask_logits = if targets.is_some() {
             self.mask_head(features, &mask_rois)?
         } else {
-            // Prediction batches are not validated up front; chunk the mask head to stay in budget.
-            let per_roi = mask_rcnn_roi_elements(&self.config, 1).unwrap_or(usize::MAX);
-            let rois_per_chunk = (MASK_RCNN_ELEMENT_BUDGET / per_roi).max(1);
             Tensor::cat(
                 mask_rois
-                    .chunks(rois_per_chunk)
-                    .map(|chunk| self.mask_head(features.clone(), chunk))
+                    .chunks(chunk)
+                    .zip(mask_classes.chunks(chunk))
+                    .map(|(rois, classes)| self.class_masks(features.clone(), rois, classes))
                     .collect::<Result<Vec<_>>>()?,
                 0,
             )
@@ -257,6 +272,7 @@ impl MaskRcnn {
             rois,
             mask_rois,
             mask_valid,
+            mask_classes,
             class_logits,
             box_deltas,
             mask_logits,
@@ -267,12 +283,54 @@ impl MaskRcnn {
             sampling_seed,
         })
     }
+    /// ROIs per inference pass whose box-head ROIAlign and mask-head activations (two base
+    /// channels or one per class) stay within `elements`.
+    fn inference_rois_per_pass(&self, elements: usize) -> usize {
+        let config = &self.config;
+        let doubled = config.base_channels.saturating_mul(2);
+        let pooled = doubled.saturating_mul(config.roi_size * config.roi_size);
+        let mask = doubled
+            .max(config.classes)
+            .saturating_mul(config.mask_size * config.mask_size);
+        (elements / pooled.max(mask).max(1)).max(1)
+    }
+    fn box_head(&self, features: Tensor<4>, rois: &[Roi]) -> Result<(Tensor<2>, Tensor<2>)> {
+        let pooled = roi_align(features, rois, self.config.roi_size, 2)?;
+        let hidden = relu(
+            self.fc2
+                .forward(relu(self.fc1.forward(pooled.flatten(1, 3)))),
+        );
+        Ok((
+            self.classes.forward(hidden.clone()),
+            self.boxes.forward(hidden),
+        ))
+    }
     fn mask_head(&self, features: Tensor<4>, rois: &[Roi]) -> Result<Tensor<4>> {
         let mut mask = roi_align(features, rois, self.config.mask_size / 2, 2)?;
         for conv in &self.mask_convs {
             mask = relu(conv.forward(mask));
         }
         Ok(self.mask_logits.forward(relu(self.mask_up.forward(mask))))
+    }
+    /// Mask logits of each ROI's own class only, `[rois, 1, mask, mask]`.
+    fn class_masks(
+        &self,
+        features: Tensor<4>,
+        rois: &[Roi],
+        classes: &[usize],
+    ) -> Result<Tensor<4>> {
+        let logits = self.mask_head(features, rois)?;
+        let [count, channels, size, _] = logits.dims();
+        let rows = classes
+            .iter()
+            .enumerate()
+            .map(|(roi, class)| (roi * channels + class) as i64)
+            .collect();
+        let device = logits.device();
+        Ok(logits
+            .reshape([count * channels, size, size])
+            .select(0, indices(rows, &device))
+            .reshape([count, 1, size, size]))
     }
 }
 
@@ -283,6 +341,9 @@ pub struct MaskRcnnOutput {
     rois: Vec<Roi>,
     mask_rois: Vec<Roi>,
     mask_valid: Vec<bool>,
+    /// Inference only: each ROI's predicted class, the one its decoded box and its single
+    /// `mask_logits` channel belong to. Training outputs keep every class channel instead.
+    mask_classes: Vec<usize>,
     class_logits: Tensor<2>,
     box_deltas: Tensor<2>,
     mask_logits: Tensor<4>,
@@ -421,16 +482,19 @@ impl MaskRcnnOutput {
     pub fn prediction(self, options: &DetectionOptions) -> Result<MaskRcnnPrediction> {
         self.prediction_within(options, MASK_RCNN_ELEMENT_BUDGET)
     }
-    /// Keeps the most confident detections whose full-image masks fit in `mask_elements` per image.
+    /// Keeps the most confident detections whose full-image masks fit in `mask_elements` for the
+    /// whole batch; an image that needs fewer masks than its share leaves the rest to the others.
     fn prediction_within(
         self,
         options: &DetectionOptions,
         mask_elements: usize,
     ) -> Result<MaskRcnnPrediction> {
         options.validate()?;
-        let limit = options
-            .max_detections
-            .min(mask_elements / self.height.saturating_mul(self.width).max(1));
+        if self.mask_classes.len() != self.rois.len() {
+            return Err(Error::Invalid(
+                "Mask R-CNN predictions need the output of an inference pass".into(),
+            ));
+        }
         let scores = values(softmax(self.class_logits, 1))?;
         let masks = values(self.mask_logits.clone())?;
         if scores.iter().chain(&masks).any(|v| !v.is_finite()) {
@@ -439,76 +503,93 @@ impl MaskRcnnOutput {
             ));
         }
         let mask_size = self.mask_logits.dims()[2];
-        let mut result = vec![Vec::new(); self.batch];
-        for (image, output) in result.iter_mut().enumerate() {
-            let mut candidates = Vec::new();
-            for (i, _roi) in self
-                .rois
-                .iter()
-                .enumerate()
-                .filter(|(_, roi)| roi.image == image)
-            {
-                if !self.mask_valid[i] {
-                    continue;
-                }
-                let class = (1..=self.classes)
-                    .max_by(|a, b| {
-                        scores[i * (self.classes + 1) + a]
-                            .total_cmp(&scores[i * (self.classes + 1) + b])
-                    })
-                    .unwrap_or(1);
-                let confidence = scores[i * (self.classes + 1) + class];
-                if confidence < options.confidence_threshold
-                    || confidence <= scores[i * (self.classes + 1)]
+        let stride = self.classes + 1;
+        let kept = (0..self.batch)
+            .map(|image| {
+                let mut candidates = Vec::new();
+                for (i, _roi) in self
+                    .rois
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, roi)| roi.image == image)
                 {
-                    continue;
+                    if !self.mask_valid[i] {
+                        continue;
+                    }
+                    let class = self.mask_classes[i];
+                    let confidence = scores[i * stride + class + 1];
+                    if confidence < options.confidence_threshold || confidence <= scores[i * stride]
+                    {
+                        continue;
+                    }
+                    let bounds = self.mask_rois[i].bounds;
+                    if bounds[2] <= bounds[0] || bounds[3] <= bounds[1] {
+                        continue;
+                    }
+                    candidates.push((i, class, confidence, bounds));
                 }
-                let bounds = self.mask_rois[i].bounds;
-                if bounds[2] <= bounds[0] || bounds[3] <= bounds[1] {
-                    continue;
+                candidates.sort_by(|a, b| b.2.total_cmp(&a.2));
+                let mut kept: Vec<(usize, usize, f32, BoxCoords)> = Vec::new();
+                for candidate in candidates {
+                    if kept.len() >= options.max_detections {
+                        break;
+                    }
+                    if kept.iter().any(|old| {
+                        old.1 == candidate.1 && iou(old.3, candidate.3) > options.iou_threshold
+                    }) {
+                        continue;
+                    }
+                    kept.push(candidate);
                 }
-                candidates.push((i, class - 1, confidence, bounds));
-            }
-            candidates.sort_by(|a, b| b.2.total_cmp(&a.2));
-            let mut kept: Vec<(usize, usize, f32, BoxCoords)> = Vec::new();
-            for candidate in candidates {
-                if kept.len() >= limit {
-                    break;
-                }
-                if kept.iter().any(|old| {
-                    old.1 == candidate.1 && iou(old.3, candidate.3) > options.iou_threshold
-                }) {
-                    continue;
-                }
-                kept.push(candidate);
-            }
-            for (i, class, confidence, bounds) in kept {
-                let offset = (i * self.classes + class) * mask_size * mask_size;
-                let mask = paste_mask(
-                    &masks[offset..offset + mask_size * mask_size],
-                    mask_size,
-                    bounds,
-                    self.height,
-                    self.width,
-                );
-                output.push(InstanceDetection {
-                    detection: Detection {
-                        class_id: class,
-                        confidence,
-                        x_min: bounds[0],
-                        y_min: bounds[1],
-                        x_max: bounds[2],
-                        y_max: bounds[3],
-                    },
-                    mask: TensorData {
-                        shape: vec![self.height, self.width],
-                        values: mask,
-                    },
-                });
-            }
-        }
-        Ok(MaskRcnnPrediction { instances: result })
+                kept
+            })
+            .collect::<Vec<_>>();
+        let counts = kept.iter().map(Vec::len).collect::<Vec<_>>();
+        let masks_allowed = mask_elements / self.height.saturating_mul(self.width).max(1);
+        let cap = shared_mask_cap(&counts, masks_allowed);
+        let instances = kept
+            .into_iter()
+            .map(|kept| {
+                kept.into_iter()
+                    .take(cap)
+                    .map(|(i, class, confidence, bounds)| {
+                        let offset = i * mask_size * mask_size;
+                        InstanceDetection {
+                            detection: Detection {
+                                class_id: class,
+                                confidence,
+                                x_min: bounds[0],
+                                y_min: bounds[1],
+                                x_max: bounds[2],
+                                y_max: bounds[3],
+                            },
+                            mask: TensorData {
+                                shape: vec![self.height, self.width],
+                                values: paste_mask(
+                                    &masks[offset..offset + mask_size * mask_size],
+                                    mask_size,
+                                    bounds,
+                                    self.height,
+                                    self.width,
+                                ),
+                            },
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        Ok(MaskRcnnPrediction { instances })
     }
+}
+
+/// Largest per-image detection count that keeps the batch within `total` masks when every
+/// image is truncated to it.
+fn shared_mask_cap(counts: &[usize], total: usize) -> usize {
+    let mut cap = counts.iter().copied().max().unwrap_or(0);
+    while counts.iter().map(|count| (*count).min(cap)).sum::<usize>() > total {
+        cap -= 1;
+    }
+    cap
 }
 
 pub fn roi_align(
@@ -1031,6 +1112,7 @@ mod tests {
             rois: rois.clone(),
             mask_rois: rois.clone(),
             mask_valid: vec![true; 6],
+            mask_classes: vec![0; 6],
             class_logits: Tensor::from_data(
                 BurnData::new(
                     (0..6)
@@ -1068,6 +1150,126 @@ mod tests {
                 .iter()
                 .all(|instance| instance.mask.values.len() == 16 * 16)
         );
+    }
+    #[test]
+    fn instance_predictions_share_the_mask_budget_across_the_batch() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let device = Device::flex();
+        let mut rois = (0..6)
+            .map(|i| Roi {
+                image: 0,
+                bounds: [i as f32 / 6.0, 0.0, (i + 1) as f32 / 6.0, 1.0],
+            })
+            .collect::<Vec<_>>();
+        rois.push(Roi {
+            image: 1,
+            bounds: [0.0, 0.0, 1.0, 1.0],
+        });
+        let count = rois.len();
+        let output = MaskRcnnOutput {
+            objectness: Tensor::zeros([2, 1], &device),
+            deltas: Tensor::zeros([2, 1, 4], &device),
+            anchors: vec![[0.0, 0.0, 1.0, 1.0]],
+            rois: rois.clone(),
+            mask_rois: rois,
+            mask_valid: vec![true; count],
+            mask_classes: vec![0; count],
+            class_logits: Tensor::from_data(
+                BurnData::new(
+                    (0..count)
+                        .flat_map(|i| [0.0, 1.0 + i as f32])
+                        .collect::<Vec<_>>(),
+                    [count, 2],
+                ),
+                &device,
+            ),
+            box_deltas: Tensor::zeros([count, 4], &device),
+            mask_logits: Tensor::ones([count, 1, 4, 4], &device),
+            batch: 2,
+            height: 16,
+            width: 16,
+            classes: 1,
+            sampling_seed: None,
+        };
+        let options = DetectionOptions {
+            confidence_threshold: 0.0,
+            iou_threshold: 0.5,
+            max_detections: 10,
+        };
+        let shared = output.prediction_within(&options, 4 * 16 * 16).unwrap();
+        let kept = shared.instances.iter().map(Vec::len).collect::<Vec<_>>();
+        assert_eq!(kept, [3, 1]);
+        let pixels: usize = shared
+            .instances
+            .iter()
+            .flatten()
+            .map(|instance| instance.mask.values.len())
+            .sum();
+        assert!(pixels <= 4 * 16 * 16);
+        assert_eq!(shared_mask_cap(&[6, 1], 4), 3);
+        assert_eq!(shared_mask_cap(&[2, 1], 4), 2);
+        assert_eq!(shared_mask_cap(&[5, 5, 5], 4), 1);
+    }
+    #[test]
+    fn inference_heads_run_in_passes_and_keep_each_rois_class_mask() {
+        let _lock = crate::tests::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let device = Device::flex();
+        device.seed(11);
+        let config = MaskRcnnConfig {
+            input_channels: 1,
+            classes: 5,
+            base_channels: 2,
+            anchor_scales: vec![0.25, 0.5],
+            anchor_ratios: vec![1.0],
+            roi_size: 2,
+            mask_size: 4,
+            proposals: 8,
+            training_samples: 8,
+        };
+        let model = MaskRcnn::new(&config, &device).unwrap();
+        let images = Tensor::<4>::random([3, 1, 16, 16], Distribution::Uniform(0.0, 1.0), &device);
+        let class_masks_per_roi = 5 * 4 * 4;
+        assert_eq!(model.inference_rois_per_pass(2 * class_masks_per_roi), 2);
+        assert_eq!(model.inference_rois_per_pass(2 * class_masks_per_roi - 1), 1);
+        let whole = model.forward(images.clone(), None).unwrap();
+        let passes = model
+            .forward_within(images.clone(), None, 2 * class_masks_per_roi)
+            .unwrap();
+        let rois = whole.rois.len();
+        assert!(rois >= 3);
+        assert_eq!(passes.rois.len(), rois);
+        assert_eq!(passes.mask_logits.dims(), [rois, 1, 4, 4]);
+        assert_eq!(passes.mask_classes, whole.mask_classes);
+        assert!(whole.mask_classes.iter().all(|class| *class < 5));
+        for (chunked, single) in [
+            (passes.class_logits, whole.class_logits.clone()),
+            (passes.box_deltas, whole.box_deltas.clone()),
+        ] {
+            let (chunked, single) = (values(chunked).unwrap(), values(single).unwrap());
+            assert_eq!(chunked.len(), single.len());
+            for (a, b) in chunked.iter().zip(&single) {
+                assert!((a - b).abs() < 1e-5, "{a} != {b}");
+            }
+        }
+        let mut features = images;
+        for block in &model.backbone {
+            features = block.forward(features);
+        }
+        let every_class = values(model.mask_head(features, &whole.mask_rois).unwrap()).unwrap();
+        let chunked = values(passes.mask_logits).unwrap();
+        let single = values(whole.mask_logits.clone()).unwrap();
+        for (roi, class) in whole.mask_classes.iter().enumerate() {
+            let own = &every_class[(roi * 5 + class) * 16..(roi * 5 + class + 1) * 16];
+            for (index, expected) in own.iter().enumerate() {
+                assert!((chunked[roi * 16 + index] - expected).abs() < 1e-5);
+                assert!((single[roi * 16 + index] - expected).abs() < 1e-5);
+            }
+        }
+        assert!(whole.prediction(&DetectionOptions::default()).is_ok());
     }
     #[test]
     fn mask_rcnn_learns_instances_and_reloads() {

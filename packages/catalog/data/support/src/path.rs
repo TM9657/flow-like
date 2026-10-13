@@ -6,7 +6,10 @@ use flow_like_catalog_core::found_or_missing;
 use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     Path,
-    files::store::{FlowLikeStore, local_store::LocalObjectStore},
+    files::{
+        store::{FlowLikeStore, local_store::LocalObjectStore},
+        upload::put_payload,
+    },
     normalize_object_path,
     object_store::{GetResult, PutPayload},
 };
@@ -116,10 +119,12 @@ impl FlowPath {
             bypass_cache = true;
         }
 
-        let result = store
-            .as_generic()
-            .put(&self.object_path(), payload.clone())
-            .await?;
+        let result = put_payload(
+            store.as_generic().as_ref(),
+            &self.object_path(),
+            payload.clone(),
+        )
+        .await?;
 
         if bypass_cache {
             return Ok(());
@@ -223,10 +228,12 @@ impl FlowPath {
             None => return Err(anyhow!("No cache layer available for writing")),
         };
 
-        cache_layer
-            .as_generic()
-            .put(&self.object_path(), payload.clone())
-            .await?;
+        put_payload(
+            cache_layer.as_generic().as_ref(),
+            &self.object_path(),
+            payload.clone(),
+        )
+        .await?;
 
         if let Some(etag) = etag {
             let runtime = self.to_runtime(context).await?;
@@ -562,6 +569,140 @@ mod tests {
             .unwrap();
         let file = path.get_file(&store).await.unwrap().expect("stored file");
         assert_eq!(file.bytes().await.unwrap().as_ref(), b"pdf");
+    }
+
+    mod store_writes {
+        use super::*;
+        use flow_like::{
+            flow::{
+                board::ExecutionStage,
+                execution::{LogLevel, internal_node::InternalNode},
+                node::{Node, NodeLogic},
+            },
+            profile::Profile,
+            state::{FlowLikeConfig, FlowLikeState},
+            utils::http::HTTPClient,
+        };
+        use flow_like_types::sync::{Mutex, RwLock};
+        use std::sync::Weak;
+
+        async fn context_with_stores(
+            primary: Arc<InMemory>,
+            cache: Arc<InMemory>,
+        ) -> ExecutionContext {
+            struct Noop;
+
+            #[flow_like_types::async_trait]
+            impl NodeLogic for Noop {
+                fn get_node(&self) -> Node {
+                    Node::new("flow_path_test", "FlowPath test", "FlowPath test", "Tests")
+                }
+
+                async fn run(&self, _: &mut ExecutionContext) -> flow_like_types::Result<()> {
+                    Ok(())
+                }
+            }
+
+            let state = Arc::new(FlowLikeState::new(
+                FlowLikeConfig::new(),
+                HTTPClient::new_without_refetch(),
+            ));
+            let node = Arc::new(InternalNode::new(
+                Noop.get_node(),
+                Default::default(),
+                Arc::new(Noop),
+                Default::default(),
+            ));
+            let context = ExecutionContext::new(
+                Arc::new(Default::default()),
+                &Weak::new(),
+                &state,
+                &node,
+                &Arc::new(Mutex::new(Default::default())),
+                &Arc::new(RwLock::new(Default::default())),
+                LogLevel::Debug,
+                ExecutionStage::Dev,
+                Arc::new(Profile::default()),
+                None,
+                Arc::new(RwLock::new(Vec::new())),
+                None,
+                None,
+                Arc::new(Default::default()),
+                None,
+            )
+            .await;
+            context
+                .set_cache("store", Arc::new(FlowLikeStore::Other(primary)))
+                .await;
+            context
+                .set_cache("cache", Arc::new(FlowLikeStore::Other(cache)))
+                .await;
+            context
+        }
+
+        #[tokio::test]
+        async fn puts_cache_the_complete_object_with_the_primary_etag_at_every_size() {
+            for size in [0, 2_800_000, 8 * 1024 * 1024 + 37] {
+                let primary = Arc::new(InMemory::new());
+                let cache = Arc::new(InMemory::new());
+                let mut context = context_with_stores(primary.clone(), cache.clone()).await;
+                let path = FlowPath::new(
+                    format!("uploads/{RAW_NAME}"),
+                    "store".to_string(),
+                    Some("cache".to_string()),
+                );
+                // Give the cache a different ETag sequence from the primary store.
+                cache
+                    .put(&path.object_path(), PutPayload::from_static(b"stale"))
+                    .await
+                    .unwrap();
+                let bytes: Vec<_> = (0..size).map(|index| (index % 251) as u8).collect();
+
+                path.put(&mut context, bytes.clone(), false).await.unwrap();
+
+                let stored = primary.get(&path.object_path()).await.unwrap();
+                let primary_etag = stored.meta.e_tag.clone().unwrap();
+                assert_eq!(stored.bytes().await.unwrap().as_ref(), bytes.as_slice());
+                let cached = cache.get(&path.object_path()).await.unwrap();
+                assert_ne!(cached.meta.e_tag.as_deref(), Some(primary_etag.as_str()));
+                assert_eq!(cached.bytes().await.unwrap().as_ref(), bytes.as_slice());
+
+                let runtime = path.to_runtime(&mut context).await.unwrap();
+                let etag_path = path.get_etag_path(&path.get_base_path_without_extension(&runtime));
+                let cached_etag = cache.get(&etag_path).await.unwrap().bytes().await.unwrap();
+                assert_eq!(cached_etag.as_ref(), primary_etag.as_bytes());
+                assert!(!path.is_cache_dirty(&mut context).await.unwrap());
+            }
+        }
+
+        #[tokio::test]
+        async fn bypassed_multipart_put_preserves_the_cached_object_and_etag() {
+            let primary = Arc::new(InMemory::new());
+            let cache = Arc::new(InMemory::new());
+            let mut context = context_with_stores(primary.clone(), cache.clone()).await;
+            let path = FlowPath::new(
+                "uploads/report.pdf".to_string(),
+                "store".to_string(),
+                Some("cache".to_string()),
+            );
+            path.put(&mut context, b"original".to_vec(), false)
+                .await
+                .unwrap();
+            let runtime = path.to_runtime(&mut context).await.unwrap();
+            let etag_path = path.get_etag_path(&path.get_base_path_without_extension(&runtime));
+            let original_etag = cache.get(&etag_path).await.unwrap().bytes().await.unwrap();
+            let bytes = vec![42; 8 * 1024 * 1024 + 1];
+
+            path.put(&mut context, bytes.clone(), true).await.unwrap();
+
+            let stored = primary.get(&path.object_path()).await.unwrap();
+            assert_eq!(stored.bytes().await.unwrap().as_ref(), bytes.as_slice());
+            let cached = cache.get(&path.object_path()).await.unwrap();
+            assert_eq!(cached.bytes().await.unwrap().as_ref(), b"original");
+            let cached_etag = cache.get(&etag_path).await.unwrap().bytes().await.unwrap();
+            assert_eq!(cached_etag, original_etag);
+            assert!(path.is_cache_dirty(&mut context).await.unwrap());
+        }
     }
 
     #[test]

@@ -111,27 +111,45 @@ impl LedgerLocation {
     }
 }
 
+/// Opens the workflow's ledger from async code. The first open of a ledger in a process waits
+/// on SQLite, so this executor thread hands its other tasks on while it waits.
 #[cfg(feature = "training")]
 pub(crate) fn repository(context: &ExecutionContext) -> Result<(TrainingRepository, String)> {
-    LedgerLocation::new(context)?.open()
+    let ledger = LedgerLocation::new(context)?;
+    blocking(|| ledger.open())
+}
+
+/// Runs blocking work called from async code. On a multi-threaded runtime the executor moves
+/// this thread's other tasks to another worker first; elsewhere the work runs in place.
+#[cfg(feature = "training")]
+fn blocking<T>(work: impl FnOnce() -> T) -> T {
+    match tokio::runtime::Handle::try_current().map(|handle| handle.runtime_flavor()) {
+        Ok(tokio::runtime::RuntimeFlavor::MultiThread) => tokio::task::block_in_place(work),
+        _ => work(),
+    }
 }
 
 /// Opening migrates and verifies the ledger under the SQLite write lock, so each file is
-/// opened once per process. A removed or replaced file is opened, and so verified, again.
+/// opened once per process. A removed or replaced file is opened, and so verified, again; a
+/// reused handle still has its storage entries verified on every call.
 #[cfg(feature = "training")]
 fn open_ledger(path: std::path::PathBuf) -> Result<TrainingRepository> {
     use std::{
         collections::HashMap,
         sync::{LazyLock, Mutex, PoisonError},
     };
-    type Opened = HashMap<std::path::PathBuf, ((u64, u64), TrainingRepository)>;
+    type Opened = HashMap<std::path::PathBuf, (LedgerIdentity, TrainingRepository)>;
     static OPENED: LazyLock<Mutex<Opened>> = LazyLock::new(|| Mutex::new(HashMap::new()));
     if let Some(identity) = ledger_identity(&path) {
-        let opened = OPENED.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some((known, repo)) = opened.get(&path)
-            && *known == identity
-        {
-            return Ok(repo.clone());
+        let cached = OPENED
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&path)
+            .filter(|(known, _)| *known == identity)
+            .map(|(_, repo)| repo.clone());
+        if let Some(repo) = cached {
+            repo.verify_storage()?;
+            return Ok(repo);
         }
     }
     let repo = TrainingRepository::open(&path)?;
@@ -144,25 +162,30 @@ fn open_ledger(path: std::path::PathBuf) -> Result<TrainingRepository> {
     Ok(repo)
 }
 
+/// The ledger file's device and inode, with its birth time where the filesystem records one,
+/// so a new file that reuses a freed inode number differs. Without inode numbers the birth
+/// time alone identifies the file.
 #[cfg(feature = "training")]
-fn ledger_identity(path: &std::path::Path) -> Option<(u64, u64)> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LedgerIdentity {
+    file: (u64, u64),
+    born: Option<std::time::SystemTime>,
+}
+
+#[cfg(feature = "training")]
+fn ledger_identity(path: &std::path::Path) -> Option<LedgerIdentity> {
     let metadata = std::fs::symlink_metadata(path)
         .ok()
         .filter(std::fs::Metadata::is_file)?;
+    let born = metadata.created().ok();
     #[cfg(unix)]
-    {
+    let file = {
         use std::os::unix::fs::MetadataExt;
-        Some((metadata.dev(), metadata.ino()))
-    }
+        (metadata.dev(), metadata.ino())
+    };
     #[cfg(not(unix))]
-    {
-        let created = metadata
-            .created()
-            .ok()?
-            .duration_since(std::time::UNIX_EPOCH)
-            .ok()?;
-        Some((created.as_secs(), u64::from(created.subsec_nanos())))
-    }
+    let file = born.map(|_| (0, 0))?;
+    Some(LedgerIdentity { file, born })
 }
 
 #[cfg(any(feature = "training", test))]
@@ -465,39 +488,158 @@ fn schedule_with(
         }
         input.training.recipe["feature_extractor"] = json!(extractor);
     }
-    if let Some(extractor) = input
+    let extractor = input
         .training
         .recipe
         .get("feature_extractor")
         .filter(|value| !value.is_null())
-    {
-        runtime_extractor(extractor)?;
-    }
+        .map(runtime_extractor)
+        .transpose()?;
+    drive_or_trigger(&repo, &key, input, extractor.as_ref(), dispatch)
+}
+
+/// Drives the stream's waiting job, or triggers a new one once N new samples arrived.
+#[cfg(feature = "training")]
+fn drive_or_trigger(
+    repo: &TrainingRepository,
+    key: &StreamKey,
+    input: ScheduleTrainingRequest,
+    extractor: Option<&runtime::engines::FeatureExtractor>,
+    dispatch: impl Fn(&TrainingRepository, &str, &WorkerLimits) -> Result<()>,
+) -> Result<Option<TrainingJob>> {
     let now = runtime::now_ms();
-    repo.recover_expired_jobs(&key, now)?;
-    for pending in repo.list_jobs(&key)? {
-        if restartable(&pending) {
-            if !repeats_known_failure(&repo, &pending, &input.worker_limits)? {
-                dispatch(&repo, &pending.id, &input.worker_limits)?;
-            }
-            return Ok(Some(pending));
-        }
+    let mut jobs = settled_jobs(repo, key, now)?;
+    if let Some(index) = jobs.iter().position(restartable) {
+        return drive_pending(repo, jobs.swap_remove(index), &input, now, &dispatch).map(Some);
     }
-    // Counting reads no sample bodies; only a trigger loads them.
-    if repo.count_new_training_samples(&key, now)? < input.after_new_samples {
+    if !trigger_due(repo, key, &jobs, &input, extractor, now)? {
         return Ok(None);
     }
     let job = repo.trigger_after_n(
-        &key,
+        key,
         input.after_new_samples,
         input.training,
         input.split,
         now,
     )?;
     if let Some(job) = &job {
-        dispatch(&repo, &job.id, &input.worker_limits)?;
+        dispatch(repo, &job.id, &input.worker_limits)?;
     }
     Ok(job)
+}
+
+/// The waiting job takes this call's compute settings and is dispatched unless it would fail
+/// the same way again.
+#[cfg(feature = "training")]
+fn drive_pending(
+    repo: &TrainingRepository,
+    job: TrainingJob,
+    input: &ScheduleTrainingRequest,
+    now: i64,
+    dispatch: &impl Fn(&TrainingRepository, &str, &WorkerLimits) -> Result<()>,
+) -> Result<TrainingJob> {
+    let job = with_requested_compute(repo, job, &input.training, now)?;
+    if !repeats_known_failure(repo, &job, &input.worker_limits)? {
+        dispatch(repo, &job.id, &input.worker_limits)?;
+    }
+    Ok(job)
+}
+
+/// A trigger needs N new samples, enough of them to fill a first training partition, and
+/// embeddings from the extractor the stream already trained on.
+#[cfg(feature = "training")]
+fn trigger_due(
+    repo: &TrainingRepository,
+    key: &StreamKey,
+    jobs: &[TrainingJob],
+    input: &ScheduleTrainingRequest,
+    extractor: Option<&runtime::engines::FeatureExtractor>,
+    now: i64,
+) -> Result<bool> {
+    if let Some(extractor) = extractor {
+        check_stream_extractor(key, jobs, extractor)?;
+    }
+    // Counting reads no sample bodies; only a trigger loads them.
+    let new_samples = repo.count_new_training_samples(key, now)?;
+    Ok(new_samples >= input.after_new_samples
+        && !first_trigger_short(jobs, new_samples, input.inspection.spec.minimum_examples))
+}
+
+/// The stream's jobs after settling those whose worker stopped. Settling reads every running
+/// job's request again, so it only runs when a listed lease has run out.
+#[cfg(feature = "training")]
+fn settled_jobs(repo: &TrainingRepository, key: &StreamKey, now: i64) -> Result<Vec<TrainingJob>> {
+    let jobs = repo.list_jobs(key)?;
+    if !jobs.iter().any(|job| lease_ran_out(job, now)) {
+        return Ok(jobs);
+    }
+    repo.recover_expired_jobs(key, now)?;
+    Ok(repo.list_jobs(key)?)
+}
+
+#[cfg(feature = "training")]
+fn lease_ran_out(job: &TrainingJob, now: i64) -> bool {
+    matches!(job.status, JobStatus::Running | JobStatus::CancelRequested)
+        && job
+            .lease_expires_at_ms
+            .is_some_and(|deadline| deadline <= now)
+}
+
+/// A waiting job of the same engine takes the compute settings of the call that drives it, so
+/// a raised memory limit reaches a job that admission refused. A job that a worker is
+/// admitting, and an experiment trial, keep their settings.
+#[cfg(feature = "training")]
+fn with_requested_compute(
+    repo: &TrainingRepository,
+    job: TrainingJob,
+    request: &TrainingRequest,
+    now: i64,
+) -> Result<TrainingJob> {
+    if job.request.engine != request.engine || job.request.compute == request.compute {
+        return Ok(job);
+    }
+    match repo.reconfigure_job_compute(&job.id, request.compute.clone(), now) {
+        Err(runtime::Error::Conflict(_)) => Ok(job),
+        reconfigured => Ok(reconfigured?),
+    }
+}
+
+/// Train After N fits every accepted sample of a stream together, so the stream keeps the
+/// feature extractor its jobs recorded; embeddings from another extractor need a new stream.
+#[cfg(feature = "training")]
+fn check_stream_extractor(
+    key: &StreamKey,
+    jobs: &[TrainingJob],
+    scheduled: &runtime::engines::FeatureExtractor,
+) -> Result<()> {
+    let recorded = jobs.iter().rev().find_map(|job| {
+        job.request
+            .recipe
+            .get("feature_extractor")
+            .filter(|value| !value.is_null())
+    });
+    let Some(recorded) = recorded.map(runtime_extractor).transpose()? else {
+        return Ok(());
+    };
+    if recorded == *scheduled {
+        return Ok(());
+    }
+    Err(anyhow!(
+        "Stream {} was trained on embeddings from feature extractor {} ({}), so embeddings from {} ({}) cannot join it: Train After N fits all of a stream's samples together. Record the new embeddings under a new stream ID",
+        key.stream_id,
+        recorded.source_id,
+        recorded.blob_sha256,
+        scheduled.source_id,
+        scheduled.blob_sha256
+    ))
+}
+
+/// Before a stream's first trigger every eligible sample is new, and validation and test take
+/// at least one each, so fewer than `minimum_examples + 2` cannot fill the training partition.
+/// Returning early spares the trigger reading every sample body under the write lock.
+#[cfg(feature = "training")]
+fn first_trigger_short(jobs: &[TrainingJob], new_samples: usize, minimum_examples: usize) -> bool {
+    jobs.is_empty() && new_samples < minimum_examples.saturating_add(2)
 }
 
 /// Waiting jobs and jobs whose worker stopped resume on dispatch; paused jobs wait for Resume.
@@ -508,7 +650,8 @@ fn restartable(job: &TrainingJob) -> bool {
 
 /// A job whose last attempt in this process failed deterministically under these worker
 /// limits, at admission or by exhausting device memory, fails the same way again. It waits
-/// for other limits or Resume Training instead of being dispatched on every call.
+/// for other worker limits, new compute settings from the call that drives it, or Resume
+/// Training, instead of being dispatched on every call.
 #[cfg(feature = "training")]
 fn repeats_known_failure(
     repo: &TrainingRepository,
@@ -520,18 +663,20 @@ fn repeats_known_failure(
     }
     let key = queue_key(repo, &job.id)?;
     let limits = flow_like_types::json::to_string(limits)?;
-    Ok(known_failures().get(&key) == Some(&limits))
+    Ok(with_known_failures(|failures| {
+        failures.get(&key) == Some(&limits)
+    }))
 }
 
 /// Worker limits of each job's last deterministic failure, by queue key.
 #[cfg(feature = "training")]
 type KnownFailures = std::collections::HashMap<String, String>;
 #[cfg(feature = "training")]
-fn known_failures() -> std::sync::MutexGuard<'static, KnownFailures> {
+fn with_known_failures<T>(use_failures: impl FnOnce(&mut KnownFailures) -> T) -> T {
     use std::sync::{LazyLock, Mutex, PoisonError};
     static FAILURES: LazyLock<Mutex<KnownFailures>> =
         LazyLock::new(|| Mutex::new(KnownFailures::new()));
-    FAILURES.lock().unwrap_or_else(PoisonError::into_inner)
+    use_failures(&mut FAILURES.lock().unwrap_or_else(PoisonError::into_inner))
 }
 
 /// Snapshot, checkpoint, estimate, engine and device-memory errors repeat under the same
@@ -545,15 +690,15 @@ fn note_attempt(key: &str, limits: &WorkerLimits, result: &runtime::Result<()>) 
             | runtime::Error::NotFound(_)
             | runtime::Error::Json(_))
     );
-    let mut failures = known_failures();
-    match flow_like_types::json::to_string(limits) {
-        Ok(limits) if deterministic => {
+    let limits = flow_like_types::json::to_string(limits).ok();
+    with_known_failures(|failures| match limits {
+        Some(limits) if deterministic => {
             failures.insert(key.to_owned(), limits);
         }
         _ => {
             failures.remove(key);
         }
-    }
+    });
 }
 
 #[cfg(feature = "training")]
@@ -732,8 +877,8 @@ pub struct ResumeRequest {
     pub inspection: InspectionContext,
     pub job_id: String,
     pub worker_limits: WorkerLimits,
-    /// New compute settings for a queued, paused or interrupted job, applied before it runs
-    /// again. Experiment trials and jobs in other states refuse them.
+    /// New compute settings, applied before the job runs again, including after Cancel or a
+    /// failure. Running jobs and experiment trials refuse them.
     #[serde(default)]
     pub compute: Option<ComputeConfig>,
 }
@@ -750,35 +895,48 @@ fn resume_with(
     dispatch: impl Fn(&TrainingRepository, &str, &WorkerLimits) -> Result<()>,
 ) -> Result<TrainingJob> {
     let key = input.inspection.key(project)?;
-    let mut job = repo.get_job(&input.job_id)?;
+    let job = repo.get_job(&input.job_id)?;
     check_stream(&key, &job.stream)?;
     runtime::worker::TrainingWorker::new(repo.clone(), input.worker_limits.clone())?;
-    if let Some(compute) = &input.compute {
-        job = reconfigure_compute(&repo, &key, &job, compute)?;
-    }
-    let job = if job.status == JobStatus::Queued {
-        job
-    } else {
-        repo.resume_job(&input.job_id, runtime::now_ms())?
-    };
+    let job = requeue_with_compute(&repo, job, input.compute.as_ref())?;
     dispatch(&repo, &job.id, &input.worker_limits)?;
     Ok(job)
 }
-/// Writes new compute settings into a job before it runs again. A run whose worker died is
-/// settled as interrupted first, so it can take them.
+/// A waiting job stays queued; a paused, interrupted, cancelled, failed or crashed job is
+/// queued again.
 #[cfg(feature = "training")]
-fn reconfigure_compute(
+fn requeue(repo: &TrainingRepository, job: TrainingJob) -> Result<TrainingJob> {
+    if job.status == JobStatus::Queued {
+        return Ok(job);
+    }
+    Ok(repo.resume_job(&job.id, runtime::now_ms())?)
+}
+/// Requeues the job, under new compute settings when given. Only waiting and stopped jobs
+/// change compute: those take it before they are requeued, and a cancelled, failed or crashed
+/// job is requeued first. Either way it is dispatched once, under the new settings.
+#[cfg(feature = "training")]
+fn requeue_with_compute(
     repo: &TrainingRepository,
-    key: &StreamKey,
-    job: &TrainingJob,
-    compute: &ComputeConfig,
+    job: TrainingJob,
+    compute: Option<&ComputeConfig>,
 ) -> Result<TrainingJob> {
+    let Some(compute) = compute else {
+        return requeue(repo, job);
+    };
     compute.validate()?;
     validate_native_schedule_compute(&job.request.engine, compute)?;
-    let now = runtime::now_ms();
-    repo.recover_expired_jobs(key, now)?;
     let compute = flow_like_types::json::to_value(compute)?;
-    Ok(repo.reconfigure_job_compute(&job.id, compute, now)?)
+    let reconfigure = move |job: TrainingJob| -> Result<TrainingJob> {
+        Ok(repo.reconfigure_job_compute(&job.id, compute, runtime::now_ms())?)
+    };
+    if matches!(
+        job.status,
+        JobStatus::Queued | JobStatus::Paused | JobStatus::Interrupted
+    ) {
+        requeue(repo, reconfigure(job)?)
+    } else {
+        reconfigure(requeue(repo, job)?)
+    }
 }
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RecoverRequest {
@@ -803,10 +961,9 @@ fn recover_with(
 ) -> Result<Vec<TrainingJob>> {
     let key = input.inspection.key(project)?;
     runtime::worker::TrainingWorker::new(repo.clone(), input.worker_limits.clone())?;
-    repo.recover_expired_jobs(&key, runtime::now_ms())?;
-    let jobs = repo.list_jobs(&key)?;
-    for job in &jobs {
-        if restartable(job) && !repeats_known_failure(&repo, job, &input.worker_limits)? {
+    let jobs = settled_jobs(&repo, &key, runtime::now_ms())?;
+    for job in jobs.iter().filter(|job| restartable(job)) {
+        if !repeats_known_failure(&repo, job, &input.worker_limits)? {
             dispatch(&repo, &job.id, &input.worker_limits)?;
         }
     }
@@ -844,7 +1001,8 @@ pub struct StudentInferenceRequest {
     #[serde(default)]
     pub compute: ComputeConfig,
     /// The extractor of embedding inputs, from Extract Image Features. A PatchCore or PaDiM
-    /// model fitted on another extractor's embeddings refuses them.
+    /// model that recorded its extractor refuses embeddings from another extractor or without
+    /// one.
     #[serde(default)]
     pub feature_extractor: Option<FeatureExtractorRef>,
 }
@@ -1227,7 +1385,7 @@ lifecycle_node!(
     ResumeRequest,
     TrainingJob,
     resume,
-    version = 1
+    version = 2
 );
 
 #[crate::register_node]
@@ -1299,9 +1457,14 @@ impl CatalogLoadedPredictor {
             Self::Classical { artifact, .. } => artifact,
         }
     }
+    /// Inputs that name no feature extractor; a model that recorded the extractor of its
+    /// training embeddings refuses them.
     pub(crate) fn predict(&self, input: &TensorData) -> Result<Value> {
         match self {
-            Self::Builtin(predictor) => Ok(predictor.predict(input)?),
+            Self::Builtin(predictor) => {
+                refuse_unnamed_embeddings(predictor.artifact())?;
+                Ok(predictor.predict(input)?)
+            }
             Self::Classical { predictor, .. } => {
                 use runtime::auto_training::SearchPredictor;
                 let mut predictor = predictor
@@ -1321,7 +1484,7 @@ impl CatalogLoadedPredictor {
             (Self::Builtin(predictor), Some(extractor)) => {
                 Ok(predictor.predict_with_extractor(input, extractor)?)
             }
-            // Classical models are fitted on table rows and record no extractor to check.
+            // Classical models record no extractor; `predict` checks inputs that name none.
             _ => self.predict(input),
         }
     }
@@ -1341,6 +1504,25 @@ impl CatalogLoadedPredictor {
             }
         }
     }
+}
+/// Embeddings that name no extractor cannot be checked against the one a PatchCore or PaDiM
+/// model recorded, and another extractor's embeddings give arbitrary anomaly scores.
+#[cfg(feature = "training")]
+fn refuse_unnamed_embeddings(model: &ModelArtifact) -> Result<()> {
+    let Some(recorded) = model
+        .manifest
+        .get("feature_extractor")
+        .filter(|value| !value.is_null())
+    else {
+        return Ok(());
+    };
+    let recorded = runtime_extractor(recorded)?;
+    Err(anyhow!(
+        "Model {} was fitted on embeddings from feature extractor {} ({}); send the extractor of these embeddings, the Feature Extractor output of Extract Image Features, with the request",
+        model.id,
+        recorded.source_id,
+        recorded.blob_sha256
+    ))
 }
 #[cfg(feature = "training")]
 #[derive(Clone, Default)]
@@ -1448,7 +1630,7 @@ impl NodeLogic for StudentInferenceNode {
             "predict",
             "AI/ML/Lifecycle",
         );
-        node.set_version(1);
+        node.set_version(2);
         node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
@@ -2603,6 +2785,49 @@ mod lifecycle_tests {
         assert!(reopened.list_jobs(&key).unwrap().is_empty());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn reused_ledger_handles_refuse_a_blob_directory_swapped_for_a_symlink() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("inspection").join("jobs.sqlite");
+        open_ledger(path.clone()).unwrap();
+        let blobs = path.with_extension("artifacts");
+        std::fs::remove_dir_all(&blobs).unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(elsewhere.path(), &blobs).unwrap();
+        let error = open_ledger(path).unwrap_err().to_string();
+        assert!(error.contains("must be a real directory"), "{error}");
+    }
+
+    #[test]
+    fn ledger_identity_carries_the_birth_time_the_filesystem_reports() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("jobs.sqlite");
+        std::fs::write(&path, b"ledger").unwrap();
+        let born = std::fs::metadata(&path).unwrap().created().ok();
+        let identity = ledger_identity(&path).map(|identity| identity.born);
+        assert_eq!(identity, Some(born));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn blocking_ledger_work_hands_other_tasks_to_another_worker() {
+        let (started, blocked) = tokio::sync::oneshot::channel();
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let waiting = tokio::spawn(async move {
+            blocking(move || {
+                let _ = started.send(());
+                released.recv_timeout(std::time::Duration::from_secs(10))
+            })
+        });
+        blocked.await.unwrap();
+        // The runtime's only worker waits above, so this task runs only if it was handed on.
+        tokio::spawn(async move { release.send(()) })
+            .await
+            .unwrap()
+            .unwrap();
+        waiting.await.unwrap().unwrap();
+    }
+
     #[test]
     fn record_sample_maps_label_provenance_and_rejects_unavailable_labels() {
         let (_directory, repo) = ledger();
@@ -2861,11 +3086,18 @@ mod lifecycle_tests {
     }
 
     #[test]
-    fn resume_refuses_invalid_compute_and_compute_for_a_settled_job() {
+    fn resume_gives_cancelled_and_failed_jobs_new_compute_and_refuses_invalid_compute() {
         let (_directory, repo) = ledger();
         let (waiting, queued) = queued_job(&repo, "queued");
         let (cancelling, cancelled) = queued_job(&repo, "cancelled");
         repo.request_cancel(&cancelled.id, runtime::now_ms())
+            .unwrap();
+        let (failing, failed) = queued_job(&repo, "failed");
+        let lease = repo.claim_job(&failed.id, "worker", 60_000, runtime::now_ms());
+        repo.fail_job(&lease.unwrap(), "engine stopped", runtime::now_ms())
+            .unwrap();
+        let (live, running) = queued_job(&repo, "running");
+        repo.claim_job(&running.id, "worker", 60_000, runtime::now_ms())
             .unwrap();
         let dispatched = RefCell::new(Vec::new());
         let without_memory = ComputeConfig {
@@ -2874,18 +3106,17 @@ mod lifecycle_tests {
         };
         assert!(resume_on(&repo, &waiting, &queued, &without_memory, &dispatched).is_err());
         let compute = small_cpu_compute();
-        let error = resume_on(&repo, &cancelling, &cancelled, &compute, &dispatched).unwrap_err();
-        assert!(
-            matches!(
-                error.downcast_ref::<runtime::Error>(),
-                Some(runtime::Error::Conflict(_))
-            ),
-            "{error}"
-        );
-        for job in [&queued, &cancelled] {
+        assert!(resume_on(&repo, &live, &running, &compute, &dispatched).is_err());
+        for job in [&queued, &running] {
             assert_eq!(repo.get_job(&job.id).unwrap().request.compute, json!({}));
         }
-        assert!(dispatched.borrow().is_empty());
+        for (inspection, job) in [(&cancelling, &cancelled), (&failing, &failed)] {
+            let resumed = resume_on(&repo, inspection, job, &compute, &dispatched).unwrap();
+            assert_eq!(resumed.status, JobStatus::Queued);
+            let stored = repo.get_job(&job.id).unwrap();
+            assert_eq!(stored.request.compute, json!(compute));
+        }
+        assert_eq!(*dispatched.borrow(), [cancelled.id.clone(), failed.id.clone()]);
     }
 
     #[test]
@@ -2930,6 +3161,111 @@ mod lifecycle_tests {
         let retried = schedule(request(3, larger(&limits))).unwrap();
         assert_eq!(retried.id, job.id);
         assert_eq!(*dispatched.borrow(), [job.id.clone(), job.id.clone()]);
+    }
+
+    fn forest_request(inspection: &InspectionContext, compute: Value) -> ScheduleTrainingRequest {
+        ScheduleTrainingRequest {
+            inspection: inspection.clone(),
+            after_new_samples: 1,
+            training: TrainingRequest {
+                engine: "isolation_forest".into(),
+                recipe: json!({"labels": []}),
+                compute,
+            },
+            split: split(),
+            worker_limits: WorkerLimits::default(),
+            feature_extractor: None,
+        }
+    }
+
+    #[test]
+    fn train_after_n_gives_its_held_job_raised_compute_and_dispatches_it_again() {
+        let (_directory, repo) = ledger();
+        let inspection = inspection_context("compute", TaskKind::SensorAnomaly, &[], &[2]);
+        record_normal(&repo, &inspection, 0..3);
+        let dispatched = RefCell::new(Vec::new());
+        let dispatch = |_: &TrainingRepository, job_id: &str, _: &WorkerLimits| -> Result<()> {
+            dispatched.borrow_mut().push(job_id.to_owned());
+            Ok(())
+        };
+        let schedule = |compute: &Value| {
+            let request = forest_request(&inspection, compute.clone());
+            schedule_with(repo.clone(), PROJECT.into(), request, &dispatch)
+                .unwrap()
+                .unwrap()
+        };
+        let small = json!({"backend": "cpu", "memory_limit_bytes": 1024});
+        let job = schedule(&small);
+        remember_failure(&repo, &job, &WorkerLimits::default());
+        assert!(schedule(&small).error.is_some());
+        assert_eq!(*dispatched.borrow(), [job.id.clone()]);
+        let raised = json!({"backend": "cpu", "memory_limit_bytes": 1_073_741_824});
+        let reconfigured = schedule(&raised);
+        assert_eq!(reconfigured.id, job.id);
+        assert_eq!(reconfigured.error, None);
+        assert_eq!(repo.get_job(&job.id).unwrap().request.compute, raised);
+        assert_eq!(*dispatched.borrow(), [job.id.clone(), job.id.clone()]);
+    }
+
+    #[test]
+    fn train_after_n_skips_first_triggers_that_cannot_fill_a_training_partition() {
+        assert!(first_trigger_short(&[], 3, 2));
+        assert!(!first_trigger_short(&[], 4, 2));
+        let (_directory, repo) = ledger();
+        let mut inspection = inspection_context("warm-up", TaskKind::SensorAnomaly, &[], &[2]);
+        inspection.spec.minimum_examples = 2;
+        record_normal(&repo, &inspection, 0..3);
+        // An invalid split fails only inside a trigger, so the error shows that one ran.
+        let ignore = |_: &TrainingRepository, _: &str, _: &WorkerLimits| -> Result<()> { Ok(()) };
+        let schedule = || {
+            let mut request = forest_request(&inspection, json!({"backend": "cpu"}));
+            request.split = SplitPolicy::Group {
+                train_fraction: 1.0,
+                validation_fraction: 0.5,
+                seed: 7,
+            };
+            schedule_with(repo.clone(), PROJECT.into(), request, &ignore)
+        };
+        assert!(schedule().unwrap().is_none());
+        record_normal(&repo, &inspection, 3..4);
+        let error = schedule().unwrap_err().to_string();
+        assert!(error.contains("group split"), "{error}");
+    }
+
+    #[test]
+    fn worker_attempts_keep_admission_failures_and_hold_the_job_under_the_same_limits() {
+        let (_directory, repo) = ledger();
+        let (inspection, job) = queued_job(&repo, "admission");
+        let limits = WorkerLimits::default();
+        attempt(&repo, &job.id, &limits, &queue_key(&repo, &job.id).unwrap());
+        let waiting = repo.get_job(&job.id).unwrap();
+        assert_eq!(waiting.status, JobStatus::Queued);
+        let error = waiting.error.unwrap_or_default();
+        assert!(error.contains("engine fixture is not registered"), "{error}");
+        let dispatched = RefCell::new(Vec::new());
+        let dispatch =
+            |_: &TrainingRepository, job_id: &str, limits: &WorkerLimits| -> Result<()> {
+                dispatched
+                    .borrow_mut()
+                    .push((job_id.to_owned(), limits.memory_budget_bytes));
+                Ok(())
+            };
+        let drive = |worker_limits: &WorkerLimits| {
+            let recover = RecoverRequest {
+                inspection: inspection.clone(),
+                worker_limits: worker_limits.clone(),
+            };
+            recover_with(repo.clone(), PROJECT.into(), recover, &dispatch).unwrap();
+            let mut request = forest_request(&inspection, json!({"backend": "cpu"}));
+            request.worker_limits = worker_limits.clone();
+            schedule_with(repo.clone(), PROJECT.into(), request, &dispatch).unwrap();
+        };
+        drive(&limits);
+        assert!(dispatched.borrow().is_empty());
+        let raised = larger(&limits);
+        drive(&raised);
+        let expected = vec![(job.id.clone(), raised.memory_budget_bytes); 2];
+        assert_eq!(*dispatched.borrow(), expected);
     }
 
     #[test]
@@ -2983,13 +3319,77 @@ mod lifecycle_tests {
             predictor.predict_checked(&embeddings, extractor.as_ref())
         };
         predict(Some(&extractor)).unwrap();
-        predict(None).unwrap();
+        let unnamed = predict(None).unwrap_err().to_string();
+        assert!(unnamed.contains("feature extractor backbone"), "{unnamed}");
         let other = FeatureExtractorRef {
             source_id: "other-backbone".into(),
             ..extractor
         };
         let error = predict(Some(&other)).unwrap_err().to_string();
         assert!(error.contains("other-backbone"), "{error}");
+    }
+
+    /// PatchCore over three new embeddings, from the named extractor when there is one.
+    fn patch_request(
+        inspection: &InspectionContext,
+        source_id: Option<&str>,
+    ) -> ScheduleTrainingRequest {
+        ScheduleTrainingRequest {
+            inspection: inspection.clone(),
+            after_new_samples: 3,
+            training: TrainingRequest {
+                engine: "patchcore".into(),
+                recipe: json!({"labels": [], "coreset_size": 8}),
+                compute: json!({"backend": "cpu"}),
+            },
+            split: split(),
+            worker_limits: WorkerLimits::default(),
+            feature_extractor: source_id.map(|source_id| FeatureExtractorRef {
+                source_id: source_id.into(),
+                blob_sha256: "a".repeat(64),
+                image_steps: Vec::new(),
+            }),
+        }
+    }
+
+    #[test]
+    fn patch_models_fitted_without_an_extractor_still_score_unnamed_embeddings() {
+        let (_directory, repo) = ledger();
+        let inspection = inspection_context("plain", TaskKind::VisualAnomaly, &[], &[4, 3]);
+        record_normal(&repo, &inspection, 0..3);
+        let ignore = |_: &TrainingRepository, _: &str, _: &WorkerLimits| -> Result<()> { Ok(()) };
+        let request = patch_request(&inspection, None);
+        let job = schedule_with(repo.clone(), PROJECT.into(), request, ignore);
+        let job = job.unwrap().unwrap();
+        run_training_job(&repo, &job.id, &WorkerLimits::default()).unwrap();
+        let artifact_id = repo.get_job(&job.id).unwrap().artifact_id.unwrap();
+        let predictor =
+            CatalogLoadedPredictor::load(&repo, &artifact_id, &ComputeConfig::default()).unwrap();
+        let embeddings = TensorData {
+            shape: vec![4, 3],
+            values: vec![0.5; 12],
+        };
+        predictor.predict_checked(&embeddings, None).unwrap();
+    }
+
+    #[test]
+    fn train_after_n_keeps_one_feature_extractor_per_stream() {
+        let (_directory, repo) = ledger();
+        let inspection = inspection_context("swap", TaskKind::VisualAnomaly, &[], &[4, 3]);
+        record_normal(&repo, &inspection, 0..3);
+        let ignore = |_: &TrainingRepository, _: &str, _: &WorkerLimits| -> Result<()> { Ok(()) };
+        let schedule = |source_id: &str| {
+            let request = patch_request(&inspection, Some(source_id));
+            schedule_with(repo.clone(), PROJECT.into(), request, &ignore)
+        };
+        let first = schedule("backbone").unwrap().unwrap();
+        repo.request_cancel(&first.id, runtime::now_ms()).unwrap();
+        record_normal(&repo, &inspection, 3..6);
+        let error = schedule("promoted-backbone").unwrap_err().to_string();
+        assert!(error.contains("promoted-backbone"), "{error}");
+        assert!(error.contains("new stream ID"), "{error}");
+        let retrained = schedule("backbone").unwrap().unwrap();
+        assert_ne!(retrained.id, first.id);
     }
 
     #[test]
