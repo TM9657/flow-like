@@ -129,6 +129,107 @@ Supported languages include: `javascript`, `typescript`, `python`, `rust`, `json
 | L    |   C    |     R |
 ```
 
+Chat tables preserve column alignment, links, emphasis, and inline code. Search,
+filters, sorting, column controls, wrapping, copy, and CSV export remain available
+in the table toolbar.
+
+---
+
+## Galleries, Recommendations, and Comparisons
+
+Use these fenced JSON blocks when pictures, ranked options, or a shared numeric
+scale make an answer easier to read. They render in chat and the Markdown preview.
+
+### Image Gallery
+
+A `gallery` block displays images with optional captions, credits, and links.
+Replace the example URLs with actual image URLs and describe each image in `alt`.
+
+````markdown
+```gallery
+{
+  "title": "Vehicle views",
+  "items": [
+    {"src": "https://example.com/front.jpg", "alt": "Front of the vehicle", "caption": "Front view", "credit": "Dealer photos"},
+    {"src": "https://example.com/interior.jpg", "alt": "Dashboard and front seats", "caption": "Interior", "href": "https://example.com/listing"}
+  ]
+}
+```
+````
+
+Each item requires `src` and `alt`. The block's `title` and each item's `caption`,
+`credit`, and `href` are optional. An unavailable or rejected image shows an alt-text
+placeholder.
+
+### Ranked Recommendations
+
+A `recommendations` block numbers options in the order supplied. Use prose around
+the block to explain the ranking criteria and cite supporting evidence.
+
+````markdown
+```recommendations
+{
+  "title": "Shortlist",
+  "items": [
+    {
+      "title": "Option A",
+      "subtitle": "For frequent travel",
+      "badge": "First choice",
+      "description": "More room for luggage.",
+      "specs": [{"label": "Seats", "value": "5"}],
+      "href": "https://example.com/option-a"
+    },
+    {"title": "Option B", "description": "A smaller alternative for city trips."}
+  ]
+}
+```
+````
+
+Only each item's `title` is required. Optional item fields are `subtitle`, `badge`,
+`description`, `href`, `specs` (an array of `label` and `value` strings), and `image`
+(an object with `src`, `alt`, and optional `caption`, `credit`, and `href`). The block's
+`title` is optional.
+
+### Comparison Bars
+
+A `comparison` block shows values against one shared maximum. Use it for a compact
+comparison; use `nivo` or `plotly` when you need axes, multiple series, or interactive
+chart controls.
+
+````markdown
+```comparison
+{
+  "title": "Illustrative luggage space",
+  "description": "Example values on the same 600-litre scale.",
+  "max": 600,
+  "unit": "L",
+  "items": [
+    {"label": "Option A", "value": 520, "detail": "Rear seats upright"},
+    {"label": "Option B", "value": 430}
+  ]
+}
+```
+````
+
+`max` must be a finite positive number. Each item requires a `label` and a finite
+numeric `value` between zero and `max`; `valueLabel` and `detail` are optional.
+The block's `title`, `description`, and `unit` are optional. For qualitative ratings,
+explain the scale and that the ratings are subjective in `description`. For example,
+use `max: 5` and an item with `value: 4` and `valueLabel: "Very good"`.
+
+### Input and Streaming Limits
+
+All three blocks require a non-empty `items` array and valid JSON without comments
+or trailing commas. String fields are plain text; put Markdown formatting and
+source citations in the surrounding response. Use known image and link URLs.
+
+During streaming, a placeholder appears until enough complete fields are available.
+Validated items then appear progressively; unfinished strings and numbers stay
+hidden. Put `max` before comparison items, and chart type/configuration before chart
+data, so the preview can begin sooner. Use **View source** to inspect the JSON and
+**Show preview** to return. Close the fence before continuing with prose. Invalid
+payloads that remain after streaming ends fall back to source.
+
 ---
 
 ## Blockquotes

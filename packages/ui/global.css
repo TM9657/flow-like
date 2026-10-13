@@ -1,5 +1,9 @@
 /* Keep theme tokens available to classes created after the application build. */
 @import "tailwindcss" theme(static);
+@import "tw-animate-css";
+@import "./styles/scrollbars.css" layer(base);
+@import "./styles/chat-prose.css";
+@import "./styles/chat-rich-media.css";
 @source "./components/**/*.{ts,tsx}";
 @source "./hooks/**/*.{ts,tsx}";
 @source "./lib/**/*.{ts,tsx}";
@@ -7,9 +11,6 @@
 @source "./pages/**/*.{ts,tsx}";
 @source "./src/**/*.{ts,tsx}";
 @source "./app/**/*.{ts,tsx}";
-
-@import "tw-animate-css";
-@import "./styles/scrollbars.css" layer(base);
 
 @custom-variant dark (&:is(.dark *));
 
@@ -105,20 +106,18 @@
 
 	/* Reading surface. Global rather than scoped to .fl-chat-root, because the
 	   FlowPilot chat renders outside that wrapper and needs the same treatment. */
-	--fl-chat-measure: 38rem;
+	--fl-chat-measure: 42rem;
 	/* One column width shared by the message rows and the composer, so their
 	   edges line up. Artifacts may break the prose measure but not this.
 	   Deliberately NOT resolved into a --fl-chat-column here: --fl-chat-content-width
 	   is declared on .fl-chat-root, so a min() computed at :root would freeze at
-	   46rem and ignore any per-chat override. The use sites resolve it instead. */
-	--fl-chat-wide: 46rem;
+	   the fallback width and ignore any per-chat override. The use sites resolve it instead. */
+	--fl-chat-wide: 48rem;
 	/* The question is a margin note, not a card — the rule carries it. */
 	--fl-chat-ask-background: transparent;
-	/* --font-reading is the host's next/font Source Serif 4 (opsz axis), set on <html>. */
-	--fl-chat-prose-font: var(--font-reading, "Source Serif 4"),
-		"Iowan Old Style", Charter, "Bitstream Charter", Georgia, ui-serif, serif;
-	--fl-chat-prose-size: 1.0625rem;
-	--fl-chat-prose-leading: 1.72;
+	--fl-chat-prose-font: var(--font-sans);
+	--fl-chat-prose-size: 1rem;
+	--fl-chat-prose-leading: 1.65;
 	--fl-chat-ask-foreground: var(--muted-foreground);
 	--fl-chat-ask-rule: var(--primary);
 	--fl-chat-rule: color-mix(in oklch, var(--border) 70%, transparent);
@@ -415,43 +414,13 @@
 	}
 }
 
-/* The answer is the document: a text serif at a real measure. Artifacts (widgets,
-   charts, tables, code) deliberately break that measure and keep the UI faces. */
+/* Message content uses the full column; individual text blocks set the reading measure. */
 [data-fl-chat-prose] {
-	max-width: var(--fl-chat-measure, 38rem);
+	min-width: 0;
+	max-width: 100%;
 	font-family: var(--fl-chat-prose-font);
-	font-size: var(--fl-chat-prose-size, 1.0625rem);
-	line-height: var(--fl-chat-prose-leading, 1.72);
-	letter-spacing: -0.003em;
-}
-
-[data-fl-chat-prose] :is(code, pre, kbd, samp) {
-	font-family: var(--font-mono);
-	font-size: 0.8125em;
-	letter-spacing: 0;
-}
-
-[data-fl-chat-prose] :is(table, pre, blockquote) {
-	max-width: none;
-}
-
-[data-fl-chat-prose] :is(table, th, td) {
-	font-family: var(--font-sans);
-	font-size: 0.8125rem;
-	letter-spacing: 0;
-}
-
-[data-fl-chat-prose] :is(h1, h2, h3, h4) {
-	letter-spacing: -0.012em;
-	text-wrap: balance;
-}
-
-/* Chat-embedded widgets and charts are UI, not prose. */
-[data-fl-chat-prose] [data-slate-void],
-[data-fl-chat-prose] figure {
-	font-family: var(--font-sans);
-	font-size: 0.875rem;
-	line-height: 1.5;
+	font-size: var(--fl-chat-prose-size, 1rem);
+	line-height: var(--fl-chat-prose-leading, 1.65);
 }
 
 /* University lessons use the shared Plate renderer, but need a calmer reading

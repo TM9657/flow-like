@@ -1,9 +1,21 @@
 "use client";
 
 import { useTranslation } from "@flow-like/locales";
-import { type ComponentType, useEffect, useMemo, useState } from "react";
+import {
+	type ComponentType,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { cn } from "../../../lib/utils";
-import { type ChartInput, parseChartData } from "./chart-data-parser";
+import { useRendererPresentation } from "../renderer-presentation";
+import type { ChartInput } from "./chart-data-parser";
+import {
+	type ChartSnapshot,
+	advanceChartSnapshot,
+	streamingChartHeight,
+} from "./streaming-chart-data";
 
 type ChartPreviewComponent = ComponentType<{
 	input: ChartInput;
@@ -25,23 +37,35 @@ interface ChartCodeBlockProps {
 	language: "nivo" | "plotly";
 	/** Optional CSS class name */
 	className?: string;
+	isStreaming?: boolean;
 }
 
-function ChartLoadingFallback() {
+function ChartLoadingFallback({
+	height,
+	title,
+}: { height: number; title?: string }) {
 	const { t } = useTranslation("common");
 	return (
-		<div className="flex items-center justify-center h-75 bg-muted/20 rounded-md animate-pulse">
-			<span className="text-muted-foreground text-sm">
-				{t("loadingChart", "Loading chart...")}
-			</span>
-		</div>
-	);
-}
-
-function ChartErrorFallback({ error }: { error: string }) {
-	return (
-		<div className="flex items-center justify-center h-50 bg-destructive/10 rounded-md p-4">
-			<span className="text-destructive text-sm">{error}</span>
+		<div data-fl-chart-pending>
+			{title && (
+				<div className="px-1 pb-2 text-center text-sm font-medium">{title}</div>
+			)}
+			<div
+				className="relative flex items-center justify-center rounded-md bg-muted/10"
+				style={{ height }}
+			>
+				<div
+					aria-hidden="true"
+					className="absolute inset-x-8 bottom-8 top-10 border-b border-l border-border/70"
+				>
+					<div className="absolute inset-x-0 top-1/4 border-t border-border/35" />
+					<div className="absolute inset-x-0 top-1/2 border-t border-border/35" />
+					<div className="absolute inset-x-0 top-3/4 border-t border-border/35" />
+				</div>
+				<output className="relative rounded bg-background/90 px-3 py-1.5 text-sm text-muted-foreground motion-safe:animate-pulse">
+					{t("preparingChart", "Preparing chart…")}
+				</output>
+			</div>
 		</div>
 	);
 }
@@ -94,8 +118,14 @@ export function ChartCodeBlock({
 	content,
 	language,
 	className,
+	isStreaming = false,
 }: ChartCodeBlockProps) {
 	const { t } = useTranslation("common");
+	const presentation = useRendererPresentation();
+	const isChat = presentation !== "default";
+	const toggleClass = isChat
+		? "mb-2 ml-auto block rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+		: TOGGLE_CLASS;
 	const [showSource, setShowSource] = useState(false);
 	const [ChartComponent, setChartComponent] =
 		useState<ChartPreviewComponent | null>(null);
@@ -103,15 +133,26 @@ export function ChartCodeBlock({
 	const [isModuleLoading, setIsModuleLoading] = useState(false);
 	const [retryKey, setRetryKey] = useState(0);
 
-	const chartInput = useMemo<ChartInput | null>(() => {
-		try {
-			return parseChartData(content, language);
-		} catch (e) {
-			return null;
-		}
-	}, [content, language]);
+	const snapshotRef = useRef<ChartSnapshot | null>(null);
+	const chartInput = useMemo(() => {
+		const next = advanceChartSnapshot(
+			snapshotRef.current,
+			content,
+			language,
+			isStreaming,
+		);
+		snapshotRef.current = next;
+		return next.input;
+	}, [content, language, isStreaming]);
+	const height = streamingChartHeight(content, chartInput);
+	const shouldLoadModule = chartInput !== null || isStreaming;
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: retryKey intentionally restarts a failed module load.
 	useEffect(() => {
+		if (!shouldLoadModule) {
+			setIsModuleLoading(false);
+			return;
+		}
 		let cancelled = false;
 
 		setIsModuleLoading(true);
@@ -150,23 +191,47 @@ export function ChartCodeBlock({
 		return () => {
 			cancelled = true;
 		};
-	}, [language, retryKey]);
+	}, [language, retryKey, shouldLoadModule, t]);
 
-	if (!chartInput) {
-		return <ChartErrorFallback error="Failed to parse chart data" />;
+	if (!chartInput && !isStreaming) {
+		return (
+			<div
+				data-fl-chart-appearance={isChat ? "chat" : undefined}
+				className={cn("relative", className)}
+			>
+				<p className="mb-2 text-xs text-muted-foreground">
+					{t(
+						"chartSourceUntilValid",
+						"The chart preview appears when its data is complete and valid.",
+					)}
+				</p>
+				<pre
+					data-slot={isChat ? "chart-source" : undefined}
+					className="overflow-x-auto rounded-md bg-muted/40 p-4 font-mono text-sm"
+				>
+					<code>{content}</code>
+				</pre>
+			</div>
+		);
 	}
 
 	if (showSource) {
 		return (
-			<div className={cn("relative", className)}>
+			<div
+				data-fl-chart-appearance={isChat ? "chat" : undefined}
+				className={cn("relative", className)}
+			>
 				<button
 					type="button"
 					onClick={() => setShowSource(false)}
-					className={TOGGLE_CLASS}
+					className={toggleClass}
 				>
 					{t("showChart", "Show Chart")}
 				</button>
-				<pre className="overflow-x-auto p-4 pt-10 font-mono text-sm bg-muted/50 rounded-md">
+				<pre
+					data-slot={isChat ? "chart-source" : undefined}
+					className="overflow-x-auto p-4 pt-10 font-mono text-sm bg-muted/50 rounded-md"
+				>
 					<code>{content}</code>
 				</pre>
 			</div>
@@ -176,26 +241,35 @@ export function ChartCodeBlock({
 	// Top left, and only on hover: Plotly parks its toolbar in the top right, and
 	// a permanent control competes with the chart title.
 	return (
-		<div className={cn("group relative", className)}>
+		<div
+			data-fl-chart-appearance={isChat ? "chat" : undefined}
+			className={cn("group relative", className)}
+		>
 			<button
 				type="button"
 				onClick={() => setShowSource(true)}
 				className={cn(
-					TOGGLE_CLASS,
-					"opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
+					toggleClass,
+					!isChat &&
+						"opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
 				)}
 			>
 				{t("viewSource", "View Source")}
 			</button>
-			{isModuleLoading ? <ChartLoadingFallback /> : null}
+			{!moduleError && (!chartInput || isModuleLoading || !ChartComponent) ? (
+				<ChartLoadingFallback
+					height={height}
+					title={chartInput?.config.title}
+				/>
+			) : null}
 			{!isModuleLoading && moduleError ? (
 				<ChartModuleFallback
 					error={moduleError}
 					onRetry={() => setRetryKey((value) => value + 1)}
 				/>
 			) : null}
-			{!isModuleLoading && !moduleError && ChartComponent ? (
-				<ChartComponent input={chartInput} />
+			{chartInput && !isModuleLoading && !moduleError && ChartComponent ? (
+				<ChartComponent input={chartInput} height={height} />
 			) : null}
 		</div>
 	);

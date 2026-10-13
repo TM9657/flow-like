@@ -1,15 +1,15 @@
 ---
 title: Prompt Templates for Rendering
-description: Copy-paste ready prompt templates for Flow-Like's markdown renderer, including interactive Nivo and Plotly previews.
+description: Prompt templates for Flow-Like Markdown, including charts, image galleries, ranked recommendations, and comparison bars.
 sidebar:
   order: 6
 ---
 
 import ChartPreview from "../../../../components/docs/ChartPreview";
 
-Flow-Like's markdown renderer can do more than plain text. In the markdown preview used by the internal debug page and markdown surfaces, fenced code blocks with the languages `nivo` and `plotly` are rendered as interactive charts instead of plain code.
-
-This page is for prompts that make an LLM return content that is immediately previewable inside Flow-Like.
+Flow-Like's full Markdown renderer displays charts, image galleries, ranked
+recommendations, and comparison bars from fenced code blocks. Use the templates
+below to request output that renders directly in chat or the Markdown playground.
 
 ## What is actually supported here?
 
@@ -19,6 +19,9 @@ For the markdown renderer, these are the relevant rendering modes:
 - Normal fenced code blocks with syntax highlighting
 - Interactive chart blocks using `nivo`
 - Interactive chart blocks using `plotly`
+- Image galleries using `gallery`
+- Ranked option cards using `recommendations`
+- Bars on a shared numeric scale using `comparison`
 
 If you want previewable chart output from an LLM, the model should return a fenced code block, not just a raw JSON array.
 
@@ -67,7 +70,7 @@ CSV mode is the easiest option for prompting because it is concise and predictab
 
 If you omit `type` in CSV mode, Flow-Like tries to auto-detect a sensible default, but explicit `type` values are more reliable in prompts.
 
-## Best prompt rule
+## Prompt Rule for a Standalone Chart
 
 Tell the model to return:
 
@@ -341,6 +344,56 @@ Example format:
 
 <ChartPreview language="plotly" source={"{\n  \"data\": [\n    {\n      \"x\": [\"Jan\", \"Feb\", \"Mar\", \"Apr\"],\n      \"y\": [1200, 1360, 1490, 1710],\n      \"type\": \"scatter\",\n      \"mode\": \"lines+markers\",\n      \"name\": \"Visits\"\n    }\n  ],\n  \"layout\": {\n    \"title\": \"Website traffic\"\n  },\n  \"config\": {\n    \"responsive\": true\n  }\n}"} client:visible />
 
+## Template: Galleries and Ranked Options
+
+Use this instruction when the response needs images or a ranked shortlist. The
+[Markdown reference](/reference/markdown-formatting/#galleries-recommendations-and-comparisons)
+lists all fields and validation rules.
+
+`````text
+Present the answer in Markdown. Add a gallery when supplied images help identify
+the options, or recommendations when the order reflects a stated ranking criterion.
+Use only known image and link URLs; omit optional images when none are available.
+Keep citations in the surrounding prose because JSON string fields are plain text.
+
+Gallery shape:
+```gallery
+{"title":"Views","items":[{"src":"IMAGE_URL","alt":"Description of the image","caption":"Front view"}]}
+```
+
+Ranked shortlist shape:
+```recommendations
+{"title":"Shortlist","items":[{"title":"Option A","description":"Why it fits","specs":[{"label":"Capacity","value":"5 seats"}]},{"title":"Option B","description":"When to choose it"}]}
+```
+
+Return complete JSON with at least one item. Do not include comments or trailing
+commas. Close each fence before resuming prose.
+`````
+
+## Template: Comparison Bars
+
+Use `comparison` for a few non-negative values on one scale. Use a chart template
+for multiple series, negative values, or axis controls.
+
+`````text
+Compare the supplied values in a fenced `comparison` JSON block:
+
+```comparison
+{"title":"Capacity","max":600,"unit":"L","items":[{"label":"Option A","value":520},{"label":"Option B","value":430}]}
+```
+
+Choose one positive finite max at least as large as every value. For subjective
+ratings, explain the scale in description and use valueLabel for labels such as
+"Very good". Do not invent measurements or imply that ratings are measured facts.
+Write max before items so the preview can render progressively. Keep source
+citations in nearby prose. Use plain text inside JSON strings.
+`````
+
+While a response streams, the renderer shows a placeholder, then validated complete
+items as they arrive. Write chart type/configuration before data to allow an early
+preview. Source stays behind **View source** during streaming. Invalid payloads
+remaining after the response finishes fall back to source.
+
 ## Template: Embed code block
 
 Use this when you want the model to embed an external link (video, social post, repository) using the `embed` fenced code block.
@@ -523,13 +576,16 @@ Do not add trailing commas inside JSON.
 
 For the markdown preview path, the Flow-Like-specific render targets are:
 
-- `nivo` — interactive Nivo charts
-- `plotly` — interactive Plotly charts
-- `embed` — external content embeds (YouTube, GitHub, generic links)
-- `map` — interactive maps with markers and routes
-- `:::info` / `:::warning` / `:::error` / `:::success` / `:::tip` — callout/admonition blocks
-- `:::spoiler` — collapsible spoiler blocks
-- `||text||` — inline spoilers
+- `nivo`: interactive Nivo charts
+- `plotly`: interactive Plotly charts
+- `gallery`: images with alt text, captions, credits, and optional links
+- `recommendations`: ranked option cards with optional images and specifications
+- `comparison`: bars with an explicit shared maximum and optional value labels
+- `embed`: external content embeds (YouTube, GitHub, generic links)
+- `map`: interactive maps with markers and routes
+- `:::info` / `:::warning` / `:::error` / `:::success` / `:::tip`: callout/admonition blocks
+- `:::spoiler`: collapsible spoiler blocks
+- `||text||`: inline spoilers
 - plain markdown
 
 Separately, A2UI also supports structured `markdown`, `nivoChart`, and `plotlyChart` components, but that is a different rendering path than the markdown chart preview.

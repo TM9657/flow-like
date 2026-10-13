@@ -265,12 +265,12 @@ if (!cached()) {
 	if (prepared.reconcileLock) {
 		// Cargo may remove dependency edges, but must keep reviewed versions and
 		// checksums. Always start from the pin so earlier local builds cannot drift.
+		// Allow downloads so reconciliation also works with an empty Cargo cache.
 		write("Cargo.lock", original("Cargo.lock"));
 		run(
 			"cargo",
 			[
 				"tree",
-				"--offline",
 				"--target",
 				"wasm32-unknown-unknown",
 				"-p",

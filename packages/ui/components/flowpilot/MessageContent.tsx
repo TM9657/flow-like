@@ -8,6 +8,7 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "../ui/collapsible";
+import { StreamingTextEditor } from "../ui/streaming-text-editor";
 import { TextEditor } from "../ui/text-editor";
 
 import type { IBoard } from "../../lib";
@@ -20,6 +21,7 @@ interface MessageContentProps {
 	board?: IBoard | null;
 	/** Whether to enable markdown rendering */
 	enableMarkdown?: boolean;
+	isStreaming?: boolean;
 }
 
 export const MessageContent = memo(function MessageContent({
@@ -27,6 +29,7 @@ export const MessageContent = memo(function MessageContent({
 	onFocusNode,
 	board,
 	enableMarkdown = true,
+	isStreaming = false,
 }: MessageContentProps) {
 	// Memoize getNodeName callback - returns display name for a valid node ID
 	const getNodeName = useCallback(
@@ -126,6 +129,28 @@ export const MessageContent = memo(function MessageContent({
 		};
 	}, [content, preprocessFocusNodes]);
 
+	const renderBody = (text: string) => {
+		if (!enableMarkdown)
+			return <p className="whitespace-pre-wrap wrap-anywhere">{text}</p>;
+		if (isStreaming)
+			return (
+				<StreamingTextEditor
+					presentation="chat-compact"
+					content={text}
+					onFocusNode={onFocusNode}
+				/>
+			);
+		return (
+			<TextEditor
+				presentation="chat-compact"
+				initialContent={text}
+				isMarkdown
+				editable={false}
+				onFocusNode={onFocusNode}
+			/>
+		);
+	};
+
 	// Render with thinking section expanded
 	if (thinkingMatch) {
 		const thinkingContent = thinkingMatch.content;
@@ -148,16 +173,7 @@ export const MessageContent = memo(function MessageContent({
 					</CollapsibleContent>
 				</Collapsible>
 				<div className="text-sm leading-relaxed whitespace-break-spaces text-wrap max-w-full w-full overflow-hidden wrap-anywhere">
-					{enableMarkdown ? (
-						<TextEditor
-							initialContent={restContent}
-							isMarkdown={true}
-							editable={false}
-							onFocusNode={onFocusNode}
-						/>
-					) : (
-						<p className="whitespace-pre-wrap wrap-anywhere">{restContent}</p>
-					)}
+					{renderBody(restContent)}
 				</div>
 			</div>
 		);
@@ -174,17 +190,7 @@ export const MessageContent = memo(function MessageContent({
 			<div className="space-y-2 w-full">
 				{beforeContent && (
 					<div className="text-sm leading-relaxed whitespace-break-spaces text-wrap max-w-full w-full overflow-hidden wrap-anywhere">
-						{enableMarkdown ? (
-							<TextEditor
-								initialContent={beforeContent}
-								isMarkdown={true}
-								editable={false}
-							/>
-						) : (
-							<p className="whitespace-pre-wrap wrap-anywhere">
-								{beforeContent}
-							</p>
-						)}
+						{renderBody(beforeContent)}
 					</div>
 				)}
 				<Collapsible
@@ -210,16 +216,7 @@ export const MessageContent = memo(function MessageContent({
 	// Normal content rendering
 	return (
 		<div className="text-sm leading-relaxed whitespace-break-spaces text-wrap max-w-full w-full overflow-hidden wrap-anywhere">
-			{enableMarkdown ? (
-				<TextEditor
-					initialContent={processedContent}
-					isMarkdown={true}
-					editable={false}
-					onFocusNode={onFocusNode}
-				/>
-			) : (
-				<p className="whitespace-pre-wrap wrap-anywhere">{processedContent}</p>
-			)}
+			{renderBody(processedContent)}
 		</div>
 	);
 });
