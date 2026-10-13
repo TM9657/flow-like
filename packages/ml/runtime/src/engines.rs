@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 mod inference;
-pub use inference::LoadedArtifactPredictor;
+pub use inference::{LoadedArtifactPredictor, verify_artifact_bytes};
 
 #[cfg(feature = "burn")]
 mod burn_adapter;
@@ -21,14 +21,17 @@ mod efficient_ad_adapter;
 mod sam2_adapter;
 #[cfg(feature = "burn")]
 pub use burn_adapter::{
-    BurnEngineRecipe, CheckpointObserver, pretrained_source_features,
-    publish_burn_pretrained_source, register_burn_engine, register_observed_burn_engine,
-    validate_burn_pretrained_preprocessing, validate_burn_pretrained_source,
+    BurnEngineRecipe, CheckpointObserver, pretrained_features_from_parts,
+    pretrained_source_features, publish_burn_pretrained_source, register_burn_engine,
+    register_observed_burn_engine, validate_burn_pretrained_preprocessing,
+    validate_burn_pretrained_source,
 };
 #[cfg(feature = "burn")]
 pub use efficient_ad_adapter::{EfficientAdEngineRecipe, register_efficient_ad_engine};
 #[cfg(feature = "burn")]
-pub use sam2_adapter::{fine_tune_sam2_source, predict_sam2_source, publish_sam2_source};
+pub use sam2_adapter::{
+    fine_tune_sam2_source, predict_sam2_from_parts, predict_sam2_source, publish_sam2_source,
+};
 
 #[cfg(feature = "burn")]
 fn image_batch_shape(shape: &[usize], expected: &[usize]) -> Result<Vec<usize>> {

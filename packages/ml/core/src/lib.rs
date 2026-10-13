@@ -668,6 +668,66 @@ impl ComputeConfig {
             "Compute memory limit must be positive",
         )
     }
+
+    /// Clamps the memory budget to 3/4 of the detected container memory so a
+    /// request can never plan for more than the host actually grants.
+    pub fn for_host(&self) -> ComputeConfig {
+        self.clamped_to_container(container_memory_limit_bytes())
+    }
+
+    fn clamped_to_container(&self, container_bytes: Option<u64>) -> ComputeConfig {
+        let mut config = self.clone();
+        if let Some(container_bytes) = container_bytes {
+            let host_budget = (container_bytes.saturating_mul(3) / 4).max(1);
+            config.memory_limit_bytes = config.memory_limit_bytes.min(host_budget);
+        }
+        config
+    }
+}
+
+const UNLIMITED_CGROUP_MEMORY_BYTES: u64 = 1 << 60;
+const MEBIBYTE: u64 = 1024 * 1024;
+
+/// Parses a cgroup v2 `memory.max` or v1 `memory.limit_in_bytes` value.
+/// `max`, zero and the v1 "unlimited" sentinels (2^60 and above) mean no limit.
+pub fn parse_cgroup_memory_limit(text: &str) -> Option<u64> {
+    let value = text.trim().parse::<u64>().ok()?;
+    (value > 0 && value < UNLIMITED_CGROUP_MEMORY_BYTES).then_some(value)
+}
+
+/// The smallest memory limit the process can see: cgroup v2 and v1 limits on
+/// Linux and the AWS Lambda function size anywhere. Detected once per process.
+pub fn container_memory_limit_bytes() -> Option<u64> {
+    static DETECTED: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    *DETECTED.get_or_init(|| {
+        detect_container_memory_limit(
+            |path| std::fs::read_to_string(path).ok(),
+            std::env::var("AWS_LAMBDA_FUNCTION_MEMORY_SIZE").ok(),
+        )
+    })
+}
+
+fn detect_container_memory_limit(
+    read: impl Fn(&str) -> Option<String>,
+    lambda_mebibytes: Option<String>,
+) -> Option<u64> {
+    let cgroup_files: &[&str] = if cfg!(target_os = "linux") {
+        &[
+            "/sys/fs/cgroup/memory.max",
+            "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+        ]
+    } else {
+        &[]
+    };
+    let lambda = lambda_mebibytes
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .and_then(|value| value.checked_mul(MEBIBYTE));
+    cgroup_files
+        .iter()
+        .filter_map(|path| read(path).as_deref().and_then(parse_cgroup_memory_limit))
+        .chain(lambda)
+        .min()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -1206,5 +1266,54 @@ mod tests {
                 .unwrap(),
             strict
         );
+    }
+
+    #[test]
+    fn cgroup_memory_limits_parse_only_finite_values() {
+        assert_eq!(parse_cgroup_memory_limit("max"), None);
+        assert_eq!(parse_cgroup_memory_limit("max\n"), None);
+        assert_eq!(parse_cgroup_memory_limit("536870912\n"), Some(512 * MEBIBYTE));
+        assert_eq!(parse_cgroup_memory_limit("0"), None);
+        assert_eq!(parse_cgroup_memory_limit("garbage"), None);
+        assert_eq!(parse_cgroup_memory_limit(&(1u64 << 60).to_string()), None);
+        assert_eq!(parse_cgroup_memory_limit("9223372036854771712"), None);
+        assert_eq!(
+            parse_cgroup_memory_limit(&((1u64 << 60) - 1).to_string()),
+            Some((1 << 60) - 1)
+        );
+    }
+
+    #[test]
+    fn container_memory_detection_takes_the_smallest_limit() {
+        let files = |path: &str| match path {
+            "/sys/fs/cgroup/memory.max" => Some("max\n".to_string()),
+            "/sys/fs/cgroup/memory/memory.limit_in_bytes" => Some("1073741824\n".to_string()),
+            _ => None,
+        };
+        let detected = detect_container_memory_limit(files, Some("2048".into()));
+        if cfg!(target_os = "linux") {
+            assert_eq!(detected, Some(1024 * MEBIBYTE));
+        } else {
+            assert_eq!(detected, Some(2048 * MEBIBYTE));
+        }
+        assert_eq!(
+            detect_container_memory_limit(|_| None, Some("512".into())),
+            Some(512 * MEBIBYTE)
+        );
+        assert_eq!(detect_container_memory_limit(|_| None, Some("0".into())), None);
+        assert_eq!(detect_container_memory_limit(|_| None, None), None);
+    }
+
+    #[test]
+    fn host_clamp_never_raises_the_configured_budget() {
+        let config = ComputeConfig::default();
+        let clamped = config.clamped_to_container(Some(1024 * MEBIBYTE));
+        assert_eq!(clamped.memory_limit_bytes, 768 * MEBIBYTE);
+        assert_eq!(clamped.backend, config.backend);
+        let roomy = config.clamped_to_container(Some(64 * 1024 * MEBIBYTE));
+        assert_eq!(roomy.memory_limit_bytes, config.memory_limit_bytes);
+        assert_eq!(config.clamped_to_container(None), config);
+        assert!(config.for_host().memory_limit_bytes <= config.memory_limit_bytes);
+        assert!(config.clamped_to_container(Some(1)).validate().is_ok());
     }
 }

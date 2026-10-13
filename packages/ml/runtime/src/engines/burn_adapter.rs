@@ -152,6 +152,17 @@ pub fn pretrained_source_features(
     Ok(output)
 }
 
+/// Spatial features from a pretrained source whose blob bytes come from outside
+/// a ledger, such as a published model folder. It never checks a project id.
+pub fn pretrained_features_from_parts(
+    _source: &PretrainedSource,
+    _bytes: &[u8],
+    _input: &TensorData,
+    _compute: &ComputeConfig,
+) -> Result<TensorData> {
+    Err(engine_error("pretrained_features_from_parts lands in L3"))
+}
+
 /// Resolve an initialization model within the owning project before admitting training.
 pub fn validate_burn_pretrained_source(
     repository: &TrainingRepository,

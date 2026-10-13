@@ -108,6 +108,18 @@ pub fn predict_sam2_source(
         .map_err(engine_error)
 }
 
+/// SAM 2 prediction from a source whose blob bytes come from outside a ledger,
+/// such as a published model folder. It never checks a project id.
+pub fn predict_sam2_from_parts(
+    _source: &PretrainedSource,
+    _bytes: &[u8],
+    _images: &TensorData,
+    _prompts: &[burn::Sam2Prompt],
+    _compute: &ComputeConfig,
+) -> Result<burn::Sam2Prediction> {
+    Err(engine_error("predict_sam2_from_parts lands in L3"))
+}
+
 /// Run a separate SAM fine-tune and publish its completed weights as an immutable source.
 /// Cancellation leaves the original source untouched and does not publish a partial result.
 pub fn fine_tune_sam2_source(

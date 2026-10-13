@@ -206,6 +206,18 @@ impl LoadedArtifactPredictor {
         })
     }
 
+    /// Loads an artifact whose blob bytes come from outside a ledger, such as a
+    /// published model folder. It never checks a project id.
+    pub fn from_parts(
+        _artifact: ModelArtifact,
+        _bytes: &[u8],
+        _compute: &ComputeConfig,
+    ) -> Result<Self> {
+        Err(engine_error(
+            "LoadedArtifactPredictor::from_parts lands in L3",
+        ))
+    }
+
     pub fn artifact(&self) -> &ModelArtifact {
         &self.artifact
     }
@@ -382,6 +394,12 @@ impl LoadedArtifactPredictor {
         }
         self.predict(input)
     }
+}
+
+/// Applies the repository blob rules (`read_blob_limited`) to bytes read from
+/// anywhere else: reference shape, size bounds, exact length and sha256.
+pub fn verify_artifact_bytes(_blob: &BlobRef, _bytes: &[u8], _maximum_bytes: u64) -> Result<()> {
+    Err(engine_error("verify_artifact_bytes lands in L3"))
 }
 
 /// Memory one EfficientAD image adds beyond the workspace: its f32 input and the three

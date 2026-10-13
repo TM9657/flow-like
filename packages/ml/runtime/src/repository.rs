@@ -42,6 +42,26 @@ CREATE TABLE IF NOT EXISTS deployments(id TEXT PRIMARY KEY, scope TEXT NOT NULL,
 CREATE TABLE IF NOT EXISTS deployment_history(id TEXT NOT NULL, generation INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(id,generation));
 ";
 
+pub const LEDGER_DATABASE_FILE: &str = "jobs.sqlite";
+pub const LEDGER_BLOB_DIR: &str = "jobs.artifacts";
+
+/// One file of a ledger snapshot folder, relative to that folder. Blob files are
+/// `jobs.artifacts/{sha}.blob`.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LedgerSnapshotFile {
+    pub file: String,
+    pub sha256: String,
+    pub bytes: u64,
+}
+
+/// A self-contained copy of a ledger: a single-file database plus every blob it references.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LedgerSnapshot {
+    pub database: LedgerSnapshotFile,
+    pub blobs: Vec<LedgerSnapshotFile>,
+    pub project_ids: BTreeSet<String>,
+}
+
 /// Cloneable handle. Each operation opens its own connection, so transaction tests cover
 /// competing processes as well as threads. Artifacts live beside the SQLite ledger.
 #[derive(Clone, Debug)]
@@ -1788,6 +1808,42 @@ impl TrainingRepository {
         deployment.updated_at_ms = at_ms;
         save_deployment(&tx, &deployment)?;
         Ok(deployment)
+    }
+
+    /// Writes a consistent single-file copy of the ledger and its referenced blobs
+    /// into the empty `directory`.
+    pub fn snapshot_to(&self, _directory: &Path) -> Result<LedgerSnapshot> {
+        Err(invalid("TrainingRepository::snapshot_to lands in L3"))
+    }
+
+    /// Checks a snapshot folder read-only: schema, integrity and every referenced blob,
+    /// with all files together at most `maximum_bytes`.
+    pub fn verify_snapshot(_directory: &Path, _maximum_bytes: u64) -> Result<LedgerSnapshot> {
+        Err(invalid("TrainingRepository::verify_snapshot lands in L3"))
+    }
+
+    /// Installs a verified snapshot as the ledger at `destination` without replacing
+    /// anything; `Error::Conflict` when the ledger or its blob directory exists.
+    pub fn install_snapshot(_directory: &Path, _destination: &Path) -> Result<()> {
+        Err(invalid("TrainingRepository::install_snapshot lands in L3"))
+    }
+
+    /// Distinct project ids named anywhere in the ledger.
+    pub fn project_ids(&self) -> Result<BTreeSet<String>> {
+        Err(invalid("TrainingRepository::project_ids lands in L3"))
+    }
+
+    /// Copies a pretrained source from another ledger under the same id with
+    /// `project_id` rewritten; idempotent for an equal blob, `Error::Conflict` otherwise.
+    pub fn adopt_pretrained_source(
+        &self,
+        _from: &TrainingRepository,
+        _source_id: &str,
+        _project_id: &str,
+    ) -> Result<PretrainedSource> {
+        Err(invalid(
+            "TrainingRepository::adopt_pretrained_source lands in L3",
+        ))
     }
 }
 
