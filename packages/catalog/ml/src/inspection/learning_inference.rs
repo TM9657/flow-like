@@ -3,6 +3,7 @@ use crate::inspection::{
     auto_training_tables::{
         FeatureSource, TableMapping, TablePreprocessing, raw_input_digest, transform_table_rows,
     },
+    cancellation::CancelFlag,
 };
 use flow_like_ml_core::{Annotation, InspectionSpec, LabelProvenance, Sample, TensorData};
 use flow_like_ml_runtime::{
@@ -102,6 +103,23 @@ fn original_sample(
     sample.stream_id = stream.into();
     Ok(sample)
 }
+/// Canary replay rebuilds each observation from its raw row, so unusable rows are rejected when
+/// they are observed rather than when an audit replays them.
+pub(super) fn validate_canary_sample(
+    observation: &LearningObservation,
+    mapping: &TableMapping,
+    stream: &str,
+) -> Result<()> {
+    original_sample(observation, mapping, stream)
+        .and_then(|sample| raw_input_digest(mapping, &observation.sample, &sample))
+        .map(|_| ())
+        .map_err(|error| {
+            anyhow!(
+                "Observation '{}' cannot be replayed for canary audits: {error}",
+                observation.sample_id
+            )
+        })
+}
 fn has_windows(preprocessing: &TablePreprocessing) -> bool {
     match preprocessing {
         TablePreprocessing::Engineered {
@@ -186,7 +204,11 @@ fn reviewed_sample(
     })
 }
 
-pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject) -> Result<()> {
+pub(super) fn audit_canary(
+    repo: &TrainingRepository,
+    project: &LearningProject,
+    cancel: &CancelFlag,
+) -> Result<()> {
     if project.state != LearningState::Canary {
         return Ok(());
     }
@@ -202,7 +224,12 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
     let budget = &template.dataset.budget;
     budget.validate()?;
     let started = Instant::now();
-    let check_time = || -> Result<()> {
+    let check = || -> Result<()> {
+        if cancel.is_cancelled() {
+            return Err(anyhow!(
+                "Canary replay was cancelled; saved predictions will resume next tick"
+            ));
+        }
         if started.elapsed().as_millis() > template.budget.worker_limits.maximum_duration_ms as u128
         {
             return Err(anyhow!(
@@ -251,7 +278,7 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
     .into_iter()
     .flatten()
     {
-        check_time()?;
+        check()?;
         let artifact = repo.get_artifact(artifact_id)?;
         if artifact.stream != project.request.stream {
             return Err(anyhow!(
@@ -285,12 +312,17 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
         let mut bytes = 0usize;
         let mut rows = Vec::with_capacity(history.len());
         for observation in &history {
-            check_time()?;
-            original_sample(
+            check()?;
+            validate_canary_sample(
                 observation,
                 &template.dataset.mapping,
                 &project.request.stream.stream_id,
-            )?;
+            )
+            .map_err(|error| {
+                anyhow!(
+                    "{error}. Observations are immutable; reject the candidate to end this canary"
+                )
+            })?;
             bytes = bytes
                 .checked_add(flow_like_types::json::to_vec(&observation.sample)?.len())
                 .ok_or_else(|| anyhow!("Canary byte count overflow"))?;
@@ -307,7 +339,7 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
             if !cohort.contains(&observation.sample_id) {
                 continue;
             }
-            check_time()?;
+            check()?;
             let review = reviews.get(&observation.sample_id).ok_or_else(|| {
                 anyhow!(
                     "Canary sample '{}' needs an available independent review",
@@ -358,14 +390,16 @@ pub(super) fn audit_canary(repo: &TrainingRepository, project: &LearningProject)
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn reviewed_canary_rows_preserve_raw_identity_and_use_the_reviewed_target() {
-        let mapping: TableMapping = flow_like_types::json::from_value(json!({
+    fn quality_mapping() -> TableMapping {
+        flow_like_types::json::from_value(json!({
             "row_id":"id","group_id":"group","timestamp_ms":"time",
             "features":{"kind":"tabular","options":{"numeric_columns":["x"],"categorical_columns":[]}},
             "target":{"kind":"column","column":"target"},"provenance":{"kind":"measured","source":"gauge"}
-        })).unwrap();
-        let observation = LearningObservation {
+        }))
+        .unwrap()
+    }
+    fn part_observation() -> LearningObservation {
+        LearningObservation {
             sample_id: "part".into(),
             group_id: "batch".into(),
             captured_at_ms: 10,
@@ -374,7 +408,30 @@ mod tests {
             embedding: vec![],
             slices: BTreeMap::new(),
             sample: json!({"id":"part","group":"batch","time":10,"x":12.,"target":"pass"}),
-        };
+        }
+    }
+    #[test]
+    fn canary_observations_must_rebuild_their_raw_identity_when_observed() {
+        let mapping = quality_mapping();
+        let observation = part_observation();
+        validate_canary_sample(&observation, &mapping, "stream").unwrap();
+        let mut missing = observation.clone();
+        missing.sample = json!({});
+        let error = validate_canary_sample(&missing, &mapping, "stream")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("'part'"), "{error}");
+        let mut sensor_time = observation.clone();
+        sensor_time.captured_at_ms = 11;
+        assert!(validate_canary_sample(&sensor_time, &mapping, "stream").is_err());
+        let mut regrouped = observation;
+        regrouped.group_id = "other".into();
+        assert!(validate_canary_sample(&regrouped, &mapping, "stream").is_err());
+    }
+    #[test]
+    fn reviewed_canary_rows_preserve_raw_identity_and_use_the_reviewed_target() {
+        let mapping = quality_mapping();
+        let observation = part_observation();
         let review = LearningReview {
             sample_id: "part".into(),
             annotation: json!({"kind":"class","class_id":1}),

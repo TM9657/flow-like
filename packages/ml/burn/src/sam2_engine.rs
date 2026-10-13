@@ -890,7 +890,12 @@ mod tests {
             fs::create_dir(directory.path().join(name)).unwrap();
             fs::write(directory.path().join(name).join("model.bpk"), b"weights").unwrap();
         }
-        commit(directory.path(), &mut state, "sam2-checkpoint-1-test".into()).unwrap();
+        commit(
+            directory.path(),
+            &mut state,
+            "sam2-checkpoint-1-test".into(),
+        )
+        .unwrap();
         assert_eq!(
             crate::tests::checkpoint_directories(directory.path(), "sam2-checkpoint-"),
             vec!["sam2-checkpoint-1-test".to_string()]
@@ -899,7 +904,12 @@ mod tests {
             read_state(directory.path()).unwrap().checkpoint,
             "sam2-checkpoint-1-test"
         );
-        commit(directory.path(), &mut state, "sam2-checkpoint-1-test".into()).unwrap();
+        commit(
+            directory.path(),
+            &mut state,
+            "sam2-checkpoint-1-test".into(),
+        )
+        .unwrap();
         assert!(
             directory
                 .path()

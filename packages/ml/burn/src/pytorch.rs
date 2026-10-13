@@ -57,6 +57,15 @@ pub(crate) fn convert_pytorch_weights(
     }
     let reader = PytorchReader::new(checkpoint.path())
         .map_err(|error| Error::Record(format!("Invalid PyTorch weights: {error}")))?;
+    // Each real tensor is one torch.Tensor leaf and one uniquely named reader entry. A forged
+    // leaf passes the entry check above, and a real tensor elsewhere could supply its name.
+    let typed = tensor_typed_leaves(&metadata);
+    if typed != reader.len() {
+        return Err(Error::Invalid(format!(
+            "PyTorch checkpoint holds values typed torch.Tensor that are not tensors ({typed} typed, {} readable)",
+            reader.len()
+        )));
+    }
     let mut total = 0u64;
     let mut tensors = Vec::with_capacity(selected.len());
     let mut names = selected
@@ -136,6 +145,21 @@ pub(crate) fn convert_pytorch_weights(
         prefix.trim_end_matches('.')
     };
     Ok((converted, format!("pytorch_zip:{selected}")))
+}
+
+/// Values typed torch.Tensor in the dicts and lists the reader collects tensors from.
+fn tensor_typed_leaves(root: &PickleValue) -> usize {
+    let mut pending = vec![root];
+    let mut count = 0;
+    while let Some(value) = pending.pop() {
+        match value {
+            PickleValue::Dict(entries) => pending.extend(entries.values()),
+            PickleValue::List(items) => pending.extend(items),
+            PickleValue::Unsupported(kind) if kind == "torch.Tensor" => count += 1,
+            _ => {}
+        }
+    }
+    count
 }
 
 fn validate_module_metadata(value: &PickleValue) -> Result<()> {
@@ -336,16 +360,15 @@ mod tests {
         let mut pickle = vec![0x80, 2, b'}', b'('];
         for field in section.split('.').filter(|field| !field.is_empty()) {
             string(&mut pickle, field);
-            pickle.extend([b'}', b'(']);
+            pickle.extend(b"}(");
         }
         view(&mut pickle, "linear.weight", 1, 0, elements, 0);
         if extra_value {
             string(&mut pickle, "unexpected");
             integer(&mut pickle, 3);
         }
-        for _ in 0..=section.split('.').filter(|field| !field.is_empty()).count() {
-            pickle.push(b'u');
-        }
+        let depth = section.split('.').filter(|field| !field.is_empty()).count();
+        pickle.extend(std::iter::repeat_n(b'u', depth + 1));
         pickle.push(b'.');
         archive(&pickle, &3.5f32.to_le_bytes(), None, &[])
     }
@@ -355,7 +378,7 @@ mod tests {
         for index in 0..views {
             view(&mut pickle, &format!("view{index}"), elements, index, 1, 1);
         }
-        pickle.extend([b'u', b'.']);
+        pickle.extend(b"u.");
         let storage = (0..elements)
             .flat_map(|value| (value as f32).to_le_bytes())
             .collect::<Vec<_>>();
@@ -505,6 +528,31 @@ mod tests {
                 .to_string()
                 .contains("import read limit")
         );
+    }
+
+    #[test]
+    fn rejects_forged_tensor_leaves_whose_name_a_real_tensor_supplies() {
+        // {"model": {"linear.weight": forged}, "model.linear.weight": tensor}: the forged entry
+        // passes the per-entry check, and the import would read the tensor outside the dict.
+        for forged in [
+            b"ctorch\nTensor\n".as_slice(),
+            b"ctorch\nTensor\n)R".as_slice(),
+        ] {
+            let mut pickle = vec![0x80, 2, b'}', b'('];
+            string(&mut pickle, "model");
+            pickle.extend(b"}(");
+            string(&mut pickle, "linear.weight");
+            pickle.extend(forged);
+            pickle.push(b'u');
+            view(&mut pickle, "model.linear.weight", 1, 0, 2, 0);
+            pickle.extend(b"u.");
+            let bytes = archive(&pickle, &3.5f32.to_le_bytes(), None, &[]);
+            let error = convert_pytorch_weights(&bytes, 1024 * 1024).unwrap_err();
+            assert!(
+                error.to_string().contains("that are not tensors"),
+                "{error}"
+            );
+        }
     }
 
     #[test]

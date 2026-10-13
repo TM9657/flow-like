@@ -17,11 +17,17 @@ const BLOB_STORE_LOCK: &str = "blob-store";
 /// Checkpoints that a resume or a successive-halving continuation can still read.
 const LIVE_CHECKPOINTS: &str = "SELECT json_extract(j.body,'$.checkpoint.blob.path'),NULL FROM jobs j LEFT JOIN experiment_trials t ON t.job_id=j.id WHERE CASE WHEN t.experiment_id IS NULL THEN j.status<>'succeeded' ELSE j.status IN ('queued','running','cancel_requested','paused','interrupted') OR t.experiment_id IN (SELECT id FROM experiments WHERE json_extract(body,'$.selected_trial_id') IS NULL AND json_extract(body,'$.status') IN ('running','cancel_requested','cancelled')) END";
 
+/// How many `eligible_samples` (?1 scope, ?2 time) lie outside `triggered_samples`. Consumed
+/// samples are dropped first; the annotation_label_availability index answers the label-time
+/// lookup, so no annotation body is read.
+const NEW_SAMPLE_COUNT: &str = "WITH pending AS MATERIALIZED (SELECT a.sample_id FROM accepted a WHERE a.scope=?1 AND NOT EXISTS(SELECT 1 FROM triggered_samples t WHERE t.scope=?1 AND t.sample_id=a.sample_id)) SELECT count(*) FROM pending p WHERE (SELECT n.accepted FROM annotations n WHERE n.scope=?1 AND n.sample_id=p.sample_id AND json_extract(n.body,'$.label_available_at_ms')<=?2 ORDER BY n.revision DESC LIMIT 1)=1";
+
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS ml_meta(version INTEGER NOT NULL);
 INSERT INTO ml_meta(version) SELECT 1 WHERE NOT EXISTS(SELECT 1 FROM ml_meta);
 CREATE TABLE IF NOT EXISTS streams(scope TEXT PRIMARY KEY, next_sequence INTEGER NOT NULL DEFAULT 0, last_trigger_sequence INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS annotations(scope TEXT NOT NULL, sample_id TEXT NOT NULL, revision INTEGER NOT NULL, accepted INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(scope,sample_id,revision));
+CREATE INDEX IF NOT EXISTS annotation_label_availability ON annotations(scope,sample_id,revision,accepted,json_extract(body,'$.label_available_at_ms'));
 CREATE TABLE IF NOT EXISTS accepted(scope TEXT NOT NULL, sample_id TEXT NOT NULL, sequence INTEGER NOT NULL, PRIMARY KEY(scope,sample_id), UNIQUE(scope,sequence));
 CREATE TABLE IF NOT EXISTS snapshots(id TEXT PRIMARY KEY, scope TEXT NOT NULL, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS triggered_samples(scope TEXT NOT NULL, sample_id TEXT NOT NULL, snapshot_id TEXT NOT NULL, PRIMARY KEY(scope,sample_id));
@@ -68,7 +74,6 @@ impl TrainingRepository {
         let mut connection = repo.connection()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        verify_schema_objects(&tx)?;
         tx.execute_batch(SCHEMA)?;
         crate::experiment_repository::initialize_experiments(&tx)?;
         crate::learning_repository::initialize_learning(&tx)?;
@@ -78,6 +83,8 @@ impl TrainingRepository {
                 "unsupported training ledger version {version}"
             )));
         }
+        // After migrations, so they may drop obsolete objects; a rejection rolls them back.
+        verify_schema_objects(&tx)?;
         tx.commit()?;
         if let Ok(exclusive) = LocalRunLock::acquire(&repo, BLOB_STORE_LOCK) {
             repo.sweep_blob_store(&exclusive, None);
@@ -242,6 +249,13 @@ impl TrainingRepository {
         Ok(serde_json::from_str(&body)?)
     }
 
+    /// Samples Train After N has not consumed yet: accepted, with an accepted latest revision
+    /// whose label is available at `as_of_ms`, and outside every earlier trigger. Label times
+    /// come from an index, so no sample body is read.
+    pub fn count_new_training_samples(&self, stream: &StreamKey, as_of_ms: i64) -> Result<usize> {
+        count_new_samples(&self.connection()?, &scope(stream)?, as_of_ms)
+    }
+
     /// Counts distinct accepted samples since the last trigger. Reserving the watermark,
     /// immutable snapshot and queued job is one transaction. Failure is retried by resume_job.
     pub fn trigger_after_n(
@@ -266,28 +280,24 @@ impl TrainingRepository {
         }
         let scope = scope(stream)?;
         let mut connection = self.connection()?;
+        // A stream short of N new samples returns before taking the write lock.
+        if count_new_samples(&connection, &scope, at_ms)? < n {
+            return Ok(None);
+        }
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let active: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM jobs WHERE scope=? AND status IN ('queued','running','cancel_requested','paused','interrupted'))", [&scope], |r| r.get(0))?;
-        if active {
+        if active || count_new_samples(&tx, &scope, at_ms)? < n {
             return Ok(None);
         }
         let samples = eligible_samples(&tx, &scope, at_ms)?;
-        let mut new_count = 0;
-        for (_, sample) in &samples {
-            let seen: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM triggered_samples WHERE scope=? AND sample_id=?)",
-                params![scope, sample.id],
-                |r| r.get(0),
-            )?;
-            new_count += usize::from(!seen);
-        }
-        if new_count < n {
-            return Ok(None);
-        }
         if !partitions_ready(&samples, &policy)? {
             return Ok(None);
         }
-        let mut snapshot = create_snapshot(&tx, stream, policy, at_ms)?;
+        let consumed: Vec<String> = samples
+            .iter()
+            .map(|(_, sample)| sample.id.clone())
+            .collect();
+        let mut snapshot = snapshot_from_samples(&tx, stream, policy, at_ms, samples)?;
         if normal_only(&request.recipe) {
             for partition in [&mut snapshot.train, &mut snapshot.validation] {
                 partition.retain(|sample| {
@@ -344,8 +354,8 @@ impl TrainingRepository {
             "UPDATE streams SET last_trigger_sequence=? WHERE scope=?",
             params![snapshot.cutoff_sequence, scope],
         )?;
-        for (_, sample) in &samples {
-            tx.execute("INSERT OR IGNORE INTO triggered_samples(scope,sample_id,snapshot_id) VALUES (?,?,?)",params![scope,sample.id,job.snapshot_id])?;
+        for sample_id in &consumed {
+            tx.execute("INSERT OR IGNORE INTO triggered_samples(scope,sample_id,snapshot_id) VALUES (?,?,?)",params![scope,sample_id,job.snapshot_id])?;
         }
         tx.commit()?;
         Ok(Some(job))
@@ -778,18 +788,95 @@ impl TrainingRepository {
         Ok(job)
     }
 
+    /// Replaces the compute settings of a lifecycle job that waits or stopped, so its next
+    /// admission uses them. Its status is kept, and a checkpoint written for the previous
+    /// request stays resumable.
+    pub fn reconfigure_job_compute(
+        &self,
+        job_id: &str,
+        compute: Value,
+        at_ms: i64,
+    ) -> Result<TrainingJob> {
+        self.writable()?;
+        if !compute.is_object() {
+            return Err(invalid("job compute settings must be a JSON object"));
+        }
+        // A worker admitting a queued job holds its lock and would run the request it read.
+        let Some(_idle) = self.stopped_worker_lock(job_id) else {
+            return Err(Error::Conflict(format!(
+                "a worker is starting or running job {job_id}; change its compute after it stops"
+            )));
+        };
+        let mut connection = self.connection()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut job: TrainingJob = read_json(&tx, "SELECT body FROM jobs WHERE id=?", job_id)?;
+        if experiment_trial(&tx, job_id)? {
+            return Err(Error::Conflict(format!(
+                "job {job_id} is an experiment trial; its experiment sets its compute"
+            )));
+        }
+        if !matches!(
+            job.status,
+            JobStatus::Queued | JobStatus::Paused | JobStatus::Interrupted
+        ) {
+            return Err(Error::Conflict(format!(
+                "job {job_id} is {:?}; only queued, paused or interrupted jobs can change compute",
+                job.status
+            )));
+        }
+        rewrite_job_request(&mut job, |request| {
+            request.compute = compute;
+            Ok(())
+        })?;
+        job.generation += 1;
+        job.error = None;
+        job.updated_at_ms = at_ms;
+        save_job(&tx, &job)?;
+        tx.commit()?;
+        Ok(job)
+    }
+
     pub fn fail_job(&self, lease: &JobLease, error: impl Into<String>, at_ms: i64) -> Result<()> {
         self.writable()?;
         self.update_leased(lease, at_ms, |job| {
-            job.status = if job.status == JobStatus::CancelRequested {
-                JobStatus::Cancelled
-            } else {
-                JobStatus::Failed
-            };
-            job.error = Some(error.into());
-            job.lease_expires_at_ms = None;
+            settle_failed(job, error.into());
             Ok(())
         })
+    }
+
+    /// A run that exhausted device memory after publishing a checkpoint is Interrupted with
+    /// its reservation released, so it resumes from that checkpoint. Runs without a checkpoint
+    /// fail like `fail_job`, as do experiment trials: their controller fails the trial anyway
+    /// and would charge an Interrupted attempt its whole reserved training slice.
+    pub(crate) fn settle_out_of_memory(
+        &self,
+        lease: &JobLease,
+        error: &str,
+        at_ms: i64,
+    ) -> Result<()> {
+        self.writable()?;
+        let mut conn = self.connection()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut job: TrainingJob =
+            read_json(&tx, "SELECT body FROM jobs WHERE id=?", &lease.job_id)?;
+        validate_lease(&job, lease, at_ms)?;
+        if job.status == JobStatus::Running
+            && job.checkpoint.is_some()
+            && !experiment_trial(&tx, &job.id)?
+        {
+            settle_stopped(&mut job, JobStatus::Interrupted, at_ms);
+            job.error = Some(error.into());
+            tx.execute(
+                "DELETE FROM resource_reservations WHERE job_id=?",
+                [&job.id],
+            )?;
+        } else {
+            settle_failed(&mut job, error.into());
+            job.updated_at_ms = at_ms;
+        }
+        save_job(&tx, &job)?;
+        tx.commit()?;
+        Ok(())
     }
 
     fn update_leased(
@@ -1075,12 +1162,11 @@ impl TrainingRepository {
             self.read_blob(&blob)?;
             return Ok(blob);
         }
-        let path = self.blob_dir.join(format!("{}.part", id()));
+        let staging = StagingFile(self.blob_dir.join(format!("{}.part", id())));
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&path)?;
-        let staging = StagingFile(path);
+            .open(&staging.0)?;
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
@@ -1144,10 +1230,13 @@ impl TrainingRepository {
             };
             let stale = name.ends_with(".part")
                 || referenced.is_some_and(|live| is_blob_name(name) && !live.contains(name));
+            if !stale {
+                continue;
+            }
             let Ok(metadata) = entry.metadata() else {
                 continue;
             };
-            if stale && metadata.is_file() && std::fs::remove_file(entry.path()).is_ok() {
+            if metadata.is_file() && std::fs::remove_file(entry.path()).is_ok() {
                 freed = freed.saturating_add(metadata.len());
             }
         }
@@ -1230,14 +1319,17 @@ impl TrainingRepository {
     ) -> Result<EvaluationReport> {
         self.writable()?;
         let mut conn = self.connection()?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        // Artifacts, snapshots and their lineage are immutable: read them before the write lock.
         let artifact: ModelArtifact =
-            read_json(&tx, "SELECT body FROM artifacts WHERE id=?", artifact_id)?;
+            read_json(&conn, "SELECT body FROM artifacts WHERE id=?", artifact_id)?;
         let snapshot: DatasetSnapshot = read_json(
-            &tx,
+            &conn,
             "SELECT body FROM snapshots WHERE id=?",
             &artifact.snapshot_id,
         )?;
+        #[cfg(feature = "native")]
+        let consumed = crate::engines::ConsumedGroups::load(&conn, &artifact, &snapshot)?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut statement =
             tx.prepare("SELECT body FROM predictions WHERE artifact_id=? ORDER BY sample_id")?;
         let mut predictions: Vec<PredictionRecord> = statement
@@ -1264,18 +1356,8 @@ impl TrainingRepository {
                 "prediction evidence was not available at evaluation time",
             ));
         }
-        let training_groups: std::collections::HashSet<_> = snapshot
-            .train
-            .iter()
-            .chain(&snapshot.validation)
-            .map(|s| s.group_id.as_str())
-            .collect();
-        let mut audited = 0usize;
-        let mut correct = 0usize;
         let mut teacher_count = 0usize;
         let mut teacher_correct = 0usize;
-        let mut supports: BTreeMap<String, (usize, usize)> = BTreeMap::new();
-        #[cfg(feature = "native")]
         let mut truths = Vec::new();
         for prediction in &predictions {
             if let Some(teacher) = &prediction.teacher_label {
@@ -1291,27 +1373,53 @@ impl TrainingRepository {
                 continue;
             }
             // A withdrawn annotation no longer provides audited truth.
-            let Some(sample) = current_prediction_truth(&tx, &artifact.stream, prediction)? else {
+            let Some(mut sample) = current_prediction_truth(&tx, &artifact.stream, prediction)?
+            else {
                 continue;
             };
-            if training_groups.contains(sample.group_id.as_str()) {
+            // Only the label is scored, and payloads can hold whole image tensors.
+            let actual = truth_label(&sample).map(str::to_owned);
+            sample.payload = Value::Null;
+            truths.push((prediction, sample, actual));
+        }
+        #[cfg(feature = "native")]
+        consumed.ensure_independent(truths.iter().map(|(_, sample, _)| sample))?;
+        #[cfg(not(feature = "native"))]
+        {
+            let training_groups: std::collections::HashSet<_> = snapshot
+                .train
+                .iter()
+                .chain(&snapshot.validation)
+                .map(|s| s.group_id.as_str())
+                .collect();
+            if let Some((_, sample, _)) = truths
+                .iter()
+                .find(|(_, sample, _)| training_groups.contains(sample.group_id.as_str()))
+            {
                 return Err(invalid(format!(
                     "sample {} shares a training/validation group",
                     sample.id
                 )));
             }
+        }
+        let mut audited = 0usize;
+        let mut correct = 0usize;
+        let mut supports: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+        #[cfg(feature = "native")]
+        let mut scored = Vec::new();
+        for (prediction, sample, actual) in truths {
             if sample.label_available_at_ms > at_ms {
                 return Err(invalid("evaluation truth was unavailable when recorded"));
             }
-            let Some(actual) = truth_label(&sample).map(str::to_owned) else {
+            let Some(actual) = actual else {
                 continue;
             };
-            let hit =
-                !prediction.failed && prediction.predicted_label.as_deref() == Some(actual.as_str());
+            let hit = !prediction.failed
+                && prediction.predicted_label.as_deref() == Some(actual.as_str());
             audited += 1;
             correct += usize::from(hit);
             #[cfg(feature = "native")]
-            truths.push((actual.clone(), prediction));
+            scored.push((actual.clone(), prediction));
             let counts = supports.entry(actual).or_default();
             counts.0 += 1;
             counts.1 += usize::from(hit);
@@ -1321,7 +1429,7 @@ impl TrainingRepository {
         metrics.insert("artifact_bytes".into(), artifact.blob.bytes as f64);
         #[cfg(feature = "native")]
         if let Some(labels) = artifact.manifest.get("labels").and_then(Value::as_array) {
-            metrics.extend(class_order_metrics(labels, &truths));
+            metrics.extend(class_order_metrics(labels, &scored));
         }
         metrics.insert(
             "accuracy_wilson_lower_95".into(),
@@ -1507,9 +1615,12 @@ impl TrainingRepository {
                 "evaluation evidence changed; evaluate again before promotion".into(),
             ));
         }
-        if report.truth_digest.as_deref()
-            != Some(evaluation_truth_digest(&tx, &artifact.stream, &evidence)?.as_str())
-        {
+        if !truth_digest_matches(
+            tx,
+            &artifact.stream,
+            &evidence,
+            report.truth_digest.as_deref(),
+        )? {
             return Err(Error::Conflict(
                 "accepted audit annotations changed; evaluate again before promotion".into(),
             ));
@@ -1651,18 +1762,56 @@ impl TrainingRepository {
     }
 }
 
-/// Withdrawn truth digests as null; a digest without withdrawals is unchanged.
+/// Digests the identity, provenance, target and acceptance of each prediction's current truth,
+/// so raw-row (`feature_row`) and transformed-input edits leave sealed evidence valid.
+/// Withdrawn truth digests as null.
 pub(crate) fn evaluation_truth_digest(
     conn: &Connection,
     stream: &StreamKey,
     predictions: &[PredictionRecord],
 ) -> Result<String> {
-    let truth = predictions
+    immutable_truth_digest(&evaluation_truths(conn, stream, predictions)?)
+}
+
+/// Whether a sealed truth digest still describes the predictions' truth. Reports sealed before
+/// truth digests left out mutable sample parts carry a digest of the full annotation bodies.
+pub(crate) fn truth_digest_matches(
+    conn: &Connection,
+    stream: &StreamKey,
+    predictions: &[PredictionRecord],
+    sealed: Option<&str>,
+) -> Result<bool> {
+    let Some(sealed) = sealed else {
+        return Ok(false);
+    };
+    let truths = evaluation_truths(conn, stream, predictions)?;
+    Ok(immutable_truth_digest(&truths)? == sealed
+        || digest(&serde_json::to_vec(&truths)?) == sealed)
+}
+
+fn evaluation_truths(
+    conn: &Connection,
+    stream: &StreamKey,
+    predictions: &[PredictionRecord],
+) -> Result<Vec<Option<TrainingSample>>> {
+    predictions
         .iter()
         .filter(|prediction| prediction.actual_source.is_some())
         .map(|prediction| current_prediction_truth(conn, stream, prediction))
+        .collect()
+}
+
+fn immutable_truth_digest(truths: &[Option<TrainingSample>]) -> Result<String> {
+    let immutable = truths
+        .iter()
+        .map(|truth| {
+            truth
+                .as_ref()
+                .map(crate::experiment_repository::immutable_sample)
+                .transpose()
+        })
         .collect::<Result<Vec<_>>>()?;
-    Ok(digest(&serde_json::to_vec(&truth)?))
+    Ok(digest(&serde_json::to_vec(&immutable)?))
 }
 
 /// The latest accepted annotation of the prediction's sample, which also replaces the truth
@@ -1804,8 +1953,7 @@ fn class_order_metrics(
             predicted.unwrap_or(if actual * 2 < classes { classes - 1 } else { 0 }) as u32
         })
         .collect();
-    if let Ok(ordinal) =
-        flow_like_ml_native::evaluation::ordinal_metrics(&actual, &ranked, classes)
+    if let Ok(ordinal) = flow_like_ml_native::evaluation::ordinal_metrics(&actual, &ranked, classes)
     {
         metrics.insert("mean_rank_error".into(), ordinal.mean_rank_error);
         metrics.insert("macro_rank_error".into(), ordinal.macro_rank_error);
@@ -2057,6 +2205,30 @@ fn save_job(tx: &Connection, job: &TrainingJob) -> Result<()> {
     }
     Ok(())
 }
+fn experiment_trial(connection: &Connection, job_id: &str) -> Result<bool> {
+    Ok(connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM experiment_trials WHERE job_id=?)",
+        [job_id],
+        |row| row.get(0),
+    )?)
+}
+/// A checkpoint written for the previous request stays resumable under the rewritten one; a
+/// checkpoint that already differed from it stays rejected at admission.
+pub(crate) fn rewrite_job_request(
+    job: &mut TrainingJob,
+    rewrite: impl FnOnce(&mut TrainingRequest) -> Result<()>,
+) -> Result<()> {
+    let previous = digest(&serde_json::to_vec(&job.request)?);
+    rewrite(&mut job.request)?;
+    if let Some(checkpoint) = job
+        .checkpoint
+        .as_mut()
+        .filter(|checkpoint| checkpoint.request_digest == previous)
+    {
+        checkpoint.request_digest = digest(&serde_json::to_vec(&job.request)?);
+    }
+    Ok(())
+}
 fn validate_lease(job: &TrainingJob, lease: &JobLease, at_ms: i64) -> Result<()> {
     if job.id != lease.job_id
         || job.generation != lease.generation
@@ -2084,6 +2256,17 @@ fn settle_stopped(job: &mut TrainingJob, status: JobStatus, at_ms: i64) {
     job.lease_owner = None;
     job.lease_expires_at_ms = None;
     job.updated_at_ms = at_ms;
+}
+
+/// A failure during a requested cancellation still ends as Cancelled.
+fn settle_failed(job: &mut TrainingJob, error: String) {
+    job.status = if job.status == JobStatus::CancelRequested {
+        JobStatus::Cancelled
+    } else {
+        JobStatus::Failed
+    };
+    job.error = Some(error);
+    job.lease_expires_at_ms = None;
 }
 
 /// Holders of the reservations that left a claim over budget.
@@ -2190,14 +2373,18 @@ fn expected_schema_objects() -> Result<&'static BTreeSet<(String, String)>> {
     connection.execute_batch(SCHEMA)?;
     crate::experiment_repository::initialize_experiments(&connection)?;
     crate::learning_repository::initialize_learning(&connection)?;
-    let mut statement =
-        connection.prepare("SELECT type,name FROM sqlite_master WHERE type IN ('table','index')")?;
+    let mut statement = connection
+        .prepare("SELECT type,name FROM sqlite_master WHERE type IN ('table','index')")?;
     let objects = statement
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?
         .collect::<rusqlite::Result<BTreeSet<_>>>()?;
     Ok(OBJECTS.get_or_init(|| objects))
+}
+
+fn count_new_samples(conn: &Connection, scope: &str, at_ms: i64) -> Result<usize> {
+    Ok(conn.query_row(NEW_SAMPLE_COUNT, params![scope, at_ms], |row| row.get(0))?)
 }
 
 fn eligible_samples(
@@ -2290,8 +2477,19 @@ fn create_snapshot(
     policy: SplitPolicy,
     at_ms: i64,
 ) -> Result<DatasetSnapshot> {
+    let samples = eligible_samples(tx, &scope(stream)?, at_ms)?;
+    snapshot_from_samples(tx, stream, policy, at_ms, samples)
+}
+
+/// `samples` are the stream's `eligible_samples` at `at_ms`, read in the same transaction.
+fn snapshot_from_samples(
+    tx: &Transaction<'_>,
+    stream: &StreamKey,
+    policy: SplitPolicy,
+    at_ms: i64,
+    samples: Vec<(i64, TrainingSample)>,
+) -> Result<DatasetSnapshot> {
     let scope = scope(stream)?;
-    let samples = eligible_samples(tx, &scope, at_ms)?;
     if samples.is_empty() {
         return Err(invalid("no accepted labels are available at snapshot time"));
     }
@@ -2701,5 +2899,176 @@ mod blob_store_tests {
                 .db_config(DbConfig::SQLITE_DBCONFIG_TRUSTED_SCHEMA)
                 .unwrap()
         );
+    }
+}
+
+#[cfg(test)]
+mod sample_count_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn annotation(index: usize, revision: u64, accepted: bool, label_at_ms: i64) -> TrainingSample {
+        TrainingSample {
+            id: format!("sample-{index}"),
+            annotation_revision: revision,
+            group_id: format!("group-{index}"),
+            captured_at_ms: 1,
+            label_available_at_ms: label_at_ms,
+            content_digest: format!("{index:064x}"),
+            source: LabelSource::Reviewed,
+            accepted,
+            payload: json!({"label":"normal","input":{"shape":[2],"values":[0.5,1.5]}}),
+        }
+    }
+
+    /// Train After N's former count: parse every eligible sample, then look up its trigger.
+    fn parsed_count(connection: &Connection, scope: &str, at_ms: i64) -> usize {
+        eligible_samples(connection, scope, at_ms)
+            .unwrap()
+            .iter()
+            .filter(|(_, sample)| {
+                !connection
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM triggered_samples WHERE scope=? AND sample_id=?)",
+                        rusqlite::params![scope, sample.id],
+                        |row| row.get::<_, bool>(0),
+                    )
+                    .unwrap()
+            })
+            .count()
+    }
+
+    #[test]
+    fn new_sample_count_matches_the_parsed_count_and_reads_label_times_from_the_index() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let stream = StreamKey {
+            project_id: "counts".into(),
+            stream_id: "line".into(),
+            inspection_version: "v1".into(),
+        };
+        for sample in [
+            annotation(0, 1, true, 10),
+            // Withdrawn once its second revision is available.
+            annotation(1, 1, true, 10),
+            annotation(1, 2, false, 20),
+            // Never accepted.
+            annotation(2, 1, false, 10),
+            // Accepted by a later revision.
+            annotation(3, 1, false, 10),
+            annotation(3, 2, true, 30),
+            // Labelled only at 50.
+            annotation(4, 1, true, 50),
+            // Consumed by an earlier trigger.
+            annotation(5, 1, true, 10),
+            // Relabelled, accepted throughout.
+            annotation(6, 1, true, 10),
+            annotation(6, 2, true, 40),
+        ] {
+            repo.record_sample(&stream, &sample).unwrap();
+        }
+        let stream_scope = scope(&stream).unwrap();
+        let connection = repo.connection().unwrap();
+        connection
+            .execute(
+                "INSERT INTO triggered_samples(scope,sample_id,snapshot_id) VALUES (?,'sample-5','earlier')",
+                [&stream_scope],
+            )
+            .unwrap();
+        for (at_ms, expected) in [(5, 0), (15, 3), (25, 2), (35, 3), (45, 3), (55, 4)] {
+            assert_eq!(
+                repo.count_new_training_samples(&stream, at_ms).unwrap(),
+                expected,
+                "at {at_ms}"
+            );
+            assert_eq!(
+                parsed_count(&connection, &stream_scope, at_ms),
+                expected,
+                "at {at_ms}"
+            );
+        }
+        let plan = connection
+            .prepare(&format!("EXPLAIN QUERY PLAN {NEW_SAMPLE_COUNT}"))
+            .unwrap()
+            .query_map(rusqlite::params![stream_scope, 0], |row| {
+                row.get::<_, String>(3)
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert!(
+            plan.iter()
+                .any(|step| step.contains("annotation_label_availability")),
+            "{plan:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod truth_digest_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn truth_digests_ignore_raw_row_edits_and_still_accept_full_body_seals() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let stream = StreamKey {
+            project_id: "truth".into(),
+            stream_id: "line".into(),
+            inspection_version: "v1".into(),
+        };
+        let recorded = TrainingSample {
+            id: "audited".into(),
+            annotation_revision: 1,
+            group_id: "lot".into(),
+            captured_at_ms: 1,
+            label_available_at_ms: 1,
+            content_digest: "a".repeat(64),
+            source: LabelSource::Reviewed,
+            accepted: true,
+            payload: json!({"label":"good","feature_row":{"temperature":20}}),
+        };
+        repo.record_sample(&stream, &recorded).unwrap();
+        let predictions = [PredictionRecord {
+            sample_id: recorded.id.clone(),
+            artifact_id: "model".into(),
+            predicted_label: Some("good".into()),
+            teacher_label: None,
+            actual_label: Some("good".into()),
+            actual_source: Some(LabelSource::Reviewed),
+            latency_ms: 1.,
+            failed: false,
+            recorded_at_ms: 2,
+            details: json!({}),
+        }];
+        let connection = repo.connection().unwrap();
+        let verifies = |sealed: Option<&str>| {
+            truth_digest_matches(&connection, &stream, &predictions, sealed).unwrap()
+        };
+        let sealed = evaluation_truth_digest(&connection, &stream, &predictions).unwrap();
+        let legacy = digest(&serde_json::to_vec(&[Some(&recorded)]).unwrap());
+        assert_ne!(sealed, legacy);
+        assert!(verifies(Some(sealed.as_str())) && verifies(Some(legacy.as_str())));
+        assert!(!verifies(None) && !verifies(Some("0".repeat(64).as_str())));
+
+        let mut edited = recorded.clone();
+        edited.payload["feature_row"] = json!({"temperature":21});
+        repo.record_prepared_sample(&stream, &edited).unwrap();
+        assert_eq!(
+            evaluation_truth_digest(&connection, &stream, &predictions).unwrap(),
+            sealed
+        );
+        assert!(verifies(Some(sealed.as_str())));
+        assert!(
+            !verifies(Some(legacy.as_str())),
+            "a full-body digest covers the raw row"
+        );
+
+        let mut relabelled = edited;
+        relabelled.annotation_revision = 2;
+        relabelled.payload["label"] = json!("defect");
+        repo.record_sample(&stream, &relabelled).unwrap();
+        assert!(!verifies(Some(sealed.as_str())));
     }
 }

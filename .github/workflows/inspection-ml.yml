@@ -49,6 +49,17 @@ jobs:
         run: cargo test --locked -p flow-like-ml-burn --features onnx-export onnx_export_requires_a_supported_graph_and_matching_shape
       - name: Metadata without training engines
         run: cargo check --locked -p flow-like-ml-burn -p flow-like-ml-runtime --no-default-features
+      - name: Vendored PyTorch checkpoint reader suite
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          TEST_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TEST_DIR"' EXIT
+          cp -R packages/vendor/pytorch-reader "$TEST_DIR/pytorch-reader"
+          # The crate is excluded from the workspace, so --locked cannot resolve its
+          # dev-dependencies. Seeding the workspace lock keeps the shipped versions.
+          cp Cargo.lock "$TEST_DIR/pytorch-reader/Cargo.lock"
+          cargo test --manifest-path "$TEST_DIR/pytorch-reader/Cargo.toml"
 
   catalog-integration:
     runs-on: ubuntu-latest
@@ -78,3 +89,5 @@ jobs:
           cargo test --locked -p flow-like-catalog-ml --features training-cpu --lib inspection::
           cargo test --locked -p flow-like-catalog-llm --lib llm::auto_training
           cargo test --locked -p flow-like-catalog-llm --lib llm::learning
+          cargo test --locked -p flow-like-catalog-llm --features training,flow-like-catalog-ml/training-cpu --lib llm::auto_training
+          cargo test --locked -p flow-like-catalog-llm --features training,flow-like-catalog-ml/training-cpu --lib llm::learning

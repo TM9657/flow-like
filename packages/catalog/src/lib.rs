@@ -427,6 +427,11 @@ fn runtime_implementation_available(node: &dyn NodeLogic) -> bool {
             cfg!(any(target_os = "linux", target_os = "windows"))
         }
         "ml_export_student_onnx" => cfg!(feature = "training-onnx-export"),
+        "ml_prompt_sam2"
+        | "ml_fine_tune_sam2"
+        | "ml_extract_pretrained_features"
+        | "ml_import_pretrained_vision"
+        | "ml_list_pretrained_vision" => cfg!(feature = "training-metadata"),
         "ml_read_opcua_sensor" => cfg!(feature = "package-industrial"),
         "ml_capture_genicam_frame" => cfg!(feature = "sensor-genicam"),
         "ai_audio_local_text_to_speech" => cfg!(feature = "local-tts"),
@@ -459,8 +464,16 @@ mod inspection_catalog_tests {
             "ml_create_learning_project",
             "ml_step_learning_project",
             "ml_route_learning_project",
+            "ml_prompt_sam2",
+            "ml_fine_tune_sam2",
+            "ml_extract_pretrained_features",
+            "ml_import_pretrained_vision",
+            "ml_list_pretrained_vision",
         ] {
             assert_eq!(has(name), cfg!(feature = "training-metadata"), "{name}");
+        }
+        for name in ["ml_training_readiness", "ml_preprocess_inspection_image"] {
+            assert!(has(name), "{name} runs without a training build");
         }
         assert_eq!(
             has("ml_export_student_onnx"),

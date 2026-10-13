@@ -175,7 +175,7 @@ jobs:
             tag="web-smoke:${GITHUB_SHA}"
             DOCKER_BUILDKIT=1 docker build --file "$recipe" --target builder --tag "$tag" .
             docker run --rm --entrypoint sh "$tag" -c \
-              'test -s out/device-crypto/flow_like_device_crypto_bg.wasm && test -s out/device-crypto/flow_like_device_crypto.js && test -s out/wordcraft/runtime.json && test -s out/wordcraft/host.js' \
+              'test -s out/device-crypto/flow_like_device_crypto_bg.wasm && test -s out/device-crypto/flow_like_device_crypto.js && test -s out/wordcraft/runtime.json && test -s out/wordcraft/host.js && for name in pdfcraft deckcraft gridcraft vectorcraft photocraft soundcraft filmcraft cadcraft designcraft; do test -s "out/craft/$name/runtime.json" || exit 1; done' \
               || { echo "${recipe} omitted a required browser runtime from its static export." >&2; exit 1; }
           done
 

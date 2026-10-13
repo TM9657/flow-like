@@ -1433,13 +1433,8 @@ impl FittedFeaturePipeline {
             for position in order {
                 deadline.check()?;
                 let previous_bytes = serialized_bytes(&result[position])?;
-                let update = stream.apply_step(
-                    index,
-                    &mut result[position],
-                    &deadline,
-                    (0, 0, 0),
-                    bytes,
-                )?;
+                let update =
+                    stream.apply_step(index, &mut result[position], &deadline, (0, 0, 0), bytes)?;
                 bytes = bytes
                     .checked_sub(previous_bytes)
                     .and_then(|value| value.checked_add(serialized_bytes(&result[position]).ok()?))
@@ -2357,9 +2352,10 @@ mod tests {
     #[test]
     fn feature_steps_reject_undeclared_and_metadata_inputs() {
         let mut policy = policy();
-        policy
-            .allowed_sources
-            .insert("side".into(), vec!["device".into(), "time".into(), "value".into()]);
+        policy.allowed_sources.insert(
+            "side".into(),
+            vec!["device".into(), "time".into(), "value".into()],
+        );
         let derive = |input: &str| FeaturePipeline {
             steps: vec![FeatureStep::DeriveColumns {
                 columns: vec![DerivedColumn {

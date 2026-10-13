@@ -84,10 +84,14 @@ function send(type, detail, bytes) {
 window.flowLikeCraftEmit = (type, detail, bytes) => {
 	const parsed = JSON.parse(detail);
 	if (type === "ready") document.getElementById("loading")?.remove();
-	if (type === "exported" && bytes.length > MAX_DOCUMENT_BYTES) {
+	const maxBytes = Math.min(
+		manifest?.maxBytes || MAX_DOCUMENT_BYTES,
+		MAX_DOCUMENT_BYTES,
+	);
+	if (type === "exported" && bytes.length > maxBytes) {
 		send("error", {
 			requestId: parsed.requestId,
-			error: "The exported document exceeds 200 MiB.",
+			error: `The exported file exceeds ${maxBytes / 1024 / 1024} MiB.`,
 		});
 		return;
 	}

@@ -1,11 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-	closeSync,
 	cpSync,
 	existsSync,
 	mkdirSync,
-	openSync,
 	readFileSync,
 	readdirSync,
 	rmSync,
@@ -16,6 +14,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 import { wasmLinkerEnvironment } from "../device-crypto/build-web.mjs";
+import { acquireBuildLock } from "./build-lock.mjs";
+import {
+	assertNoBrandArtwork,
+	bundleLicenses,
+	hashLicenseInputs,
+} from "./licenses.mjs";
 
 const suiteDirectory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(suiteDirectory, "../..");
@@ -31,23 +35,35 @@ const toolchain =
 if (!toolchain)
 	throw new Error("The repository Rust toolchain is not configured.");
 const buildEnvironment = { ...process.env, RUSTUP_TOOLCHAIN: toolchain };
-const pin = JSON.parse(readFileSync(join(directory, "upstream.json"), "utf8"));
+let pin = JSON.parse(readFileSync(join(directory, "upstream.json"), "utf8"));
 if (!/^[a-f0-9]{40}$/.test(pin.revision))
 	throw new Error("Craft runtimes must be pinned to an exact Git commit.");
 const cache = join(root, "target/craft-viewers", id);
+const releaseLock = acquireBuildLock({ directory: cache, label: pin.label });
+// An adapter may be updated while an earlier cold build owns this lock.
+// Read its pin and fingerprint only after that build has finished.
+pin = JSON.parse(readFileSync(join(directory, "upstream.json"), "utf8"));
+if (!/^[a-f0-9]{40}$/.test(pin.revision))
+	throw new Error("Craft runtimes must be pinned to an exact Git commit.");
 const source =
 	process.env[`CRAFT_SOURCE_${id.toUpperCase()}`] ||
 	join(cache, "source", pin.revision);
-const existingTools = join(root, "target/wordcraft/tools", pin.wasmBindgen);
-const tools = existsSync(
-	join(
-		existingTools,
-		"bin",
-		process.platform === "win32" ? "wasm-bindgen.exe" : "wasm-bindgen",
+const toolCandidates = [
+	join(root, "target/wordcraft/tools", pin.wasmBindgen),
+	...readdirSync(suiteDirectory).map((name) =>
+		join(root, "target/craft-viewers", name, "tools", pin.wasmBindgen),
 	),
-)
-	? existingTools
-	: join(cache, "tools", pin.wasmBindgen);
+];
+const tools =
+	toolCandidates.find((path) =>
+		existsSync(
+			join(
+				path,
+				"bin",
+				process.platform === "win32" ? "wasm-bindgen.exe" : "wasm-bindgen",
+			),
+		),
+	) ?? join(cache, "tools", pin.wasmBindgen);
 const output = join(cache, "runtime");
 const hash = createHash("sha256").update(toolchain);
 for (const base of [directory, suiteDirectory]) {
@@ -62,68 +78,13 @@ for (const name of [
 	"rust-toolchain.toml",
 ])
 	hash.update(name).update(readFileSync(join(root, name)));
+hashLicenseInputs(hash);
 const fingerprint = hash.digest("hex");
 const stampPath = join(output, "runtime.json");
 const targets = [
 	`apps/web/public/craft/${id}`,
 	`apps/desktop/public/craft/${id}`,
 ];
-
-function acquireBuildLock() {
-	mkdirSync(cache, { recursive: true });
-	const lock = join(cache, "build.lock");
-	const deadline = Date.now() + 10 * 60 * 1000;
-	let waiting = false;
-	while (true) {
-		try {
-			const descriptor = openSync(lock, "wx");
-			writeFileSync(descriptor, String(process.pid));
-			closeSync(descriptor);
-			let released = false;
-			const release = () => {
-				if (released) return;
-				released = true;
-				try {
-					if (readFileSync(lock, "utf8") === String(process.pid))
-						rmSync(lock, { force: true });
-				} catch (error) {
-					if (error.code !== "ENOENT") throw error;
-				}
-			};
-			process.on("exit", release);
-			return release;
-		} catch (error) {
-			if (error.code !== "EEXIST") throw error;
-			try {
-				const owner = Number(readFileSync(lock, "utf8"));
-				if (Number.isSafeInteger(owner) && owner > 0) {
-					try {
-						process.kill(owner, 0);
-					} catch (error) {
-						if (error.code === "ESRCH") {
-							rmSync(lock, { force: true });
-							continue;
-						}
-					}
-				}
-			} catch (error) {
-				if (error.code === "ENOENT") continue;
-				throw error;
-			}
-			if (Date.now() >= deadline)
-				throw new Error(
-					`Another ${pin.label} build is still running. Wait for it to finish, then retry. Lock: ${lock}`,
-				);
-			if (!waiting) {
-				console.log(`Waiting for the other ${pin.label} build…`);
-				waiting = true;
-			}
-			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
-		}
-	}
-}
-
-const releaseLock = acquireBuildLock();
 
 function run(command, args, options = {}) {
 	return execFileSync(command, args, {
@@ -223,7 +184,11 @@ if (!cached()) {
 	);
 	const write = (path, text) => {
 		mkdirSync(dirname(join(source, path)), { recursive: true });
-		writeFileSync(join(source, path), text);
+		if (
+			!existsSync(join(source, path)) ||
+			readFileSync(join(source, path), "utf8") !== text
+		)
+			writeFileSync(join(source, path), text);
 	};
 	const prepared =
 		(await prepare({
@@ -283,7 +248,8 @@ if (!cached()) {
 	};
 	// Optional system font checkouts would change the runtime without changing its
 	// pin or cache key. This build uses only upstream's bundled, attributed fonts.
-	env.CRAFT_FONTS_DIR = undefined;
+	env.CRAFT_FONTS_DIR = join(root, "target/craft-viewers/bundled-fonts-only");
+	mkdirSync(env.CRAFT_FONTS_DIR, { recursive: true });
 	env.CRAFT_FONTS_REQUIRED = undefined;
 	const installedTargets = run("rustup", ["target", "list", "--installed"], {
 		encoding: "utf8",
@@ -323,6 +289,7 @@ if (!cached()) {
 	// chunks leave room for upstream growth without changing hosting configuration.
 	const wasmPath = join(output, "craft_bg.wasm");
 	const wasmBytes = readFileSync(wasmPath);
+	assertNoBrandArtwork(source, wasmBytes);
 	const compressed = gzipSync(wasmBytes, { level: 9 });
 	const wasm = {
 		compression: "gzip",
@@ -346,26 +313,38 @@ if (!cached()) {
 		cpSync(join(suiteDirectory, name), join(output, name));
 	cpSync(join(suiteDirectory, "protocol.mjs"), join(output, "protocol.js"));
 	for (const asset of prepared.assets || []) {
+		mkdirSync(dirname(join(output, asset.to)), { recursive: true });
 		cpSync(join(source, asset.from), join(output, asset.to), {
 			recursive: true,
 		});
 	}
 	const licenses = join(output, "licenses");
 	mkdirSync(licenses, { recursive: true });
-	for (const name of [
-		"LICENSE-MIT",
-		"LICENSE-APACHE",
-		"NOTICE",
-		"ATTRIBUTION.md",
-	]) {
-		if (existsSync(join(source, name)))
-			cpSync(join(source, name), join(licenses, name.replace(/\.md$/, ".txt")));
+	const attributionFiles = run(
+		"git",
+		["ls-tree", "-r", "--name-only", pin.revision],
+		{ encoding: "utf8", stdio: "pipe" },
+	)
+		.trim()
+		.split("\n")
+		.filter((name) =>
+			/(^|\/)(LICENSE[^/]*|NOTICE[^/]*|COPYING[^/]*|OFL[^/]*|ATTRIBUTION\.md|CGATS_LICENSE\.txt)$/i.test(
+				name,
+			),
+		);
+	for (const name of attributionFiles) {
+		const destination = join(licenses, name.replace(/\.md$/, ".txt"));
+		mkdirSync(dirname(destination), { recursive: true });
+		writeFileSync(destination, original(name));
 	}
-	for (const name of (existsSync(join(source, "assets/fonts"))
-		? readdirSync(join(source, "assets/fonts"))
-		: []
-	).filter((name) => name.endsWith(".txt")))
-		cpSync(join(source, "assets/fonts", name), join(licenses, name));
+	bundleLicenses({
+		source,
+		output,
+		pin,
+		cargoPackage: pin.cargoPackage,
+		cargoArgs: prepared.cargoArgs || [],
+		env,
+	});
 	const files = {};
 	for (const name of readdirSync(output, { recursive: true })) {
 		if (name === "runtime.json") continue;

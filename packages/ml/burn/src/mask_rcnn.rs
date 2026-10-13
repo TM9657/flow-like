@@ -132,14 +132,12 @@ impl MaskRcnn {
         if let Some(targets) = targets {
             validate_targets(targets, batch, self.config.classes, height, width)?;
         }
-        let sampling_seed = targets.map(|_| {
-            values(Tensor::<1>::random(
-                [1],
-                Distribution::Uniform(0.0, 1.0),
-                &input.device(),
-            ))[0]
-                .to_bits() as u64
-        });
+        let sampling_seed = if targets.is_some() {
+            let draw = Tensor::<1>::random([1], Distribution::Uniform(0.0, 1.0), &input.device());
+            Some(values(draw)?[0].to_bits() as u64)
+        } else {
+            None
+        };
         let mut features = input;
         for block in &self.backbone {
             features = block.forward(features);
@@ -176,8 +174,8 @@ impl MaskRcnn {
                 .forward(rpn)
                 .permute([0, 2, 3, 1])
                 .reshape([batch, anchors.len(), 4]);
-        let scores = values(objectness.clone());
-        let offsets = values(deltas.clone());
+        let scores = values(objectness.clone())?;
+        let offsets = values(deltas.clone())?;
         let mut rois = Vec::new();
         for image in 0..batch {
             let mut proposals = proposals(
@@ -209,8 +207,8 @@ impl MaskRcnn {
         let box_deltas = self.boxes.forward(hidden);
         let mut mask_valid = vec![true; rois.len()];
         let mask_rois = if targets.is_none() {
-            let scores = values(class_logits.clone());
-            let offsets = values(box_deltas.clone());
+            let scores = values(class_logits.clone())?;
+            let offsets = values(box_deltas.clone())?;
             if scores.iter().chain(&offsets).any(|v| !v.is_finite()) {
                 return Err(Error::Invalid(
                     "ROI heads produced non-finite values".into(),
@@ -299,7 +297,7 @@ impl MaskRcnnOutput {
         validate_targets(targets, self.batch, self.classes, self.height, self.width)?;
         let device = self.objectness.device();
         let count = self.anchors.len();
-        let raw = values(self.objectness.clone());
+        let raw = values(self.objectness.clone())?;
         let anchor_seed = self.sampling_seed.unwrap_or_default() ^ RPN_SAMPLING_SALT;
         let mut selected = Vec::new();
         let mut obj_targets = Vec::new();
@@ -433,8 +431,8 @@ impl MaskRcnnOutput {
         let limit = options
             .max_detections
             .min(mask_elements / self.height.saturating_mul(self.width).max(1));
-        let scores = values(softmax(self.class_logits, 1));
-        let masks = values(self.mask_logits.clone());
+        let scores = values(softmax(self.class_logits, 1))?;
+        let masks = values(self.mask_logits.clone())?;
         if scores.iter().chain(&masks).any(|v| !v.is_finite()) {
             return Err(Error::Invalid(
                 "Instance heads produced non-finite values".into(),
@@ -596,8 +594,12 @@ pub fn roi_align(
     }
     Ok(Tensor::cat(output, 0))
 }
-fn values<const D: usize>(tensor: Tensor<D>) -> Vec<f32> {
-    tensor.into_data().iter::<f32>().collect()
+fn values<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
+    Ok(tensor
+        .try_into_data()
+        .map_err(crate::execution::device_error)?
+        .iter::<f32>()
+        .collect())
 }
 fn indices(values: Vec<i64>, device: &Device) -> Tensor<1, Int> {
     let n = values.len();
@@ -625,9 +627,9 @@ fn validate_targets(
     for instance in targets.iter().flatten() {
         instance.validate(classes, height, width)?;
     }
-    let elements = targets
-        .iter()
-        .try_fold(0usize, |total, instances| total.checked_add(instance_mask_elements(instances)?));
+    let elements = targets.iter().try_fold(0usize, |total, instances| {
+        total.checked_add(instance_mask_elements(instances)?)
+    });
     if elements.is_none_or(|n| n > MASK_RCNN_ELEMENT_BUDGET) {
         return Err(Error::Invalid(format!(
             "Instance masks of this batch exceed the {MASK_RCNN_ELEMENT_BUDGET}-element Mask R-CNN limit; lower the batch size"
@@ -873,9 +875,9 @@ mod tests {
             2,
         )
         .unwrap();
-        assert_eq!(values(output.clone()), vec![2.5, 4.5, 10.5, 12.5]);
+        assert_eq!(values(output.clone()).unwrap(), vec![2.5, 4.5, 10.5, 12.5]);
         let gradients = output.sum().backward();
-        let gradient = values(input.grad(&gradients).unwrap());
+        let gradient = values(input.grad(&gradients).unwrap()).unwrap();
         assert!(gradient.iter().all(|v| (*v - 0.25).abs() < 1e-6));
     }
     #[test]
@@ -996,13 +998,14 @@ mod tests {
                 bounds: [0.1, 0.3, 0.9, 0.8],
             },
         ];
-        let whole = values(model.mask_head(features.clone(), &rois).unwrap());
+        let whole = values(model.mask_head(features.clone(), &rois).unwrap()).unwrap();
         let chunked = values(Tensor::cat(
             rois.chunks(2)
                 .map(|chunk| model.mask_head(features.clone(), chunk).unwrap())
                 .collect::<Vec<_>>(),
             0,
-        ));
+        ))
+        .unwrap();
         assert_eq!(whole.len(), 3 * 2 * 4 * 4);
         assert_eq!(whole.len(), chunked.len());
         for (single, split) in whole.iter().zip(&chunked) {
@@ -1116,7 +1119,8 @@ mod tests {
                 .unwrap()
                 .loss(&truth)
                 .unwrap(),
-        )[0];
+        )
+        .unwrap()[0];
         let mut last = initial;
         for _ in 0..100 {
             let loss = model
@@ -1124,7 +1128,7 @@ mod tests {
                 .unwrap()
                 .loss(&truth)
                 .unwrap();
-            last = values(loss.clone())[0];
+            last = values(loss.clone()).unwrap()[0];
             let gradients = GradientsParams::from_grads(loss.backward(), &model);
             model = optimizer.step(0.003, model, gradients);
         }
@@ -1139,8 +1143,8 @@ mod tests {
             .unwrap()
             .try_load_file(&path)
             .unwrap();
-        let first = values(model.forward(input(), None).unwrap().class_logits);
-        let second = values(loaded.forward(input(), None).unwrap().class_logits);
+        let first = values(model.forward(input(), None).unwrap().class_logits).unwrap();
+        let second = values(loaded.forward(input(), None).unwrap().class_logits).unwrap();
         assert_eq!(first, second);
         let prediction = model
             .forward(input(), None)
@@ -1269,6 +1273,6 @@ mod tests {
             .unwrap()
             .loss(&empty)
             .unwrap();
-        assert!(values(loss)[0].is_finite());
+        assert!(values(loss).unwrap()[0].is_finite());
     }
 }

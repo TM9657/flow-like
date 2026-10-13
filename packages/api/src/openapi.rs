@@ -520,6 +520,8 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         crate::routes::app::data::list_files::list_user_files,
         crate::routes::app::data::delete_files::delete_files,
         crate::routes::app::data::delete_files::delete_user_files,
+        crate::routes::app::data::rename_files::rename_file,
+        crate::routes::app::data::rename_files::rename_user_file,
         crate::routes::app::data::presign_data_access::presign_data_access,
         crate::routes::app::data::presign_data_access::presign_user_data_access,
         // Realtime board routes
@@ -1225,6 +1227,7 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         crate::routes::app::data::download_files::DownloadFilesPayload,
         crate::routes::app::data::list_files::ListFilesPayload,
         crate::routes::app::data::delete_files::DeleteFilesPayload,
+        crate::routes::app::data::rename_files::RenameFilePayload,
         // University
         crate::routes::user::lookup::UserLookupResponse,
         crate::routes::user::lookup::UserBatchLookupBody,

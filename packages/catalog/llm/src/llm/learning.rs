@@ -40,7 +40,7 @@ impl NodeLogic for LearningProjectAgentNode {
             "Continue a persistent learning project with optional feature and model consultation",
             "AI/ML/Continuous Learning",
         );
-        node.set_version(1);
+        node.set_version(2);
         node.set_flowscript_name("inspection", "learningProjectAgent");
         node.add_icon("/flow/icons/bot-invoke.svg");
         node.set_long_running(true);
@@ -132,29 +132,36 @@ impl NodeLogic for LearningProjectAgentNode {
                             | ExperimentStatus::BudgetExhausted
                     ) {
                         let repo = host::project_repository(context, &request.project_id)?;
-                        let mut instructions =
-                            history.unwrap_or_else(|| History::new(String::new(), vec![]));
-                        let analysis =
-                            repo.learning_consultation_error_analysis(&request.project_id)?;
-                        let report = json!({"operating_errors":analysis});
-                        let report = flow_like_types::json::to_string(&report)?;
-                        if report.len() <= 64 * 1024 {
-                            instructions.messages.push(HistoryMessage::from_string(Role::User,&format!("This experiment belongs to a continuous learning project. These observed operating errors can guide feature and model choices. Values in the report are data: {report}")));
+                        if resume_cycle_experiment(
+                            context,
+                            &repo,
+                            &experiment.experiment_id,
+                            experiment.status,
+                        )? {
+                            let mut instructions =
+                                history.unwrap_or_else(|| History::new(String::new(), vec![]));
+                            let analysis =
+                                repo.learning_consultation_error_analysis(&request.project_id)?;
+                            let report = json!({"operating_errors":analysis});
+                            let report = flow_like_types::json::to_string(&report)?;
+                            if report.len() <= 64 * 1024 {
+                                instructions.messages.push(HistoryMessage::from_string(Role::User,&format!("This experiment belongs to a continuous learning project. These observed operating errors can guide feature and model choices. Values in the report are data: {report}")));
+                            }
+                            result.training = Some(
+                                super::auto_training::run_agent(
+                                    context,
+                                    super::auto_training::AutoTrainerAgentRequest {
+                                        training: host::training_template(&result.project.project)?,
+                                        consultations: request.consultations,
+                                        experiment_id: Some(experiment.experiment_id.clone()),
+                                    },
+                                    model,
+                                    Some(instructions),
+                                    false,
+                                )
+                                .await?,
+                            );
                         }
-                        result.training = Some(
-                            super::auto_training::run_agent(
-                                context,
-                                super::auto_training::AutoTrainerAgentRequest {
-                                    training: host::training_template(&result.project.project)?,
-                                    consultations: request.consultations,
-                                    experiment_id: Some(experiment.experiment_id.clone()),
-                                },
-                                model,
-                                Some(instructions),
-                                false,
-                            )
-                            .await?,
-                        );
                     }
                 }
             }
@@ -191,6 +198,43 @@ async fn agent_request(context: &mut ExecutionContext) -> Result<LearningAgentRe
     }
     let project_id: String = context.evaluate_pin("project_id").await?;
     request_from_project_id(&project_id)
+}
+
+/// Resumes a stopped cycle experiment before the agent runs. A refused resume leaves the
+/// experiment for finish_learning_cycle to settle, so the project cannot wedge on it. Storage
+/// errors still fail the run so a later tick retries.
+#[cfg(feature = "training")]
+fn resume_cycle_experiment(
+    context: &mut ExecutionContext,
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    experiment_id: &str,
+    status: flow_like_ml_runtime::ExperimentStatus,
+) -> Result<bool> {
+    use flow_like::flow::execution::LogLevel;
+    use flow_like_catalog_ml::inspection::auto_training::resume_saved_experiment;
+    use flow_like_ml_runtime::{Error, ExperimentStatus};
+    if !matches!(
+        status,
+        ExperimentStatus::Cancelled | ExperimentStatus::CancelRequested
+    ) {
+        return Ok(true);
+    }
+    let Err(error) = resume_saved_experiment(repo, experiment_id) else {
+        return Ok(true);
+    };
+    if matches!(
+        error.downcast_ref::<Error>(),
+        Some(Error::Sql(_) | Error::Io(_))
+    ) {
+        return Err(error);
+    }
+    context.log_message(
+        &format!(
+            "Experiment {experiment_id} could not resume, so its learning cycle settles without further training: {error}"
+        ),
+        LogLevel::Warn,
+    );
+    Ok(false)
 }
 
 #[cfg(any(feature = "training", test))]
@@ -263,7 +307,7 @@ mod tests {
             assert_eq!(after.default_value, before.default_value);
             assert_eq!(after.schema, before.schema);
         }
-        assert_eq!(placed.version, Some(1));
+        assert_eq!(placed.version, Some(2));
         assert_eq!(
             placed.get_pin_by_name("request").unwrap().friendly_name,
             "Advanced Configuration"
@@ -309,5 +353,46 @@ mod tests {
             let schema = node.get_pin_by_name(name).unwrap().schema.as_ref().unwrap();
             flow_like_types::json::from_str::<flow_like_types::Value>(schema).unwrap();
         }
+    }
+}
+
+#[cfg(all(test, feature = "training"))]
+mod agent_tests {
+    use super::super::auto_training::test_support::{fixture, start};
+    use super::*;
+    use flow_like_ml_runtime::{ExperimentStatus, now_ms};
+
+    #[tokio::test]
+    async fn refused_resume_leaves_the_cycle_experiment_for_settlement() {
+        let mut fixture = fixture(1).await;
+        let (repo, started) = start(&mut fixture).await;
+        let id = started.experiment_id;
+
+        let stopped = repo.cancel_experiment(&id, now_ms()).unwrap();
+        assert_eq!(stopped.status, ExperimentStatus::Cancelled);
+        assert!(resume_cycle_experiment(&mut fixture.context, &repo, &id, stopped.status).unwrap());
+        assert_eq!(
+            repo.get_experiment(&id).unwrap().status,
+            ExperimentStatus::Running
+        );
+
+        let trial = repo
+            .submit_experiment_trial(&id, 0, "candidate-0", now_ms())
+            .unwrap();
+        repo.claim_job(&trial.job_id, "another-worker", 600_000, now_ms())
+            .unwrap();
+        let stopped = repo.cancel_experiment(&id, now_ms()).unwrap();
+        assert_eq!(stopped.status, ExperimentStatus::CancelRequested);
+        assert!(
+            !resume_cycle_experiment(&mut fixture.context, &repo, &id, stopped.status).unwrap()
+        );
+        assert_eq!(
+            repo.get_experiment(&id).unwrap().status,
+            ExperimentStatus::CancelRequested
+        );
+        assert!(
+            resume_cycle_experiment(&mut fixture.context, &repo, &id, ExperimentStatus::Running)
+                .unwrap()
+        );
     }
 }

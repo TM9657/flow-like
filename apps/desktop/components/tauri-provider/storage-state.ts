@@ -210,6 +210,60 @@ export class StorageState implements IStorageState {
 
 		return asArray(items);
 	}
+	async renameStorageItem(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		await this.renameInternal(appId, prefix, newName, isDir, "app");
+	}
+	async renameStorageItemUser(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		await this.renameInternal(appId, prefix, newName, isDir, "user");
+	}
+	private async renameInternal(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+		scope: StorageScope,
+	): Promise<void> {
+		if (await this.backend.isOffline(appId)) {
+			await invoke(
+				scope === "user" ? "storage_user_rename" : "storage_rename",
+				{
+					appId,
+					prefix,
+					newName,
+					isDir,
+				},
+			);
+			return;
+		}
+
+		const { profile, auth, queryClient } = this.backend;
+		if (!profile || !auth || !queryClient) {
+			throw new Error("Backend is not properly initialized for renaming.");
+		}
+		const endpoint =
+			scope === "user"
+				? `apps/${appId}/data/user/rename`
+				: `apps/${appId}/data/rename`;
+		await fetcher<void>(
+			profile,
+			endpoint,
+			{
+				method: "POST",
+				body: JSON.stringify({ prefix, new_name: newName, is_dir: isDir }),
+			},
+			auth,
+		);
+	}
 	async deleteStorageItems(appId: string, prefixes: string[]): Promise<void> {
 		const isOffline = await this.backend.isOffline(appId);
 

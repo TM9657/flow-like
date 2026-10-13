@@ -76,6 +76,88 @@ fn sigmoid(value: f32) -> f32 {
     }
 }
 
+/// GroundingDINO exports fill masked and padded text tokens with -inf. The lowest finite
+/// logit has the same sigmoid of exactly 0 and passes tensor validation, which still
+/// rejects NaN and +inf.
+#[cfg(any(feature = "execute", test))]
+fn finite_grounding_logits(mut tensor: NamedTensor) -> Result<NamedTensor> {
+    if let TensorValues::Float32(values) = &mut tensor.data {
+        for value in values.iter_mut() {
+            if *value == f32::NEG_INFINITY {
+                *value = f32::MIN;
+            }
+        }
+    }
+    tensor.validate()?;
+    Ok(tensor)
+}
+
+/// Runs a GroundingDINO session and returns only the logits and boxes outputs it decodes.
+#[cfg(feature = "execute")]
+fn infer_grounding(
+    session: &mut flow_like_model_provider::ml::ort::session::Session,
+    inputs: Vec<NamedTensor>,
+    config: &GroundingConfig,
+) -> Result<Vec<NamedTensor>> {
+    use flow_like_model_provider::ml::ort::{session::SessionInputValue, value::Tensor};
+    use std::{borrow::Cow, collections::HashSet};
+    if inputs.is_empty() || inputs.len() > 128 {
+        return Err(anyhow!(
+            "Supply between 1 and 128 named input tensors, not {}",
+            inputs.len()
+        ));
+    }
+    let mut names = HashSet::new();
+    let mut values: Vec<(Cow<'static, str>, SessionInputValue<'static>)> =
+        Vec::with_capacity(inputs.len());
+    for tensor in inputs {
+        tensor.validate()?;
+        if !names.insert(tensor.name.clone()) {
+            return Err(anyhow!("Duplicate input tensor '{}'", tensor.name));
+        }
+        let value = match tensor.data {
+            TensorValues::Float32(v) => Tensor::from_array((tensor.shape, v))?.into_dyn(),
+            TensorValues::Float64(v) => Tensor::from_array((tensor.shape, v))?.into_dyn(),
+            TensorValues::Int64(v) => Tensor::from_array((tensor.shape, v))?.into_dyn(),
+            TensorValues::Int32(v) => Tensor::from_array((tensor.shape, v))?.into_dyn(),
+            TensorValues::Bool(v) => Tensor::from_array((tensor.shape, v))?.into_dyn(),
+        };
+        values.push((Cow::Owned(tensor.name), value.into()));
+    }
+    let outputs = session.run(values)?;
+    let mut decoded = Vec::with_capacity(2);
+    for name in [&config.logits_output, &config.boxes_output] {
+        let (shape, data) = outputs
+            .get(name)
+            .ok_or_else(|| anyhow!("Missing output tensor '{name}'"))?
+            .try_extract_tensor::<f32>()
+            .map_err(|error| {
+                anyhow!("GroundingDINO output '{name}' must contain float32 values: {error}")
+            })?;
+        if data.len() > 16_777_216 {
+            return Err(anyhow!(
+                "GroundingDINO output '{name}' has {} values, above the 16777216 element limit",
+                data.len()
+            ));
+        }
+        let tensor = NamedTensor {
+            name: name.clone(),
+            shape: shape
+                .iter()
+                .map(|dimension| usize::try_from(*dimension))
+                .collect::<std::result::Result<Vec<_>, _>>()?,
+            data: TensorValues::Float32(data.to_vec()),
+        };
+        decoded.push(if *name == config.logits_output {
+            finite_grounding_logits(tensor)?
+        } else {
+            tensor.validate()?;
+            tensor
+        });
+    }
+    Ok(decoded)
+}
+
 /// Decode normalized cxcywh boxes and token logits using the caller's label map.
 /// Each query selects its highest scoring class before class-aware NMS.
 pub fn decode_grounding(
@@ -531,8 +613,7 @@ impl NodeLogic for GroundingDinoDetectionNode {
             let inputs: Vec<NamedTensor> = context.evaluate_pin("inputs").await?;
             let config: GroundingConfig = context.evaluate_pin("config").await?;
             let session = model.get_session(context).await?;
-            let outputs =
-                crate::onnx::tensor::infer_tensors(&mut session.lock().await.session, inputs)?;
+            let outputs = infer_grounding(&mut session.lock().await.session, inputs, &config)?;
             context
                 .set_pin_value("result", json!(decode_grounding(&outputs, &config)?))
                 .await?;
@@ -819,6 +900,54 @@ mod tests {
         assert!((result.detections[0].bounds.x_min - 0.3).abs() < 1e-6);
         config.classes[0].token_indices = vec![4];
         assert!(decode_grounding(&outputs, &config).is_err());
+    }
+    #[test]
+    fn grounding_scores_masked_negative_infinity_tokens_as_zero_probability() {
+        let masked = f32::NEG_INFINITY;
+        let logits = finite_grounding_logits(tensor(
+            "logits",
+            &[1, 3, 3],
+            &[
+                4.0, masked, masked, masked, 3.0, masked, masked, masked, masked,
+            ],
+        ))
+        .unwrap();
+        let outputs = vec![
+            logits,
+            tensor(
+                "boxes",
+                &[1, 3, 4],
+                &[0.5, 0.5, 0.4, 0.4, 0.2, 0.2, 0.1, 0.1, 0.8, 0.8, 0.2, 0.2],
+            ),
+        ];
+        let config = GroundingConfig {
+            labels: vec!["scratch".into(), "dent".into()],
+            classes: vec![
+                GroundingClass {
+                    class_id: 0,
+                    token_indices: vec![0],
+                },
+                GroundingClass {
+                    class_id: 1,
+                    token_indices: vec![1, 2],
+                },
+            ],
+            logits_output: "logits".into(),
+            boxes_output: "boxes".into(),
+            token_aggregation: TokenAggregation::Mean,
+            score_threshold: 0.4,
+            nms_iou_threshold: 0.5,
+            max_detections: 10,
+        };
+        let result = decode_grounding(&outputs, &config).unwrap();
+        assert_eq!(result.detections.len(), 2);
+        assert_eq!(result.detections[0].label, "scratch");
+        assert_eq!(result.detections[1].label, "dent");
+        assert!((result.detections[1].confidence - sigmoid(3.0) / 2.0).abs() < 1e-6);
+        for invalid in [f32::NAN, f32::INFINITY] {
+            let checked = finite_grounding_logits(tensor("logits", &[1, 1, 2], &[0.0, invalid]));
+            assert!(checked.is_err(), "{invalid} must be rejected");
+        }
     }
     fn prompt() -> SamPrompt {
         SamPrompt {

@@ -124,6 +124,9 @@ xcap = "0.8.1"
 arboard = "3.6.1"
 enigo = "0.6.1"
 
+[target."cfg(unix)".dependencies]
+rustix = { version = "1.1", features = ["fs"] }
+
 [target."cfg(any(target_os = \"macos\", windows))".dependencies]
 rdev.workspace = true
 
@@ -156,6 +159,7 @@ windows = { version = "0.61", features = [
     "Win32_System_Com",
     "Win32_System_Ole",
     "Win32_System_Variant",
+    "Win32_Storage_FileSystem",
 ] }
 webview2-com = "0.38"
 

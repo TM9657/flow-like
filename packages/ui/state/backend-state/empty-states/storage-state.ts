@@ -19,6 +19,22 @@ export class EmptyStorageState implements IStorageState {
 	deleteStorageItemsUser(appId: string, prefixes: string[]): Promise<void> {
 		throw new Error("Method not implemented.");
 	}
+	renameStorageItem(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
+	renameStorageItemUser(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
 	downloadStorageItems(
 		appId: string,
 		prefixes: string[],

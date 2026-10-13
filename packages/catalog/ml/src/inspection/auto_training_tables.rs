@@ -11,7 +11,10 @@ use flow_like_storage_contracts::database::DatabaseReference;
 use flow_like_types::{Result, Value, anyhow, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PinnedTableSource {
@@ -19,6 +22,29 @@ pub struct PinnedTableSource {
     pub reference: DatabaseReference,
     #[serde(default)]
     pub locator: Option<TableLocator>,
+    /// Temporal columns of the pinned schema whose values are not epoch milliseconds.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub temporal_units: BTreeMap<String, TemporalUnit>,
+}
+
+/// Storage unit of an Arrow timestamp or date column; sample timestamps convert it to milliseconds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TemporalUnit {
+    Seconds,
+    Microseconds,
+    Nanoseconds,
+    Days,
+}
+impl TemporalUnit {
+    fn to_milliseconds(self, value: i64) -> Option<i64> {
+        match self {
+            Self::Seconds => value.checked_mul(1_000),
+            Self::Microseconds => Some(value.div_euclid(1_000)),
+            Self::Nanoseconds => Some(value.div_euclid(1_000_000)),
+            Self::Days => value.checked_mul(86_400_000),
+        }
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TableLocator {
@@ -183,9 +209,10 @@ pub struct PreparedTableDataset {
     pub profile: TableProfile,
     pub digest: String,
     #[serde(default)]
-    pub rows: Vec<Value>,
+    pub rows: Arc<Vec<Value>>,
+    /// Source rows before feature engineering; shares `rows` when no columns were derived.
     #[serde(default)]
-    pub raw_rows: Vec<Value>,
+    pub raw_rows: Arc<Vec<Value>>,
     #[serde(default)]
     pub annotation_revisions: BTreeMap<String, i64>,
     #[serde(default)]
@@ -268,12 +295,23 @@ fn decode<T: serde::de::DeserializeOwned>(value: &Value) -> Result<T> {
         flow_like_types::json::from_value(value.clone())?
     })
 }
-fn timestamp(row: &Value, column: &Option<String>, default: i64) -> Result<i64> {
-    match column {
-        Some(column) => field(row, column)?
-            .as_i64()
-            .ok_or_else(|| anyhow!("Timestamp '{column}' must be integer milliseconds")),
-        None => Ok(default),
+fn timestamp(
+    row: &Value,
+    column: &Option<String>,
+    default: i64,
+    units: &BTreeMap<String, TemporalUnit>,
+) -> Result<i64> {
+    let Some(column) = column else {
+        return Ok(default);
+    };
+    let value = field(row, column)?.as_i64().ok_or_else(|| {
+        anyhow!("Timestamp '{column}' must be integer epoch milliseconds or a timestamp column")
+    })?;
+    match units.get(column) {
+        None => Ok(value),
+        Some(unit) => unit.to_milliseconds(value).ok_or_else(|| {
+            anyhow!("Timestamp '{column}' value {value} in {unit:?} overflows epoch milliseconds")
+        }),
     }
 }
 fn finite(value: &Value) -> Result<f64> {
@@ -394,6 +432,51 @@ fn validate_mapping(mapping: &TableMapping) -> Result<()> {
     Ok(())
 }
 
+/// Feature and target columns, the only source columns a training profile may describe.
+pub(crate) fn profiled_columns(mapping: &TableMapping) -> Vec<String> {
+    let mut columns: Vec<String> = match &mapping.features {
+        FeatureSource::Tabular { options } => options
+            .numeric_columns
+            .iter()
+            .chain(&options.categorical_columns)
+            .cloned()
+            .collect(),
+        FeatureSource::Tensor { column } | FeatureSource::Sample { column } => {
+            vec![column.clone()]
+        }
+    };
+    match &mapping.target {
+        TargetSource::Column { column } | TargetSource::Annotation { column } => {
+            columns.push(column.clone())
+        }
+        TargetSource::Columns { columns: targets } => columns.extend(targets.iter().cloned()),
+        TargetSource::Sample => {}
+    }
+    columns
+}
+
+/// Source columns a mapping reads: keys, timestamps, outcome, features and target.
+#[cfg(any(feature = "execute", test))]
+pub(crate) fn mapped_columns(mapping: &TableMapping) -> Vec<String> {
+    let mut columns = vec![mapping.row_id.clone()];
+    columns.extend(
+        [
+            &mapping.group_id,
+            &mapping.timestamp_ms,
+            &mapping.window_start_ms,
+            &mapping.window_end_ms,
+            &mapping.outcome,
+        ]
+        .into_iter()
+        .flatten()
+        .cloned(),
+    );
+    columns.extend(profiled_columns(mapping));
+    let mut seen = HashSet::new();
+    columns.retain(|column| seen.insert(column.clone()));
+    columns
+}
+
 /// Split identity uses row/group/time metadata before any fitted transformation.
 pub(crate) fn raw_input_digest(
     mapping: &TableMapping,
@@ -478,7 +561,8 @@ pub(crate) fn prepare_identity_rows(
             }
             sample
         } else {
-            let time = timestamp(row, &request.mapping.timestamp_ms, 0)?;
+            let units = &source.temporal_units;
+            let time = timestamp(row, &request.mapping.timestamp_ms, 0, units)?;
             if matches!(request.split, TableSplitPolicy::Time { .. })
                 && request.mapping.timestamp_ms.is_none()
             {
@@ -494,8 +578,8 @@ pub(crate) fn prepare_identity_rows(
                 },
                 stream_id: request.stream_id.clone(),
                 timestamp_ms: time,
-                window_start_ms: timestamp(row, &request.mapping.window_start_ms, time)?,
-                window_end_ms: timestamp(row, &request.mapping.window_end_ms, time)?,
+                window_start_ms: timestamp(row, &request.mapping.window_start_ms, time, units)?,
+                window_end_ms: timestamp(row, &request.mapping.window_end_ms, time, units)?,
                 input: match &request.mapping.features {
                     FeatureSource::Tensor { column } => decode(field(row, column)?)?,
                     _ => TensorData {
@@ -593,7 +677,8 @@ pub(crate) fn prepare_identity_rows(
                             .and_then(|review| review.available_at_ms)
                             .unwrap_or(sample.timestamp_ms),
                     );
-                if available >= deadline {
+                // Like split_temporal and the snapshot check, a label available at the cutoff is inside.
+                if available > deadline {
                     split.purged.push(*index);
                     false
                 } else {
@@ -644,15 +729,24 @@ pub fn prepare_rows(
     request: &TableDatasetRequest,
     rows: &[Value],
 ) -> Result<PreparedTableDataset> {
+    prepare_rows_owned(source, request, rows.to_vec())
+}
+
+/// `prepare_rows` for rows the caller hands over; `rows` and `raw_rows` share them.
+pub fn prepare_rows_owned(
+    source: PinnedTableSource,
+    request: &TableDatasetRequest,
+    rows: Vec<Value>,
+) -> Result<PreparedTableDataset> {
     let TableIdentity {
         mut samples,
         split,
         raw_content_digests,
-    } = prepare_identity_rows(&source, request, rows)?;
+    } = prepare_identity_rows(&source, request, &rows)?;
     let preprocessing = match &request.mapping.features {
         FeatureSource::Tabular { options } => {
-            let fitted = FittedTabularPreprocessor::fit(rows, &split.train, options)?;
-            let inputs = fitted.transform_rows(rows, request.budget.maximum_tensor_elements)?;
+            let fitted = FittedTabularPreprocessor::fit(&rows, &split.train, options)?;
+            let inputs = fitted.transform_rows(&rows, request.budget.maximum_tensor_elements)?;
             for (sample, input) in samples.iter_mut().zip(inputs) {
                 sample.input = input;
             }
@@ -683,7 +777,7 @@ pub fn prepare_rows(
             ));
         }
     }
-    let profile = profile_training_rows(rows, &split.train)?;
+    let profile = profile_training_rows(&rows, &split.train, &profiled_columns(&request.mapping))?;
     let digest = content_digest(&flow_like_types::json::to_vec(&(
         &source.reference,
         &spec,
@@ -691,6 +785,7 @@ pub fn prepare_rows(
         &samples,
         &preprocessing,
     ))?);
+    let rows = Arc::new(rows);
     Ok(PreparedTableDataset {
         source,
         spec,
@@ -699,8 +794,8 @@ pub fn prepare_rows(
         preprocessing,
         profile,
         digest,
-        rows: rows.to_vec(),
-        raw_rows: rows.to_vec(),
+        rows: Arc::clone(&rows),
+        raw_rows: rows,
         annotation_revisions: request
             .label_overrides
             .iter()
@@ -720,16 +815,18 @@ pub fn prepare_rows(
     })
 }
 
-fn profile_training_rows(rows: &[Value], training: &[usize]) -> Result<TableProfile> {
-    let mut profiles: BTreeMap<String, ColumnProfile> = BTreeMap::new();
-    for index in training {
-        let row = rows[*index]
-            .as_object()
-            .ok_or_else(|| anyhow!("Table rows must be objects"))?;
-        for name in row.keys() {
-            profiles
-                .entry(name.clone())
-                .or_insert_with(|| ColumnProfile {
+/// Profiles only `columns` of training rows, so unmapped source values never reach a consultant.
+pub(crate) fn profile_training_rows(
+    rows: &[Value],
+    training: &[usize],
+    columns: &[String],
+) -> Result<TableProfile> {
+    let mut profiles: BTreeMap<String, ColumnProfile> = columns
+        .iter()
+        .map(|name| {
+            (
+                name.clone(),
+                ColumnProfile {
                     name: name.clone(),
                     missing: 0,
                     numeric: 0,
@@ -739,15 +836,19 @@ fn profile_training_rows(rows: &[Value], training: &[usize]) -> Result<TableProf
                     minimum: None,
                     maximum: None,
                     examples: vec![],
-                });
-        }
-    }
+                },
+            )
+        })
+        .collect();
     if profiles.len() > 4096 {
         return Err(anyhow!("Table profile exceeds 4096 columns"));
     }
     for index in training {
+        let row = rows[*index]
+            .as_object()
+            .ok_or_else(|| anyhow!("Table rows must be objects"))?;
         for (name, profile) in &mut profiles {
-            let value = rows[*index].get(name).unwrap_or(&Value::Null);
+            let value = row.get(name).unwrap_or(&Value::Null);
             match value {
                 Value::Null => profile.missing += 1,
                 Value::Number(number) => {
@@ -926,19 +1027,28 @@ pub fn base_preprocessing(preprocessing: &TablePreprocessing) -> &TablePreproces
 #[cfg(feature = "execute")]
 mod table_io {
     use super::*;
-    use flow_like::flow::execution::context::ExecutionContext;
+    use flow_like::flow::execution::context::{ExecutionContext, ExecutionContextCache};
     use flow_like_catalog_core::{CachedDB, CachedDBRefreshHook, CachedDBRefresher};
     use flow_like_storage::{
+        arrow_schema::{DataType, Schema, TimeUnit},
+        arrow_utils::value_to_record_batch,
         contracts::database::DatabaseSelector,
         databases::vector::{
             VectorStore, buffered::BufferedVectorStore, lancedb::LanceDBVectorStore,
         },
+        lancedb::Connection,
     };
     use flow_like_types::{async_trait, sync::RwLock};
-    use std::sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
+    use std::{
+        collections::HashMap,
+        sync::{
+            LazyLock, Mutex, Weak,
+            atomic::{AtomicU64, Ordering},
+        },
     };
+
+    /// Upper bound on rows per read query; byte-sized pages are usually smaller.
+    const MAXIMUM_PAGE_ROWS: usize = 4096;
 
     struct ViewRefresher {
         source: NodeDBConnection,
@@ -1035,12 +1145,31 @@ mod table_io {
             })
             .await?;
         let reference = snapshot.reference().await?;
+        let temporal_units = schema_temporal_units(&VectorStore::schema(&snapshot).await?);
         let database = cache_view(context, source.clone(), snapshot).await?;
         Ok(PinnedTableSource {
             database,
             reference,
             locator: Some(locator),
+            temporal_units,
         })
+    }
+    /// Lance returns timestamp and date cells as integers in their storage unit.
+    fn schema_temporal_units(schema: &Schema) -> BTreeMap<String, TemporalUnit> {
+        schema
+            .fields()
+            .iter()
+            .filter_map(|field| {
+                let unit = match field.data_type() {
+                    DataType::Timestamp(TimeUnit::Second, _) => TemporalUnit::Seconds,
+                    DataType::Timestamp(TimeUnit::Microsecond, _) => TemporalUnit::Microseconds,
+                    DataType::Timestamp(TimeUnit::Nanosecond, _) => TemporalUnit::Nanoseconds,
+                    DataType::Date32 => TemporalUnit::Days,
+                    _ => return None,
+                };
+                Some((field.name().clone(), unit))
+            })
+            .collect()
     }
     pub async fn inspect_table_schema(
         context: &mut ExecutionContext,
@@ -1060,43 +1189,69 @@ mod table_io {
             .collect();
         Ok(SourceTableSchema { source, columns })
     }
-    pub async fn read_rows(
+    /// Reads the pinned table in pages sized from the largest row seen so far. Unfiltered
+    /// list queries let Lance push each page's offset into the scan instead of rescanning.
+    async fn read_pages(
         context: &mut ExecutionContext,
         source: &PinnedTableSource,
         budget: &TableBudget,
-        page_size: usize,
+        select: Option<Vec<String>>,
+        maximum_page_rows: usize,
     ) -> Result<Vec<Value>> {
         budget.validate()?;
-        let mut rows = Vec::new();
+        let table = &source.reference.table;
+        let total = source
+            .database
+            .load(context)
+            .await?
+            .db
+            .read()
+            .await
+            .count(None)
+            .await?;
+        if total > budget.maximum_rows {
+            return Err(anyhow!(
+                "Source table '{table}' has {total} rows, above the row budget of {}; no partial dataset was prepared",
+                budget.maximum_rows
+            ));
+        }
+        let page_bytes = (budget.maximum_bytes / 16).max(1);
+        let mut rows = Vec::with_capacity(total);
         let mut bytes = 0usize;
+        let mut largest = 0usize;
         loop {
+            let page_rows = if largest == 0 {
+                1
+            } else {
+                (page_bytes / largest).clamp(1, maximum_page_rows.max(1))
+            };
+            let limit = page_rows.min(
+                budget
+                    .maximum_rows
+                    .saturating_add(1)
+                    .saturating_sub(rows.len()),
+            );
             let cached = source.database.load(context).await?;
             let page = cached
                 .db
                 .read()
                 .await
-                .filter(
-                    "true",
-                    None,
-                    page_size.min(
-                        budget
-                            .maximum_rows
-                            .saturating_add(1)
-                            .saturating_sub(rows.len()),
-                    ),
-                    rows.len(),
-                )
+                .list(select.clone(), limit, rows.len())
                 .await?;
             if page.is_empty() {
                 break;
             }
             for row in page {
+                let size = serialized_json_size(&row)?;
+                largest = largest.max(size);
                 bytes = bytes
-                    .checked_add(flow_like_types::json::to_vec(&row)?.len())
+                    .checked_add(size)
                     .ok_or_else(|| anyhow!("Table byte budget overflows"))?;
                 if bytes > budget.maximum_bytes || rows.len() >= budget.maximum_rows {
                     return Err(anyhow!(
-                        "Source table exceeds the row or byte budget; no partial dataset was prepared"
+                        "Source table '{table}' exceeds the budget of {} rows or {} bytes; no partial dataset was prepared",
+                        budget.maximum_rows,
+                        budget.maximum_bytes
                     ));
                 }
                 rows.push(row);
@@ -1104,18 +1259,74 @@ mod table_io {
         }
         Ok(rows)
     }
+    /// Reads every column; `page_size` caps the rows of one query.
+    pub async fn read_rows(
+        context: &mut ExecutionContext,
+        source: &PinnedTableSource,
+        budget: &TableBudget,
+        page_size: usize,
+    ) -> Result<Vec<Value>> {
+        read_pages(context, source, budget, None, page_size).await
+    }
+    /// Reads only the named columns present in the pinned schema. A missing mapped column
+    /// is reported by name when a row is mapped.
+    pub async fn read_columns(
+        context: &mut ExecutionContext,
+        source: &PinnedTableSource,
+        budget: &TableBudget,
+        columns: &[String],
+    ) -> Result<Vec<Value>> {
+        if columns.is_empty() {
+            return Ok(Vec::new());
+        }
+        let schema = source
+            .database
+            .load(context)
+            .await?
+            .db
+            .read()
+            .await
+            .schema()
+            .await?;
+        let available: HashSet<&str> = schema
+            .fields()
+            .iter()
+            .map(|field| field.name().as_str())
+            .collect();
+        let mut seen = HashSet::new();
+        let selected: Vec<String> = columns
+            .iter()
+            .filter(|column| available.contains(column.as_str()) && seen.insert(column.as_str()))
+            .cloned()
+            .collect();
+        if selected.is_empty() {
+            return Err(anyhow!(
+                "Table '{}' has none of the mapped columns {columns:?}",
+                source.reference.table
+            ));
+        }
+        if selected.iter().any(|column| column.contains(['.', '`'])) {
+            // Lance resolves dotted names as nested field paths, so such tables are read whole.
+            let mut rows = read_pages(context, source, budget, None, MAXIMUM_PAGE_ROWS).await?;
+            let wanted: HashSet<&str> = selected.iter().map(String::as_str).collect();
+            for row in &mut rows {
+                if let Some(row) = row.as_object_mut() {
+                    row.retain(|name, _| wanted.contains(name.as_str()));
+                }
+            }
+            return Ok(rows);
+        }
+        read_pages(context, source, budget, Some(selected), MAXIMUM_PAGE_ROWS).await
+    }
     pub async fn prepare_table_dataset(
         context: &mut ExecutionContext,
         request: &TableDatasetRequest,
     ) -> Result<PreparedTableDataset> {
         let source = pin_table_source(context, &request.source).await?;
-        let page_size = if matches!(request.mapping.features, FeatureSource::Tabular { .. }) {
-            512
-        } else {
-            1
-        };
-        let rows = read_rows(context, &source, &request.budget, page_size).await?;
-        prepare_rows(source, request, &rows)
+        let columns = mapped_columns(&request.mapping);
+        let rows = read_columns(context, &source, &request.budget, &columns).await?;
+        let request = request.clone();
+        tokio::task::spawn_blocking(move || prepare_rows_owned(source, &request, rows)).await?
     }
     pub async fn clone_experiment_table(
         context: &mut ExecutionContext,
@@ -1140,7 +1351,7 @@ mod table_io {
                 "Clone requires a new bounded alphanumeric table name"
             ));
         }
-        let rows = read_rows(context, source, &TableBudget::default(), 1).await?;
+        let rows = read_rows(context, source, &TableBudget::default(), MAXIMUM_PAGE_ROWS).await?;
         let cached = source.database.load(context).await?;
         let connection = cached.db.read().await.inner().connection()?.clone();
         let mut store = LanceDBVectorStore::from_connection(connection, name.into()).await;
@@ -1154,12 +1365,13 @@ mod table_io {
             database,
             reference,
             locator: source.locator.clone(),
+            temporal_units: source.temporal_units.clone(),
         })
     }
-    pub async fn reopen_pinned_source(
-        context: &mut ExecutionContext,
-        source: &PinnedTableSource,
-    ) -> Result<NodeDBConnection> {
+    fn authorized_locator<'a>(
+        context: &ExecutionContext,
+        source: &'a PinnedTableSource,
+    ) -> Result<(&'a TableLocator, ExecutionContextCache)> {
         let locator = source.locator.as_ref().ok_or_else(|| {
             anyhow!(
                 "Durable source locator is missing; supply the original scoped database connection"
@@ -1179,24 +1391,122 @@ mod table_io {
                 "Dataset source belongs to a different execution scope or is not pinned"
             ));
         }
+        Ok((locator, scope))
+    }
+    /// The pinned store this run already holds, checked against the durable reference.
+    async fn cached_source(
+        context: &mut ExecutionContext,
+        source: &PinnedTableSource,
+        locator: &TableLocator,
+    ) -> Result<Option<LanceDBVectorStore>> {
         let cache_present = context
             .cache
             .read()
             .await
             .contains_key(&source.database.cache_key);
-        if cache_present {
-            let cached = source.database.load(context).await?;
-            let store = cached.db.read().await;
-            if store.inner().reference().await? != source.reference
-                || content_digest(store.inner().connection()?.uri().as_bytes())
-                    != locator.connection_digest
-            {
-                return Err(anyhow!(
-                    "Cached source differs from the pinned dataset reference"
-                ));
-            }
+        if !cache_present {
+            return Ok(None);
+        }
+        let cached = source.database.load(context).await?;
+        let store = cached.db.read().await.inner().clone();
+        if store.reference().await? != source.reference
+            || content_digest(store.connection()?.uri().as_bytes()) != locator.connection_digest
+        {
+            return Err(anyhow!(
+                "Cached source differs from the pinned dataset reference"
+            ));
+        }
+        Ok(Some(store))
+    }
+    async fn cache_reopened(
+        context: &ExecutionContext,
+        store: LanceDBVectorStore,
+    ) -> NodeDBConnection {
+        let cache_key = format!("inspection::reopened::{}", uuid::Uuid::new_v4());
+        context.cache.write().await.insert(
+            cache_key.clone(),
+            Arc::new(CachedDB {
+                db: Arc::new(RwLock::new(BufferedVectorStore::new(store, 0))),
+            }),
+        );
+        NodeDBConnection { cache_key }
+    }
+    pub async fn reopen_pinned_source(
+        context: &mut ExecutionContext,
+        source: &PinnedTableSource,
+    ) -> Result<NodeDBConnection> {
+        let (locator, scope) = authorized_locator(context, source)?;
+        if cached_source(context, source, locator).await?.is_some() {
             return Ok(source.database.clone());
         }
+        let connection = locate_source_connection(context, &scope, locator).await?;
+        let selector = DatabaseSelector {
+            branch: source.reference.branch.clone(),
+            version: Some(source.reference.version),
+            tag: None,
+            read_only: true,
+        };
+        let store = match LanceDBVectorStore::from_connection_with_selector(
+            connection.clone(),
+            source.reference.table.clone(),
+            selector,
+        )
+        .await
+        {
+            Ok(store) => store,
+            Err(error) => return Err(missing_version_error(connection, source, error).await),
+        };
+        if store.reference().await? != source.reference {
+            return Err(anyhow!(
+                "Reopened source differs from the pinned dataset reference"
+            ));
+        }
+        Ok(cache_reopened(context, store).await)
+    }
+    /// Names a cleaned-up pinned version instead of surfacing Lance's checkout error.
+    async fn missing_version_error(
+        connection: Connection,
+        source: &PinnedTableSource,
+        error: flow_like_types::Error,
+    ) -> flow_like_types::Error {
+        let reference = &source.reference;
+        let head = LanceDBVectorStore::from_connection_with_selector(
+            connection,
+            reference.table.clone(),
+            DatabaseSelector {
+                branch: reference.branch.clone(),
+                version: None,
+                tag: None,
+                read_only: true,
+            },
+        )
+        .await;
+        let versions = match head {
+            Ok(head) => head.list_versions().await,
+            Err(_) => return error,
+        };
+        match versions {
+            Ok(versions)
+                if versions
+                    .iter()
+                    .all(|kept| kept.version != reference.version) =>
+            {
+                anyhow!(
+                    "Pinned version {} of table '{}' on branch '{}' was cleaned up or the table was recreated, so this exact replay cannot run; prepare the dataset again from the current table ({error})",
+                    reference.version,
+                    reference.table,
+                    reference.branch
+                )
+            }
+            _ => error,
+        }
+    }
+    /// Finds the project or user database whose URI digest the durable locator recorded.
+    async fn locate_source_connection(
+        context: &ExecutionContext,
+        scope: &ExecutionContextCache,
+        locator: &TableLocator,
+    ) -> Result<Connection> {
         let callbacks = context.app_state.config.read().await.callbacks.clone();
         let mut matched = None;
         for user_scoped in [false, true] {
@@ -1239,48 +1549,37 @@ mod table_io {
             matched = Some(connection);
             break;
         }
-        let connection=matched.ok_or_else(||anyhow!("The source connection is not available in the current authorized workspace; reconnect the original database"))?;
-        let store = LanceDBVectorStore::from_connection_with_selector(
-            connection,
-            source.reference.table.clone(),
-            DatabaseSelector {
-                branch: source.reference.branch.clone(),
-                version: Some(source.reference.version),
-                tag: None,
-                read_only: true,
-            },
-        )
-        .await?;
-        if store.reference().await? != source.reference {
-            return Err(anyhow!(
-                "Reopened source differs from the pinned dataset reference"
-            ));
-        }
-        let cache_key = format!("inspection::reopened::{}", uuid::Uuid::new_v4());
-        context.cache.write().await.insert(
-            cache_key.clone(),
-            Arc::new(CachedDB {
-                db: Arc::new(RwLock::new(BufferedVectorStore::new(store, 0))),
-            }),
-        );
-        Ok(NodeDBConnection { cache_key })
+        matched.ok_or_else(|| {
+            anyhow!(
+                "The source connection is not available in the current authorized workspace; reconnect the original database"
+            )
+        })
     }
+    /// Opens the head of the pinned table's branch without opening the pinned version,
+    /// which version cleanup may have removed.
     pub async fn reopen_latest_source(
         context: &mut ExecutionContext,
         source: &PinnedTableSource,
     ) -> Result<NodeDBConnection> {
-        let pinned = reopen_pinned_source(context, source).await?;
-        let cached = pinned.load(context).await?;
-        let store = cached.db.read().await.inner().clone();
-        let latest = store
-            .checkout(DatabaseSelector {
-                branch: source.reference.branch.clone(),
-                version: None,
-                tag: None,
-                read_only: true,
-            })
-            .await?;
-        cache_view(context, pinned, latest).await
+        let (locator, scope) = authorized_locator(context, source)?;
+        let head = DatabaseSelector {
+            branch: source.reference.branch.clone(),
+            version: None,
+            tag: None,
+            read_only: true,
+        };
+        if let Some(store) = cached_source(context, source, locator).await? {
+            let latest = store.checkout(head).await?;
+            return cache_view(context, source.database.clone(), latest).await;
+        }
+        let connection = locate_source_connection(context, &scope, locator).await?;
+        let latest = LanceDBVectorStore::from_connection_with_selector(
+            connection,
+            source.reference.table.clone(),
+            head,
+        )
+        .await?;
+        Ok(cache_reopened(context, latest).await)
     }
     fn table_name(
         experiment_id: &str,
@@ -1307,6 +1606,95 @@ mod table_io {
         }
         let identity = content_digest(experiment_id.as_bytes());
         Ok(format!("{prefix}_{}_{partition}", &identity[..16]))
+    }
+    /// Serializes materialization of one experiment table within this process.
+    async fn lock_experiment_table(key: String) -> tokio::sync::OwnedMutexGuard<()> {
+        static LOCKS: LazyLock<Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>> =
+            LazyLock::new(|| Mutex::new(HashMap::new()));
+        let lock = {
+            let mut locks = LOCKS
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            locks.retain(|_, lock| lock.strong_count() > 0);
+            let current = locks.get(&key).and_then(Weak::upgrade);
+            current.unwrap_or_else(|| {
+                let lock = Arc::new(tokio::sync::Mutex::new(()));
+                locks.insert(key, Arc::downgrade(&lock));
+                lock
+            })
+        };
+        lock.lock_owned().await
+    }
+    /// Creates the table with every row in one commit. Returns false without writing when
+    /// the table exists, so a concurrent writer never appends a second copy.
+    pub(super) async fn create_experiment_table(
+        connection: &Connection,
+        name: &str,
+        rows: &[Value],
+    ) -> Result<bool> {
+        let batch = value_to_record_batch(rows.to_vec())?;
+        match connection.create_table(name, batch).execute().await {
+            Ok(_) => Ok(true),
+            Err(flow_like_storage::lancedb::Error::TableAlreadyExists { .. }) => Ok(false),
+            Err(error) => Err(anyhow!(
+                "Creating experiment table '{name}' failed: {error}"
+            )),
+        }
+    }
+    /// Pins the existing table and requires exactly the requested rows.
+    async fn verify_experiment_table(
+        store: &LanceDBVectorStore,
+        rows: &[Value],
+        policy: &TableWritePolicy,
+        largest_row: usize,
+    ) -> Result<LanceDBVectorStore> {
+        let reference = store.reference().await?;
+        let pinned = store
+            .checkout(DatabaseSelector {
+                branch: reference.branch,
+                version: Some(reference.version),
+                tag: None,
+                read_only: true,
+            })
+            .await?;
+        let expected: BTreeMap<_, _> = rows
+            .iter()
+            .map(|row| Ok((identifier(field(row, "sample_id")?)?, row)))
+            .collect::<Result<_>>()?;
+        let mut found = HashSet::new();
+        let mut read_bytes = 0usize;
+        let page_size = (policy.maximum_bytes / 16 / largest_row).clamp(1, 512);
+        loop {
+            let limit = page_size.min(rows.len().saturating_add(1).saturating_sub(found.len()));
+            let page = pinned.list(None, limit, found.len()).await?;
+            if page.is_empty() {
+                break;
+            }
+            for row in page {
+                read_bytes = read_bytes
+                    .checked_add(serialized_json_size(&row)?)
+                    .ok_or_else(|| anyhow!("Existing output byte count overflows"))?;
+                let id = identifier(field(&row, "sample_id")?)?;
+                if read_bytes > policy.maximum_bytes
+                    || !found.insert(id.clone())
+                    || expected.get(&id).is_none_or(|value| **value != row)
+                {
+                    return Err(anyhow!(
+                        "Existing scoped experiment table '{}' differs from the requested rows at sample '{id}'; source data was not changed",
+                        store.table_name()
+                    ));
+                }
+            }
+        }
+        if found.len() != rows.len() {
+            return Err(anyhow!(
+                "Existing scoped experiment table '{}' holds {} of {} requested rows",
+                store.table_name(),
+                found.len(),
+                rows.len()
+            ));
+        }
+        Ok(pinned)
     }
     pub async fn write_experiment_rows(
         context: &mut ExecutionContext,
@@ -1379,57 +1767,21 @@ mod table_io {
             let cached = source.database.load(context).await?;
             let connection = cached.db.read().await.inner().connection()?.clone();
             let name = table_name(experiment_id, partition, policy)?;
-            let mut store = LanceDBVectorStore::from_connection(connection, name).await;
-            if store.table_exists().await? {
-                let reference = store.reference().await?;
-                store = store
-                    .checkout(DatabaseSelector {
-                        branch: reference.branch,
-                        version: Some(reference.version),
-                        tag: None,
-                        read_only: true,
-                    })
-                    .await?;
-                let expected: BTreeMap<_, _> = rows
-                    .iter()
-                    .map(|row| Ok((identifier(field(row, "sample_id")?)?, row)))
-                    .collect::<Result<_>>()?;
-                let mut found = HashSet::new();
-                let mut read_bytes = 0usize;
-                let page_size = (policy.maximum_bytes / 16 / largest_row).clamp(1, 512);
-                loop {
-                    let page = store
-                        .filter(
-                            "true",
-                            None,
-                            page_size.min(rows.len().saturating_add(1).saturating_sub(found.len())),
-                            found.len(),
-                        )
-                        .await?;
-                    if page.is_empty() {
-                        break;
-                    }
-                    for row in page {
-                        read_bytes = read_bytes
-                            .checked_add(flow_like_types::json::to_vec(&row)?.len())
-                            .ok_or_else(|| anyhow!("Existing output byte count overflows"))?;
-                        let id = identifier(field(&row, "sample_id")?)?;
-                        if read_bytes > policy.maximum_bytes
-                            || !found.insert(id.clone())
-                            || expected.get(&id).is_none_or(|value| **value != row)
-                        {
-                            return Err(anyhow!(
-                                "Existing scoped experiment table differs from the requested rows; source data was not changed"
-                            ));
-                        }
-                    }
-                }
-                if found.len() != rows.len() {
-                    return Err(anyhow!("Existing scoped experiment table is incomplete"));
-                }
+            let _serialized = lock_experiment_table(format!(
+                "{}/{name}",
+                content_digest(connection.uri().as_bytes())
+            ))
+            .await;
+            let existing =
+                LanceDBVectorStore::from_connection(connection.clone(), name.clone()).await;
+            let created = !existing.table_exists().await?
+                && create_experiment_table(&connection, &name, &rows).await?;
+            let store = LanceDBVectorStore::from_connection(connection, name).await;
+            let store = if created {
+                store
             } else {
-                store.insert(rows.clone()).await?;
-            }
+                verify_experiment_table(&store, &rows, policy, largest_row).await?
+            };
             cache_view(context, source.database.clone(), store).await?
         };
         let cached = database.load(context).await?;
@@ -1526,7 +1878,7 @@ mod table_io {
 #[cfg(feature = "execute")]
 pub use table_io::{
     clone_experiment_table, inspect_table_schema, materialize_prepared_tables, pin_table_source,
-    prepare_table_dataset, read_rows, reopen_latest_source, reopen_pinned_source,
+    prepare_table_dataset, read_columns, read_rows, reopen_latest_source, reopen_pinned_source,
     write_experiment_rows,
 };
 
@@ -1547,6 +1899,7 @@ mod tests {
                 pinned: true,
             },
             locator: None,
+            temporal_units: BTreeMap::new(),
         };
         let request = TableDatasetRequest {
             source: source.database.clone(),
@@ -1664,19 +2017,97 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .available_at_ms
-                < 10
+                <= 10
         }));
         assert!(prepared.split.validation.iter().all(|index| {
-            prepared.samples[*index].window_start_ms >= 11
+            prepared.samples[*index].window_start_ms > 11
                 && prepared.samples[*index]
                     .outcome
                     .as_ref()
                     .unwrap()
                     .available_at_ms
-                    < 20
+                    <= 20
         }));
+        assert!(prepared.split.train.contains(&8));
         assert!(!prepared.split.purged.is_empty());
         prepared.split.validate(&prepared.samples).unwrap();
+    }
+
+    #[test]
+    fn review_overrides_available_after_a_cutoff_are_purged_and_at_it_are_kept() {
+        let (source, mut request, rows) = fixture();
+        request.split = TableSplitPolicy::Time {
+            train_end_ms: 10,
+            validation_end_ms: 20,
+            embargo_ms: 0,
+        };
+        let review = |available_at_ms: i64| TableLabelOverride {
+            annotation: Annotation::Class { class_id: 0 },
+            provenance: LabelProvenance::Measured {
+                source: "gauge".into(),
+            },
+            annotation_revision: 2,
+            outcome: None,
+            available_at_ms: Some(available_at_ms),
+        };
+        request.label_overrides.insert("4".into(), review(10));
+        request.label_overrides.insert("2".into(), review(11));
+        let prepared = prepare_rows(source, &request, &rows).unwrap();
+        assert!(prepared.split.train.contains(&4));
+        assert!(prepared.split.purged.contains(&2));
+        assert!(!prepared.split.train.contains(&2));
+    }
+
+    #[test]
+    fn temporal_columns_in_other_units_become_millisecond_sample_times() {
+        let (mut source, mut request, mut rows) = fixture();
+        request.split = TableSplitPolicy::Time {
+            train_end_ms: 10_000,
+            validation_end_ms: 20_000,
+            embargo_ms: 0,
+        };
+        for (index, row) in rows.iter_mut().enumerate() {
+            row["time"] = json!(index as i64 * 1_000_000 + 999);
+        }
+        source
+            .temporal_units
+            .insert("time".into(), TemporalUnit::Microseconds);
+        let prepared = prepare_rows(source.clone(), &request, &rows).unwrap();
+        for (index, sample) in prepared.samples.iter().enumerate() {
+            assert_eq!(sample.timestamp_ms, index as i64 * 1_000);
+            assert_eq!(sample.window_end_ms, sample.timestamp_ms);
+        }
+        assert!(prepared.split.train.contains(&9));
+        assert!(prepared.split.validation.contains(&19));
+        assert!(prepared.split.test.contains(&29));
+        assert_eq!(prepared.raw_rows[3]["time"], json!(3_000_999));
+        source.temporal_units.clear();
+        assert!(prepare_rows(source, &request, &rows).is_err());
+        assert_eq!(TemporalUnit::Seconds.to_milliseconds(7), Some(7_000));
+        assert_eq!(TemporalUnit::Nanoseconds.to_milliseconds(-1), Some(-1));
+        assert_eq!(TemporalUnit::Days.to_milliseconds(2), Some(172_800_000));
+        assert_eq!(TemporalUnit::Days.to_milliseconds(i64::MAX), None);
+    }
+
+    #[test]
+    fn training_profiles_describe_only_mapped_features_and_targets() {
+        let (source, request, rows) = fixture();
+        let prepared = prepare_rows(source, &request, &rows).unwrap();
+        let names: Vec<_> = prepared
+            .profile
+            .columns
+            .iter()
+            .map(|column| column.name.as_str())
+            .collect();
+        assert_eq!(names, ["category", "target", "x"]);
+        assert_eq!(
+            mapped_columns(&request.mapping),
+            ["id", "group", "time", "x", "category", "target"]
+        );
+        let x = &prepared.profile.columns[2];
+        assert_eq!(x.numeric, prepared.split.train.len());
+        assert!(x.examples.len() <= 5);
+        assert!(Arc::ptr_eq(&prepared.rows, &prepared.raw_rows));
     }
 
     fn feature_plan() -> super::super::feature_engineering::FeaturePlan {
@@ -1710,7 +2141,7 @@ mod tests {
                 .unwrap();
         assert_eq!(prepared.split, original.split);
         assert_eq!(prepared.raw_content_digests, original.raw_content_digests);
-        assert_eq!(prepared.raw_rows, rows);
+        assert_eq!(*prepared.raw_rows, rows);
         for index in prepared
             .split
             .train
@@ -1743,6 +2174,119 @@ mod tests {
             batch,
             transform_table_rows(&reloaded, &rows[..2], 100).unwrap()
         );
+    }
+
+    #[test]
+    fn feature_plans_reject_undeclared_columns_in_selections_and_steps() {
+        use super::super::feature_engineering::{FeaturePlan, prepare_feature_rows};
+        let (source, request, rows) = fixture();
+        let attempt = |plan: Value| {
+            let plan: FeaturePlan = flow_like_types::json::from_value(plan).unwrap();
+            prepare_feature_rows(
+                source.clone(),
+                &request,
+                &rows,
+                &plan,
+                vec![],
+                &BTreeMap::new(),
+            )
+            .unwrap_err()
+            .to_string()
+        };
+        let selected = "Selected features must be authorized inputs or generated columns";
+        for (numeric, categorical) in [(json!(["x", "z"]), json!([])), (json!(["x"]), json!(["z"]))]
+        {
+            let error = attempt(json!({
+                "numeric_columns":numeric,"categorical_columns":categorical,"standardize":true
+            }));
+            assert!(error.contains(selected), "{error}");
+        }
+        let steps = [
+            (
+                json!({"kind":"derive_columns","columns":[{"name":"z_double","expression":{"kind":"binary","op":"add","left":{"kind":"column","name":"z"},"right":{"kind":"column","name":"z"}}}]}),
+                "Column 'z' is not an allowed feature input",
+            ),
+            (
+                json!({"kind":"window_features","group_by":["group"],"timestamp_column":"time","features":[{"name":"lag_z","column":"z","operation":{"kind":"lag","steps":1}}]}),
+                "Column 'z' is not an allowed feature input",
+            ),
+            (
+                json!({"kind":"window_features","group_by":["z"],"timestamp_column":"time","features":[{"name":"lag_x","column":"x","operation":{"kind":"lag","steps":1}}]}),
+                "Window key 'z' is not allowed metadata",
+            ),
+        ];
+        for (step, expected) in steps {
+            let error = attempt(json!({
+                "pipeline":{"steps":[step]},
+                "numeric_columns":["x"],"categorical_columns":[],"standardize":true
+            }));
+            assert!(error.contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn window_features_match_a_full_time_ordered_replay_in_every_partition() {
+        use super::super::feature_engineering::prepare_feature_rows;
+        let (source, request, mut rows) = fixture();
+        rows.reverse();
+        let plan: super::super::feature_engineering::FeaturePlan =
+            flow_like_types::json::from_value(json!({
+                "pipeline":{"steps":[
+                    {"kind":"window_features","group_by":["category"],"timestamp_column":"time","features":[
+                        {"name":"lag_x","column":"x","operation":{"kind":"lag","steps":1}},
+                        {"name":"mean_x","column":"x","operation":{"kind":"rolling","statistic":"mean","window":{"kind":"rows","count":3},"min_periods":1,"include_current":false}}
+                    ]}
+                ]},
+                "numeric_columns":["x","lag_x","mean_x"],"categorical_columns":[],
+                "standardize":false,"imputation":{"kind":"constant","value":0.0}
+            }))
+            .unwrap();
+        let prepared =
+            prepare_feature_rows(source, &request, &rows, &plan, vec![], &BTreeMap::new()).unwrap();
+        let TablePreprocessing::Engineered { pipeline, .. } = &prepared.preprocessing else {
+            unreachable!()
+        };
+        assert_eq!(
+            pipeline.limits.maximum_duration_ms,
+            plan.limits.maximum_duration_ms
+        );
+        assert_eq!(*prepared.raw_rows, rows);
+        let groups: HashSet<_> = prepared
+            .split
+            .train
+            .iter()
+            .map(|index| &prepared.samples[*index].group_id)
+            .collect();
+        assert!(
+            prepared
+                .split
+                .validation
+                .iter()
+                .chain(&prepared.split.test)
+                .all(|index| !groups.contains(&prepared.samples[*index].group_id))
+        );
+        let mut ordered: Vec<usize> = (0..rows.len()).collect();
+        ordered.sort_by_key(|index| rows[*index]["time"].as_i64().unwrap());
+        let ordered_rows: Vec<Value> = ordered.iter().map(|index| rows[*index].clone()).collect();
+        let replay = transform_table_rows(&prepared.preprocessing, &ordered_rows, 1_000).unwrap();
+        for (position, index) in ordered.iter().enumerate() {
+            let time = rows[*index]["time"].as_i64().unwrap() as f32;
+            let lag = if time > 0. { time - 1. } else { 0. };
+            let mean = match time as i64 {
+                0 => 0.,
+                1 => 0.,
+                2 => 0.5,
+                _ => time - 2.,
+            };
+            let expected = vec![time, lag, mean];
+            assert_eq!(replay[position].values, expected);
+            let partitioned = prepared.split.train.contains(index)
+                || prepared.split.validation.contains(index)
+                || prepared.split.test.contains(index);
+            if partitioned {
+                assert_eq!(prepared.samples[*index].input, replay[position]);
+            }
+        }
     }
 
     #[test]
@@ -1856,7 +2400,7 @@ mod tests {
             Annotation::Class { class_id: 1 }
         );
         assert_eq!(changed.raw_content_digests, original.raw_content_digests);
-        assert_eq!(changed.rows, rows);
+        assert_eq!(*changed.rows, rows);
         changed.split.validate(&changed.samples).unwrap();
     }
 
@@ -1879,7 +2423,19 @@ mod tests {
         )
         .unwrap();
         assert!(prepared.split.purged.contains(&excluded));
-        assert!(prepared.rows[excluded]["x_squared"].is_null());
+        assert!(
+            !prepared
+                .split
+                .train
+                .iter()
+                .chain(&prepared.split.validation)
+                .chain(&prepared.split.test)
+                .any(|index| *index == excluded)
+        );
+        assert_eq!(
+            prepared.rows[excluded]["x_squared"].as_f64(),
+            Some((excluded * excluded) as f64)
+        );
         assert_eq!(prepared.raw_rows[excluded], rows[excluded]);
         prepared.split.validate(&prepared.samples).unwrap();
         plan.limits.maximum_rows = rows.len() - 1;
@@ -1925,8 +2481,21 @@ mod tests {
     }
 
     #[cfg(feature = "execute")]
-    #[tokio::test]
-    async fn local_table_pin_materialization_retry_and_reopen_preserve_source_versions() {
+    struct TestDirectory(std::path::PathBuf);
+    #[cfg(feature = "execute")]
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A context whose project database and app storage live in a fresh temporary directory.
+    #[cfg(feature = "execute")]
+    async fn table_context() -> (
+        TestDirectory,
+        flow_like::flow::execution::context::ExecutionContext,
+        flow_like_storage::lancedb::Connection,
+    ) {
         use ahash::AHashMap;
         use flow_like::{
             flow::{
@@ -1942,27 +2511,18 @@ mod tests {
             state::{FlowLikeConfig, FlowLikeState, FlowLikeStores},
             utils::http::HTTPClient,
         };
-        use flow_like_catalog_core::CachedDB;
         use flow_like_storage::{
-            databases::vector::{
-                VectorStore, buffered::BufferedVectorStore, lancedb::LanceDBVectorStore,
-            },
+            files::store::{FlowLikeStore, local_store::LocalObjectStore},
             object_store::path::Path,
         };
         use flow_like_types::sync::{Mutex, RwLock};
-        use std::sync::{Arc, Weak};
-        struct Directory(std::path::PathBuf);
-        impl Drop for Directory {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_dir_all(&self.0);
-            }
-        }
-        let directory = Directory(std::env::temp_dir().join(format!(
+        use std::sync::Weak;
+        let directory = TestDirectory(std::env::temp_dir().join(format!(
             "flow-like-training-tables-{}",
             uuid::Uuid::new_v4()
         )));
         std::fs::create_dir_all(&directory.0).unwrap();
-        let location = directory.0.to_string_lossy().into_owned();
+        let location = directory.0.join("database").to_string_lossy().into_owned();
         let mut config = FlowLikeConfig::new();
         let reopen_location = location.clone();
         config.register_build_project_database(Arc::new(move |_| {
@@ -2000,8 +2560,12 @@ mod tests {
             None,
         )
         .await;
+        let mut stores = FlowLikeStores::default();
+        stores.app_storage_store = Some(FlowLikeStore::Local(Arc::new(
+            LocalObjectStore::new(directory.0.clone()).unwrap(),
+        )));
         context.execution_cache = Some(ExecutionContextCache {
-            stores: FlowLikeStores::default(),
+            stores,
             app_id: "table-test".into(),
             model_usage_app_id: None,
             board_dir: Path::from("board"),
@@ -2014,12 +2578,26 @@ mod tests {
             .execute()
             .await
             .unwrap();
-        let mut store = LanceDBVectorStore::from_connection(connection, "original".into()).await;
-        let (_, mut request, rows) = fixture();
-        store.insert(rows.clone()).await.unwrap();
-        let initial = store.reference().await.unwrap();
+        (directory, context, connection)
+    }
+
+    /// Writes `rows` to a new table and caches it as an unpinned run database.
+    #[cfg(feature = "execute")]
+    async fn cached_table(
+        context: &mut flow_like::flow::execution::context::ExecutionContext,
+        connection: flow_like_storage::lancedb::Connection,
+        name: &str,
+        rows: Vec<Value>,
+    ) -> NodeDBConnection {
+        use flow_like_catalog_core::CachedDB;
+        use flow_like_storage::databases::vector::{
+            VectorStore, buffered::BufferedVectorStore, lancedb::LanceDBVectorStore,
+        };
+        use flow_like_types::sync::RwLock;
+        let mut store = LanceDBVectorStore::from_connection(connection, name.into()).await;
+        store.insert(rows).await.unwrap();
         let database = NodeDBConnection {
-            cache_key: "original".into(),
+            cache_key: format!("source::{name}"),
         };
         context.cache.write().await.insert(
             database.cache_key.clone(),
@@ -2027,8 +2605,31 @@ mod tests {
                 db: Arc::new(RwLock::new(BufferedVectorStore::new(store, 0))),
             }),
         );
+        database
+    }
+
+    #[cfg(feature = "execute")]
+    #[tokio::test]
+    async fn local_table_pin_materialization_retry_and_reopen_preserve_source_versions() {
+        use flow_like_storage::databases::vector::VectorStore;
+        let (_directory, mut context, connection) = table_context().await;
+        let (_, mut request, rows) = fixture();
+        let database = cached_table(&mut context, connection, "original", rows.clone()).await;
+        let initial = database
+            .load(&mut context)
+            .await
+            .unwrap()
+            .db
+            .read()
+            .await
+            .inner()
+            .reference()
+            .await
+            .unwrap();
         request.source = database.clone();
         let prepared = prepare_table_dataset(&mut context, &request).await.unwrap();
+        assert!(prepared.raw_rows.iter().all(|row| row.get("z").is_none()));
+        assert_eq!(prepared.profile.columns.len(), 3);
         let callback = context
             .app_state
             .config
@@ -2179,5 +2780,330 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    #[cfg(feature = "execute")]
+    #[tokio::test]
+    async fn latest_reopen_survives_a_cleaned_pinned_version_that_exact_replays_name() {
+        use flow_like_storage::lancedb::table::{Duration, OptimizeAction};
+        let (_directory, mut context, connection) = table_context().await;
+        let (_, mut request, rows) = fixture();
+        let database = cached_table(&mut context, connection, "cleaned", rows.clone()).await;
+        request.source = database.clone();
+        let prepared = prepare_table_dataset(&mut context, &request).await.unwrap();
+        let cached = database.load(&mut context).await.unwrap();
+        let mut changed = rows[1].clone();
+        changed["x"] = json!(4242);
+        cached
+            .upsert_from(&context, vec![changed], "id".into())
+            .await
+            .unwrap();
+        cached.ensure_flushed().await.unwrap();
+        let table = cached.db.read().await.inner().raw().await.unwrap();
+        table
+            .optimize(OptimizeAction::Prune {
+                older_than: Some(Duration::zero()),
+                delete_unverified: Some(true),
+                error_if_tagged_old_versions: Some(false),
+            })
+            .await
+            .unwrap();
+        context.cache.write().await.clear();
+        let error = reopen_pinned_source(&mut context, &prepared.source)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("was cleaned up"), "{error}");
+        request.source = reopen_latest_source(&mut context, &prepared.source)
+            .await
+            .unwrap();
+        let latest = prepare_table_dataset(&mut context, &request).await.unwrap();
+        assert!(latest.source.reference.version > prepared.source.reference.version);
+        assert!(
+            latest
+                .raw_rows
+                .iter()
+                .any(|row| row["id"] == 1 && row["x"] == 4242)
+        );
+    }
+
+    #[cfg(feature = "execute")]
+    #[tokio::test]
+    async fn mapped_reads_project_columns_in_byte_sized_pages_within_budgets() {
+        let (_directory, mut context, connection) = table_context().await;
+        let (_, request, rows) = fixture();
+        let database = cached_table(&mut context, connection, "paged", rows.clone()).await;
+        let source = pin_table_source(&mut context, &database).await.unwrap();
+        let columns = mapped_columns(&request.mapping);
+        let mut budget = TableBudget {
+            maximum_bytes: 4096,
+            ..TableBudget::default()
+        };
+        let read = read_columns(&mut context, &source, &budget, &columns)
+            .await
+            .unwrap();
+        assert_eq!(read.len(), rows.len());
+        for (row, original) in read.iter().zip(&rows) {
+            let expected = Value::Object(
+                columns
+                    .iter()
+                    .map(|name| (name.clone(), original[name].clone()))
+                    .collect(),
+            );
+            assert_eq!(row, &expected);
+        }
+        budget.maximum_rows = rows.len() - 1;
+        let error = read_columns(&mut context, &source, &budget, &columns)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("row budget"), "{error}");
+        budget.maximum_rows = rows.len();
+        budget.maximum_bytes = 1024;
+        assert!(
+            read_columns(&mut context, &source, &budget, &columns)
+                .await
+                .is_err()
+        );
+        let whole = read_rows(&mut context, &source, &TableBudget::default(), 7)
+            .await
+            .unwrap();
+        assert_eq!(whole, rows);
+    }
+
+    #[cfg(feature = "execute")]
+    #[tokio::test]
+    async fn concurrent_materialization_creates_each_experiment_table_once() {
+        use flow_like_storage::databases::vector::{VectorStore, lancedb::LanceDBVectorStore};
+        let (_directory, mut context, connection) = table_context().await;
+        let (_, _, rows) = fixture();
+        let database = cached_table(&mut context, connection.clone(), "raced", rows).await;
+        let source = pin_table_source(&mut context, &database).await.unwrap();
+        let output: Vec<Value> = (0..5)
+            .map(|index| json!({"sample_id":format!("s{index}"),"record_json":"{}"}))
+            .collect();
+        let policy = TableWritePolicy::default();
+        let mut other_context = context.clone();
+        let (first, second) = tokio::join!(
+            write_experiment_rows(
+                &mut context,
+                &source,
+                output.clone(),
+                "experiment-race",
+                "predictions",
+                "digest",
+                &policy,
+            ),
+            write_experiment_rows(
+                &mut other_context,
+                &source,
+                output.clone(),
+                "experiment-race",
+                "predictions",
+                "digest",
+                &policy,
+            )
+        );
+        let (first, second) = (first.unwrap(), second.unwrap());
+        assert_eq!(first.reference, second.reference);
+        let name = first.reference.table.clone();
+        assert!(
+            !table_io::create_experiment_table(&connection, &name, &output)
+                .await
+                .unwrap()
+        );
+        let stored = LanceDBVectorStore::from_connection(connection, name).await;
+        assert_eq!(stored.count(None).await.unwrap(), output.len());
+    }
+
+    #[cfg(feature = "execute")]
+    #[tokio::test]
+    async fn pinned_sources_record_non_millisecond_temporal_columns() {
+        use flow_like_catalog_core::CachedDB;
+        use flow_like_storage::{
+            arrow_array::{
+                ArrayRef, Date32Array, Int64Array, RecordBatch, StringArray,
+                TimestampMicrosecondArray,
+            },
+            arrow_schema::{DataType, Field, Schema, TimeUnit},
+            databases::vector::{buffered::BufferedVectorStore, lancedb::LanceDBVectorStore},
+        };
+        use flow_like_types::sync::RwLock;
+        let (_directory, mut context, connection) = table_context().await;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new(
+                "captured",
+                DataType::Timestamp(TimeUnit::Microsecond, None),
+                false,
+            ),
+            Field::new("day", DataType::Date32, false),
+            Field::new("label", DataType::Utf8, false),
+        ]));
+        let columns: Vec<ArrayRef> = vec![
+            Arc::new(Int64Array::from(vec![1, 2])),
+            Arc::new(TimestampMicrosecondArray::from(vec![1_500_000, 2_500_000])),
+            Arc::new(Date32Array::from(vec![1, 2])),
+            Arc::new(StringArray::from(vec!["a", "b"])),
+        ];
+        let batch = RecordBatch::try_new(schema, columns).unwrap();
+        let mut store = LanceDBVectorStore::from_connection(connection, "timed".into()).await;
+        store.insert_record_batch(batch).await.unwrap();
+        let database = NodeDBConnection {
+            cache_key: "timed".into(),
+        };
+        context.cache.write().await.insert(
+            database.cache_key.clone(),
+            Arc::new(CachedDB {
+                db: Arc::new(RwLock::new(BufferedVectorStore::new(store, 0))),
+            }),
+        );
+        let source = pin_table_source(&mut context, &database).await.unwrap();
+        assert_eq!(
+            source.temporal_units,
+            BTreeMap::from([
+                ("captured".to_string(), TemporalUnit::Microseconds),
+                ("day".to_string(), TemporalUnit::Days),
+            ])
+        );
+        let rows = read_rows(&mut context, &source, &TableBudget::default(), 10)
+            .await
+            .unwrap();
+        assert_eq!(rows[0]["captured"], json!(1_500_000));
+        assert_eq!(rows[1]["day"], json!(2));
+    }
+
+    /// An auto-training request over the fixture columns; `dataset` adds stream and split.
+    #[cfg(feature = "training")]
+    fn training_request(
+        source: &NodeDBConnection,
+        dataset: Value,
+    ) -> super::super::auto_training::AutoTrainRequest {
+        let mut request = json!({
+            "dataset":{
+                "source":source,
+                "spec":{"id":"readings","description":"Classify readings","task":"sensor_classification","labels":["good","bad"],"input_shape":[1],"prediction_horizon_ms":null,"minimum_examples":2,"minimum_examples_per_class":1},
+                "mapping":{"row_id":"id","group_id":"group","timestamp_ms":"time","features":{"kind":"tabular","options":{"numeric_columns":["x"],"categorical_columns":["category"]}},"target":{"kind":"column","column":"target"},"provenance":{"kind":"measured","source":"gauge"}}
+            },
+            "compute":{"backend":"cpu"},
+            "tables":{"create_tables":false}
+        });
+        for (key, value) in dataset.as_object().unwrap() {
+            request["dataset"][key] = value.clone();
+        }
+        flow_like_types::json::from_value(request).unwrap()
+    }
+
+    #[cfg(feature = "training")]
+    #[tokio::test]
+    async fn temporal_boundary_samples_import_into_their_partitions() {
+        use super::super::auto_training::{experiment_repository, start_auto_training};
+        let (_directory, mut context, connection) = table_context().await;
+        let rows: Vec<Value> = (0..=30)
+            .map(|index| {
+                json!({"id":index,"group":index,"time":index,"x":index,"category":"shared",
+                    "target":if index % 2 == 0 {"good"} else {"bad"}})
+            })
+            .collect();
+        let source = cached_table(&mut context, connection, "boundaries", rows).await;
+        for embargo in [0i64, 2] {
+            let request = training_request(
+                &source,
+                json!({
+                    "stream_id":format!("boundaries-{embargo}"),
+                    "split":{"kind":"time","train_end_ms":10,"validation_end_ms":20,"embargo_ms":embargo}
+                }),
+            );
+            let started = start_auto_training(&mut context, request, false)
+                .await
+                .unwrap();
+            let repo = experiment_repository(&context, &started.experiment_id).unwrap();
+            let experiment = repo.get_experiment(&started.experiment_id).unwrap();
+            let snapshot = repo
+                .get_snapshot_limited(
+                    &experiment.request.snapshot_id,
+                    experiment.request.budget.maximum_dataset_bytes,
+                )
+                .unwrap();
+            let ids = |samples: &[flow_like_ml_runtime::TrainingSample]| {
+                samples
+                    .iter()
+                    .map(|sample| sample.id.clone())
+                    .collect::<HashSet<_>>()
+            };
+            let train = ids(&snapshot.train);
+            let validation = ids(&snapshot.validation);
+            let test = ids(&snapshot.test);
+            assert!(train.contains("10"));
+            assert!(validation.contains(&(11 + embargo).to_string()));
+            assert!(validation.contains("20"));
+            assert!(test.contains(&(21 + embargo).to_string()));
+            for offset in 1..=embargo {
+                for id in [(10 + offset).to_string(), (20 + offset).to_string()] {
+                    assert!(
+                        !train.contains(&id) && !validation.contains(&id) && !test.contains(&id)
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "training")]
+    #[tokio::test]
+    async fn feature_candidates_reject_undeclared_source_columns() {
+        use super::super::feature_engineering::{FeaturePlan, derive_pipeline_candidate};
+        let (_directory, mut context, connection) = table_context().await;
+        let (_, _, rows) = fixture();
+        let source = cached_table(&mut context, connection, "undeclared", rows).await;
+        let mut request = training_request(
+            &source,
+            json!({
+                "stream_id":"undeclared",
+                "split":{"kind":"group","train_fraction":0.6,"validation_fraction":0.2,"seed":42}
+            }),
+        );
+        request.feature_plan = Some(
+            flow_like_types::json::from_value(json!({
+                "pipeline":{"steps":[{"kind":"derive_columns","columns":[{"name":"x_squared","expression":{"kind":"unary","op":"square","value":{"kind":"column","name":"x"}}}]}]},
+                "numeric_columns":["x","x_squared"],"categorical_columns":[],"standardize":true
+            }))
+            .unwrap(),
+        );
+        let id = super::super::auto_training::start_auto_training(&mut context, request, false)
+            .await
+            .unwrap()
+            .experiment_id;
+        for (numeric, categorical) in [(vec!["z"], vec![]), (vec!["x"], vec!["z"])] {
+            assert!(
+                super::super::auto_training::derive_feature_candidate(
+                    &mut context,
+                    &id,
+                    numeric.into_iter().map(String::from).collect(),
+                    categorical.into_iter().map(String::from).collect(),
+                    true,
+                )
+                .await
+                .is_err()
+            );
+        }
+        let plans = [
+            (
+                json!({"numeric_columns":["x","z"],"categorical_columns":[],"standardize":true}),
+                "Selected features must be authorized inputs or generated columns",
+            ),
+            (
+                json!({"pipeline":{"steps":[{"kind":"derive_columns","columns":[{"name":"z_double","expression":{"kind":"binary","op":"add","left":{"kind":"column","name":"z"},"right":{"kind":"column","name":"z"}}}]}]},"numeric_columns":["x","z_double"],"categorical_columns":[],"standardize":true}),
+                "Column 'z' is not an allowed feature input",
+            ),
+            (
+                json!({"pipeline":{"steps":[{"kind":"window_features","group_by":["z"],"timestamp_column":"time","features":[{"name":"lag_x","column":"x","operation":{"kind":"lag","steps":1}}]}]},"numeric_columns":["x","lag_x"],"categorical_columns":[],"standardize":true}),
+                "Window key 'z' is not allowed metadata",
+            ),
+        ];
+        for (plan, expected) in plans {
+            let plan: FeaturePlan = flow_like_types::json::from_value(plan).unwrap();
+            let error = derive_pipeline_candidate(&mut context, &id, plan)
+                .await
+                .unwrap_err();
+            assert!(error.to_string().contains(expected), "{error}");
+        }
     }
 }

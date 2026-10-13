@@ -20,7 +20,9 @@ export function validateCommand(data, session, manifest) {
 			data.bytes.byteLength >
 				Math.min(manifest?.maxBytes || MAX_DOCUMENT_BYTES, MAX_DOCUMENT_BYTES)
 		) {
-			throw new Error("Documents must be between 1 byte and 200 MiB.");
+			throw new Error(
+				`Files must be between 1 byte and ${Math.min(manifest?.maxBytes || MAX_DOCUMENT_BYTES, MAX_DOCUMENT_BYTES) / 1024 / 1024} MiB.`,
+			);
 		}
 		return {
 			type: "open",

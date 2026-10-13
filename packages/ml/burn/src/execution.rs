@@ -63,10 +63,7 @@ pub(crate) fn device_error(error: impl std::fmt::Display) -> Error {
 pub(crate) fn materialize(model: &impl Module) -> Result<()> {
     struct Materialize(Result<()>);
     impl Materialize {
-        fn read(
-            &mut self,
-            read: impl FnOnce() -> std::result::Result<TensorData, ExecutionError>,
-        ) {
+        fn read(&mut self, read: impl FnOnce() -> std::result::Result<TensorData, ExecutionError>) {
             if self.0.is_ok()
                 && let Err(error) = read()
             {

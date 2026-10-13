@@ -840,7 +840,10 @@ fn snapshot_byte_limit_precedes_deserialization_and_worker_admission() {
     ));
 }
 
-fn fixture_worker(repo: &TrainingRepository, engine: impl TrainingEngine + 'static) -> TrainingWorker {
+fn fixture_worker(
+    repo: &TrainingRepository,
+    engine: impl TrainingEngine + 'static,
+) -> TrainingWorker {
     let mut worker = TrainingWorker::new(repo.clone(), WorkerLimits::default()).unwrap();
     worker.register("fixture", Arc::new(engine)).unwrap();
     worker
@@ -921,18 +924,28 @@ fn expired_leases_are_settled_by_cancel_recovery_and_resume() {
         repo.request_cancel(&stopping.id, 2003).unwrap().status,
         JobStatus::CancelRequested
     );
-    assert!(repo.recover_expired_jobs(&stream(), 2005).unwrap().is_empty());
+    assert!(
+        repo.recover_expired_jobs(&stream(), 2005)
+            .unwrap()
+            .is_empty()
+    );
     let recovered = repo.recover_expired_jobs(&stream(), 2012).unwrap();
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].status, JobStatus::Cancelled);
-    assert!(repo.recover_expired_jobs(&stream(), 2013).unwrap().is_empty());
+    assert!(
+        repo.recover_expired_jobs(&stream(), 2013)
+            .unwrap()
+            .is_empty()
+    );
 
     populate(&repo, 15..18);
     let interrupted = repo
         .trigger_after_n(&stream(), 1, request(), policy(), 2020)
         .unwrap()
         .unwrap();
-    let stale = repo.claim_job(&interrupted.id, "crashed", 10, 2021).unwrap();
+    let stale = repo
+        .claim_job(&interrupted.id, "crashed", 10, 2021)
+        .unwrap();
     let recovered = repo.recover_expired_jobs(&stream(), 2040).unwrap();
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].status, JobStatus::Interrupted);
@@ -1077,7 +1090,11 @@ impl TrainingEngine for ProgressProbe {
         Ok(1)
     }
     fn train(&self, work: &TrainingWork, control: &WorkerControl) -> Result<EngineOutput> {
-        let stored = || work.repository.get_job(&work.job.id).map(|job| job.progress);
+        let stored = || {
+            work.repository
+                .get_job(&work.job.id)
+                .map(|job| job.progress)
+        };
         for batch in 0..50 {
             control.progress(json!({"epoch":0,"batch":batch,"validation_loss":null}))?;
         }
@@ -1133,7 +1150,9 @@ fn finished_jobs_leave_only_their_model_in_the_blob_store() {
     let (_dir, repo) = repo();
     populate(&repo, 0..12);
     let job = queued(&repo);
-    let artifact = fixture_worker(&repo, EpochCheckpoints).run(&job.id).unwrap();
+    let artifact = fixture_worker(&repo, EpochCheckpoints)
+        .run(&job.id)
+        .unwrap();
     let blobs: Vec<String> = std::fs::read_dir(repo.path().with_extension("artifacts"))
         .unwrap()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
@@ -1263,7 +1282,11 @@ fn received_ledgers_with_foreign_schema_objects_are_rejected() {
 #[test]
 fn derived_storage_paths_cannot_be_redirected_through_symlinks() {
     let outside = tempfile::tempdir().unwrap();
-    for entry in ["training.artifacts", ".training-locks", "training.sqlite-wal"] {
+    for entry in [
+        "training.artifacts",
+        ".training-locks",
+        "training.sqlite-wal",
+    ] {
         let directory = tempfile::tempdir().unwrap();
         std::os::unix::fs::symlink(outside.path(), directory.path().join(entry)).unwrap();
         assert!(
@@ -1275,6 +1298,364 @@ fn derived_storage_paths_cannot_be_redirected_through_symlinks() {
         );
     }
     assert!(std::fs::read_dir(outside.path()).unwrap().next().is_none());
+}
+
+/// Publishes an epoch checkpoint and then exhausts device memory; a resumed run must start
+/// from that checkpoint.
+struct ExhaustsDeviceMemory {
+    panics: bool,
+}
+impl TrainingEngine for ExhaustsDeviceMemory {
+    fn estimated_memory_bytes(&self, _: &TrainingWork) -> Result<u64> {
+        Ok(1)
+    }
+    fn train(&self, work: &TrainingWork, control: &WorkerControl) -> Result<EngineOutput> {
+        if let Some(checkpoint) = &work.resume_checkpoint {
+            if checkpoint.as_slice() != b"epoch-1" {
+                return Err(Error::Engine("resumed from another checkpoint".into()));
+            }
+            return Ok(EngineOutput {
+                model_bytes: b"resumed-model".to_vec(),
+                manifest: json!({}),
+            });
+        }
+        control.checkpoint(b"epoch-1", 1, json!({"epoch":1}))?;
+        if self.panics {
+            panic!("wgpu error: Out of Memory");
+        }
+        Err(Error::Engine(
+            "Backend unavailable: out of device memory; reduce the batch size or input resolution: out of device memory allocating 1073741824 bytes".into(),
+        ))
+    }
+}
+
+#[test]
+fn device_memory_exhaustion_after_a_checkpoint_leaves_the_run_resumable() {
+    for panics in [true, false] {
+        let (_dir, repo) = repo();
+        populate(&repo, 0..12);
+        let job = queued(&repo);
+        let worker = fixture_worker(&repo, ExhaustsDeviceMemory { panics });
+        let error = worker.run(&job.id).unwrap_err().to_string();
+        assert!(
+            error.contains("out of device memory; reduce the batch size"),
+            "{error}"
+        );
+        let interrupted = repo.get_job(&job.id).unwrap();
+        assert_eq!(interrupted.status, JobStatus::Interrupted);
+        assert!(interrupted.lease_owner.is_none() && interrupted.lease_expires_at_ms.is_none());
+        assert!(
+            interrupted
+                .error
+                .as_deref()
+                .is_some_and(|reason| reason.contains("out of device memory")),
+            "{:?}",
+            interrupted.error
+        );
+        assert_eq!(
+            repo.read_blob(&interrupted.checkpoint.unwrap().blob)
+                .unwrap(),
+            b"epoch-1"
+        );
+        let reservations: i64 = rusqlite::Connection::open(repo.path())
+            .unwrap()
+            .query_row("SELECT count(*) FROM resource_reservations", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(reservations, 0, "a stopped run must not hold device memory");
+        let artifact = worker.run(&job.id).unwrap();
+        assert_eq!(repo.read_blob(&artifact.blob).unwrap(), b"resumed-model");
+        let resumed = repo.get_job(&job.id).unwrap();
+        assert_eq!(resumed.status, JobStatus::Succeeded);
+        assert!(resumed.error.is_none());
+    }
+}
+
+#[test]
+fn experiment_trials_fail_on_device_memory_exhaustion_for_their_controller() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let job = queued(&repo);
+    rusqlite::Connection::open(repo.path())
+        .unwrap()
+        .execute(
+            "INSERT INTO experiment_trials(id,experiment_id,job_id,idempotency_key,candidate_index,body) VALUES ('trial','experiment',?,'key',0,'{}')",
+            [&job.id],
+        )
+        .unwrap();
+    let error = fixture_worker(&repo, ExhaustsDeviceMemory { panics: true })
+        .run(&job.id)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("out of device memory"), "{error}");
+    let failed = repo.get_job(&job.id).unwrap();
+    assert_eq!(failed.status, JobStatus::Failed);
+    assert!(
+        failed
+            .error
+            .unwrap()
+            .contains("out of device memory; reduce the batch size")
+    );
+}
+
+#[test]
+fn queued_jobs_are_admitted_under_reconfigured_compute() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let job = queued(&repo);
+    let engine = || FixtureEngine {
+        cancel: None,
+        memory: 2_000_000,
+    };
+    assert!(matches!(
+        fixture_worker(&repo, engine()).run(&job.id),
+        Err(Error::Engine(_))
+    ));
+    let waiting = repo.get_job(&job.id).unwrap();
+    assert!(waiting.error.is_some());
+    assert!(matches!(
+        repo.reconfigure_job_compute(&job.id, json!(4_000_000), 1100),
+        Err(Error::Invalid(_))
+    ));
+    assert!(matches!(
+        repo.reconfigure_job_compute("missing", json!({}), 1100),
+        Err(Error::NotFound(_))
+    ));
+    let compute = json!({"memory_limit_bytes":4_000_000});
+    let reconfigured = repo
+        .reconfigure_job_compute(&job.id, compute.clone(), 1100)
+        .unwrap();
+    assert_eq!(reconfigured.status, JobStatus::Queued);
+    assert_eq!(reconfigured.request.compute, compute);
+    assert_eq!(reconfigured.generation, waiting.generation + 1);
+    assert!(reconfigured.error.is_none());
+    assert_eq!(repo.get_job(&job.id).unwrap(), reconfigured);
+    fixture_worker(&repo, engine()).run(&job.id).unwrap();
+    let finished = repo.get_job(&job.id).unwrap();
+    assert_eq!(finished.status, JobStatus::Succeeded);
+    assert_eq!(finished.request.compute, compute);
+}
+
+#[test]
+fn experiment_trials_and_active_or_finished_jobs_keep_their_compute() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let compute = json!({"memory_limit_bytes":4_000_000});
+    let trial = queued(&repo);
+    rusqlite::Connection::open(repo.path())
+        .unwrap()
+        .execute(
+            "INSERT INTO experiment_trials(id,experiment_id,job_id,idempotency_key,candidate_index,body) VALUES ('trial','experiment',?,'key',0,'{}')",
+            [&trial.id],
+        )
+        .unwrap();
+    assert!(matches!(
+        repo.reconfigure_job_compute(&trial.id, compute.clone(), 1100),
+        Err(Error::Conflict(message)) if message.contains("experiment trial")
+    ));
+    assert_eq!(repo.get_job(&trial.id).unwrap(), trial);
+
+    let other = StreamKey {
+        stream_id: "line-2".into(),
+        ..stream()
+    };
+    for i in 0..12 {
+        repo.record_sample(&other, &sample(i)).unwrap();
+    }
+    let job = repo
+        .trigger_after_n(&other, 12, request(), policy(), 1000)
+        .unwrap()
+        .unwrap();
+    let refused = |at_ms| {
+        matches!(
+            repo.reconfigure_job_compute(&job.id, compute.clone(), at_ms),
+            Err(Error::Conflict(_))
+        )
+    };
+    let lease = repo.claim_job(&job.id, "worker", 1000, 1000).unwrap();
+    assert!(refused(1100), "running");
+    repo.request_cancel(&job.id, 1200).unwrap();
+    assert!(refused(1300), "cancel requested");
+    repo.acknowledge_cancel(&lease, 1400).unwrap();
+    assert!(refused(1500), "cancelled");
+    assert_eq!(repo.get_job(&job.id).unwrap().request, request());
+}
+
+#[test]
+fn reconfigured_compute_refreshes_only_a_checkpoint_of_the_previous_request() {
+    let (_dir, repo) = repo();
+    let worker = fixture_worker(&repo, ExhaustsDeviceMemory { panics: false });
+    let compute = json!({"memory_limit_bytes":4_000_000});
+    let interrupted = |stream: &StreamKey| {
+        for i in 0..12 {
+            repo.record_sample(stream, &sample(i)).unwrap();
+        }
+        let job = repo
+            .trigger_after_n(stream, 12, request(), policy(), 1000)
+            .unwrap()
+            .unwrap();
+        assert!(worker.run(&job.id).is_err());
+        let job = repo.get_job(&job.id).unwrap();
+        assert_eq!(job.status, JobStatus::Interrupted);
+        job
+    };
+
+    let current = interrupted(&stream());
+    let written = current.checkpoint.clone().unwrap();
+    let reconfigured = repo
+        .reconfigure_job_compute(&current.id, compute.clone(), now_ms())
+        .unwrap();
+    assert_eq!(reconfigured.status, JobStatus::Interrupted);
+    assert!(reconfigured.error.is_none());
+    let refreshed = reconfigured.checkpoint.unwrap();
+    assert_eq!(refreshed.blob, written.blob);
+    assert_ne!(refreshed.request_digest, written.request_digest);
+    let artifact = worker.run(&current.id).unwrap();
+    assert_eq!(repo.read_blob(&artifact.blob).unwrap(), b"resumed-model");
+
+    let stale = interrupted(&StreamKey {
+        stream_id: "line-2".into(),
+        ..stream()
+    });
+    rusqlite::Connection::open(repo.path())
+        .unwrap()
+        .execute(
+            "UPDATE jobs SET body=json_set(body,'$.checkpoint.request_digest','foreign') WHERE id=?",
+            [&stale.id],
+        )
+        .unwrap();
+    let reconfigured = repo
+        .reconfigure_job_compute(&stale.id, compute, now_ms())
+        .unwrap();
+    assert_eq!(reconfigured.checkpoint.unwrap().request_digest, "foreign");
+    let error = worker.run(&stale.id).unwrap_err().to_string();
+    assert!(
+        error.contains("checkpoint recipe/compute contract changed"),
+        "{error}"
+    );
+}
+
+#[test]
+fn new_sample_counts_follow_triggers_and_label_availability() {
+    let (_dir, repo) = repo();
+    let mut delayed = sample(0);
+    delayed.label_available_at_ms = 2000;
+    repo.record_sample(&stream(), &delayed).unwrap();
+    populate(&repo, 1..13);
+    let mut withdrawn = sample(1);
+    withdrawn.annotation_revision = 2;
+    withdrawn.accepted = false;
+    withdrawn.label_available_at_ms = 1500;
+    repo.record_sample(&stream(), &withdrawn).unwrap();
+    let count = |at_ms| repo.count_new_training_samples(&stream(), at_ms).unwrap();
+    assert_eq!((count(1000), count(1500), count(2000)), (12, 11, 12));
+    assert!(
+        repo.trigger_after_n(&stream(), 13, request(), policy(), 1000)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        repo.trigger_after_n(&stream(), 12, request(), policy(), 1000)
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!((count(1000), count(2000)), (0, 1));
+}
+
+#[test]
+fn raw_row_edits_keep_sealed_audit_evidence_valid() {
+    let (_dir, repo) = repo();
+    for i in 0..12 {
+        let mut record = sample(i);
+        record.payload["feature_row"] = json!({"temperature":i});
+        repo.record_sample(&stream(), &record).unwrap();
+    }
+    let artifact = candidate(&repo);
+    let report = evaluate(&repo, &artifact);
+    let mut edited = repo.get_snapshot(&artifact.snapshot_id).unwrap().test[0].clone();
+    edited.payload["feature_row"] = json!({"temperature":-1});
+    assert!(
+        !repo
+            .record_prepared_sample(&stream(), &edited)
+            .unwrap()
+            .inserted
+    );
+    let stored: i64 = rusqlite::Connection::open(repo.path())
+        .unwrap()
+        .query_row(
+            "SELECT json_extract(body,'$.payload.feature_row.temperature') FROM annotations WHERE sample_id=?",
+            [&edited.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored, -1, "the edit rewrote the stored annotation");
+    repo.promote("production", 0, &report.id, promotion_policy(), 1200)
+        .unwrap();
+}
+
+#[cfg(feature = "native")]
+#[test]
+fn classification_audits_reject_content_an_initialization_model_consumed() {
+    let (_dir, repo) = repo();
+    populate(&repo, 0..12);
+    let source = candidate(&repo);
+    let consumed = repo.get_snapshot(&source.snapshot_id).unwrap();
+    let warm = StreamKey {
+        stream_id: "line-2".into(),
+        ..stream()
+    };
+    for (index, original) in consumed
+        .train
+        .iter()
+        .chain(&consumed.validation)
+        .enumerate()
+    {
+        repo.record_sample(
+            &warm,
+            &TrainingSample {
+                id: format!("warm-{index}"),
+                group_id: format!("warm-lot-{index}"),
+                ..original.clone()
+            },
+        )
+        .unwrap();
+    }
+    let job = repo
+        .trigger_after_n(&warm, 3, request(), policy(), 1000)
+        .unwrap()
+        .unwrap();
+    let lease = repo.claim_job(&job.id, "worker", 1000, 1000).unwrap();
+    let fine_tuned = repo
+        .finish_training(
+            &lease,
+            b"fine-tuned-model",
+            json!({"pretrained":{"source_kind":"training_artifact","source_id":source.id}}),
+            1001,
+        )
+        .unwrap();
+    let audit = repo.get_snapshot(&fine_tuned.snapshot_id).unwrap().test;
+    assert!(!audit.is_empty());
+    for sample in &audit {
+        let label = sample.payload["label"].as_str().unwrap().to_owned();
+        repo.record_prediction(&PredictionRecord {
+            sample_id: sample.id.clone(),
+            artifact_id: fine_tuned.id.clone(),
+            predicted_label: Some(label.clone()),
+            teacher_label: None,
+            actual_label: Some(label),
+            actual_source: Some(LabelSource::Reviewed),
+            latency_ms: 1.,
+            failed: false,
+            recorded_at_ms: 1100,
+            details: json!({}),
+        })
+        .unwrap();
+    }
+    assert!(matches!(
+        repo.evaluate_classification(&fine_tuned.id, 1101),
+        Err(Error::Invalid(message)) if message.contains("a model it was initialized from")
+    ));
 }
 
 #[cfg(all(feature = "native", feature = "burn"))]

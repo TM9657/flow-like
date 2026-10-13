@@ -54,3 +54,44 @@ describe("web storage listing refresh", () => {
 		},
 	);
 });
+
+describe("web storage rename", () => {
+	beforeEach(() => {
+		mocks.apiPost.mockReset();
+		mocks.apiPost.mockResolvedValue(null);
+	});
+
+	test.each([
+		["renameStorageItem", "apps/app/data/rename"],
+		["renameStorageItemUser", "apps/app/data/user/rename"],
+	] as const)(
+		"%s preserves scope, paths, and item kind",
+		async (method, endpoint) => {
+			const auth = { token: "test" };
+			const state = new WebStorageState({ auth } as never);
+			for (const isDir of [false, true]) {
+				await state[method]("app", "docs/old%23name", "new 100%.txt", isDir);
+				expect(mocks.apiPost).toHaveBeenLastCalledWith(
+					endpoint,
+					{
+						prefix: "docs/old%23name",
+						new_name: "new 100%.txt",
+						is_dir: isDir,
+					},
+					auth,
+				);
+			}
+		},
+	);
+
+	test.each(["renameStorageItem", "renameStorageItemUser"] as const)(
+		"%s propagates name conflicts to the browser",
+		async (method) => {
+			const state = new WebStorageState({ auth: {} } as never);
+			mocks.apiPost.mockRejectedValueOnce(new Error("Name already exists"));
+			await expect(state[method]("app", "old", "taken", true)).rejects.toThrow(
+				"Name already exists",
+			);
+		},
+	);
+});

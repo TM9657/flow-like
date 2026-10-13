@@ -7,24 +7,28 @@ use flow_like_ml_core::{
 use flow_like_ml_runtime::{auto_training::*, engines::*, worker::TrainingWorker, *};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering},
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering},
+    },
+    time::{Duration, Instant},
 };
 
 #[derive(Clone, Copy)]
 struct Fixture {
     anomaly: bool,
     test_size: usize,
-    /// Added to validation inputs so held-out scores differ from in-sample ones.
-    validation_shift: f32,
+    /// Narrows validation inputs around the middle of the training clusters. Shifting them
+    /// instead leaves the training range, where isolation scores saturate at the edge values.
+    validation_spread: f32,
 }
 impl Default for Fixture {
     fn default() -> Self {
         Self {
             anomaly: false,
             test_size: 16,
-            validation_shift: 0.0,
+            validation_spread: 1.0,
         }
     }
 }
@@ -66,11 +70,15 @@ fn fixture(repo: &TrainingRepository, options: Fixture) -> (ExperimentRequest, I
     };
     let mut partitions: [Vec<TrainingSample>; 3] = Default::default();
     for (partition, rows) in partitions.iter_mut().enumerate() {
-        let count = if partition == 2 { options.test_size } else { 16 };
-        let shift = if partition == 1 {
-            options.validation_shift
+        let count = if partition == 2 {
+            options.test_size
         } else {
-            0.0
+            16
+        };
+        let spread = if partition == 1 {
+            options.validation_spread
+        } else {
+            1.0
         };
         for index in 0..count {
             let sign = if index % 2 == 0 { -1.0 } else { 1.0 };
@@ -89,7 +97,9 @@ fn fixture(repo: &TrainingRepository, options: Fixture) -> (ExperimentRequest, I
                 window_end_ms: 100,
                 input: TensorData {
                     shape: vec![1],
-                    values: vec![sign * (1.0 + shift + index as f32 * 0.01)],
+                    values: vec![
+                        sign * (1.0 + 0.07 * (1.0 - spread) + index as f32 * 0.01 * spread),
+                    ],
                 },
                 annotation: if anomaly {
                     Annotation::Anomaly {
@@ -499,124 +509,157 @@ fn cancellation_after_controller_interruption_settles_the_completed_worker() {
     );
 }
 
-#[test]
-fn forecast_search_checks_each_target_width_before_flattening() {
-    for ragged_partition in [Some(0), Some(1), None] {
-        let dir = tempfile::tempdir().unwrap();
-        let repo = TrainingRepository::open(dir.path().join("forecast.sqlite")).unwrap();
-        let stream = StreamKey {
-            project_id: "forecast".into(),
-            stream_id: "readings".into(),
-            inspection_version: "v1".into(),
-        };
-        let spec = InspectionSpec {
-            id: "forecast".into(),
-            description: "Forecast the next two readings".into(),
-            task: TaskKind::SequenceForecast,
-            labels: vec![],
-            input_shape: vec![1],
-            prediction_horizon_ms: Some(1),
-            minimum_examples: 1,
-            minimum_examples_per_class: 1,
-        };
-        let mut partitions: [Vec<TrainingSample>; 3] = Default::default();
-        for (partition, rows) in partitions.iter_mut().enumerate() {
-            for index in 0..2 {
-                let timestamp = (partition * 2 + index) as i64 * 10;
-                let targets = if ragged_partition == Some(partition) {
-                    if index == 0 {
-                        vec![10.]
-                    } else {
-                        vec![20., 30., 40.]
-                    }
-                } else {
-                    vec![10., 20.]
-                };
-                let sample = Sample {
-                    id: format!("{partition}-{index}"),
-                    group_id: format!("group-{partition}-{index}"),
-                    stream_id: stream.stream_id.clone(),
-                    timestamp_ms: timestamp,
-                    window_start_ms: timestamp,
-                    window_end_ms: timestamp,
-                    input: TensorData {
-                        shape: vec![1],
-                        values: vec![index as f32],
-                    },
-                    annotation: Annotation::Values { values: targets },
-                    provenance: LabelProvenance::Reviewed {
-                        reviewer: "fixture".into(),
-                        reviewed_at_ms: timestamp + 2,
-                    },
-                    outcome: Some(flow_like_ml_core::Outcome {
-                        target_start_ms: timestamp + 1,
-                        target_end_ms: timestamp + 1,
-                        available_at_ms: timestamp + 2,
-                    }),
-                };
-                spec.validate_sample_at(&sample, 100).unwrap();
-                let row = TrainingSample {
-                    id: sample.id.clone(),
-                    annotation_revision: 1,
-                    group_id: sample.group_id.clone(),
-                    captured_at_ms: timestamp,
-                    label_available_at_ms: timestamp + 2,
-                    content_digest: format!(
-                        "{:x}",
-                        Sha256::digest(serde_json::to_vec(&sample).unwrap())
-                    ),
-                    source: LabelSource::Reviewed,
-                    accepted: true,
-                    payload: serde_json::to_value(sample).unwrap(),
-                };
-                repo.record_sample(&stream, &row).unwrap();
-                rows.push(row);
-            }
+fn forecast_spec() -> InspectionSpec {
+    InspectionSpec {
+        id: "forecast".into(),
+        description: "Forecast the next readings".into(),
+        task: TaskKind::SequenceForecast,
+        labels: vec![],
+        input_shape: vec![1],
+        prediction_horizon_ms: Some(1),
+        minimum_examples: 1,
+        minimum_examples_per_class: 1,
+    }
+}
+
+/// A reviewed forecast window whose outcome is measured 1 ms and available 2 ms after it.
+fn forecast_row(
+    stream: &StreamKey,
+    partition: usize,
+    index: usize,
+    targets: Vec<f32>,
+) -> TrainingSample {
+    let timestamp = (partition * 2 + index) as i64 * 10;
+    let sample = Sample {
+        id: format!("{partition}-{index}"),
+        group_id: format!("group-{partition}-{index}"),
+        stream_id: stream.stream_id.clone(),
+        timestamp_ms: timestamp,
+        window_start_ms: timestamp,
+        window_end_ms: timestamp,
+        input: TensorData {
+            shape: vec![1],
+            values: vec![index as f32],
+        },
+        annotation: Annotation::Values { values: targets },
+        provenance: LabelProvenance::Reviewed {
+            reviewer: "fixture".into(),
+            reviewed_at_ms: timestamp + 2,
+        },
+        outcome: Some(flow_like_ml_core::Outcome {
+            target_start_ms: timestamp + 1,
+            target_end_ms: timestamp + 1,
+            available_at_ms: timestamp + 2,
+        }),
+    };
+    forecast_spec().validate_sample_at(&sample, 100).unwrap();
+    TrainingSample {
+        id: sample.id.clone(),
+        annotation_revision: 1,
+        group_id: sample.group_id.clone(),
+        captured_at_ms: timestamp,
+        label_available_at_ms: timestamp + 2,
+        content_digest: format!("{:x}", Sha256::digest(serde_json::to_vec(&sample).unwrap())),
+        source: LabelSource::Reviewed,
+        accepted: true,
+        payload: serde_json::to_value(sample).unwrap(),
+    }
+}
+
+/// Two reviewed forecast windows per partition, labelled `targets(partition, index)`.
+fn forecast_snapshot(
+    repo: &TrainingRepository,
+    targets: impl Fn(usize, usize) -> Vec<f32>,
+) -> DatasetSnapshot {
+    let stream = StreamKey {
+        project_id: "forecast".into(),
+        stream_id: "readings".into(),
+        inspection_version: "v1".into(),
+    };
+    let mut partitions: [Vec<TrainingSample>; 3] = Default::default();
+    for (partition, rows) in partitions.iter_mut().enumerate() {
+        for index in 0..2 {
+            let row = forecast_row(&stream, partition, index, targets(partition, index));
+            repo.record_sample(&stream, &row).unwrap();
+            rows.push(row);
         }
-        let [train, validation, test] = partitions;
-        let snapshot = repo
-            .import_experiment_snapshot(DatasetSnapshot {
-                id: String::new(),
-                digest: String::new(),
-                stream: stream.clone(),
-                as_of_ms: 100,
-                cutoff_sequence: 6,
-                policy: SplitPolicy::Group {
-                    train_fraction: 0.4,
-                    validation_fraction: 0.3,
-                    seed: 42,
-                },
-                train,
-                validation,
-                test,
-                excluded: vec![],
-            })
-            .unwrap();
-        let mut goals = default_goals(&spec);
-        goals.bounds = vec![MetricBound {
-            name: "rmse".into(),
-            minimum: None,
-            maximum: Some(100.),
-        }];
-        let budget = ExperimentBudget::default();
-        let limits = budget.worker_limits.clone();
-        let experiment = repo.create_experiment(ExperimentRequest {
-            stream,
+    }
+    let [train, validation, test] = partitions;
+    repo.import_experiment_snapshot(DatasetSnapshot {
+        id: String::new(),
+        digest: String::new(),
+        stream,
+        as_of_ms: 100,
+        cutoff_sequence: 6,
+        policy: SplitPolicy::Group {
+            train_fraction: 0.4,
+            validation_fraction: 0.3,
+            seed: 42,
+        },
+        train,
+        validation,
+        test,
+        excluded: vec![],
+    })
+    .unwrap()
+}
+
+/// A forecast search over `forecast_snapshot` with `candidates` under an rmse bound of 100.
+fn forecast_experiment(
+    repo: &TrainingRepository,
+    targets: impl Fn(usize, usize) -> Vec<f32>,
+    candidates: Vec<TrainingRequest>,
+) -> Experiment {
+    let snapshot = forecast_snapshot(repo, targets);
+    let spec = forecast_spec();
+    let mut goals = default_goals(&spec);
+    goals.bounds = vec![MetricBound {
+        name: "rmse".into(),
+        minimum: None,
+        maximum: Some(100.),
+    }];
+    repo.create_experiment(
+        ExperimentRequest {
+            stream: snapshot.stream,
             snapshot_id: snapshot.id,
             spec: serde_json::to_value(spec).unwrap(),
-            candidates: vec![TrainingRequest {
-                engine: "burn".into(),
-                recipe: json!({"config":{"recipe":{"architecture":"mlp","input_features":1,"hidden":4,"outputs":2,"objective":"regression"},"backend":{"backend":"cpu"},"epochs":1,"batch_size":2,"learning_rate":0.01,"seed":42,"gradient_clip":5.},"labels":[],"inspection_task":"sequence_forecast"}),
-                compute: json!({"backend":"cpu"}),
-            }],
+            candidates,
             goals,
-            budget,
+            budget: ExperimentBudget::default(),
             source_table_versions: vec![],
             created_tables: vec![],
             updated_table_versions: vec![],
             preprocessing_manifest: json!({}),
             context: json!({}),
-        }, now_ms()).unwrap();
+        },
+        now_ms(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn forecast_search_checks_each_target_width_before_flattening() {
+    for ragged_partition in [Some(0), Some(1), None] {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = TrainingRepository::open(dir.path().join("forecast.sqlite")).unwrap();
+        let experiment = forecast_experiment(
+            &repo,
+            |partition, index| {
+                if ragged_partition != Some(partition) {
+                    vec![10., 20.]
+                } else if index == 0 {
+                    vec![10.]
+                } else {
+                    vec![20., 30., 40.]
+                }
+            },
+            vec![TrainingRequest {
+                engine: "burn".into(),
+                recipe: json!({"config":{"recipe":{"architecture":"mlp","input_features":1,"hidden":4,"outputs":2,"objective":"regression"},"backend":{"backend":"cpu"},"epochs":1,"batch_size":2,"learning_rate":0.01,"seed":42,"gradient_clip":5.},"labels":[],"inspection_task":"sequence_forecast"}),
+                compute: json!({"backend":"cpu"}),
+            }],
+        );
+        let limits = experiment.request.budget.worker_limits.clone();
         let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
             .run(&experiment.id)
             .unwrap();
@@ -642,6 +685,54 @@ fn forecast_search_checks_each_target_width_before_flattening() {
             assert!(result.final_evaluation_id.is_some());
         }
     }
+}
+
+#[test]
+fn single_step_forecasts_search_boosting_but_wider_horizons_do_not() {
+    let boosting = |output_features: usize| {
+        let search = AutoSearchConfig {
+            maximum_candidates: 32,
+            output_features,
+            ..Default::default()
+        };
+        generate_candidates(&forecast_spec(), &search, &cpu())
+            .unwrap()
+            .into_iter()
+            .filter(|candidate| candidate.engine == "histogram_gradient_boosting")
+            .collect::<Vec<_>>()
+    };
+    assert!(boosting(2).is_empty(), "boosting fits one target value");
+    let candidates = boosting(1);
+    assert_eq!(candidates.len(), 3);
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("forecast.sqlite")).unwrap();
+    let experiment = forecast_experiment(&repo, |_, index| vec![10. + index as f32], candidates);
+    let limits = experiment.request.budget.worker_limits.clone();
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    assert!(result.target_met, "{:?}", result.unmet_constraints);
+    let trials = repo.list_experiment_trials(&experiment.id).unwrap();
+    assert_eq!(trials.len(), 3);
+    for trial in trials {
+        assert_eq!(
+            trial.status,
+            ExperimentTrialStatus::Validated,
+            "{:?}",
+            trial.error
+        );
+        assert!(trial.validation_metrics.contains_key("rmse"));
+    }
+    let evaluation = repo
+        .get_evaluation(result.final_evaluation_id.as_ref().unwrap())
+        .unwrap();
+    assert_eq!(evaluation.audited_samples, 2);
 }
 
 #[test]
@@ -1088,7 +1179,10 @@ fn a_clock_that_moves_backwards_never_stops_the_search_as_budget_exhausted() {
         "{:?}",
         result.stop_reason
     );
-    assert_eq!(repo.list_experiment_trials(&experiment.id).unwrap().len(), 2);
+    assert_eq!(
+        repo.list_experiment_trials(&experiment.id).unwrap().len(),
+        2
+    );
 }
 
 #[test]
@@ -1132,6 +1226,37 @@ fn a_search_bound_by_wall_time_keeps_its_final_audit() {
             "no trial may start inside the audit window"
         );
     }
+}
+
+#[test]
+fn a_goal_bound_validation_never_measures_fails_before_any_training() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (mut request, _) = setup(&repo);
+    request.goals.bounds.push(MetricBound {
+        name: "teacher_agreement".into(),
+        minimum: Some(0.9),
+        maximum: None,
+    });
+    let limits = request.budget.worker_limits.clone();
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert_eq!(result.status, ExperimentStatus::Failed);
+    assert!(
+        result
+            .stop_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("teacher_agreement")),
+        "{:?}",
+        result.stop_reason
+    );
+    assert!(
+        repo.list_experiment_trials(&experiment.id)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1233,7 +1358,9 @@ fn failed_test_predictions_count_as_failures_and_settle_the_experiment() {
         let winner = repo
             .get_experiment_trial(result.selected_trial_id.as_ref().unwrap())
             .unwrap();
-        let predictions = repo.predictions(winner.artifact_id.as_ref().unwrap()).unwrap();
+        let predictions = repo
+            .predictions(winner.artifact_id.as_ref().unwrap())
+            .unwrap();
         assert_eq!(predictions.len(), 16);
         assert!(
             predictions
@@ -1392,7 +1519,11 @@ fn strict_gpu_compute_generates_no_native_candidates() {
     let search = AutoSearchConfig::default();
     let candidates = generate_candidates(&sensors, &search, &strict).unwrap();
     assert!(!candidates.is_empty());
-    assert!(candidates.iter().all(|candidate| candidate.engine == "burn"));
+    assert!(
+        candidates
+            .iter()
+            .all(|candidate| candidate.engine == "burn")
+    );
     assert!(
         generate_candidates(&sensors, &search, &ComputeConfig::default())
             .unwrap()
@@ -1586,8 +1717,7 @@ impl SearchPredictorFactory for FailingContinuations {
         compute: &ComputeConfig,
     ) -> Result<Box<dyn SearchPredictor>> {
         let artifact = repository.get_artifact(artifact_id)?;
-        if repository.get_job(&artifact.job_id)?.request.recipe["search"]["rung"].as_u64()
-            > Some(0)
+        if repository.get_job(&artifact.job_id)?.request.recipe["search"]["rung"].as_u64() > Some(0)
         {
             return Err(Error::Engine(
                 "fixture continuation validation failure".into(),
@@ -1603,8 +1733,8 @@ fn a_failed_continuation_is_retried_once_with_fewer_epochs() {
     let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
     let (mut request, spec) = setup(&repo);
     request.budget.maximum_trials = 6;
-    request.budget.maximum_training_time_ms = 180_000;
-    request.budget.worker_limits.maximum_duration_ms = 30_000;
+    request.budget.maximum_training_time_ms = 360_000;
+    request.budget.worker_limits.maximum_duration_ms = 60_000;
     let search = AutoSearchConfig {
         maximum_candidates: 32,
         min_epochs: 1,
@@ -1682,7 +1812,7 @@ fn the_anomaly_decision_scale_is_fitted_on_held_out_normal_samples() {
         &repo,
         Fixture {
             anomaly: true,
-            validation_shift: 0.5,
+            validation_spread: 0.5,
             ..Fixture::default()
         },
     );
@@ -1705,11 +1835,129 @@ fn the_anomaly_decision_scale_is_fitted_on_held_out_normal_samples() {
     let mut predictor = NativeSearchPredictorFactory
         .load(&repo, trial.artifact_id.as_ref().unwrap(), &cpu())
         .unwrap();
-    let snapshot = repo
-        .get_snapshot(&experiment.request.snapshot_id)
-        .unwrap();
+    let snapshot = repo.get_snapshot(&experiment.request.snapshot_id).unwrap();
     let held_out = normal_score_percentile(&mut *predictor, &snapshot.validation);
     let in_sample = normal_score_percentile(&mut *predictor, &snapshot.train);
     assert_ne!(held_out, in_sample, "the fixture must separate the two");
     assert_eq!(trial.validation_metrics["anomaly_scale"], held_out);
+}
+
+/// Another experiment's trial job reserves the whole native CPU budget until its lease is
+/// failed.
+fn occupy_native_budget(repo: &TrainingRepository, request: &ExperimentRequest) -> JobLease {
+    let holder = repo.create_experiment(request.clone(), now_ms()).unwrap();
+    let trial = repo
+        .submit_experiment_trial(&holder.id, 0, "holder", now_ms())
+        .unwrap();
+    let budget = request.budget.worker_limits.memory_budget_bytes;
+    repo.claim_job_with_resources(
+        &trial.job_id,
+        "holder",
+        600_000,
+        now_ms(),
+        Some(ResourceRequest {
+            key: "cpu:0".into(),
+            estimated_bytes: budget,
+            budget_bytes: budget,
+        }),
+    )
+    .unwrap()
+}
+
+fn blocked_events(repo: &TrainingRepository, experiment_id: &str) -> Vec<serde_json::Value> {
+    repo.experiment_events(experiment_id)
+        .unwrap()
+        .into_iter()
+        .filter(|event| event["kind"] == "trial_blocked")
+        .map(|event| event["body"].clone())
+        .collect()
+}
+
+/// Releases the holder half a second after the experiment's first trial failed to claim the
+/// budget, past the immediate retry that follows the submission, so only a backoff retry can
+/// claim it.
+fn release_once_blocked(repo: &TrainingRepository, id: &str, holder: &JobLease) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while Instant::now() < deadline {
+        let blocked = repo
+            .list_experiment_trials(id)
+            .unwrap()
+            .first()
+            .is_some_and(|trial| repo.get_job(&trial.job_id).unwrap().error.is_some());
+        if blocked {
+            std::thread::sleep(Duration::from_millis(500));
+            repo.fail_job(holder, "released by the fixture", now_ms())
+                .unwrap();
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    false
+}
+
+#[test]
+fn a_step_held_back_by_an_occupied_budget_names_the_holder_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (request, _) = setup(&repo);
+    let limits = request.budget.worker_limits.clone();
+    let holder = occupy_native_budget(&repo, &request);
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let controller = AutoTrainingController::new(repo.clone(), worker(&repo, &limits));
+    for _ in 0..2 {
+        let result = controller.run_next(&experiment.id).unwrap();
+        assert_eq!(result.status, ExperimentStatus::Running);
+    }
+    let trial = repo
+        .list_experiment_trials(&experiment.id)
+        .unwrap()
+        .remove(0);
+    assert_eq!(trial.status, ExperimentTrialStatus::Scheduled);
+    let job = repo.get_job(&trial.job_id).unwrap();
+    assert_eq!(job.status, JobStatus::Queued);
+    assert!(
+        job.error
+            .as_deref()
+            .is_some_and(|error| error.contains("is occupied")),
+        "{:?}",
+        job.error
+    );
+    let blocked = blocked_events(&repo, &experiment.id);
+    assert_eq!(blocked.len(), 1, "{blocked:?}");
+    assert_eq!(blocked[0]["trial_id"], trial.id.as_str());
+    assert!(
+        blocked[0]["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains(&holder.job_id)),
+        "{blocked:?}"
+    );
+}
+
+#[test]
+fn a_run_waits_for_an_occupied_budget_instead_of_returning_with_a_scheduled_trial() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let (request, _) = setup(&repo);
+    let limits = request.budget.worker_limits.clone();
+    let holder = occupy_native_budget(&repo, &request);
+    let experiment = repo.create_experiment(request, now_ms()).unwrap();
+    let release = std::thread::spawn({
+        let repo = repo.clone();
+        let experiment_id = experiment.id.clone();
+        move || release_once_blocked(&repo, &experiment_id, &holder)
+    });
+    let result = AutoTrainingController::new(repo.clone(), worker(&repo, &limits))
+        .run(&experiment.id)
+        .unwrap();
+    assert!(
+        release.join().unwrap(),
+        "the trial never reported the occupied budget"
+    );
+    assert_eq!(
+        result.status,
+        ExperimentStatus::Completed,
+        "{:?}",
+        result.stop_reason
+    );
+    assert_eq!(blocked_events(&repo, &experiment.id).len(), 1);
 }

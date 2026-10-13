@@ -3,6 +3,7 @@ import {
 	ExternalLinkIcon,
 	FolderIcon,
 	FolderOpenIcon,
+	PencilIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -45,6 +46,7 @@ export function FileOrFolder({
 	loadFile,
 	shareFile,
 	deleteFile,
+	renameFile,
 	downloadFile,
 	revealInExplorer,
 	openWithApp,
@@ -58,6 +60,7 @@ export function FileOrFolder({
 	loadFile?: (file: string) => void;
 	shareFile?: (file: string, e: any) => void;
 	deleteFile?: (file: string) => void;
+	renameFile?: (file: IStorageItem) => void;
 	downloadFile?: (file: string) => void;
 	revealInExplorer?: (location: string) => void;
 	openWithApp?: (location: string, appPath?: string) => void;
@@ -170,6 +173,12 @@ export function FileOrFolder({
 							>
 								Copy Path
 							</DropdownMenuItem>
+							{renameFile && (
+								<DropdownMenuItem onSelect={() => renameFile(file)}>
+									<PencilIcon className="h-4 w-4 mr-2" />
+									Rename
+								</DropdownMenuItem>
+							)}
 							{typeof deleteFile !== "undefined" && (
 								<>
 									<DropdownMenuSeparator />
@@ -287,6 +296,12 @@ export function FileOrFolder({
 						>
 							Copy Path
 						</DropdownMenuItem>
+						{renameFile && (
+							<DropdownMenuItem onSelect={() => renameFile(file)}>
+								<PencilIcon className="h-4 w-4 mr-2" />
+								Rename
+							</DropdownMenuItem>
+						)}
 						{typeof downloadFile !== "undefined" && (
 							<DropdownMenuItem
 								onClick={(e) => {

@@ -28,7 +28,10 @@ impl TrainingEngine for EfficientAdEngine {
             .estimated_training_bytes()
             .map_err(engine_error)?;
         let dataset = serialized_size(&work.snapshot)?;
-        Ok(model.saturating_add(dataset.saturating_mul(12)))
+        Ok(model.saturating_add(dataset.saturating_mul(SNAPSHOT_MEMORY_FACTOR)))
+    }
+    fn snapshot_byte_limit(&self, budget: u64) -> u64 {
+        budget / SNAPSHOT_MEMORY_FACTOR
     }
     fn train(&self, work: &TrainingWork, control: &WorkerControl) -> Result<EngineOutput> {
         let mut recipe: EfficientAdEngineRecipe =

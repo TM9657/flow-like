@@ -10,6 +10,7 @@ import {
 	ListIcon,
 	MaximizeIcon,
 	MinimizeIcon,
+	PencilIcon,
 	RefreshCwIcon,
 	SearchIcon,
 	SortAscIcon,
@@ -22,6 +23,7 @@ import {
 	lazy,
 	useCallback,
 	useEffect,
+	useId,
 	useMemo,
 	useRef,
 	useState,
@@ -40,6 +42,7 @@ import {
 	useQueryClient,
 } from "../..";
 import { asArray } from "../../lib/response-shape";
+import { normalizeStorageLocation } from "../../lib/storage-tree";
 import { humanFileSize } from "../../lib/utils";
 import {
 	Badge,
@@ -62,14 +65,25 @@ import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
+	isAudio,
 	isCode,
+	isImage,
+	isPdf,
 	isText,
+	isVideo,
 } from "../ui";
+import { craftViewer } from "./craft-viewers";
 import { StorageBreadcrumbs } from "./storage-breadcrumbs";
-import { createStorageDocx, isStorageDocx } from "./storage-docx";
+import { createStorageCraftFile, storageCraftSaveName } from "./storage-craft";
+import { isStorageDocx } from "./storage-docx";
 import { useStorageDocxHistory } from "./storage-docx-history";
 import { FileOrFolder } from "./storage-file-or-folder";
 
+const CraftDocument = lazy(() =>
+	import("./craft-document").then((module) => ({
+		default: module.CraftDocument,
+	})),
+);
 const WordcraftDocument = lazy(() =>
 	import("./wordcraft-document").then((module) => ({
 		default: module.WordcraftDocument,
@@ -77,6 +91,16 @@ const WordcraftDocument = lazy(() =>
 );
 
 const EMPTY_PREVIEW = { url: "", file: "", folder: "" };
+
+function hasInlineMediaPreview(file: string) {
+	const filename = storageDisplayName(file);
+	return (
+		isPdf(file, filename) ||
+		isImage(file, filename) ||
+		isAudio(file, filename) ||
+		isVideo(file, filename)
+	);
+}
 
 interface StorageOperationResult {
 	prefix: string;
@@ -140,6 +164,12 @@ interface StorageOperations {
 		options?: IStorageListOptions,
 	) => Promise<IStorageItem[]>;
 	deleteStorageItems: (appId: string, prefixes: string[]) => Promise<void>;
+	renameStorageItem: (
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	) => Promise<void>;
 	downloadStorageItems: (
 		appId: string,
 		prefixes: string[],
@@ -166,6 +196,7 @@ export function StorageSystem({
 	openWithApp,
 	listAppsForFile,
 	enableDocx = false,
+	enableCraftEditors = false,
 	canWrite = true,
 }: Readonly<{
 	appId: string;
@@ -181,6 +212,7 @@ export function StorageSystem({
 		location: string,
 	) => Promise<import("./storage-file-or-folder").AppEntry[]>;
 	enableDocx?: boolean;
+	enableCraftEditors?: boolean;
 	canWrite?: boolean;
 }>) {
 	// Responsive helper: detect small screens (<= Tailwind 'sm')
@@ -230,6 +262,19 @@ export function StorageSystem({
 			deleteStorageItems: (targetAppId, prefixes) =>
 				operations?.deleteStorageItems(targetAppId, prefixes) ??
 				backend.storageState.deleteStorageItems(targetAppId, prefixes),
+			renameStorageItem: (targetAppId, targetPrefix, newName, isDir) =>
+				operations?.renameStorageItem(
+					targetAppId,
+					targetPrefix,
+					newName,
+					isDir,
+				) ??
+				backend.storageState.renameStorageItem(
+					targetAppId,
+					targetPrefix,
+					newName,
+					isDir,
+				),
 			downloadStorageItems: (targetAppId, prefixes) =>
 				operations?.downloadStorageItems(targetAppId, prefixes) ??
 				backend.storageState.downloadStorageItems(targetAppId, prefixes),
@@ -261,6 +306,15 @@ export function StorageSystem({
 		[backend.storageState, operations],
 	);
 	const [preview, setPreview] = useState(EMPTY_PREVIEW);
+	const [inlineEditorOpen, setInlineEditorOpen] = useState(false);
+	const editorFor = useCallback(
+		(file: string) =>
+			enableCraftEditors || (enableDocx && isStorageDocx(file))
+				? craftViewer(file)
+				: undefined,
+		[enableCraftEditors, enableDocx],
+	);
+	const conversionTarget = useRef({ source: "", id: "" });
 	const docxDirty = useRef(false);
 	const docxBusy = useRef(false);
 	const previewRequest = useRef(0);
@@ -282,6 +336,7 @@ export function StorageSystem({
 	const dismissPreview = useCallback(() => {
 		previewRequest.current++;
 		docxDirty.current = false;
+		setInlineEditorOpen(false);
 		setPreview(EMPTY_PREVIEW);
 	}, []);
 	const { openHistory, closeHistory } = useStorageDocxHistory(
@@ -378,7 +433,7 @@ export function StorageSystem({
 				exact: true,
 				refetchType: "none",
 			});
-			await queryClient.fetchQuery({
+			return await queryClient.fetchQuery({
 				queryKey,
 				queryFn: () =>
 					storageApi.listStorageItems(appId, prefix, { refresh: true }),
@@ -533,6 +588,224 @@ export function StorageSystem({
 		return [...base, ...virtualItems];
 	}, [files.data, virtualFoldersHere, prefix, normalizePrefix]);
 
+	const renameInputId = useId();
+	const renameContext = JSON.stringify([appId, storageScopeKey, prefix]);
+	const latestRenameContext = useRef(renameContext);
+	latestRenameContext.current = renameContext;
+	const [renameTarget, setRenameTarget] = useState<{
+		file: IStorageItem;
+		context: string;
+	} | null>(null);
+	const [renameName, setRenameName] = useState("");
+	const [renameError, setRenameError] = useState("");
+	const [renaming, setRenaming] = useState(false);
+	const renamePending = useRef(false);
+	const activeRename =
+		renameTarget?.context === renameContext ? renameTarget : null;
+	useEffect(() => {
+		setRenameTarget((current) =>
+			current?.context === renameContext ? current : null,
+		);
+	}, [renameContext]);
+
+	const startRename = useCallback(
+		(file: IStorageItem) => {
+			if (!canWrite || renamePending.current) return;
+			setRenameName(storageDisplayName(file.location));
+			setRenameError("");
+			setRenameTarget({ file, context: renameContext });
+		},
+		[canWrite, renameContext],
+	);
+
+	const refreshAfterRename = useCallback(
+		async (source: string, isDir: boolean) => {
+			const listName =
+				(storageScopeKey === "user"
+					? backend.storageState.listStorageItemsUser
+					: backend.storageState.listStorageItems
+				).name || "backendFn";
+			const queries = queryClient.getQueryCache().findAll({
+				predicate: ({ queryKey }) =>
+					queryKey[1] === appId &&
+					typeof queryKey[2] === "string" &&
+					((queryKey.length === 4 &&
+						queryKey[0] === "listStorageItems" &&
+						queryKey[3] === storageScopeKey) ||
+						(queryKey.length === 3 &&
+							queryKey[0] === listName &&
+							(storageScopeKey === "shared" || storageScopeKey === "user"))),
+			});
+			const results = await Promise.allSettled(
+				queries.map(async ({ queryKey }) => {
+					await queryClient.cancelQueries({ queryKey, exact: true });
+					await queryClient.invalidateQueries({
+						queryKey,
+						exact: true,
+						refetchType: "none",
+					});
+					const directory = normalizePrefix(queryKey[2] as string);
+					if (
+						isDir &&
+						(directory === source || directory.startsWith(`${source}/`))
+					) {
+						// Expanded folders must stop exposing paths removed by the rename.
+						queryClient.setQueryData(queryKey, []);
+						return;
+					}
+					await queryClient.fetchQuery({
+						queryKey,
+						queryFn: () =>
+							storageApi.listStorageItems(appId, queryKey[2] as string, {
+								refresh: true,
+							}),
+						staleTime: 0,
+					});
+				}),
+			);
+			if (results.some((result) => result.status === "rejected")) {
+				toast.error("Renamed, but some folders could not be refreshed");
+			}
+			return await refreshFiles();
+		},
+		[
+			appId,
+			backend.storageState,
+			normalizePrefix,
+			queryClient,
+			refreshFiles,
+			storageApi,
+			storageScopeKey,
+		],
+	);
+
+	const submitRename = async () => {
+		if (!canWrite || !activeRename || renamePending.current) return;
+		const { file } = activeRename;
+		const oldName = storageDisplayName(file.location);
+		if (!renameName.trim()) {
+			setRenameError("Name cannot be empty");
+			return;
+		}
+		if (
+			renameName === "." ||
+			renameName === ".." ||
+			/[\\/\p{Cc}]/u.test(renameName)
+		) {
+			setRenameError(
+				"Use a name without slashes, control characters, or dot segments",
+			);
+			return;
+		}
+		if (renameName === oldName) {
+			setRenameTarget(null);
+			return;
+		}
+		if (
+			filesWithVirtual.some(
+				(candidate) =>
+					candidate.location !== file.location &&
+					storageDisplayName(candidate.location).toLowerCase() ===
+						renameName.toLowerCase(),
+			)
+		) {
+			setRenameError("A file or folder with that name already exists");
+			return;
+		}
+		const source = normalizeStorageLocation(file.location, prefix);
+		const previewPath = preview.file
+			? normalizeStorageLocation(preview.file, preview.folder)
+			: "";
+		const renamingPreview =
+			previewPath === source ||
+			(file.is_dir && previewPath.startsWith(`${source}/`));
+		renamePending.current = true;
+		setRenaming(true);
+		setRenameError("");
+		let renameAttempted = false;
+		try {
+			if (renamingPreview && !confirmPreviewLeave()) {
+				return;
+			}
+			// A download already in flight still refers to the old location.
+			previewRequest.current++;
+			const virtualOnly =
+				file.is_dir &&
+				virtualFoldersHere.some(
+					(name) => storageDisplayName(name) === oldName,
+				) &&
+				!backendFolderNames.has(oldName);
+			if (!virtualOnly) {
+				renameAttempted = true;
+				await storageApi.renameStorageItem(
+					appId,
+					source,
+					renameName,
+					!!file.is_dir,
+				);
+			}
+			if (
+				renamingPreview &&
+				latestRenameContext.current === activeRename.context
+			) {
+				docxDirty.current = false;
+				await closeHistory();
+				dismissPreview();
+			}
+			const renamedItems = virtualOnly
+				? undefined
+				: await refreshAfterRename(source, !!file.is_dir);
+			if (file.is_dir) {
+				const renamedFolder = renamedItems?.find(
+					(candidate) =>
+						candidate.is_dir &&
+						storageDisplayName(candidate.location) === renameName,
+				);
+				const destination = normalizeStorageLocation(
+					renamedFolder?.location ?? renameName,
+					prefix,
+				);
+				const folders = readVF();
+				const moved: VFMap = Object.create(null);
+				for (const [parent, names] of Object.entries(folders)) {
+					const nextParent =
+						parent === source || parent.startsWith(`${source}/`)
+							? `${destination}${parent.slice(source.length)}`
+							: parent;
+					moved[nextParent] =
+						parent === currentParentKey
+							? names.map((name) =>
+									storageDisplayName(name) === oldName ? renameName : name,
+								)
+							: names;
+				}
+				writeVF(moved);
+				if (latestRenameContext.current === activeRename.context) {
+					setVirtualFolders({
+						storeKey,
+						parentKey: currentParentKey,
+						names: moved[currentParentKey] ?? [],
+					});
+				}
+			}
+			setRenameTarget((current) => (current === activeRename ? null : current));
+			toast.success(file.is_dir ? "Folder renamed" : "File renamed");
+		} catch (error) {
+			setRenameError(
+				error instanceof Error
+					? error.message
+					: typeof error === "string"
+						? error
+						: "Failed to rename item",
+			);
+			// A failed cloud folder rename can leave some destination copies.
+			if (renameAttempted) await refreshFiles();
+		} finally {
+			renamePending.current = false;
+			setRenaming(false);
+		}
+	};
+
 	const [searchQuery, setSearchQuery] = useState("");
 	const [viewMode, setViewMode] = useState<"grid" | "list">("list");
 	const [sortBy, setSortBy] = useState<"name" | "date" | "size" | "type">(
@@ -639,11 +912,14 @@ export function StorageSystem({
 			}
 
 			const fileUrl = url[0].url;
-			if (enableDocx && isStorageDocx(file)) openHistory();
+			const viewer = editorFor(file);
+			if (viewer && !hasInlineMediaPreview(file)) openHistory();
 			else if (!(await closeHistory())) return;
 			if (request !== previewRequest.current) return;
 
 			docxDirty.current = false;
+			setInlineEditorOpen(false);
+			conversionTarget.current = { source: file, id: crypto.randomUUID() };
 			setPreview({
 				url: fileUrl,
 				file,
@@ -655,7 +931,7 @@ export function StorageSystem({
 			closeHistory,
 			closePreview,
 			confirmPreviewLeave,
-			enableDocx,
+			editorFor,
 			openHistory,
 			prefix,
 			preview.file,
@@ -665,21 +941,32 @@ export function StorageSystem({
 
 	const saveDocx = useCallback(
 		async (file: File) => {
-			if (!enableDocx || !canWrite || !isStorageDocx(preview.file)) {
+			const viewer = editorFor(preview.file);
+			if (!canWrite || !viewer) {
 				throw new Error("You do not have permission to save this document.");
 			}
-			const document = createStorageDocx(file, preview.file);
+			if (conversionTarget.current.source !== preview.file)
+				conversionTarget.current = {
+					source: preview.file,
+					id: crypto.randomUUID(),
+				};
+			const document = createStorageCraftFile(
+				file,
+				preview.file,
+				viewer,
+				conversionTarget.current.id,
+			);
 			try {
 				await storageApi.uploadStorageItems(appId, preview.folder, [document]);
 			} finally {
 				await refreshFiles();
 			}
-			toast.success(`Saved ${storageDisplayName(preview.file)}`);
+			toast.success(`Saved ${storageDisplayName(document.name)}`);
 		},
 		[
 			appId,
 			canWrite,
-			enableDocx,
+			editorFor,
 			preview.file,
 			preview.folder,
 			refreshFiles,
@@ -718,7 +1005,23 @@ export function StorageSystem({
 		() => storageDisplayName(preview.file),
 		[preview.file],
 	);
-	const isDocxPreview = enableDocx && isStorageDocx(preview.file);
+	const previewViewer = editorFor(preview.file);
+	const hasInlinePreview = hasInlineMediaPreview(preview.file);
+	const isEditorPreview =
+		!!previewViewer && (!hasInlinePreview || inlineEditorOpen);
+	const inlineEditAction = canWrite && previewViewer && hasInlinePreview && (
+		<Button
+			variant="outline"
+			size="sm"
+			aria-label={previewViewer.id === "pdfcraft" ? "Edit PDF" : "Edit file"}
+			onClick={() => {
+				openHistory();
+				setInlineEditorOpen(true);
+			}}
+		>
+			<PencilIcon className="size-4" /> Edit
+		</Button>
+	);
 
 	const downloadFile = useCallback(
 		async (file: string) => {
@@ -811,11 +1114,9 @@ export function StorageSystem({
 				appId={appId}
 				highlight={preview.file === file.location}
 				file={file}
-				previewable={
-					enableDocx && isStorageDocx(file.location) ? true : undefined
-				}
+				previewable={editorFor(file.location) ? true : undefined}
 				changePrefix={(newPrefix) => {
-					if (isDocxPreview || clearPreviewOnNavigate) {
+					if (isEditorPreview || clearPreviewOnNavigate) {
 						navigatePrefix(`${prefix}/${newPrefix}`);
 					} else {
 						updatePrefix(`${prefix}/${newPrefix}`);
@@ -825,6 +1126,7 @@ export function StorageSystem({
 				revealInExplorer={revealInExplorer}
 				openWithApp={openWithApp}
 				listAppsForFile={listAppsForFile}
+				renameFile={canWrite ? startRename : undefined}
 				deleteFile={async (target) => {
 					const deletingPreview = storageDisplayName(preview.file) === target;
 					if (deletingPreview && !confirmPreviewLeave()) return;
@@ -862,13 +1164,14 @@ export function StorageSystem({
 		),
 		[
 			appId,
+			canWrite,
 			closePreview,
 			confirmPreviewLeave,
 			downloadFile,
-			enableDocx,
+			editorFor,
 			refreshFiles,
 			listAppsForFile,
-			isDocxPreview,
+			isEditorPreview,
 			loadFile,
 			navigatePrefix,
 			openWithApp,
@@ -876,6 +1179,7 @@ export function StorageSystem({
 			preview.file,
 			revealInExplorer,
 			storageApi,
+			startRename,
 			updatePrefix,
 		],
 	);
@@ -885,6 +1189,78 @@ export function StorageSystem({
 
 	return (
 		<div className="flex flex-col w-full h-full max-h-full overflow-hidden">
+			{activeRename && (
+				<Dialog
+					open
+					onOpenChange={(open) => {
+						if (!open && !renamePending.current) setRenameTarget(null);
+					}}
+				>
+					<DialogContent aria-describedby={undefined}>
+						<DialogTitle>
+							Rename {activeRename.file.is_dir ? "folder" : "file"}
+						</DialogTitle>
+						<form
+							className="space-y-4"
+							onSubmit={(event) => {
+								event.preventDefault();
+								void submitRename();
+							}}
+						>
+							<div className="space-y-2">
+								<label htmlFor={renameInputId} className="text-sm font-medium">
+									Name
+								</label>
+								<Input
+									id={renameInputId}
+									autoFocus
+									value={renameName}
+									disabled={renaming || !canWrite}
+									aria-invalid={!!renameError}
+									aria-describedby={
+										renameError ? `${renameInputId}-error` : undefined
+									}
+									onFocus={(event) => {
+										const extension = activeRename.file.is_dir
+											? -1
+											: renameName.lastIndexOf(".");
+										event.target.setSelectionRange(
+											0,
+											extension > 0 ? extension : renameName.length,
+										);
+									}}
+									onChange={(event) => {
+										setRenameName(event.target.value);
+										setRenameError("");
+									}}
+								/>
+								{renameError && (
+									<p
+										id={`${renameInputId}-error`}
+										role="alert"
+										className="text-sm text-destructive"
+									>
+										{renameError}
+									</p>
+								)}
+							</div>
+							<div className="flex justify-end gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									disabled={renaming}
+									onClick={() => setRenameTarget(null)}
+								>
+									Cancel
+								</Button>
+								<Button type="submit" disabled={renaming || !canWrite}>
+									{renaming ? "Renaming..." : "Rename"}
+								</Button>
+							</div>
+						</form>
+					</DialogContent>
+				</Dialog>
+			)}
 			<input
 				ref={fileReference}
 				type="file"
@@ -1212,7 +1588,7 @@ export function StorageSystem({
 			<Separator className="shrink-0 my-4" />
 
 			{/* Content Section */}
-			{(filesWithVirtual.length ?? 0) === 0 && !isDocxPreview && (
+			{(filesWithVirtual.length ?? 0) === 0 && !isEditorPreview && (
 				<div className="flex flex-col flex-1 min-h-0 w-full relative px-4 pb-4">
 					<EmptyState
 						className="w-full h-full max-w-full border-2 border-dashed border-muted-foreground/25 rounded-lg"
@@ -1237,9 +1613,9 @@ export function StorageSystem({
 				</div>
 			)}
 
-			{((filesWithVirtual.length ?? 0) > 0 || isDocxPreview) && (
+			{((filesWithVirtual.length ?? 0) > 0 || isEditorPreview) && (
 				<div className="flex flex-col flex-1 min-h-0 px-4 pb-4">
-					{preview.url !== "" && isDocxPreview && (
+					{preview.url !== "" && isEditorPreview && (
 						<Dialog
 							open
 							onOpenChange={(open) => {
@@ -1258,31 +1634,57 @@ export function StorageSystem({
 													{previewName}
 												</DialogTitle>
 												<p className="mt-2 text-sm text-muted-foreground">
-													Loading Flows Word...
+													Loading {previewViewer?.label}...
 												</p>
 											</div>
 										}
 									>
-										<WordcraftDocument
-											key={preview.file}
-											url={preview.url}
-											filename={previewName}
-											title={
-												<DialogTitle className="min-w-0 truncate text-base">
-													{previewName}
-												</DialogTitle>
-											}
-											editable={canWrite}
-											onSave={saveDocx}
-											onDirtyChange={onDocxDirtyChange}
-											onBusyChange={onDocxBusyChange}
-										/>
+										{previewViewer?.id === "wordcraft" ? (
+											<WordcraftDocument
+												key={preview.file}
+												url={preview.url}
+												filename={previewName}
+												title={
+													<DialogTitle className="min-w-0 truncate text-base">
+														{previewName}
+													</DialogTitle>
+												}
+												editable={canWrite}
+												onSave={saveDocx}
+												onDirtyChange={onDocxDirtyChange}
+												onBusyChange={onDocxBusyChange}
+											/>
+										) : previewViewer ? (
+											<CraftDocument
+												key={preview.file}
+												viewer={previewViewer}
+												initialEditing={inlineEditorOpen}
+												outputFilename={storageDisplayName(
+													storageCraftSaveName(
+														preview.file,
+														previewViewer,
+														conversionTarget.current.id,
+													),
+												)}
+												url={preview.url}
+												filename={previewName}
+												title={
+													<DialogTitle className="min-w-0 truncate text-base">
+														{previewName}
+													</DialogTitle>
+												}
+												editable={canWrite}
+												onSave={saveDocx}
+												onDirtyChange={onDocxDirtyChange}
+												onBusyChange={onDocxBusyChange}
+											/>
+										) : null}
 									</Suspense>
 								</div>
 							</DialogContent>
 						</Dialog>
 					)}
-					{preview.url !== "" && !isDocxPreview && (
+					{preview.url !== "" && !isEditorPreview && (
 						<>
 							{(isSmallScreen || isPreviewMaximized) && (
 								<div className="fixed inset-0 z-50 bg-background">
@@ -1291,24 +1693,27 @@ export function StorageSystem({
 											<h3 className="font-medium text-lg">
 												Preview - {previewName}
 											</h3>
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() => {
-													if (isSmallScreen) {
-														closePreview();
-													} else {
-														setIsPreviewMaximized(false);
-													}
-												}}
-												className="h-8 w-8 p-0"
-											>
-												{isSmallScreen ? (
-													<XIcon className="h-4 w-4" />
-												) : (
-													<MinimizeIcon className="h-4 w-4" />
-												)}
-											</Button>
+											<div className="flex items-center gap-2">
+												{inlineEditAction}
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => {
+														if (isSmallScreen) {
+															closePreview();
+														} else {
+															setIsPreviewMaximized(false);
+														}
+													}}
+													className="h-8 w-8 p-0"
+												>
+													{isSmallScreen ? (
+														<XIcon className="h-4 w-4" />
+													) : (
+														<MinimizeIcon className="h-4 w-4" />
+													)}
+												</Button>
+											</div>
 										</div>
 										<div className="flex-1 min-h-0 overflow-auto">
 											<FilePreviewer
@@ -1361,14 +1766,17 @@ export function StorageSystem({
 										<div className="flex flex-col flex-1 min-h-0 bg-muted/50 rounded-md border">
 											<div className="p-2 border-b bg-background rounded-t-md flex items-center justify-between shrink-0">
 												<h3 className="font-medium text-sm">Preview</h3>
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => setIsPreviewMaximized(true)}
-													className="h-6 w-6 p-0"
-												>
-													<MaximizeIcon className="h-3 w-3" />
-												</Button>
+												<div className="flex items-center gap-2">
+													{inlineEditAction}
+													<Button
+														variant="ghost"
+														size="sm"
+														onClick={() => setIsPreviewMaximized(true)}
+														className="h-6 w-6 p-0"
+													>
+														<MaximizeIcon className="h-3 w-3" />
+													</Button>
+												</div>
 											</div>
 											<div className="flex-1 min-h-0 overflow-auto">
 												<FilePreviewer
@@ -1384,7 +1792,7 @@ export function StorageSystem({
 							)}
 						</>
 					)}
-					{(preview.url === "" || isDocxPreview) && (
+					{(preview.url === "" || isEditorPreview) && (
 						<div className="flex flex-col flex-1 min-h-0 border rounded-lg p-3 sm:p-4 bg-background">
 							<div className="flex items-center gap-2 mb-2 shrink-0">
 								<h3 className="font-medium text-sm text-muted-foreground">

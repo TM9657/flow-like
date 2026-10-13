@@ -7,5 +7,24 @@
 	"label": "Flows Audio",
 	"canvasId": "craft_canvas",
 	"maxBytes": 104857600,
-	"extensions": ["wav", "wave", "bwf", "aif", "aiff", "aifc", "flac", "mp3", "ogg", "oga", "m4a", "aac", "caf", "mid", "midi", "smf", "scraft", "scraftz"]
+	"extensions": [
+		"wav",
+		"wave",
+		"bwf",
+		"aif",
+		"aiff",
+		"aifc",
+		"flac",
+		"mp3",
+		"ogg",
+		"oga",
+		"m4a",
+		"aac",
+		"caf",
+		"mid",
+		"midi",
+		"smf",
+		"scraft",
+		"scraftz"
+	]
 }

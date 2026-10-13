@@ -33,16 +33,27 @@ fn job(
     classes: usize,
     pretrained: Option<PretrainedSourceRef>,
 ) -> TrainingJob {
-    job_with(repo, project, name, name, classes, pretrained, 1, json!([]))
+    let content = |index: i64| format!("{name}-{index}");
+    job_with(
+        repo,
+        project,
+        name,
+        content,
+        classes,
+        pretrained,
+        1,
+        json!([]),
+    )
 }
 
-/// Streams with the same `content` hold identical rows under the same sample digests.
+/// `content` names the row at each time index; equal names give equal sample digests, so
+/// streams can share rows.
 #[allow(clippy::too_many_arguments)]
 fn job_with(
     repo: &TrainingRepository,
     project: &str,
     name: &str,
-    content: &str,
+    content: impl Fn(i64) -> String,
     classes: usize,
     pretrained: Option<PretrainedSourceRef>,
     epochs: usize,
@@ -85,7 +96,7 @@ fn job_with(
                 group_id: sample.group_id.clone(),
                 captured_at_ms: index,
                 label_available_at_ms: index,
-                content_digest: format!("{:x}", Sha256::digest(format!("{content}-{index}"))),
+                content_digest: format!("{:x}", Sha256::digest(content(index))),
                 source: LabelSource::Reviewed,
                 accepted: true,
                 payload: serde_json::to_value(sample).unwrap(),
@@ -282,7 +293,7 @@ fn fine_tuning_resumes_its_own_checkpoint_without_reloading_the_source_blob() {
         &repo,
         "project",
         "resume",
-        "resume",
+        |index: i64| format!("resume-{index}"),
         3,
         Some(PretrainedSourceRef {
             source_id: source.id.clone(),
@@ -467,25 +478,38 @@ fn in_project_sources_cannot_initialize_runs_that_hold_out_their_training_conten
         replace_head: true,
         freeze_backbone: false,
     };
-    // The source's rows reappear in another stream, where they are validated and audited.
-    let copied = job_with(
+    // A reshuffled copy of the source's rows validates and audits on its training rows.
+    let reshuffled = job_with(
         &repo,
         "project",
-        "copied",
-        "source",
+        "reshuffled",
+        |index: i64| format!("source-{}", (index + 6) % 12),
         2,
         Some(reference.clone()),
         1,
         json!([]),
     );
-    let error = worker(&repo).run(&copied.id).unwrap_err().to_string();
+    let error = worker(&repo).run(&reshuffled.id).unwrap_err().to_string();
     assert!(error.contains("validation/test groups"), "{error}");
-    let stopped = repo.get_job(&copied.id).unwrap();
+    let stopped = repo.get_job(&reshuffled.id).unwrap();
     assert_eq!(stopped.status, JobStatus::Failed);
     assert!(stopped.artifact_id.is_none());
-    let independent = job(&repo, "project", "independent", 2, Some(reference));
-    let artifact = worker(&repo).run(&independent.id).unwrap();
-    assert_eq!(artifact.manifest["pretrained"]["source_kind"], "training_artifact");
+    // The same rows under the same split keep the source's training rows in training.
+    let aligned = job_with(
+        &repo,
+        "project",
+        "aligned",
+        |index: i64| format!("source-{index}"),
+        2,
+        Some(reference),
+        1,
+        json!([]),
+    );
+    let artifact = worker(&repo).run(&aligned.id).unwrap();
+    assert_eq!(
+        artifact.manifest["pretrained"]["source_kind"],
+        "training_artifact"
+    );
 }
 
 #[test]
@@ -518,7 +542,7 @@ fn fine_tuning_checks_declared_normalization_against_the_source_recommendation()
         &repo,
         "project",
         "unnormalized",
-        "unnormalized",
+        |index: i64| format!("unnormalized-{index}"),
         3,
         Some(reference.clone()),
         1,
@@ -530,7 +554,7 @@ fn fine_tuning_checks_declared_normalization_against_the_source_recommendation()
         &repo,
         "project",
         "matching",
-        "matching",
+        |index: i64| format!("matching-{index}"),
         3,
         Some(reference.clone()),
         1,

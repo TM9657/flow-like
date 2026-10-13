@@ -1,4 +1,4 @@
-use crate::repository::{evaluation_truth_digest, validate_prediction_truth};
+use crate::repository::{current_prediction_truth, evaluation_truth_digest};
 use crate::*;
 use flow_like_ml_core::{Annotation, BoundingBox, LabelProvenance, Sample};
 use flow_like_ml_native::evaluation as metrics;
@@ -82,15 +82,18 @@ impl TrainingRepository {
         };
         let mut truths = Vec::new();
         for prediction in &predictions {
-            if matches!(
+            if !matches!(
                 prediction.actual_source,
                 Some(LabelSource::Reviewed | LabelSource::ObservedOutcome)
             ) {
-                truths.push((
-                    prediction,
-                    validate_prediction_truth(&tx, &artifact.stream, prediction)?,
-                ));
+                continue;
             }
+            // A withdrawn annotation no longer provides audited truth.
+            let Some(recorded) = current_prediction_truth(&tx, &artifact.stream, prediction)?
+            else {
+                continue;
+            };
+            truths.push((prediction, recorded));
         }
         consumed.ensure_independent(truths.iter().map(|(_, recorded)| recorded))?;
         let mut audited = Vec::new();

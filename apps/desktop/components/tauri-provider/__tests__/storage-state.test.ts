@@ -106,6 +106,117 @@ describe("desktop storage listing refresh", () => {
 	);
 });
 
+describe("desktop storage rename", () => {
+	const renameRoutes = [
+		["renameStorageItem", "apps/app/data/rename", "storage_rename"],
+		[
+			"renameStorageItemUser",
+			"apps/app/data/user/rename",
+			"storage_user_rename",
+		],
+	] as const;
+
+	beforeEach(() => {
+		vi.resetAllMocks();
+		mocks.fetcher.mockResolvedValue(undefined);
+		mocks.invoke.mockResolvedValue(undefined);
+	});
+
+	test.each(renameRoutes)(
+		"%s sends hub renames only to remote storage",
+		async (method, endpoint) => {
+			const backend = {
+				isOffline: vi.fn().mockResolvedValue(false),
+				profile: {},
+				auth: {},
+				queryClient: {},
+			};
+			const state = new StorageState(backend as never);
+			for (const isDir of [false, true]) {
+				await state[method]("app", "docs/old%20name", "new 100% name", isDir);
+				expect(mocks.fetcher).toHaveBeenLastCalledWith(
+					backend.profile,
+					endpoint,
+					{
+						method: "POST",
+						body: JSON.stringify({
+							prefix: "docs/old%20name",
+							new_name: "new 100% name",
+							is_dir: isDir,
+						}),
+					},
+					backend.auth,
+				);
+			}
+			expect(mocks.invoke).not.toHaveBeenCalled();
+		},
+	);
+
+	test.each(renameRoutes)(
+		"%s sends offline renames to its scoped native command",
+		async (method, _endpoint, command) => {
+			const state = new StorageState({
+				isOffline: vi.fn().mockResolvedValue(true),
+			} as never);
+			for (const isDir of [false, true]) {
+				await state[method]("app", "docs/old%20name", "new 100% name", isDir);
+				expect(mocks.invoke).toHaveBeenLastCalledWith(command, {
+					appId: "app",
+					prefix: "docs/old%20name",
+					newName: "new 100% name",
+					isDir,
+				});
+			}
+			expect(mocks.fetcher).not.toHaveBeenCalled();
+		},
+	);
+
+	test.each(renameRoutes)(
+		"%s propagates remote errors without falling back to a local rename",
+		async (method) => {
+			const state = new StorageState({
+				isOffline: vi.fn().mockResolvedValue(false),
+				profile: {},
+				auth: {},
+				queryClient: {},
+			} as never);
+			mocks.fetcher.mockRejectedValueOnce(new Error("Name already exists"));
+			await expect(
+				state[method]("app", "old", "existing", true),
+			).rejects.toThrow("Name already exists");
+			expect(mocks.invoke).not.toHaveBeenCalled();
+		},
+	);
+
+	test.each(renameRoutes)(
+		"%s propagates native rename errors",
+		async (method) => {
+			const state = new StorageState({
+				isOffline: vi.fn().mockResolvedValue(true),
+			} as never);
+			mocks.invoke.mockRejectedValueOnce(new Error("File is in use"));
+			await expect(state[method]("app", "old", "new", false)).rejects.toThrow(
+				"File is in use",
+			);
+			expect(mocks.fetcher).not.toHaveBeenCalled();
+		},
+	);
+
+	test.each(renameRoutes)(
+		"%s rejects an uninitialized remote backend",
+		async (method) => {
+			const state = new StorageState({
+				isOffline: vi.fn().mockResolvedValue(false),
+			} as never);
+			await expect(state[method]("app", "old", "new", false)).rejects.toThrow(
+				"not properly initialized for renaming",
+			);
+			expect(mocks.fetcher).not.toHaveBeenCalled();
+			expect(mocks.invoke).not.toHaveBeenCalled();
+		},
+	);
+});
+
 describe("desktop storage replacement", () => {
 	const target = "/storage/docs/report.docx";
 	const original = new TextEncoder().encode("original document");

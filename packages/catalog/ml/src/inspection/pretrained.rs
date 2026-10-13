@@ -63,13 +63,25 @@ pub struct ExtractPretrainedFeaturesNode;
 #[flow_like_types::async_trait]
 impl NodeLogic for ExtractPretrainedFeaturesNode {
     fn get_node(&self) -> flow_like::flow::node::Node {
-        super::operation_node::<PretrainedFeaturesRequest, flow_like_ml_core::TensorData>(
+        let mut node = super::operation_node::<
+            PretrainedFeaturesRequest,
+            flow_like_ml_core::TensorData,
+        >(
             "ml_extract_pretrained_features",
             "Extract Pretrained Image Features",
             "Extract NCHW spatial features from project-owned DINOv2 or convolutional weights for patch anomaly models",
             "pretrainedImageFeatures",
             "AI/ML/Training",
+        );
+        node.add_output_pin(
+            "extractor",
+            "Feature Extractor",
+            "Source, weights digest and image steps of these features; patch models record it and reject features from other weights",
+            flow_like::flow::variable::VariableType::Struct,
         )
+        .set_schema::<super::lifecycle::FeatureExtractorRef>();
+        node.set_version(2);
+        node
     }
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         #[cfg(feature = "training")]
@@ -80,14 +92,18 @@ impl NodeLogic for ExtractPretrainedFeaturesNode {
             if context.is_cancelled() {
                 return Err(anyhow!("Pretrained feature extraction cancelled"));
             }
-            let result = tokio::task::spawn_blocking(move || {
-                flow_like_ml_runtime::engines::pretrained_source_features(
+            let (result, extractor) = tokio::task::spawn_blocking(move || -> Result<_> {
+                let features = flow_like_ml_runtime::engines::pretrained_source_features(
                     &repo,
                     &project,
                     &request.source_id,
                     &request.input,
                     &request.compute,
-                )
+                )?;
+                let source = repo.get_pretrained_source(&request.source_id)?;
+                let extractor: super::lifecycle::FeatureExtractorRef =
+                    flow_like_ml_runtime::engines::FeatureExtractor::from_source(&source)?.into();
+                Ok((features, extractor))
             })
             .await??;
             if context.is_cancelled() {
@@ -95,6 +111,9 @@ impl NodeLogic for ExtractPretrainedFeaturesNode {
             }
             context
                 .set_pin_value("result", flow_like_types::json::json!(result))
+                .await?;
+            context
+                .set_pin_value("extractor", flow_like_types::json::json!(extractor))
                 .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
@@ -300,5 +319,47 @@ impl NodeLogic for ListPretrainedVisionNode {
                 "Pretrained weight listing requires a local training build"
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pretrained_features_also_output_their_extractor() {
+        use super::super::lifecycle::FeatureExtractorRef;
+        use flow_like::flow::pin::Pin;
+        let node = ExtractPretrainedFeaturesNode.get_node();
+        assert_eq!(node.version, Some(2));
+        assert_eq!(
+            node.get_pin_by_name("extractor").unwrap().schema,
+            Pin::schema_string_for::<FeatureExtractorRef>()
+        );
+    }
+
+    #[cfg(feature = "training")]
+    #[test]
+    fn extractor_pins_carry_the_runtime_extractor_shape() {
+        use super::super::lifecycle::FeatureExtractorRef;
+        use flow_like_types::json::{from_value, to_value};
+        let runtime = flow_like_ml_runtime::engines::FeatureExtractor {
+            source_id: "pretrained:resnet".into(),
+            blob_sha256: "a".repeat(64),
+            image_steps: vec![flow_like_ml_core::PreprocessingStep::Resize {
+                width: 224,
+                height: 224,
+            }],
+        };
+        let pinned = FeatureExtractorRef::from(runtime.clone());
+        assert_eq!(to_value(&pinned).unwrap(), to_value(&runtime).unwrap());
+        let parsed: FeatureExtractorRef = from_value(to_value(&runtime).unwrap()).unwrap();
+        assert_eq!(parsed, pinned);
+        assert_eq!(pinned.to_runtime().unwrap(), runtime);
+        let unverifiable = FeatureExtractorRef {
+            blob_sha256: "not-a-digest".into(),
+            ..pinned
+        };
+        assert!(unverifiable.to_runtime().is_err());
     }
 }

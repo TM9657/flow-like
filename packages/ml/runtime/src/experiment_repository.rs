@@ -99,6 +99,7 @@ pub(crate) fn reserve_recovered_trial(
     trial.updated_at_ms = at_ms;
     touch(&mut value, at_ms);
     save_trial(connection, &trial)?;
+    charge_retained_checkpoints(connection, &mut value)?;
     save_experiment(connection, &value)?;
     Ok(failure)
 }
@@ -173,12 +174,12 @@ impl TrainingRepository {
         self.writable()?;
         validate_snapshot(&snapshot)?;
         let mut connection = self.connection()?;
-        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        validate_snapshot_truth(&tx, &snapshot)?;
+        validate_snapshot_truth(&connection, &snapshot)?;
         if snapshot.id.is_empty() {
             snapshot.id = id();
         }
         snapshot.digest = snapshot_hash(&snapshot)?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         insert_snapshot(&tx, &snapshot)?;
         tx.commit()?;
         Ok(snapshot)
@@ -190,10 +191,12 @@ impl TrainingRepository {
         let snapshot =
             self.get_snapshot_limited(&request.snapshot_id, request.budget.maximum_dataset_bytes)?;
         validate_snapshot(&snapshot)?;
+        ensure_experiment_snapshot(&request, &snapshot, at_ms)?;
         let mut connection = self.connection()?;
+        validate_snapshot_truth(&connection, &snapshot)?;
+        let prepared = prepare_dataset(&request.spec, &snapshot)?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        validate_snapshot_truth(&tx, &snapshot)?;
-        let experiment = insert_experiment(&tx, request, &snapshot, at_ms)?;
+        let experiment = insert_experiment(&tx, request, &snapshot, prepared, at_ms)?;
         tx.commit()?;
         Ok(experiment)
     }
@@ -221,11 +224,13 @@ impl TrainingRepository {
             )));
         }
         request.snapshot_id = snapshot.id.clone();
+        ensure_experiment_snapshot(&request, &snapshot, at_ms)?;
         let mut connection = self.connection()?;
+        validate_snapshot_truth(&connection, &snapshot)?;
+        let prepared = prepare_dataset(&request.spec, &snapshot)?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        validate_snapshot_truth(&tx, &snapshot)?;
         insert_snapshot(&tx, &snapshot)?;
-        let experiment = insert_experiment(&tx, request, &snapshot, at_ms)?;
+        let experiment = insert_experiment(&tx, request, &snapshot, prepared, at_ms)?;
         tx.commit()?;
         Ok(experiment)
     }
@@ -531,6 +536,7 @@ impl TrainingRepository {
             ExperimentStatus::Cancelled
         };
         value.stop_reason = Some("cancelled".into());
+        charge_retained_checkpoints(&tx, &mut value)?;
         pause_clock(&mut value, at_ms);
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
@@ -622,6 +628,7 @@ impl TrainingRepository {
             }
             save_trial(&tx, &trial)?;
         }
+        charge_retained_checkpoints(&tx, &mut value)?;
         let exhausted = if wall_exhausted {
             Some("wall_time_budget_exhausted")
         } else if resource_exhausted && !resumed {
@@ -745,6 +752,12 @@ impl TrainingRepository {
                 .checked_add(artifact.blob.bytes)
                 .ok_or_else(|| invalid("artifact budget overflow"))?;
         }
+        trial.artifact_id = Some(artifact.id);
+        trial.status = ExperimentTrialStatus::Validated;
+        trial.validation_metrics = metrics.clone();
+        trial.updated_at_ms = at_ms;
+        save_trial(&tx, &trial)?;
+        charge_retained_checkpoints(&tx, &mut value)?;
         if value.usage.artifact_bytes > value.request.budget.maximum_artifact_bytes
             || value.usage.training_time_ms > value.request.budget.maximum_training_time_ms
         {
@@ -752,10 +765,6 @@ impl TrainingRepository {
             value.stop_reason = Some("resource_budget_exhausted".into());
             pause_clock(&mut value, at_ms);
         }
-        trial.artifact_id = Some(artifact.id);
-        trial.status = ExperimentTrialStatus::Validated;
-        trial.validation_metrics = metrics.clone();
-        trial.updated_at_ms = at_ms;
         let best = value
             .best_trial_id
             .as_deref()
@@ -769,7 +778,6 @@ impl TrainingRepository {
         {
             value.best_trial_id = Some(trial.id.clone());
         }
-        save_trial(&tx, &trial)?;
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
         tx.commit()?;
@@ -850,6 +858,7 @@ impl TrainingRepository {
         trial.error = Some(error.into());
         trial.updated_at_ms = at_ms;
         save_trial(&tx, &trial)?;
+        charge_retained_checkpoints(&tx, &mut value)?;
         if value.status == ExperimentStatus::CancelRequested && active_jobs(&tx, &value.id)? == 0 {
             value.status = ExperimentStatus::Cancelled;
         }
@@ -894,6 +903,8 @@ impl TrainingRepository {
         value.selected_trial_id = Some(winner);
         value.selected_at_ms = Some(at_ms);
         value.status = ExperimentStatus::Evaluating;
+        // The search is sealed, so the blob collector reclaims every trial checkpoint.
+        set_checkpoint_charge(&mut value, 0)?;
         // The final audit spends wall time even after a budget stop paused the clock.
         activate_clock(&mut value, at_ms);
         touch(&mut value, at_ms);
@@ -1002,24 +1013,6 @@ impl TrainingRepository {
                     "final evaluation provenance, task or time differs from the selected model",
                 ));
             }
-            let predictions: Vec<PredictionRecord> = query(
-                &tx,
-                "SELECT body FROM predictions WHERE artifact_id=? ORDER BY sample_id",
-                &artifact.id,
-            )?;
-            if digest(&serde_json::to_vec(&predictions)?) != report.evidence_digest
-                || report.truth_digest.as_deref()
-                    != Some(
-                        crate::repository::evaluation_truth_digest(
-                            &tx,
-                            &artifact.stream,
-                            &predictions,
-                        )?
-                        .as_str(),
-                    )
-            {
-                return Err(Error::Conflict("final evaluation evidence changed".into()));
-            }
             let dataset: DatasetSnapshot = read(
                 &tx,
                 "SELECT body FROM snapshots WHERE id=?",
@@ -1030,12 +1023,25 @@ impl TrainingRepository {
                 .iter()
                 .map(|sample| sample.id.as_str())
                 .collect();
-            if predictions
-                .iter()
-                .map(|prediction| prediction.sample_id.as_str())
-                .collect::<BTreeSet<_>>()
-                != test_ids
+            let mut predictions: Vec<PredictionRecord> = query(
+                &tx,
+                "SELECT body FROM predictions WHERE artifact_id=? ORDER BY sample_id",
+                &artifact.id,
+            )?;
+            // The audit evaluates the holdout cohort only. Shadow traffic may score other
+            // samples with the winner; those predictions are not final evidence.
+            predictions.retain(|p| test_ids.contains(p.sample_id.as_str()));
+            if digest(&serde_json::to_vec(&predictions)?) != report.evidence_digest
+                || !crate::repository::truth_digest_matches(
+                    &tx,
+                    &artifact.stream,
+                    &predictions,
+                    report.truth_digest.as_deref(),
+                )?
             {
+                return Err(Error::Conflict("final evaluation evidence changed".into()));
+            }
+            if predictions.len() != test_ids.len() {
                 return Err(invalid(
                     "final evidence must cover exactly the frozen holdout",
                 ));
@@ -1113,6 +1119,7 @@ impl TrainingRepository {
                 value.stop_reason = Some(stop_reason.into());
             }
         }
+        set_checkpoint_charge(&mut value, 0)?;
         pause_clock(&mut value, at_ms);
         touch(&mut value, at_ms);
         save_experiment(&tx, &value)?;
@@ -1149,20 +1156,25 @@ impl TrainingRepository {
     pub fn register_experiment_dataset(
         &self,
         experiment_id: &str,
-        derived: DatasetSnapshot,
+        mut derived: DatasetSnapshot,
         preprocessing_manifest: Value,
         at_ms: i64,
     ) -> Result<ExperimentDataset> {
         self.writable()?;
         validate_snapshot(&derived)?;
         let mut connection = self.connection()?;
+        let prepared = prepare_derived_dataset(&connection, experiment_id, &mut derived, at_ms)?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut experiment = experiment(&tx, experiment_id)?;
         let at_ms = ordered_at(&experiment, at_ms);
         ensure_running(&experiment, at_ms)?;
-        validate_derived_dataset(&tx, &experiment, &derived)?;
-        let dataset =
-            insert_derived_dataset(&tx, &mut experiment, derived, preprocessing_manifest)?;
+        let dataset = insert_derived_dataset(
+            &tx,
+            &mut experiment,
+            &derived,
+            preprocessing_manifest,
+            prepared,
+        )?;
         touch(&mut experiment, at_ms);
         save_experiment(&tx, &experiment)?;
         tx.commit()?;
@@ -1175,7 +1187,7 @@ impl TrainingRepository {
     pub fn register_experiment_candidates(
         &self,
         experiment_id: &str,
-        derived: DatasetSnapshot,
+        mut derived: DatasetSnapshot,
         preprocessing_manifest: Value,
         candidates: Vec<TrainingRequest>,
         at_ms: i64,
@@ -1196,6 +1208,7 @@ impl TrainingRepository {
             validate_candidate(candidate)?;
         }
         let mut connection = self.connection()?;
+        let prepared = prepare_derived_dataset(&connection, experiment_id, &mut derived, at_ms)?;
         let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut experiment = experiment(&tx, experiment_id)?;
         let at_ms = ordered_at(&experiment, at_ms);
@@ -1206,9 +1219,13 @@ impl TrainingRepository {
                 validate_candidate_dataset(&tx, &experiment, candidate)?;
             }
         }
-        validate_derived_dataset(&tx, &experiment, &derived)?;
-        let dataset =
-            insert_derived_dataset(&tx, &mut experiment, derived, preprocessing_manifest)?;
+        let dataset = insert_derived_dataset(
+            &tx,
+            &mut experiment,
+            &derived,
+            preprocessing_manifest,
+            prepared,
+        )?;
         experiment.request.candidates.extend(candidates);
         touch(&mut experiment, at_ms);
         save_experiment(&tx, &experiment)?;
@@ -1542,9 +1559,40 @@ fn activate_clock(experiment: &mut Experiment, at_ms: i64) -> bool {
         _ => false,
     }
 }
+/// Trials end before the audit allowance, so one admitted just before the search window closes
+/// cannot spend the frozen winner's final evaluation time.
 fn wall_deadline_ms(experiment: &Experiment, at_ms: i64) -> Result<i64> {
-    i64::try_from(at_ms as i128 + experiment.wall_remaining_ms(at_ms) as i128)
+    let search_ms = experiment
+        .wall_remaining_ms(at_ms)
+        .saturating_sub(experiment.audit_allowance_ms());
+    i64::try_from(at_ms as i128 + search_ms as i128)
         .map_err(|_| invalid("experiment deadline overflows the supported clock"))
+}
+/// Settled trials hold no artifact reservation, yet their last checkpoint stays on disk while
+/// the search may continue or resume them. Each distinct checkpoint blob that is not also an
+/// artifact of the experiment counts once, until a winner is selected or the search finalizes.
+fn charge_retained_checkpoints(connection: &Connection, experiment: &mut Experiment) -> Result<()> {
+    let retained = if experiment.selected_trial_id.is_some() {
+        0
+    } else {
+        let bytes: i64 = connection.query_row(
+            "SELECT COALESCE(SUM(bytes),0) FROM (SELECT MAX(json_extract(j.body,'$.checkpoint.blob.bytes')) AS bytes FROM experiment_trials t JOIN jobs j ON j.id=t.job_id WHERE t.experiment_id=?1 AND json_extract(t.body,'$.reserved_artifact_bytes')=0 AND json_extract(j.body,'$.checkpoint.blob.path') IS NOT NULL AND json_extract(j.body,'$.checkpoint.blob.path') NOT IN (SELECT json_extract(a.body,'$.blob.path') FROM experiment_trials s JOIN jobs k ON k.id=s.job_id JOIN artifacts a ON a.id=json_extract(k.body,'$.artifact_id') WHERE s.experiment_id=?1 AND json_extract(a.body,'$.blob.path') IS NOT NULL) GROUP BY json_extract(j.body,'$.checkpoint.blob.path'))",
+            [&experiment.id],
+            |row| row.get(0),
+        )?;
+        u64::try_from(bytes).map_err(|_| invalid("retained checkpoint size is negative"))?
+    };
+    set_checkpoint_charge(experiment, retained)
+}
+fn set_checkpoint_charge(experiment: &mut Experiment, bytes: u64) -> Result<()> {
+    let usage = &mut experiment.usage;
+    usage.artifact_bytes = usage
+        .artifact_bytes
+        .saturating_sub(usage.checkpoint_bytes)
+        .checked_add(bytes)
+        .ok_or_else(|| invalid("artifact budget overflow"))?;
+    usage.checkpoint_bytes = bytes;
+    Ok(())
 }
 /// Workers stop at the absolute deadline in their recipe. A checkpoint written for the same
 /// recipe stays resumable because only the deadline changes.
@@ -1558,22 +1606,17 @@ fn refresh_job_deadline(job: &mut TrainingJob, deadline_ms: i64) -> Result<bool>
     {
         return Ok(false);
     }
-    let previous = digest(&serde_json::to_vec(&job.request)?);
-    job.request
-        .recipe
-        .as_object_mut()
-        .ok_or_else(|| invalid("experiment job recipe must be an object"))?
-        .insert(
-            "experiment_deadline_ms".into(),
-            serde_json::json!(deadline_ms),
-        );
-    if let Some(checkpoint) = job
-        .checkpoint
-        .as_mut()
-        .filter(|checkpoint| checkpoint.request_digest == previous)
-    {
-        checkpoint.request_digest = digest(&serde_json::to_vec(&job.request)?);
-    }
+    crate::repository::rewrite_job_request(job, |request| {
+        request
+            .recipe
+            .as_object_mut()
+            .ok_or_else(|| invalid("experiment job recipe must be an object"))?
+            .insert(
+                "experiment_deadline_ms".into(),
+                serde_json::json!(deadline_ms),
+            );
+        Ok(())
+    })?;
     Ok(true)
 }
 fn refresh_queued_deadlines(
@@ -1599,7 +1642,8 @@ fn settled_charge(used: u64, reserved: u64, actual: u64, maximum: u64) -> u64 {
     if actual <= reserved {
         used.saturating_sub(reserved - actual)
     } else {
-        used.saturating_add(actual - reserved).min(maximum.max(used))
+        used.saturating_add(actual - reserved)
+            .min(maximum.max(used))
     }
 }
 fn charge_llm(
@@ -1855,6 +1899,8 @@ fn ensure_same_prepared_sample(recorded: &TrainingSample, sample: &TrainingSampl
     }
     Ok(())
 }
+/// Annotation revisions are append-only and only their raw `feature_row` can be rewritten, so a
+/// passing check still holds after it; callers run it before taking the write lock.
 fn validate_snapshot_truth(connection: &Connection, snapshot: &DatasetSnapshot) -> Result<()> {
     let scope = serde_json::to_string(&snapshot.stream)?;
     for sample in snapshot
@@ -1904,33 +1950,19 @@ fn insert_snapshot(connection: &Connection, snapshot: &DatasetSnapshot) -> Resul
     )?;
     Ok(())
 }
-fn register_dataset(
-    connection: &Connection,
-    experiment: &mut Experiment,
-    snapshot: &DatasetSnapshot,
-    preprocessing_manifest: Value,
-) -> Result<ExperimentDataset> {
-    let previous: Option<String> = connection
-        .query_row(
-            "SELECT body FROM experiment_datasets WHERE experiment_id=? AND snapshot_id=?",
-            params![experiment.id, snapshot.id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    if let Some(previous) = previous {
-        let dataset: ExperimentDataset = serde_json::from_str(&previous)?;
-        if dataset.digest != snapshot.digest
-            || dataset.preprocessing_manifest != preprocessing_manifest
-        {
-            return Err(Error::Conflict("dataset registration is immutable".into()));
-        }
-        return Ok(dataset);
-    }
+/// Worker view of a dataset, built before the write lock because it touches every sample: the
+/// final holdout is removed and anomaly tasks keep only normal examples.
+struct PreparedDataset {
+    training: DatasetSnapshot,
+    /// Serialized size of the registered dataset and its worker view together.
+    bytes: u64,
+}
+fn prepare_dataset(spec: &Value, snapshot: &DatasetSnapshot) -> Result<PreparedDataset> {
     let mut training = snapshot.clone();
     training.id = id();
     training.test.clear();
     if matches!(
-        experiment.request.spec.get("task").and_then(Value::as_str),
+        spec.get("task").and_then(Value::as_str),
         Some("visual_anomaly" | "sensor_anomaly" | "sequence_autoencoder")
     ) {
         for partition in [&mut training.train, &mut training.validation] {
@@ -1948,7 +1980,6 @@ fn register_dataset(
             ));
         }
     }
-    let spec = &experiment.request.spec;
     if !crate::repository::training_ready(
         &training,
         &serde_json::json!({"inspection_task":spec["task"],"labels":spec["labels"],"minimum_examples":spec["minimum_examples"],"minimum_examples_per_class":spec["minimum_examples_per_class"]}),
@@ -1961,14 +1992,40 @@ fn register_dataset(
     let bytes = serialized_bytes(snapshot)?
         .checked_add(serialized_bytes(&training)?)
         .ok_or_else(|| invalid("dataset size overflow"))?;
+    Ok(PreparedDataset { training, bytes })
+}
+fn register_dataset(
+    connection: &Connection,
+    experiment: &mut Experiment,
+    snapshot: &DatasetSnapshot,
+    preprocessing_manifest: Value,
+    prepared: PreparedDataset,
+) -> Result<ExperimentDataset> {
+    let previous: Option<String> = connection
+        .query_row(
+            "SELECT body FROM experiment_datasets WHERE experiment_id=? AND snapshot_id=?",
+            params![experiment.id, snapshot.id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(previous) = previous {
+        let dataset: ExperimentDataset = serde_json::from_str(&previous)?;
+        if dataset.digest != snapshot.digest
+            || dataset.preprocessing_manifest != preprocessing_manifest
+        {
+            return Err(Error::Conflict("dataset registration is immutable".into()));
+        }
+        return Ok(dataset);
+    }
     let total = experiment
         .usage
         .dataset_bytes
-        .checked_add(bytes)
+        .checked_add(prepared.bytes)
         .ok_or_else(|| invalid("dataset budget overflow"))?;
     if total > experiment.request.budget.maximum_dataset_bytes {
         return Err(invalid("experiment dataset storage budget exhausted"));
     }
+    let training = prepared.training;
     insert_snapshot(connection, &training)?;
     let dataset = ExperimentDataset {
         snapshot_id: snapshot.id.clone(),
@@ -1984,17 +2041,26 @@ fn register_dataset(
     experiment.usage.dataset_bytes = total;
     Ok(dataset)
 }
-fn insert_experiment(
-    connection: &Connection,
-    request: ExperimentRequest,
+fn ensure_experiment_snapshot(
+    request: &ExperimentRequest,
     snapshot: &DatasetSnapshot,
     at_ms: i64,
-) -> Result<Experiment> {
+) -> Result<()> {
     if snapshot.stream != request.stream || snapshot.as_of_ms > at_ms {
         return Err(invalid(
             "experiment snapshot belongs to another stream or future time",
         ));
     }
+    Ok(())
+}
+/// Callers check the snapshot with `ensure_experiment_snapshot` and prepare its dataset first.
+fn insert_experiment(
+    connection: &Connection,
+    request: ExperimentRequest,
+    snapshot: &DatasetSnapshot,
+    prepared: PreparedDataset,
+    at_ms: i64,
+) -> Result<Experiment> {
     let mut experiment = Experiment {
         id: id(),
         request,
@@ -2018,7 +2084,13 @@ fn insert_experiment(
         at_ms,
     )?;
     let preprocessing = experiment.request.preprocessing_manifest.clone();
-    register_dataset(connection, &mut experiment, snapshot, preprocessing)?;
+    register_dataset(
+        connection,
+        &mut experiment,
+        snapshot,
+        preprocessing,
+        prepared,
+    )?;
     for candidate in &experiment.request.candidates {
         validate_candidate_dataset(connection, &experiment, candidate)?;
     }
@@ -2068,18 +2140,38 @@ fn validate_derived_dataset(
     }
     Ok(())
 }
-fn insert_derived_dataset(
+/// The split and the task contract are fixed at creation, so a derived dataset is checked and
+/// prepared before the write lock; the caller re-checks that the experiment still runs.
+fn prepare_derived_dataset(
     connection: &Connection,
-    experiment: &mut Experiment,
-    mut derived: DatasetSnapshot,
-    preprocessing_manifest: Value,
-) -> Result<ExperimentDataset> {
+    experiment_id: &str,
+    derived: &mut DatasetSnapshot,
+    at_ms: i64,
+) -> Result<PreparedDataset> {
+    let current = experiment(connection, experiment_id)?;
+    ensure_running(&current, ordered_at(&current, at_ms))?;
+    validate_derived_dataset(connection, &current, derived)?;
     if derived.id.is_empty() {
         derived.id = id();
     }
-    derived.digest = snapshot_hash(&derived)?;
-    insert_snapshot(connection, &derived)?;
-    register_dataset(connection, experiment, &derived, preprocessing_manifest)
+    derived.digest = snapshot_hash(derived)?;
+    prepare_dataset(&current.request.spec, derived)
+}
+fn insert_derived_dataset(
+    connection: &Connection,
+    experiment: &mut Experiment,
+    derived: &DatasetSnapshot,
+    preprocessing_manifest: Value,
+    prepared: PreparedDataset,
+) -> Result<ExperimentDataset> {
+    insert_snapshot(connection, derived)?;
+    register_dataset(
+        connection,
+        experiment,
+        derived,
+        preprocessing_manifest,
+        prepared,
+    )
 }
 fn ensure_candidate_capacity(experiment: &Experiment, additional: usize) -> Result<()> {
     if experiment
@@ -2258,7 +2350,7 @@ fn submit_trial(
         spec["input_shape"] = shape.clone();
     }
     request.recipe["inspection_spec"] = spec;
-    // Dispatch starts the wall clock, so the remaining time ends at this absolute deadline.
+    // Dispatch starts the wall clock; the trial ends before the final audit's allowance.
     request.recipe["experiment_deadline_ms"] =
         serde_json::json!(wall_deadline_ms(experiment, at_ms)?);
     let active = unsettled_trials(tx, &experiment_id)?;

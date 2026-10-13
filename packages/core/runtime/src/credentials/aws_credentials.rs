@@ -8,7 +8,7 @@ use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::lancedb::connection::ConnectBuilder;
 #[cfg(feature = "flow-runtime")]
 use flow_like_storage::object_store;
-use flow_like_storage::object_store::aws::{AmazonS3Builder, AmazonS3ConfigKey};
+use flow_like_storage::object_store::aws::{AmazonS3Builder, AmazonS3ConfigKey, S3CopyIfNotExists};
 use flow_like_types::{Result, anyhow, async_trait};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -121,6 +121,19 @@ pub fn s3_storage_options(config: Option<&BucketConfig>) -> Vec<(String, String)
     options
 }
 
+pub(crate) fn s3_copy_if_not_exists(config: Option<&BucketConfig>) -> S3CopyIfNotExists {
+    let is_r2 = config
+        .and_then(|config| config.endpoint.as_deref())
+        .and_then(|endpoint| url::Url::parse(endpoint).ok())
+        .and_then(|endpoint| endpoint.host_str().map(str::to_owned))
+        .is_some_and(|host| host.ends_with(".r2.cloudflarestorage.com"));
+    if is_r2 {
+        S3CopyIfNotExists::Header("cf-copy-destination-if-none-match".into(), "*".into())
+    } else {
+        S3CopyIfNotExists::Multipart
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AwsSharedCredentials {
     pub access_key_id: Option<String>,
@@ -219,7 +232,8 @@ impl SharedCredentialsTrait for AwsSharedCredentials {
                         .ok_or(anyhow!("AWS_SECRET_ACCESS_KEY is not set"))?,
                 )
                 .with_bucket_name(bucket_name)
-                .with_region(&self.region);
+                .with_region(&self.region)
+                .with_copy_if_not_exists(s3_copy_if_not_exists(bucket_config));
 
             if let Some(token) = &self.session_token {
                 builder = builder.with_token(token);
@@ -352,6 +366,28 @@ fn make_s3_builder(
 mod tests {
     use super::*;
     use flow_like_types::json::{from_str, to_string};
+
+    #[test]
+    fn conditional_copy_uses_the_provider_supported_precondition() {
+        assert_eq!(s3_copy_if_not_exists(None), S3CopyIfNotExists::Multipart);
+        let config = |endpoint: &str| BucketConfig {
+            endpoint: Some(endpoint.into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            s3_copy_if_not_exists(Some(&config("https://account.r2.cloudflarestorage.com"))),
+            S3CopyIfNotExists::Header("cf-copy-destination-if-none-match".into(), "*".into())
+        );
+        for endpoint in [
+            "http://localhost:9000",
+            "https://account.r2.cloudflarestorage.com.example.org",
+        ] {
+            assert_eq!(
+                s3_copy_if_not_exists(Some(&config(endpoint))),
+                S3CopyIfNotExists::Multipart
+            );
+        }
+    }
 
     #[flow_like_types::tokio::test]
     async fn static_credentials_build_without_a_session_token() {

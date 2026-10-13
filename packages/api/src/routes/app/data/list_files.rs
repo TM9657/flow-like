@@ -100,6 +100,20 @@ fn listing_key(
     .to_string()
 }
 
+pub(super) async fn invalidate_listing(
+    cache: &CacheBackendHandle,
+    credentials: &SharedCredentials,
+    app: &str,
+    subject: &str,
+    scope: &str,
+    path: &ObjectPath,
+) {
+    if let Some(storage) = content_identity(credentials) {
+        let key = listing_key(&storage, app, subject, scope, path);
+        best_effort::delete(cache, CACHE_NAMESPACE, &key).await;
+    }
+}
+
 async fn cached_listing(
     cache: &CacheBackendHandle,
     key: Option<&str>,

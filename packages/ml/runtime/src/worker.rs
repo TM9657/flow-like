@@ -164,8 +164,7 @@ impl LeaseKeeper {
     }
 
     fn ensure_current(&self) -> Result<()> {
-        if self.lost.load(Ordering::Acquire)
-            || now_ms() >= self.deadline_ms.load(Ordering::Acquire)
+        if self.lost.load(Ordering::Acquire) || now_ms() >= self.deadline_ms.load(Ordering::Acquire)
         {
             return Err(Error::LeaseLost);
         }
@@ -454,13 +453,15 @@ impl TrainingWorker {
         // Stop the heartbeat before settling so it cannot renew a terminal job.
         drop(heartbeat);
         if let Err(error) = &result {
-            if matches!(error, Error::Cancelled) {
-                let _ = self.repository.acknowledge_cancel(&lease, now_ms());
-            } else {
-                let _ = self
+            let _ = match error {
+                Error::Cancelled => self.repository.acknowledge_cancel(&lease, now_ms()),
+                Error::Engine(message) if message.contains(DEVICE_MEMORY_REMEDY) => self
                     .repository
-                    .fail_job(&lease, error.to_string(), now_ms());
-            }
+                    .settle_out_of_memory(&lease, &error.to_string(), now_ms()),
+                _ => self
+                    .repository
+                    .fail_job(&lease, error.to_string(), now_ms()),
+            };
         }
         let _ = self.repository.collect_unreferenced_blobs();
         result
@@ -548,18 +549,27 @@ fn panic_error(payload: &(dyn std::any::Any + Send)) -> Error {
         .map(|message| (*message).to_owned())
         .or_else(|| payload.downcast_ref::<String>().cloned());
     Error::Engine(match message {
-        Some(message) => format!("training engine panicked: {}", first_line(&message)),
+        Some(message) => format!("training engine panicked: {}", reason_line(&message)),
         None => "training engine panicked".into(),
     })
 }
 
+/// Engine errors carrying this remedy are device memory exhaustion, which leaves a run with
+/// a checkpoint resumable.
+const DEVICE_MEMORY_REMEDY: &str =
+    "out of device memory; reduce the batch size or input resolution";
+
 /// Device allocators report exhaustion in several spellings; the stored reason names the fix.
 fn name_device_memory_exhaustion(error: Error) -> Error {
     match error {
-        Error::Engine(message) if out_of_device_memory(&message) => Error::Engine(format!(
-            "out of device memory; reduce the batch size or input resolution ({})",
-            first_line(&message)
-        )),
+        Error::Engine(message)
+            if !message.contains(DEVICE_MEMORY_REMEDY) && out_of_device_memory(&message) =>
+        {
+            Error::Engine(format!(
+                "{DEVICE_MEMORY_REMEDY} ({})",
+                reason_line(&message)
+            ))
+        }
         error => error,
     }
 }
@@ -571,6 +581,7 @@ fn out_of_device_memory(message: &str) -> bool {
         "out-of-memory",
         "out of device memory",
         "out_of_memory",
+        "out_of_device_memory",
         "outofmemory",
         "can't allocate buffer",
     ]
@@ -578,10 +589,12 @@ fn out_of_device_memory(message: &str) -> bool {
     .any(|marker| message.contains(marker))
 }
 
-fn first_line(message: &str) -> String {
+/// The first line naming device memory exhaustion, otherwise the first line.
+fn reason_line(message: &str) -> String {
     message
         .lines()
-        .next()
+        .find(|line| out_of_device_memory(line))
+        .or_else(|| message.lines().next())
         .unwrap_or_default()
         .trim()
         .chars()
@@ -906,7 +919,10 @@ mod lock_tests {
             .unwrap();
         let held = LocalRunLock::acquire(&repository, &format!("job:{}", stalled.id)).unwrap();
         assert_eq!(
-            repository.request_cancel(&stalled.id, now_ms()).unwrap().status,
+            repository
+                .request_cancel(&stalled.id, now_ms())
+                .unwrap()
+                .status,
             JobStatus::CancelRequested
         );
         assert!(
@@ -916,7 +932,13 @@ mod lock_tests {
                 .is_empty()
         );
         assert!(matches!(
-            repository.claim_job_with_resources(&next.id, "next-worker", 1000, now_ms(), Some(resource.clone())),
+            repository.claim_job_with_resources(
+                &next.id,
+                "next-worker",
+                1000,
+                now_ms(),
+                Some(resource.clone())
+            ),
             Err(Error::Conflict(message)) if message.contains(&stalled.id)
         ));
         drop(held);
@@ -947,8 +969,15 @@ mod lock_tests {
             );
             assert!(!reason.contains('\n'));
         }
+        let named = format!("{DEVICE_MEMORY_REMEDY}: out of device memory allocating 8 bytes");
         assert!(matches!(
-            name_device_memory_exhaustion(Error::Engine("training duration budget exhausted".into())),
+            name_device_memory_exhaustion(Error::Engine(named.clone())),
+            Error::Engine(message) if message == named
+        ));
+        assert!(matches!(
+            name_device_memory_exhaustion(Error::Engine(
+                "training duration budget exhausted".into()
+            )),
             Error::Engine(message) if message == "training duration budget exhausted"
         ));
         assert!(matches!(

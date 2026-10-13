@@ -1226,9 +1226,10 @@ fn resumed_jobs_get_the_deadline_of_the_restarted_clock() {
     let trial = repo
         .submit_experiment_trial(&experiment.id, 0, "candidate", 2_000)
         .unwrap();
+    // 9_000 ms remain at dispatch; the final audit keeps a tenth of the 10_000 ms budget.
     assert_eq!(
         repo.get_job(&trial.job_id).unwrap().request.recipe["experiment_deadline_ms"],
-        json!(11_000)
+        json!(10_000)
     );
     let lease = repo
         .claim_job(&trial.job_id, "worker", 10_000, 2_001)
@@ -1253,14 +1254,14 @@ fn resumed_jobs_get_the_deadline_of_the_restarted_clock() {
     repo.resume_experiment(&experiment.id, 50_000).unwrap();
     let job = repo.get_job(&trial.job_id).unwrap();
     assert_eq!(job.status, JobStatus::Queued);
-    assert_eq!(job.request.recipe["experiment_deadline_ms"], json!(58_000));
+    assert_eq!(job.request.recipe["experiment_deadline_ms"], json!(57_000));
     assert_eq!(
         job.checkpoint.unwrap().request_digest,
         digest(&serde_json::to_vec(&job.request).unwrap())
     );
     repo.mark_experiment_active(&experiment.id, 70_000).unwrap();
     let job = repo.get_job(&trial.job_id).unwrap();
-    assert_eq!(job.request.recipe["experiment_deadline_ms"], json!(78_000));
+    assert_eq!(job.request.recipe["experiment_deadline_ms"], json!(77_000));
     assert_eq!(
         job.checkpoint.unwrap().request_digest,
         digest(&serde_json::to_vec(&job.request).unwrap())
@@ -1515,4 +1516,269 @@ fn snapshot_import_with_creation_leaves_nothing_behind_on_failure() {
         experiment.request.snapshot_id
     );
     assert_eq!(count(), before + 2);
+}
+
+fn frozen_winner(
+    repo: &TrainingRepository,
+    request: ExperimentRequest,
+) -> (Experiment, ModelArtifact) {
+    let experiment = repo.create_experiment(request, 100).unwrap();
+    let trial = repo
+        .submit_experiment_trial(&experiment.id, 0, "first", 101)
+        .unwrap();
+    let artifact = trained(repo, &trial, 102);
+    validate(repo, &trial, 1., 104);
+    let selected = repo.select_experiment_winner(&experiment.id, 105).unwrap();
+    (selected, artifact)
+}
+
+fn reviewed_prediction(artifact: &ModelArtifact, sample: &TrainingSample) -> PredictionRecord {
+    PredictionRecord {
+        sample_id: sample.id.clone(),
+        artifact_id: artifact.id.clone(),
+        predicted_label: Some("good".into()),
+        teacher_label: None,
+        actual_label: Some("good".into()),
+        actual_source: Some(LabelSource::Reviewed),
+        latency_ms: 1.,
+        failed: false,
+        recorded_at_ms: 106,
+        details: Value::Null,
+    }
+}
+
+#[test]
+fn shadow_predictions_outside_the_frozen_holdout_do_not_void_the_final_audit() {
+    let (_directory, repo, snapshot, request) = setup();
+    let (experiment, artifact) = frozen_winner(&repo, request);
+    for sample in &snapshot.test {
+        repo.record_prediction(&reviewed_prediction(&artifact, sample))
+            .unwrap();
+    }
+    let shadow = PredictionRecord {
+        actual_label: None,
+        actual_source: None,
+        ..reviewed_prediction(&artifact, &snapshot.train[0])
+    };
+    repo.record_prediction(&shadow).unwrap();
+    let holdout: BTreeSet<String> = snapshot
+        .test
+        .iter()
+        .map(|sample| sample.id.clone())
+        .collect();
+    let report = repo
+        .evaluate_classification_cohort(&artifact.id, Some(&holdout), 107)
+        .unwrap();
+    let finished = repo
+        .finalize_experiment(&experiment.id, Some(&report.id), "completed", 108)
+        .unwrap();
+    assert_eq!(finished.status, ExperimentStatus::Completed);
+    assert_eq!(
+        finished.final_evaluation_id.as_deref(),
+        Some(report.id.as_str())
+    );
+}
+
+#[test]
+fn final_evidence_must_still_cover_the_whole_frozen_holdout() {
+    let (_directory, repo, snapshot, request) = setup();
+    assert!(snapshot.test.len() > 1);
+    let (experiment, artifact) = frozen_winner(&repo, request);
+    for sample in &snapshot.test[1..] {
+        repo.record_prediction(&reviewed_prediction(&artifact, sample))
+            .unwrap();
+    }
+    let report = repo.evaluate_classification(&artifact.id, 107).unwrap();
+    assert!(matches!(
+        repo.finalize_experiment(&experiment.id, Some(&report.id), "completed", 108),
+        Err(Error::Invalid(reason)) if reason.contains("frozen holdout")
+    ));
+}
+
+#[test]
+fn trial_deadlines_leave_the_audit_allowance_to_the_frozen_winner() {
+    let (_directory, repo, _snapshot, request) = setup();
+    let deadline = |experiment: &Experiment, at_ms: i64| {
+        let trial = repo
+            .submit_experiment_trial(&experiment.id, 0, "candidate", at_ms)
+            .unwrap();
+        let job = repo.get_job(&trial.job_id).unwrap();
+        job.request.recipe["experiment_deadline_ms"].clone()
+    };
+    let mut long = request.clone();
+    long.budget.maximum_wall_time_ms = 10_000_000;
+    let long = repo.create_experiment(long, 100).unwrap();
+    assert_eq!(long.audit_allowance_ms(), 300_000);
+    assert_eq!(deadline(&long, 1_000), json!(9_701_000));
+    let short = repo.create_experiment(request, 100).unwrap();
+    assert_eq!(short.audit_allowance_ms(), 1_000);
+    repo.mark_experiment_active(&short.id, 100).unwrap();
+    // Only 500 ms remain, all of them reserved for the final audit.
+    assert_eq!(deadline(&short, 9_600), json!(9_600));
+}
+
+#[test]
+fn settled_trials_charge_their_retained_checkpoint_until_a_winner_is_selected() {
+    let (_directory, repo, _snapshot, mut request) = setup();
+    request.budget.maximum_artifact_bytes = 60;
+    let experiment = repo.create_experiment(request, 100).unwrap();
+    let trial = repo
+        .submit_experiment_trial(&experiment.id, 0, "first", 101)
+        .unwrap();
+    let lease = repo.claim_job(&trial.job_id, "worker", 1000, 102).unwrap();
+    let checkpoint = repo
+        .publish_checkpoint(&lease, &[1; 25], 1, json!({"epoch":1}), false, 103)
+        .unwrap();
+    repo.finish_training(&lease, b"weights", json!({}), 104)
+        .unwrap();
+    validate(&repo, &trial, 1., 105);
+    let usage = repo.get_experiment(&experiment.id).unwrap().usage;
+    assert_eq!(usage.checkpoint_bytes, checkpoint.blob.bytes);
+    assert_eq!(usage.artifact_bytes, 7 + checkpoint.blob.bytes);
+    // 32 retained bytes and another 30 byte reservation exceed the 60 byte budget.
+    assert!(matches!(
+        repo.submit_experiment_trial(&experiment.id, 1, "second", 106),
+        Err(Error::Invalid(reason)) if reason.contains("artifact budget exhausted")
+    ));
+    let selected = repo.select_experiment_winner(&experiment.id, 107).unwrap();
+    assert_eq!(selected.usage.checkpoint_bytes, 0);
+    assert_eq!(selected.usage.artifact_bytes, 7);
+}
+
+#[test]
+fn checkpoint_blobs_shared_with_artifacts_or_continuations_are_charged_once() {
+    let (_directory, repo, _snapshot, mut request) = setup();
+    request.candidates[0] = TrainingRequest {
+        engine: "burn".into(),
+        recipe: json!({"config":{"epochs":2},"search":{"family":"mlp-small","rung":0,"max_epochs":9,"reduction_factor":3}}),
+        compute: json!({}),
+    };
+    request.budget.maximum_parallel_trials = 2;
+    let experiment = repo.create_experiment(request, 100).unwrap();
+    // Native engines checkpoint the finished model, which is the artifact blob itself.
+    let native = repo
+        .submit_experiment_trial(&experiment.id, 1, "native", 101)
+        .unwrap();
+    let lease = repo.claim_job(&native.job_id, "worker", 1000, 102).unwrap();
+    repo.publish_checkpoint(&lease, b"weights", 1, json!({}), false, 103)
+        .unwrap();
+    repo.finish_training(&lease, b"weights", json!({}), 104)
+        .unwrap();
+    validate(&repo, &native, 0.9, 105);
+    let usage = repo.get_experiment(&experiment.id).unwrap().usage;
+    assert_eq!((usage.artifact_bytes, usage.checkpoint_bytes), (7, 0));
+    let parent = repo
+        .submit_experiment_trial(&experiment.id, 0, "initial", 106)
+        .unwrap();
+    let lease = repo.claim_job(&parent.job_id, "worker", 1000, 107).unwrap();
+    let checkpoint = repo
+        .publish_checkpoint(&lease, b"optimizer-state", 2, json!({}), false, 108)
+        .unwrap();
+    repo.finish_training(&lease, b"parent-weights", json!({}), 109)
+        .unwrap();
+    validate(&repo, &parent, 0.95, 110);
+    // The continuation starts from the parent's blob until it publishes its own checkpoint.
+    let child = repo.continue_experiment_trial(&parent.id, 6, 111).unwrap();
+    let copied = repo.get_job(&child.job_id).unwrap().checkpoint.unwrap();
+    assert_eq!(copied.blob, checkpoint.blob);
+    let cancelled = repo.cancel_experiment(&experiment.id, 112).unwrap();
+    assert_eq!(
+        repo.get_experiment_trial(&child.id).unwrap().status,
+        ExperimentTrialStatus::Cancelled
+    );
+    assert_eq!(cancelled.usage.checkpoint_bytes, checkpoint.blob.bytes);
+    assert_eq!(
+        cancelled.usage.artifact_bytes,
+        7 + 14 + checkpoint.blob.bytes
+    );
+}
+
+#[test]
+fn resuming_or_finalizing_releases_the_retained_checkpoint_charge() {
+    let (_directory, repo, _snapshot, request) = setup();
+    let experiment = repo.create_experiment(request, 100).unwrap();
+    let trial = repo
+        .submit_experiment_trial(&experiment.id, 0, "candidate", 101)
+        .unwrap();
+    let lease = repo.claim_job(&trial.job_id, "worker", 1000, 102).unwrap();
+    let checkpoint = repo
+        .publish_checkpoint(&lease, b"optimizer-state", 1, json!({}), false, 103)
+        .unwrap();
+    let retained = checkpoint.blob.bytes;
+    repo.cancel_experiment(&experiment.id, 104).unwrap();
+    repo.acknowledge_cancel(&lease, 105).unwrap();
+    repo.fail_experiment_trial(&trial.id, "cancelled", 0, 106)
+        .unwrap();
+    let cancelled = repo.get_experiment(&experiment.id).unwrap();
+    assert_eq!(cancelled.status, ExperimentStatus::Cancelled);
+    assert_eq!(
+        (
+            cancelled.usage.artifact_bytes,
+            cancelled.usage.checkpoint_bytes
+        ),
+        (retained, retained)
+    );
+    // The requeued trial's checkpoint is covered by its new reservation.
+    let resumed = repo.resume_experiment(&experiment.id, 107).unwrap();
+    assert_eq!(resumed.status, ExperimentStatus::Running);
+    assert_eq!(
+        (resumed.usage.artifact_bytes, resumed.usage.checkpoint_bytes),
+        (0, 0)
+    );
+    repo.fail_experiment_trial(&trial.id, "worker crashed", 0, 108)
+        .unwrap();
+    assert_eq!(
+        repo.get_experiment(&experiment.id)
+            .unwrap()
+            .usage
+            .checkpoint_bytes,
+        retained
+    );
+    let finished = repo
+        .finalize_experiment(
+            &experiment.id,
+            None,
+            "no_candidate_met_validation_requirements",
+            109,
+        )
+        .unwrap();
+    assert_eq!(finished.status, ExperimentStatus::Failed);
+    assert_eq!(
+        (
+            finished.usage.artifact_bytes,
+            finished.usage.checkpoint_bytes
+        ),
+        (0, 0)
+    );
+}
+
+#[test]
+fn snapshot_validation_fails_without_waiting_for_the_write_lock() {
+    let (_directory, repo, snapshot, request) = setup();
+    let experiment = repo.create_experiment(request.clone(), 100).unwrap();
+    let mut forged = snapshot.clone();
+    forged.id.clear();
+    forged.test[0].payload["label"] = json!("forged");
+    let mut relabelled = snapshot;
+    relabelled.id.clear();
+    relabelled.digest.clear();
+    relabelled.test[0].payload["label"] = json!("bad");
+    // Another writer holds the ledger; validation must not wait the 15 s busy timeout for it.
+    let mut writer = repo.connection().unwrap();
+    let lock = writer
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .unwrap();
+    assert!(matches!(
+        repo.import_experiment_snapshot(forged.clone()),
+        Err(Error::Invalid(reason)) if reason.contains("target or provenance")
+    ));
+    assert!(matches!(
+        repo.create_experiment_with_snapshot(forged, request, 101),
+        Err(Error::Invalid(reason)) if reason.contains("target or provenance")
+    ));
+    assert!(matches!(
+        repo.register_experiment_dataset(&experiment.id, relabelled, Value::Null, 101),
+        Err(Error::Invalid(reason)) if reason.contains("target or provenance")
+    ));
+    drop(lock);
 }

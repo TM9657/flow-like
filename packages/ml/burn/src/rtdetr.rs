@@ -57,12 +57,14 @@ impl DetrPrediction {
             return Err(Error::Invalid("DETR box and logit shapes differ".into()));
         }
         let scores = sigmoid(self.logits)
-            .to_data()
+            .try_into_data()
+            .map_err(crate::execution::device_error)?
             .try_to_vec::<f32>()
             .map_err(|e| Error::Record(e.to_string()))?;
         let boxes = self
             .boxes
-            .to_data()
+            .try_into_data()
+            .map_err(crate::execution::device_error)?
             .try_to_vec::<f32>()
             .map_err(|e| Error::Record(e.to_string()))?;
         if scores.iter().chain(&boxes).any(|v| !v.is_finite()) {

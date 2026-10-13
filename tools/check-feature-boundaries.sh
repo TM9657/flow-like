@@ -662,11 +662,11 @@ configure_boundary() {
             ;;
         catalog-server-local-ml)
             CHECK_ARGS=(--package flow-like-catalog --no-default-features --features server-local-ml)
-            FORBIDDEN=(flow-like-catalog-automation enigo rdev xcap tauri)
+            FORBIDDEN=(flow-like-catalog-automation enigo rdev xcap tauri burn)
             REQUIRED=(flow-like-catalog-onnx ort ort-sys face_id tract-tflite)
             FEATURE_PACKAGE="flow-like-catalog"
-            REQUIRED_FEATURES=(remote-metadata package-onnx local-ml runtime-catalog)
-            FORBIDDEN_FEATURES=(package-automation)
+            REQUIRED_FEATURES=(remote-metadata package-onnx local-ml runtime-catalog training-metadata)
+            FORBIDDEN_FEATURES=(package-automation training-auto training-cpu)
             ;;
         catalog-execute)
             # Compatibility alias. Dependency checks plus aggregate feature

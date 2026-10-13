@@ -1650,10 +1650,11 @@ fn quadratic_reference_selection(
                 selected_classes.get(label).copied().unwrap_or(0) < policy.rare_class_quota
             });
             let class_bonus = if rare {
-                1. + 1. / label
-                    .and_then(|label| support.get(label))
-                    .copied()
-                    .unwrap_or(1) as f64
+                1. + 1.
+                    / label
+                        .and_then(|label| support.get(label))
+                        .copied()
+                        .unwrap_or(1) as f64
             } else {
                 0.
             };

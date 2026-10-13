@@ -632,8 +632,7 @@ impl Recipe {
                 let training_rois = config.training_samples as u128 * sampled_roi * 2;
                 // Inference holds the two widest mask-head layers of every proposal, with the
                 // same slack.
-                let inference_rois =
-                    config.proposals as u128 * mask_pixels * (c * 8 + classes * 4);
+                let inference_rois = config.proposals as u128 * mask_pixels * (c * 8 + classes * 4);
                 // Each sampled positive ROI uploads its full-image target mask.
                 let target_masks = (config.training_samples / 4) as u128 * image_area;
                 (

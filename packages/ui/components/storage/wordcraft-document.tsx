@@ -1,12 +1,6 @@
 "use client";
 
-import {
-	DownloadIcon,
-	InfoIcon,
-	Loader2Icon,
-	PencilIcon,
-	SaveIcon,
-} from "lucide-react";
+import { DownloadIcon, Loader2Icon, PencilIcon, SaveIcon } from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
@@ -15,7 +9,7 @@ import {
 	useState,
 } from "react";
 import { Button } from "../ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { ViewerAbout } from "./viewer-about";
 import {
 	DOCX_MIME,
 	MAX_DOCX_BYTES,
@@ -283,24 +277,17 @@ function WordcraftSession({
 								? "Saved"
 								: ""}
 				</span>
-				{editing && (
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								variant="ghost"
-								size="icon"
-								className="size-8 shrink-0 text-muted-foreground"
-								aria-label="About Flows Word"
-							>
-								<InfoIcon />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent>
+				<ViewerAbout
+					label="Flows Word"
+					licensesUrl="/wordcraft/licenses/index.html"
+				>
+					{editing ? (
+						<>
 							Flows Word editing is experimental. Complex formatting may change
 							when saved.
-						</TooltipContent>
-					</Tooltip>
-				)}
+						</>
+					) : undefined}
+				</ViewerAbout>
 				<Button asChild variant="ghost" size="sm" className="shrink-0">
 					<a
 						href={downloadUrl}

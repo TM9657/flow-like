@@ -20,7 +20,8 @@ use std::{
 
 const MANIFEST: &str = "efficient-ad-state.json";
 const MAP_SIZE: usize = 256 * 256;
-const INFERENCE_WORKSPACE_BYTES: usize = 256 * 1024 * 1024;
+/// Device activation workspace that bounds each chunk of [`EfficientAdPredictor::predict`].
+pub const EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES: u64 = 256 * 1024 * 1024;
 static CHECKPOINT_ID: AtomicU64 = AtomicU64::new(0);
 fn record(error: impl std::fmt::Display) -> Error {
     Error::Record(error.to_string())
@@ -279,7 +280,8 @@ impl Architecture {
         (input + pdn + features + autoencoder + 4 * MAP_SIZE) * size_of::<f32>()
     }
     fn inference_chunk(&self) -> usize {
-        (INFERENCE_WORKSPACE_BYTES / self.inference_bytes_per_image()).max(1)
+        let workspace = EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES as usize;
+        (workspace / self.inference_bytes_per_image()).max(1)
     }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -904,8 +906,8 @@ impl EfficientAdPredictor {
             let c = &self.calibration;
             let st = (st - c.teacher_student_low)
                 * (0.1 / (c.teacher_student_high - c.teacher_student_low).max(1e-6));
-            let ae =
-                (ae - c.autoencoder_low) * (0.1 / (c.autoencoder_high - c.autoencoder_low).max(1e-6));
+            let ae = (ae - c.autoencoder_low)
+                * (0.1 / (c.autoencoder_high - c.autoencoder_low).max(1e-6));
             let combined = (st.clone() + ae.clone()) * 0.5;
             anomaly.extend(to_data(display(combined))?.values);
             teacher_student.extend(to_data(display(st))?.values);
@@ -1298,6 +1300,23 @@ mod tests {
             (1..=4).contains(&canonical.inference_chunk()),
             "Canonical PDN needs about 100 MB of activations per image"
         );
+    }
+    #[test]
+    fn one_image_of_the_largest_loadable_architecture_fits_the_inference_workspace() {
+        // read_state's upper bounds. Runtime admission charges the workspace once per request,
+        // so even a chunk of one image must stay within it.
+        let largest = Architecture {
+            input: 16,
+            width: 256,
+            features: 1024,
+            autoencoder_width: 256,
+        };
+        let image = largest.inference_bytes_per_image() as u64;
+        assert!(
+            image <= EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES,
+            "one image needs {image} bytes"
+        );
+        assert_eq!(largest.inference_chunk(), 1);
     }
     #[test]
     fn efficient_ad_rejects_incompatible_teacher_and_image_shapes() {

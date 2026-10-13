@@ -143,6 +143,8 @@ pub(crate) fn device(choice: &BackendChoice, training: bool) -> Result<Device> {
 }
 
 fn open_device(choice: &BackendChoice, training: bool) -> Result<Device> {
+    #[cfg(windows)]
+    exclude_working_directory_from_dll_search();
     let device = std::panic::catch_unwind(|| -> Result<Device> {
         #[cfg(ml_backend_wgpu)]
         if matches!(
@@ -197,6 +199,23 @@ fn open_device(choice: &BackendChoice, training: bool) -> Result<Device> {
         ))
     })??;
     Ok(if training { device.autodiff() } else { device })
+}
+
+/// GPU runtimes load further libraries by bare name, which Windows also looks up in the
+/// working directory. Removing it from this process's search order keeps a DLL planted there
+/// from loading, while PATH still finds the CUDA toolkit libraries.
+#[cfg(windows)]
+fn exclude_working_directory_from_dll_search() {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn SetDllDirectoryW(path: *const u16) -> i32;
+    }
+    static EXCLUDED: std::sync::Once = std::sync::Once::new();
+    EXCLUDED.call_once(|| {
+        let empty = [0u16];
+        // SAFETY: `empty` is a nul-terminated UTF-16 string that outlives the call.
+        unsafe { SetDllDirectoryW(empty.as_ptr()) };
+    });
 }
 
 #[cfg(ml_backend_cuda)]

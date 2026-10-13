@@ -1,19 +1,35 @@
-use super::operation;
+use super::{cancellable_operation, cancellation::CancelFlag, operation};
 use flow_like_ml_native::{dataset::StandardScaler, models::*};
 use flow_like_types::Result;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+fn stop_when_cancelled(
+    cancel: CancelFlag,
+    training: &'static str,
+) -> impl FnMut(usize) -> flow_like_ml_core::Result<()> {
+    move |step| {
+        if cancel.is_cancelled() {
+            return Err(flow_like_ml_core::Error::Invalid(format!(
+                "{training} was cancelled at step {step}"
+            )));
+        }
+        Ok(())
+    }
+}
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct IsolationForestRequest {
     pub rows: Vec<Vec<f64>>,
     pub config: IsolationForestConfig,
 }
-fn isolation(input: IsolationForestRequest) -> Result<NativeModel> {
-    Ok(NativeModel::IsolationForest(IsolationForest::fit(
-        &input.rows,
-        &input.config,
-    )?))
+fn isolation(input: IsolationForestRequest, cancel: CancelFlag) -> Result<NativeModel> {
+    Ok(NativeModel::IsolationForest(
+        IsolationForest::fit_with_progress(
+            &input.rows,
+            &input.config,
+            stop_when_cancelled(cancel, "Isolation Forest training"),
+        )?,
+    ))
 }
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct BoostRequest {
@@ -21,9 +37,14 @@ pub struct BoostRequest {
     pub targets: Vec<f64>,
     pub config: BoostConfig,
 }
-fn boost(input: BoostRequest) -> Result<NativeModel> {
+fn boost(input: BoostRequest, cancel: CancelFlag) -> Result<NativeModel> {
     Ok(NativeModel::HistogramGradientBoosting(
-        HistogramGradientBoosting::fit(&input.rows, &input.targets, &input.config)?,
+        HistogramGradientBoosting::fit_with_progress(
+            &input.rows,
+            &input.targets,
+            &input.config,
+            stop_when_cancelled(cancel, "Gradient boosted tree training"),
+        )?,
     ))
 }
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -31,10 +52,11 @@ pub struct PatchCoreRequest {
     pub normal_patches: Vec<Vec<f64>>,
     pub coreset_size: usize,
 }
-fn patchcore(input: PatchCoreRequest) -> Result<NativeModel> {
-    Ok(NativeModel::PatchCore(PatchCore::fit(
+fn patchcore(input: PatchCoreRequest, cancel: CancelFlag) -> Result<NativeModel> {
+    Ok(NativeModel::PatchCore(PatchCore::fit_with_progress(
         &input.normal_patches,
         input.coreset_size,
+        stop_when_cancelled(cancel, "PatchCore coreset selection"),
     )?))
 }
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -42,10 +64,11 @@ pub struct PadimRequest {
     pub normal_images: Vec<Vec<Vec<f64>>>,
     pub regularization: f64,
 }
-fn padim(input: PadimRequest) -> Result<NativeModel> {
-    Ok(NativeModel::Padim(Padim::fit(
+fn padim(input: PadimRequest, cancel: CancelFlag) -> Result<NativeModel> {
+    Ok(NativeModel::Padim(Padim::fit_with_progress(
         &input.normal_images,
         input.regularization,
+        stop_when_cancelled(cancel, "PaDiM training"),
     )?))
 }
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -128,7 +151,7 @@ fn scale(input: ScaleRequest) -> Result<ScaledRows> {
 #[crate::register_node]
 #[derive(Default)]
 pub struct TrainIsolationForestNode;
-operation!(
+cancellable_operation!(
     TrainIsolationForestNode,
     "ml_train_isolation_forest",
     "Train Isolation Forest",
@@ -137,12 +160,13 @@ operation!(
     "AI/ML/Anomaly",
     IsolationForestRequest,
     NativeModel,
-    isolation
+    isolation,
+    version = 1
 );
 #[crate::register_node]
 #[derive(Default)]
 pub struct TrainGradientBoostedTreesNode;
-operation!(
+cancellable_operation!(
     TrainGradientBoostedTreesNode,
     "ml_train_gradient_boosted_trees",
     "Train Gradient Boosted Trees",
@@ -151,12 +175,13 @@ operation!(
     "AI/ML/Training",
     BoostRequest,
     NativeModel,
-    boost
+    boost,
+    version = 1
 );
 #[crate::register_node]
 #[derive(Default)]
 pub struct TrainPatchCoreNode;
-operation!(
+cancellable_operation!(
     TrainPatchCoreNode,
     "ml_train_patchcore",
     "Train PatchCore Memory Bank",
@@ -165,12 +190,13 @@ operation!(
     "AI/ML/Anomaly",
     PatchCoreRequest,
     NativeModel,
-    patchcore
+    patchcore,
+    version = 1
 );
 #[crate::register_node]
 #[derive(Default)]
 pub struct TrainPadimNode;
-operation!(
+cancellable_operation!(
     TrainPadimNode,
     "ml_train_padim",
     "Train PaDiM",
@@ -179,7 +205,8 @@ operation!(
     "AI/ML/Anomaly",
     PadimRequest,
     NativeModel,
-    padim
+    padim,
+    version = 1
 );
 #[crate::register_node]
 #[derive(Default)]
@@ -231,36 +258,75 @@ mod tests {
     use flow_like::flow::{node::NodeLogic, pin::Pin};
     use flow_like_types::json::{from_value, json};
 
+    fn training_rows() -> Vec<Vec<f64>> {
+        vec![vec![0.0], vec![0.1], vec![0.2], vec![0.3]]
+    }
+
+    fn train_all(cancel: &CancelFlag) -> [Result<NativeModel>; 4] {
+        let rows = training_rows();
+        [
+            isolation(
+                IsolationForestRequest {
+                    rows: rows.clone(),
+                    config: IsolationForestConfig {
+                        trees: 4,
+                        sample_size: 4,
+                        seed: 7,
+                    },
+                },
+                cancel.clone(),
+            ),
+            boost(
+                BoostRequest {
+                    rows: rows.clone(),
+                    targets: vec![0.0, 0.1, 0.2, 0.3],
+                    config: BoostConfig::default(),
+                },
+                cancel.clone(),
+            ),
+            patchcore(
+                PatchCoreRequest {
+                    normal_patches: rows.clone(),
+                    coreset_size: 2,
+                },
+                cancel.clone(),
+            ),
+            padim(
+                PadimRequest {
+                    normal_images: vec![rows.clone(), rows],
+                    regularization: 0.01,
+                },
+                cancel.clone(),
+            ),
+        ]
+    }
+
+    #[test]
+    fn cancelled_native_training_stops_before_fitting() {
+        let cancel = CancelFlag::default();
+        cancel.cancel();
+        let trainings = [
+            "Isolation Forest training",
+            "Gradient boosted tree training",
+            "PatchCore coreset selection",
+            "PaDiM training",
+        ];
+        for (result, training) in train_all(&cancel).into_iter().zip(trainings) {
+            let Err(error) = result else {
+                panic!("{training} ignored a cancelled run");
+            };
+            assert_eq!(
+                error.to_string(),
+                format!("{training} was cancelled at step 0")
+            );
+        }
+    }
+
     #[test]
     fn training_results_feed_native_inference_without_a_model_wrapper() {
-        let rows = vec![vec![0.0], vec![0.1], vec![0.2], vec![0.3]];
-        let models = [
-            isolation(IsolationForestRequest {
-                rows: rows.clone(),
-                config: IsolationForestConfig {
-                    trees: 4,
-                    sample_size: 4,
-                    seed: 7,
-                },
-            })
-            .unwrap(),
-            boost(BoostRequest {
-                rows: rows.clone(),
-                targets: vec![0.0, 0.1, 0.2, 0.3],
-                config: BoostConfig::default(),
-            })
-            .unwrap(),
-            patchcore(PatchCoreRequest {
-                normal_patches: rows.clone(),
-                coreset_size: 2,
-            })
-            .unwrap(),
-            padim(PadimRequest {
-                normal_images: vec![rows.clone(), rows.clone()],
-                regularization: 0.01,
-            })
-            .unwrap(),
-        ];
+        let rows = training_rows();
+        let cancel = CancelFlag::default();
+        let models = train_all(&cancel).map(|model| model.unwrap());
         for model in models {
             let value = json!(model);
             assert!(value.get("architecture").is_some());
@@ -280,6 +346,7 @@ mod tests {
                 node.get_pin_by_name("result").unwrap().schema,
                 Pin::schema_string_for::<NativeModel>()
             );
+            assert_eq!(node.version, Some(1), "{} version", node.name);
         }
     }
 }

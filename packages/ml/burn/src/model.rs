@@ -357,7 +357,7 @@ impl Model {
                     ),
                 )
             }
-            (Output::Detection(output), Targets::Boxes { values }) => output.loss(values),
+            (Output::Detection(output), Targets::Boxes { values }) => output.loss(values)?,
             (Output::Detr(output), Targets::Boxes { values }) => output.loss(values)?,
             _ => unreachable!("Dataset and recipe validated before training"),
         })

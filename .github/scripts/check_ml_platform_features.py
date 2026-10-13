@@ -60,9 +60,14 @@ def check_product_features(offline):
         expected = feature != "remote-metadata"
         assert ("training-metadata" in enabled) == expected, f"{feature}: incorrect training metadata"
         assert "training-auto" not in enabled and "burn" not in packages, f"{feature}: enables a training engine"
-    for feature in ["desktop", "server-local-ml", "executor-local-ml", "local-runtime-ml"]:
-        packages = cargo_features("flow-like-catalog", target, [feature], offline, 0)
-        assert "training-auto" in packages["flow-like-catalog"], f"{feature}: missing automatic training"
+    packages = cargo_features("flow-like-catalog", target, ["desktop"], offline, 0)
+    assert "training-auto" in packages["flow-like-catalog"], "desktop: missing automatic training"
+    # Server and executor bundles have no durable local app storage, so training can never run there.
+    for feature in ["server-local-ml", "executor-local-ml", "local-runtime-ml"]:
+        packages = cargo_features("flow-like-catalog", target, [feature], offline, 3)
+        enabled = packages["flow-like-catalog"]
+        assert "training-metadata" in enabled, f"{feature}: missing training metadata"
+        assert "training-auto" not in enabled and "burn" not in packages, f"{feature}: enables a training engine"
     for feature in ["mobile", "mobile-apple", "server", "executor", "local-runtime", "local-ml"]:
         packages = cargo_features("flow-like-catalog", target, [feature], offline, 0)
         assert "training-auto" not in packages["flow-like-catalog"], f"{feature}: unexpectedly enables automatic training"

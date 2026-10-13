@@ -141,9 +141,9 @@ fn run(
     start: Start<'_>,
 ) -> Result<TrainingReport> {
     config.validate()?;
-    data.validate(&config.recipe)?;
+    config.validate_dataset(data)?;
     if let Some(v) = validation {
-        v.validate(&config.recipe)?;
+        config.validate_dataset(v)?;
     }
     if cancellation.is_cancelled() {
         return Err(Error::Cancelled);
@@ -570,7 +570,7 @@ fn read_state(dir: &Path) -> Result<State> {
             state.version
         )));
     }
-    state.config.validate()?;
+    state.config.validate_stored()?;
     if state.imported.is_some() && state.pretrained.is_some() {
         return Err(Error::Invalid(
             "A model cannot be both a direct import and a fine-tuned artifact".into(),

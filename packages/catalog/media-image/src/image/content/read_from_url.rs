@@ -1,15 +1,11 @@
+use super::read_from_path::decode_image;
 use flow_like::flow::{
     execution::{context::ExecutionContext, egress::GuardedHttpClient},
     node::{Node, NodeLogic},
     variable::VariableType,
 };
 use flow_like_catalog_core::NodeImage;
-use flow_like_types::{
-    Ok, async_trait,
-    image::{DynamicImage, ImageDecoder, ImageReader},
-    json::json,
-};
-use std::io::Cursor;
+use flow_like_types::{Ok, async_trait, json::json};
 
 #[crate::register_node]
 #[derive(Default)]
@@ -31,7 +27,7 @@ impl NodeLogic for ReadImageFromUrlNode {
             "Image/Content",
         );
         node.set_flowscript_name("image", "readUrl");
-        node.set_version(1);
+        node.set_version(2);
         node.add_icon("/flow/icons/image.svg");
 
         node.add_input_pin(
@@ -48,12 +44,12 @@ impl NodeLogic for ReadImageFromUrlNode {
         );
 
         node.add_input_pin(
-            "apply_exif",
+            "apply_exif_orientation",
             "Apply Exif Orientation",
-            "Apply Exif Orientation",
+            "Rotate and flip the image upright as its EXIF orientation tag says",
             VariableType::Boolean,
         )
-        .set_default_value(Some(json!(false)));
+        .set_default_value(Some(json!(true)));
 
         node.add_output_pin(
             "exec_out",
@@ -79,18 +75,8 @@ impl NodeLogic for ReadImageFromUrlNode {
             .await
             .map_err(flow_like_types::reqwest::Error::without_url)?
             .to_vec();
-        let apply_exif: bool = context.evaluate_pin("apply_exif").await?;
-
-        let image = {
-            let reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
-            let mut decoder = reader.into_decoder()?;
-            let orientation = decoder.orientation()?;
-            let mut img = DynamicImage::from_decoder(decoder)?;
-            if !apply_exif {
-                img.apply_orientation(orientation);
-            }
-            img
-        };
+        let apply_exif_orientation: bool = context.evaluate_pin("apply_exif_orientation").await?;
+        let image = decode_image(bytes, apply_exif_orientation)?;
 
         let node_img = NodeImage::new(context, image).await;
         context.set_pin_value("image_out", json!(node_img)).await?;

@@ -176,7 +176,9 @@ impl Host {
             }
             Some("saved") => {
                 if let Some(revision) = field(&message, "revision").as_f64() {
-                    if self.last_exported == Some(revision as u64)
+                    if self.app.editor.is_none()
+                        && self.app.text_box_editor.is_none()
+                        && self.last_exported == Some(revision as u64)
                         && self.revision() as f64 == revision
                     {
                         if let Some(doc) = self.app.session.active_mut() {
@@ -194,7 +196,9 @@ impl Host {
         self.app.session.active().map(|d| d.revision).unwrap_or(0)
     }
     fn report_dirty(&mut self) {
-        let dirty = self.app.session.active().is_some_and(|d| d.is_dirty());
+        let dirty = self.app.editor.is_some()
+            || self.app.text_box_editor.is_some()
+            || self.app.session.active().is_some_and(|d| d.is_dirty());
         if dirty != self.reported_dirty {
             self.reported_dirty = dirty;
             event(
@@ -259,7 +263,7 @@ impl eframe::App for Host {
             }
         }
         if self.opened {
-            gridcraft_ui_egui::SheetApp_LOGIC
+            self.app.logic(ctx);
         }
         self.report_dirty();
     }

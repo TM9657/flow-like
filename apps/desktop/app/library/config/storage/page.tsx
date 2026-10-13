@@ -68,7 +68,7 @@ export default function Page() {
 			appId={id ?? ""}
 			prefix={decodeURIComponent(prefix)}
 			fileToUrl={fileToUrl}
-			enableDocx
+			enableCraftEditors
 			canWrite={canWrite}
 			revealInExplorer={handleRevealInExplorer}
 			openWithApp={handleOpenWithApp}

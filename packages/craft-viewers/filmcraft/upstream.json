@@ -1,0 +1,22 @@
+{
+	"repository": "https://github.com/storytold/filmcraft.git",
+	"revision": "0541d4d182d0bb755a2633ef66824cdadb280c09",
+	"version": "0.7.0",
+	"wasmBindgen": "0.2.129",
+	"cargoPackage": "filmcraft-web",
+	"wasmFile": "filmcraft_web",
+	"label": "Flows Video",
+	"canvasId": "craft_canvas",
+	"maxBytes": 209715200,
+	"extensions": [
+		"mp4",
+		"m4v",
+		"mov",
+		"webm",
+		"mkv",
+		"avi",
+		"mxf",
+		"mts",
+		"m2ts"
+	]
+}

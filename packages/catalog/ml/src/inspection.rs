@@ -2,6 +2,7 @@ pub mod auto_training;
 pub mod auto_training_legacy;
 pub mod auto_training_setup;
 pub mod auto_training_tables;
+pub mod cancellation;
 pub mod compute;
 pub mod data;
 pub mod feature_engineering;
@@ -131,6 +132,97 @@ macro_rules! operation {
 }
 pub(crate) use operation;
 
+/// Awaits `work`, running `cancel` if the run's token fires or this future is dropped first.
+/// The executor drops node futures on cancellation, so the drop path is the one that usually runs.
+#[cfg(feature = "execute")]
+pub(crate) async fn join_cancellable<T, C>(
+    token: Option<flow_like_types::tokio_util::sync::CancellationToken>,
+    cancel: C,
+    mut work: tokio::task::JoinHandle<flow_like_types::Result<T>>,
+) -> flow_like_types::Result<T>
+where
+    C: Fn() + Clone + Send,
+{
+    let guard = cancellation::CancelOnDrop::new(cancel.clone());
+    let result = match token {
+        Some(token) => tokio::select! {
+            result = &mut work => result,
+            _ = token.cancelled() => {
+                cancel();
+                work.await
+            }
+        },
+        None => work.await,
+    };
+    guard.disarm();
+    result?
+}
+
+#[cfg(feature = "execute")]
+pub(crate) async fn run_cancellable_operation<I, O, H>(
+    context: &mut flow_like::flow::execution::context::ExecutionContext,
+    handler: H,
+) -> flow_like_types::Result<()>
+where
+    I: serde::de::DeserializeOwned + Send + 'static,
+    O: serde::Serialize + Send + 'static,
+    H: FnOnce(I, cancellation::CancelFlag) -> flow_like_types::Result<O> + Send + 'static,
+{
+    context.deactivate_exec_pin("exec_out").await?;
+    let input: I = context.evaluate_pin("request").await?;
+    let flag = cancellation::CancelFlag::default();
+    let worker = flag.clone();
+    let work = tokio::task::spawn_blocking(move || handler(input, worker));
+    let token = context.get_cancellation_token();
+    let output = join_cancellable(token, move || flag.cancel(), work).await?;
+    context
+        .set_pin_value("result", flow_like_types::json::json!(output))
+        .await?;
+    context.activate_exec_pin("exec_out").await
+}
+
+/// `operation!` for handlers `fn(Input, CancelFlag) -> Result<Output>` that stop once the flag
+/// is cancelled, which happens when the run is cancelled or the node is dropped.
+macro_rules! cancellable_operation {
+    ($node:ident, $id:literal, $name:literal, $description:literal, $function:literal, $category:literal, $input:ty, $output:ty, $handler:path $(, version = $version:literal)?) => {
+        #[flow_like_types::async_trait]
+        impl flow_like::flow::node::NodeLogic for $node {
+            fn get_node(&self) -> flow_like::flow::node::Node {
+                let node = super::operation_node::<$input, $output>(
+                    $id,
+                    $name,
+                    $description,
+                    $function,
+                    $category,
+                );
+                $(
+                    let mut node = node;
+                    node.set_version($version);
+                )?
+                node
+            }
+            async fn run(
+                &self,
+                context: &mut flow_like::flow::execution::context::ExecutionContext,
+            ) -> flow_like_types::Result<()> {
+                #[cfg(feature = "execute")]
+                {
+                    super::run_cancellable_operation::<$input, $output, _>(context, $handler)
+                        .await
+                }
+                #[cfg(not(feature = "execute"))]
+                {
+                    let _ = context;
+                    Err(flow_like_types::anyhow!(
+                        "ML execution requires the execute feature"
+                    ))
+                }
+            }
+        }
+    };
+}
+pub(crate) use cancellable_operation;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,11 +293,113 @@ mod tests {
             "ml_route_learning_project",
             "ml_promote_learning_model",
             "ml_rollback_learning_model",
+            "ml_reject_learning_candidate",
         ] {
             assert!(
                 ids.contains(required),
                 "Missing auto training node {required}"
             );
         }
+    }
+
+    #[test]
+    fn feature_extractor_outputs_and_inputs_share_one_schema() {
+        use flow_like::flow::{node::NodeLogic, pin::Pin};
+        let extractor = Pin::schema_string_for::<lifecycle::FeatureExtractorRef>();
+        for producer in [
+            lifecycle::ExtractPatchFeaturesNode.get_node(),
+            pretrained::ExtractPretrainedFeaturesNode.get_node(),
+            data::FeatureMapToPatchesNode.get_node(),
+        ] {
+            let pin = producer.get_pin_by_name("extractor").unwrap();
+            assert_eq!(pin.schema, extractor, "{}", producer.name);
+        }
+        for consumer in [
+            lifecycle::ScheduleTrainingNode.get_node(),
+            lifecycle::StudentInferenceNode.get_node(),
+            auto_training::PredictAutoModelNode.get_node(),
+            data::FeatureMapToPatchesNode.get_node(),
+        ] {
+            let request = consumer.get_pin_by_name("request").unwrap();
+            let schema: flow_like_types::Value =
+                flow_like_types::json::from_str(request.schema.as_deref().unwrap()).unwrap();
+            let definitions = schema["$defs"].as_object().unwrap();
+            assert!(
+                definitions.contains_key("FeatureExtractorRef"),
+                "{} defines {:?}",
+                consumer.name,
+                definitions.keys().collect::<Vec<_>>()
+            );
+        }
+    }
+}
+
+#[cfg(all(test, feature = "execute"))]
+mod join_cancellable_tests {
+    use super::{cancellation::CancelFlag, join_cancellable};
+    use flow_like_types::{Result, anyhow, tokio_util::sync::CancellationToken};
+    use futures::FutureExt;
+    use std::time::{Duration, Instant};
+
+    fn cancels(flag: &CancelFlag) -> impl Fn() + Clone + Send {
+        let flag = flag.clone();
+        move || flag.cancel()
+    }
+
+    fn wait_for_cancel(flag: &CancelFlag) -> Result<()> {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while Instant::now() < deadline {
+            if flag.is_cancelled() {
+                return Err(anyhow!("worker stopped after cancellation"));
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_fired_token_cancels_the_work_and_returns_its_error() {
+        let token = CancellationToken::new();
+        token.cancel();
+        let flag = CancelFlag::default();
+        let worker = flag.clone();
+        let work = tokio::task::spawn_blocking(move || wait_for_cancel(&worker));
+        let error = join_cancellable(Some(token), cancels(&flag), work)
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "worker stopped after cancellation");
+    }
+
+    #[tokio::test]
+    async fn dropping_the_join_cancels_the_work() {
+        let flag = CancelFlag::default();
+        let worker = flag.clone();
+        let (stopped, observed) = std::sync::mpsc::channel();
+        let work = tokio::task::spawn_blocking(move || {
+            let result = wait_for_cancel(&worker);
+            let _ = stopped.send(result.is_err());
+            result
+        });
+        let join = join_cancellable(Some(CancellationToken::new()), cancels(&flag), work);
+        assert!(join.now_or_never().is_none());
+        assert!(flag.is_cancelled());
+        assert!(observed.recv_timeout(Duration::from_secs(30)).unwrap());
+    }
+
+    #[tokio::test]
+    async fn returned_work_disarms_the_guard() {
+        let flag = CancelFlag::default();
+        let token = Some(CancellationToken::new());
+        let work = tokio::task::spawn_blocking(|| Ok(7));
+        assert_eq!(
+            join_cancellable(token, cancels(&flag), work).await.unwrap(),
+            7
+        );
+        let work = tokio::task::spawn_blocking(|| Err::<(), _>(anyhow!("handler failed")));
+        let error = join_cancellable(None, cancels(&flag), work)
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "handler failed");
+        assert!(!flag.is_cancelled());
     }
 }

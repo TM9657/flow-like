@@ -1,6 +1,6 @@
 //! Bounded model search. Validation ranks candidates; the final holdout is read after selection.
 use crate::{
-    engines::{BurnEngineRecipe, LoadedArtifactPredictor},
+    engines::{BurnEngineRecipe, LoadedArtifactPredictor, SNAPSHOT_MEMORY_FACTOR, serialized_size},
     worker::{LocalRunLock, TrainingWorker},
     *,
 };
@@ -13,13 +13,19 @@ use flow_like_ml_native::evaluation as metrics;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     sync::Arc,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
-/// Cap on the wall time held back for the final audit, otherwise a tenth of the wall budget.
-const MAXIMUM_AUDIT_ALLOWANCE_MS: u64 = 300_000;
 /// Marks a candidate appended with a smaller batch in place of the oversized original.
 const RESIZED_FROM: &str = "resized_from_candidate";
+/// Event naming what kept a scheduled trial from starting.
+const TRIAL_BLOCKED: &str = "trial_blocked";
+/// Retries cannot fill the 256-event log, which also records skipped candidates.
+const MAXIMUM_BLOCKED_EVENTS: usize = 32;
+/// Pause before the first retry of a held-back step; later pauses double.
+const FIRST_RETRY_DELAY_MS: u64 = 250;
+/// Longest pause between retries, which also bounds how late `run` sees a cancellation.
+const MAXIMUM_RETRY_DELAY_MS: u64 = 10_000;
 
 pub trait SearchPredictor {
     /// Input has a leading batch dimension. Return native scores or Burn-shaped predictions.
@@ -497,15 +503,24 @@ pub fn generate_candidates(
     }
     candidates.truncate(search.maximum_candidates);
     if candidates.is_empty() {
-        return Err(invalid(match smallest_unfit {
-            Some(estimate) => format!(
-                "no candidate fits the memory budget of {memory_budget} bytes; the smallest estimate is {estimate} bytes"
-            ),
-            None if skipped_native => "native classical candidates need CPU compute or allow_cpu_fallback, and no GPU recipe matches this shape and task".into(),
-            None => "no supported candidate matches this shape and task".into(),
-        }));
+        let message = if let Some(estimate) = smallest_unfit {
+            unfit_message(memory_budget, estimate)
+        } else if skipped_native {
+            "native candidates need CPU or allow_cpu_fallback, and no GPU recipe fits this task"
+                .to_string()
+        } else {
+            "no supported candidate matches this shape and task".to_string()
+        };
+        return Err(invalid(message));
     }
     Ok(candidates)
+}
+
+fn unfit_message(budget: u64, estimate: u64) -> String {
+    format!(
+        "no candidate fits the memory budget of {budget} bytes; \
+         the smallest estimate is {estimate} bytes"
+    )
 }
 
 /// Halve `batch` until the training estimate plus `fixed_bytes` fits `budget`. Returns the
@@ -681,7 +696,8 @@ fn decode_prediction(
                 ));
             }
             // Boxes clamped to the image border can collapse to zero area; no truth can match
-            // them and box validation would reject the whole partition.
+            // them and box validation would reject the whole partition. NaN boxes stay, so
+            // validation still rejects a broken model.
             let boxes = detections
                 .into_iter()
                 .next()
@@ -1105,7 +1121,9 @@ impl AutoTrainingController {
     }
 
     /// Execute at most one candidate. Reopening the repository resumes a scheduled job or
-    /// validates its already-published artifact without retraining it.
+    /// validates its already-published artifact without retraining it. A trial whose job,
+    /// lease or resource budget another worker holds stays scheduled, and the reason is
+    /// recorded as a `trial_blocked` experiment event.
     pub fn run_next(&self, experiment_id: &str) -> Result<Experiment> {
         let _lock =
             match LocalRunLock::acquire(&self.repository, &format!("experiment:{experiment_id}")) {
@@ -1280,7 +1298,11 @@ impl AutoTrainingController {
                     self.note(
                         experiment_id,
                         "anomaly_calibration_in_sample",
-                        serde_json::json!({"trial_id":trial.id,"reason":"validation has no normal samples, so the decision scale was fitted on training scores"}),
+                        serde_json::json!({
+                            "trial_id": trial.id,
+                            "reason": "validation has no normal samples, so the decision scale \
+                                       was fitted on training scores",
+                        }),
                     );
                 }
                 scale
@@ -1329,7 +1351,8 @@ impl AutoTrainingController {
                     self.now(),
                 )?;
             }
-            Err(Error::Conflict(_) | Error::LeaseLost) => {
+            Err(error @ (Error::Conflict(_) | Error::LeaseLost)) => {
+                self.note_blocked(experiment_id, &trial, &error.to_string());
                 return self.repository.get_experiment(experiment_id);
             }
             Err(error) => {
@@ -1359,7 +1382,12 @@ impl AutoTrainingController {
 
     /// Run the fixed candidate list, then evaluate one frozen winner. Hosts can call run_next
     /// instead to inspect validation results and append additional bounded candidates.
+    /// A step held back by another worker, lease, resource reservation or concurrent writer is
+    /// retried with backoff for at most one per-trial duration cap without progress; then the
+    /// experiment is returned still running, or the last conflict is returned.
     pub fn run(&self, experiment_id: &str) -> Result<Experiment> {
+        let limit_ms = self.worker.limits().maximum_duration_ms;
+        let mut backoff = Backoff::new();
         loop {
             let before = self.repository.get_experiment(experiment_id)?;
             if matches!(
@@ -1374,17 +1402,26 @@ impl AutoTrainingController {
             if before.selected_trial_id.is_some() {
                 return self.finalize(experiment_id);
             }
-            let after = self.run_next(experiment_id)?;
-            if after.generation == before.generation {
-                if self
-                    .repository
-                    .list_experiment_trials(experiment_id)?
-                    .iter()
-                    .any(|t| t.status == ExperimentTrialStatus::Scheduled)
-                {
-                    return Ok(after);
-                }
+            let after = match self.run_next(experiment_id) {
+                Ok(after) => after,
+                Err(Error::Conflict(_)) if backoff.wait(limit_ms) => continue,
+                Err(error) => return Err(error),
+            };
+            if after.generation != before.generation {
+                backoff = Backoff::new();
+                continue;
+            }
+            if !self
+                .repository
+                .list_experiment_trials(experiment_id)?
+                .iter()
+                .any(|t| t.status == ExperimentTrialStatus::Scheduled)
+            {
                 return self.finalize(experiment_id);
+            }
+            // The scheduled trial is held elsewhere; a trial_blocked event names the holder.
+            if !backoff.wait(limit_ms) {
+                return Ok(after);
             }
         }
     }
@@ -1400,6 +1437,8 @@ impl AutoTrainingController {
                 Err(Error::Conflict(_)) => return self.repository.get_experiment(experiment_id),
                 Err(error) => return Err(error),
             };
+        self.repository
+            .mark_experiment_active(experiment_id, self.now())?;
         let experiment = self.repository.get_experiment(experiment_id)?;
         if experiment.final_evaluation_id.is_some()
             || matches!(
@@ -1521,7 +1560,10 @@ impl AutoTrainingController {
             }
             if let Some(existing) = recorded.get(&row.id) {
                 if existing.details.get("partition").and_then(Value::as_str) == Some("final_test")
-                    && existing.details.get("experiment_id").and_then(Value::as_str)
+                    && existing
+                        .details
+                        .get("experiment_id")
+                        .and_then(Value::as_str)
                         == Some(experiment_id)
                 {
                     continue;
@@ -1578,7 +1620,11 @@ impl AutoTrainingController {
                     }
                 },
             };
-            let mut details = serde_json::json!({"prediction":evidence,"experiment_id":experiment_id,"partition":"final_test"});
+            let mut details = serde_json::json!({
+                "prediction": evidence,
+                "experiment_id": experiment_id,
+                "partition": "final_test",
+            });
             if let Some(failure) = &failure {
                 details["error"] = serde_json::json!(failure);
             }
@@ -1627,6 +1673,33 @@ impl AutoTrainingController {
             .record_experiment_event(experiment_id, kind, body, self.now());
     }
 
+    /// Record what kept a scheduled trial from starting, once per trial and reason.
+    fn note_blocked(&self, experiment_id: &str, trial: &ExperimentTrial, reason: &str) {
+        let Ok(events) = self.repository.experiment_events(experiment_id) else {
+            return;
+        };
+        let blocked: Vec<&Value> = events
+            .iter()
+            .filter(|event| event["kind"] == TRIAL_BLOCKED)
+            .collect();
+        let recorded = blocked.iter().any(|event| {
+            event["body"]["trial_id"] == trial.id.as_str() && event["body"]["reason"] == reason
+        });
+        if recorded || blocked.len() >= MAXIMUM_BLOCKED_EVENTS {
+            return;
+        }
+        self.note(
+            experiment_id,
+            TRIAL_BLOCKED,
+            serde_json::json!({
+                "trial_id": trial.id,
+                "job_id": trial.job_id,
+                "candidate_index": trial.candidate_index,
+                "reason": reason,
+            }),
+        );
+    }
+
     /// The next unsubmitted candidate that fits this worker's memory. An oversized Burn
     /// candidate is replaced by a copy with the largest fitting batch, or skipped with its
     /// estimate recorded when even one sample does not fit.
@@ -1664,7 +1737,13 @@ impl AutoTrainingController {
                             self.note(
                                 &experiment.id,
                                 "candidate_resized",
-                                serde_json::json!({"candidate_index":index,"replacement_index":updated.request.candidates.len() - 1,"batch_size":batch,"estimated_bytes":estimate,"memory_budget_bytes":budget}),
+                                serde_json::json!({
+                                    "candidate_index": index,
+                                    "replacement_index": updated.request.candidates.len() - 1,
+                                    "batch_size": batch,
+                                    "estimated_bytes": estimate,
+                                    "memory_budget_bytes": budget,
+                                }),
                             );
                             experiment = updated;
                         }
@@ -1672,7 +1751,10 @@ impl AutoTrainingController {
                             self.note(
                                 &experiment.id,
                                 "candidate_skipped",
-                                serde_json::json!({"candidate_index":index,"reason":format!("batch {batch} would fit, but {message}")}),
+                                serde_json::json!({
+                                    "candidate_index": index,
+                                    "reason": format!("batch {batch} would fit, but {message}"),
+                                }),
                             );
                         }
                         Err(error) => return Err(error),
@@ -1683,7 +1765,12 @@ impl AutoTrainingController {
                     self.note(
                         &experiment.id,
                         "candidate_skipped",
-                        serde_json::json!({"candidate_index":index,"reason":"training does not fit the worker memory budget at batch 1","estimated_bytes":estimate,"memory_budget_bytes":budget}),
+                        serde_json::json!({
+                            "candidate_index": index,
+                            "reason": "training does not fit the worker memory budget at batch 1",
+                            "estimated_bytes": estimate,
+                            "memory_budget_bytes": budget,
+                        }),
                     );
                     skipped.insert(index);
                 }
@@ -1709,8 +1796,9 @@ impl AutoTrainingController {
         Ok(skipped)
     }
 
-    /// Mirror the Burn worker's admission estimate: model and optimizer at the batch, twelve
-    /// copies of the serialized training view and the unpacked pretrained source.
+    /// Mirror the Burn worker's admission estimate: model and optimizer at the batch, the
+    /// engine's per-byte charge for the serialized training view and the unpacked pretrained
+    /// source.
     fn admit(
         &self,
         experiment: &Experiment,
@@ -1737,8 +1825,8 @@ impl AutoTrainingController {
             .and_then(Value::as_str)
             .unwrap_or(&experiment.request.snapshot_id)
             .to_owned();
-        // Twelve copies of a larger view exceed the budget whatever the model needs.
-        let limit = budget / 12;
+        // A larger view exceeds the budget whatever the model needs.
+        let limit = budget / SNAPSHOT_MEMORY_FACTOR;
         let key = (dataset_id, limit);
         if !data.contains_key(&key) {
             let measured = self.training_data(&experiment.id, &key.0, limit)?;
@@ -1748,7 +1836,9 @@ impl AutoTrainingController {
             TrainingData::Measured { bytes, shape } => (*bytes, shape.clone()),
             TrainingData::Exceeds => {
                 return Ok(Admission::Unfit {
-                    estimate: limit.saturating_add(1).saturating_mul(12),
+                    estimate: limit
+                        .saturating_add(1)
+                        .saturating_mul(SNAPSHOT_MEMORY_FACTOR),
                     budget,
                 });
             }
@@ -1761,7 +1851,9 @@ impl AutoTrainingController {
             },
             None => 0,
         };
-        let fixed = dataset_bytes.saturating_mul(12).saturating_add(source_bytes);
+        let fixed = dataset_bytes
+            .saturating_mul(SNAPSHOT_MEMORY_FACTOR)
+            .saturating_add(source_bytes);
         Ok(
             match fit_batch(
                 &recipe.config.recipe,
@@ -1827,7 +1919,11 @@ impl AutoTrainingController {
             return Ok(TrainingData::Unknown);
         };
         let Ok(sample) = serde_json::from_value::<Sample>(
-            first.payload.get("sample").unwrap_or(&first.payload).clone(),
+            first
+                .payload
+                .get("sample")
+                .unwrap_or(&first.payload)
+                .clone(),
         ) else {
             return Ok(TrainingData::Unknown);
         };
@@ -1844,7 +1940,8 @@ impl AutoTrainingController {
             .ok()?;
         let config: burn::TrainingConfig =
             serde_json::from_value(source.manifest["config"].clone()).ok()?;
-        let shape: Vec<usize> = serde_json::from_value(source.manifest["input_shape"].clone()).ok()?;
+        let shape: Vec<usize> =
+            serde_json::from_value(source.manifest["input_shape"].clone()).ok()?;
         Some(
             source
                 .blob
@@ -1870,11 +1967,7 @@ impl AutoTrainingController {
                 smallest = Some((estimate, budget));
             }
         }
-        Ok(smallest.map(|(estimate, budget)| {
-            format!(
-                "no candidate fits the memory budget of {budget} bytes; the smallest estimate is {estimate} bytes"
-            )
-        }))
+        Ok(smallest.map(|(estimate, budget)| unfit_message(budget, estimate)))
     }
 
     fn next_halving_trial(
@@ -2000,8 +2093,14 @@ impl AutoTrainingController {
         dataset: &DatasetSnapshot,
         spec: &InspectionSpec,
     ) -> Result<(f64, bool)> {
-        let mut scores =
-            self.normal_scores(id, predictor, &dataset.validation, spec, dataset.as_of_ms, true)?;
+        let mut scores = self.normal_scores(
+            id,
+            predictor,
+            &dataset.validation,
+            spec,
+            dataset.as_of_ms,
+            true,
+        )?;
         let in_sample = scores.is_empty();
         if in_sample {
             scores =
@@ -2073,14 +2172,9 @@ impl AutoTrainingController {
     }
 }
 
-/// Wall time held back so a frozen winner always gets its final holdout evaluation.
-fn audit_allowance_ms(experiment: &Experiment) -> u64 {
-    (experiment.request.budget.maximum_wall_time_ms / 10).min(MAXIMUM_AUDIT_ALLOWANCE_MS)
-}
-
 /// New trials start only while more than the audit allowance of wall time remains.
 fn search_window_open(experiment: &Experiment, at_ms: i64) -> bool {
-    experiment.wall_remaining_ms(at_ms) > audit_allowance_ms(experiment)
+    experiment.wall_remaining_ms(at_ms) > experiment.audit_allowance_ms()
 }
 
 /// The audit may use the remaining wall time and at least its allowance after the winner
@@ -2088,7 +2182,7 @@ fn search_window_open(experiment: &Experiment, at_ms: i64) -> bool {
 fn audit_window_open(experiment: &Experiment, at_ms: i64) -> bool {
     experiment.wall_remaining_ms(at_ms) > 0
         || experiment.selected_at_ms.is_some_and(|selected| {
-            (at_ms as i128 - selected as i128) < audit_allowance_ms(experiment) as i128
+            (at_ms as i128 - selected as i128) < experiment.audit_allowance_ms() as i128
         })
 }
 
@@ -2100,6 +2194,41 @@ fn epochs_within_trial_cap(cap_ms: u64, trained_ms: u64, trained_epochs: usize) 
         return usize::MAX;
     }
     usize::try_from(cap_ms / 5 * 4 / per_epoch_ms).unwrap_or(usize::MAX)
+}
+
+/// Doubling pauses whose total stays within a limit.
+struct Backoff {
+    delay_ms: u64,
+    waited_ms: u64,
+}
+impl Backoff {
+    fn new() -> Self {
+        Self {
+            delay_ms: FIRST_RETRY_DELAY_MS,
+            waited_ms: 0,
+        }
+    }
+
+    /// The next pause, or None once it would take the total past `limit_ms`.
+    fn next_pause(&mut self, limit_ms: u64) -> Option<Duration> {
+        let waited_ms = self.waited_ms.saturating_add(self.delay_ms);
+        if waited_ms > limit_ms {
+            return None;
+        }
+        let pause = Duration::from_millis(self.delay_ms);
+        self.waited_ms = waited_ms;
+        self.delay_ms = self.delay_ms.saturating_mul(2).min(MAXIMUM_RETRY_DELAY_MS);
+        Some(pause)
+    }
+
+    /// Sleeps for the next pause; false once the total would pass `limit_ms`.
+    fn wait(&mut self, limit_ms: u64) -> bool {
+        let Some(pause) = self.next_pause(limit_ms) else {
+            return false;
+        };
+        std::thread::sleep(pause);
+        true
+    }
 }
 
 fn ledger_busy(error: &Error) -> bool {
@@ -2120,12 +2249,12 @@ fn failed_evidence(task: &EvaluationTask) -> Option<Value> {
         EvaluationTask::Detection { .. } => {
             serde_json::to_value(EvidencePrediction::Detection { boxes: Vec::new() }).ok()
         }
-        EvaluationTask::InstanceSegmentation { .. } => serde_json::to_value(
-            EvidencePrediction::Instances {
+        EvaluationTask::InstanceSegmentation { .. } => {
+            serde_json::to_value(EvidencePrediction::Instances {
                 instances: Vec::new(),
-            },
-        )
-        .ok(),
+            })
+            .ok()
+        }
         _ => None,
     }
 }
@@ -2148,22 +2277,6 @@ fn audited_label(
         ));
     }
     Ok(Some(expected.clone()))
-}
-
-fn serialized_size<T: Serialize>(value: &T) -> Result<u64> {
-    struct Counter(u64);
-    impl std::io::Write for Counter {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.0 = self.0.saturating_add(bytes.len() as u64);
-            Ok(bytes.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-    let mut counter = Counter(0);
-    serde_json::to_writer(&mut counter, value)?;
-    Ok(counter.0)
 }
 
 enum Audit {
@@ -2369,11 +2482,7 @@ mod tests {
         let cases = vec![
             (
                 EvaluationTask::Anomaly { threshold: 0.5 },
-                vec![
-                    anomaly(false, 0.2),
-                    anomaly(true, 0.8),
-                    anomaly(false, 0.6),
-                ],
+                vec![anomaly(false, 0.2), anomaly(true, 0.8), anomaly(false, 0.6)],
                 vec![
                     "accuracy_wilson_lower_95",
                     "log_loss",
@@ -2527,7 +2636,12 @@ mod tests {
             goals.bounds = vec![bound(name)];
             validate_goals(&spec, &goals).unwrap();
         }
-        for name in ["teacher_agreement", "recall/missing", "class/2/recall", "accuracy "] {
+        for name in [
+            "teacher_agreement",
+            "recall/missing",
+            "class/2/recall",
+            "accuracy ",
+        ] {
             goals.bounds = vec![bound(name)];
             assert!(validate_goals(&spec, &goals).is_err(), "{name}");
         }
@@ -2551,12 +2665,15 @@ mod tests {
             classes: 2,
             base_channels: 16,
         };
-        let shape = [3, 64, 64];
+        let shape: [usize; 3] = [3, 64, 64];
         let at = |batch| recipe.estimated_training_bytes(&shape, batch).unwrap();
         assert_eq!(fit_batch(&recipe, &shape, 16, 0, at(16)), Some(Ok(16)));
         assert_eq!(fit_batch(&recipe, &shape, 16, 0, at(4)), Some(Ok(4)));
         assert_eq!(fit_batch(&recipe, &shape, 16, 100, at(4) + 99), Some(Ok(2)));
-        assert_eq!(fit_batch(&recipe, &shape, 16, 0, at(1) - 1), Some(Err(at(1))));
+        assert_eq!(
+            fit_batch(&recipe, &shape, 16, 0, at(1) - 1),
+            Some(Err(at(1)))
+        );
     }
 
     #[test]
@@ -2590,5 +2707,26 @@ mod tests {
         };
         assert_eq!(boxes.len(), 1);
         assert_eq!(boxes[0].x_max, 0.6);
+    }
+
+    #[test]
+    fn retry_pauses_double_to_their_cap_and_stop_at_the_total_limit() {
+        let pauses = |limit_ms: u64| {
+            let mut backoff = Backoff::new();
+            std::iter::from_fn(|| backoff.next_pause(limit_ms))
+                .map(|pause| pause.as_millis() as u64)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(pauses(2_000), vec![250, 500, 1_000]);
+        assert!(pauses(100).is_empty());
+        let long = pauses(60_000);
+        assert_eq!(long[..7], [250, 500, 1_000, 2_000, 4_000, 8_000, 10_000]);
+        assert_eq!(long.len(), 10);
+        assert!(
+            long[6..]
+                .iter()
+                .all(|pause| *pause == MAXIMUM_RETRY_DELAY_MS)
+        );
+        assert!(long.iter().sum::<u64>() <= 60_000);
     }
 }

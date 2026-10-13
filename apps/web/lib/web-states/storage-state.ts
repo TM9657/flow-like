@@ -116,6 +116,32 @@ export class WebStorageState implements IStorageState {
 		await apiDelete(`apps/${appId}/data/user`, this.backend.auth, { prefixes });
 	}
 
+	async renameStorageItem(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		await apiPost(
+			`apps/${appId}/data/rename`,
+			{ prefix, new_name: newName, is_dir: isDir },
+			this.backend.auth,
+		);
+	}
+
+	async renameStorageItemUser(
+		appId: string,
+		prefix: string,
+		newName: string,
+		isDir: boolean,
+	): Promise<void> {
+		await apiPost(
+			`apps/${appId}/data/user/rename`,
+			{ prefix, new_name: newName, is_dir: isDir },
+			this.backend.auth,
+		);
+	}
+
 	// Batched: the route caps a request at MAX_PREFIXES and now rejects
 	// anything larger, and callers (an a2ui surface resolving its images, a
 	// multi-file selection) legitimately ask for more than that.

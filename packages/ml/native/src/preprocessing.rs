@@ -112,13 +112,16 @@ fn category(value: &Value, name: &str, canonical: bool) -> Result<Option<String>
     Ok(Some(key))
 }
 
+/// Sums in sorted order so the statistic depends only on the training values, not on row order.
 fn average(values: &[f64]) -> f64 {
-    let count = values.len() as f64;
-    let quotient = values.iter().sum::<f64>() / count;
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let count = sorted.len() as f64;
+    let quotient = sorted.iter().sum::<f64>() / count;
     if quotient.is_finite() {
         quotient
     } else {
-        values.iter().map(|value| value / count).sum()
+        sorted.iter().map(|value| value / count).sum()
     }
 }
 
@@ -126,21 +129,21 @@ fn average(values: &[f64]) -> f64 {
 /// error of the two-pass variance (n * eps * |mean|), keeps scale 1 so later deviations stay finite
 /// and proportionate instead of being divided by rounding noise.
 fn standardization(values: &[f64]) -> (f64, f64) {
-    let (minimum, maximum) = values
-        .iter()
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(minimum, maximum), value| {
-            (minimum.min(*value), maximum.max(*value))
-        });
+    let (minimum, maximum) = values.iter().fold(
+        (f64::INFINITY, f64::NEG_INFINITY),
+        |(minimum, maximum), value| (minimum.min(*value), maximum.max(*value)),
+    );
     if minimum == maximum {
         return (minimum, 1.0);
     }
     let count = values.len() as f64;
     let mean = average(values);
-    let deviation = values
+    let mut squares = values
         .iter()
         .map(|value| (value - mean).powi(2) / count)
-        .sum::<f64>()
-        .sqrt();
+        .collect::<Vec<_>>();
+    squares.sort_by(f64::total_cmp);
+    let deviation = squares.iter().sum::<f64>().sqrt();
     if deviation <= count * f64::EPSILON * mean.abs() {
         (mean, 1.0)
     } else {
@@ -533,6 +536,26 @@ mod tests {
         let fitted = FittedTabularPreprocessor::fit(&missing, &[0, 1], &options).unwrap();
         assert_eq!(encoded(&fitted, json!({"value": null})), [0.0]);
         assert_eq!(encoded(&fitted, json!({"value": 6.0})), [1.0]);
+    }
+
+    #[test]
+    fn statistics_do_not_depend_on_training_row_order() {
+        let rows: Vec<_> = (0..54)
+            .map(|index| json!({"value": 0.1 + index as f64 * 0.77 + (index % 7) as f64 * 1e-3}))
+            .collect();
+        let forward: Vec<_> = (0..rows.len()).collect();
+        let mut shuffled = forward.clone();
+        shuffled.reverse();
+        shuffled.swap(3, 40);
+        let options = single_column(true, Imputation::Mean);
+        assert_eq!(
+            FittedTabularPreprocessor::fit(&rows, &forward, &options)
+                .unwrap()
+                .columns,
+            FittedTabularPreprocessor::fit(&rows, &shuffled, &options)
+                .unwrap()
+                .columns
+        );
     }
 
     #[test]

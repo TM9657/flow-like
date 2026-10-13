@@ -1275,6 +1275,7 @@ pub fn run() {
             functions::flow::storage::storage_remove,
             functions::flow::storage::storage_user_remove,
             functions::flow::storage::storage_rename,
+            functions::flow::storage::storage_user_rename,
             functions::flow::storage::storage_get,
             functions::flow::storage::storage_user_get,
             functions::flow::storage::storage_to_fullpath,

@@ -93,7 +93,10 @@ mod efficient_ad;
 #[cfg(feature = "engine")]
 mod mask_rcnn;
 #[cfg(feature = "engine")]
-pub use efficient_ad::{EfficientAdPredictor, resume_efficient_ad, train_efficient_ad};
+pub use efficient_ad::{
+    EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES, EfficientAdPredictor, resume_efficient_ad,
+    train_efficient_ad,
+};
 #[cfg(feature = "engine")]
 mod vision;
 #[cfg(feature = "engine")]

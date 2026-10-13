@@ -124,6 +124,11 @@ pub struct ExperimentUsage {
     pub artifact_bytes: u64,
     pub reserved_artifact_bytes: u64,
     pub dataset_bytes: u64,
+    /// Part of `artifact_bytes` held by the last checkpoints of settled trials, which stay on
+    /// disk while the search may still continue or resume them. Released when a winner is
+    /// selected or the experiment finalizes.
+    #[serde(default)]
+    pub checkpoint_bytes: u64,
 }
 
 /// Wall time is charged only while a controller works on the experiment, never while it waits
@@ -175,7 +180,15 @@ impl Experiment {
             .maximum_wall_time_ms
             .saturating_sub(self.wall_elapsed_ms(now_ms))
     }
+
+    /// Wall time held back from candidate training for the frozen winner's final holdout
+    /// evaluation: a tenth of the wall budget, at most five minutes.
+    pub fn audit_allowance_ms(&self) -> u64 {
+        (self.request.budget.maximum_wall_time_ms / 10).min(MAXIMUM_AUDIT_ALLOWANCE_MS)
+    }
 }
+
+const MAXIMUM_AUDIT_ALLOWANCE_MS: u64 = 300_000;
 
 fn elapsed_between(start_ms: i64, end_ms: i64) -> u64 {
     u64::try_from(end_ms.saturating_sub(start_ms)).unwrap_or(0)

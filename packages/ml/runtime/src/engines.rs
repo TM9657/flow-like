@@ -247,37 +247,51 @@ fn initialization_artifact(manifest: &Value) -> Result<Option<String>> {
         .ok_or_else(|| invalid("training-artifact initialization has no source ID"))
 }
 
-/// Content digests that a training artifact, and every training artifact it was initialized
-/// from, consumed for fitting or selection.
-pub(crate) fn lineage_digests(
-    connection: &Connection,
-    artifact_id: &str,
-) -> Result<HashSet<String>> {
-    let mut digests = HashSet::new();
-    let mut visited = HashSet::new();
-    let mut next = Some(artifact_id.to_owned());
-    while let Some(id) = next {
-        if visited.len() == MAXIMUM_INITIALIZATION_DEPTH || !visited.insert(id.clone()) {
-            return Err(invalid(format!(
-                "initialization lineage of {artifact_id} exceeds {MAXIMUM_INITIALIZATION_DEPTH} models"
-            )));
+/// Content that a training artifact, and every training artifact it was initialized from,
+/// was fitted on, and content those models were only validated on.
+pub(crate) struct LineageContent {
+    trained: HashSet<String>,
+    validated: HashSet<String>,
+}
+
+impl LineageContent {
+    pub(crate) fn load(connection: &Connection, artifact_id: &str) -> Result<Self> {
+        let mut lineage = Self {
+            trained: HashSet::new(),
+            validated: HashSet::new(),
+        };
+        let mut visited = HashSet::new();
+        let mut next = Some(artifact_id.to_owned());
+        while let Some(id) = next {
+            if visited.len() == MAXIMUM_INITIALIZATION_DEPTH || !visited.insert(id.clone()) {
+                return Err(invalid(format!(
+                    "initialization lineage of {artifact_id} exceeds {MAXIMUM_INITIALIZATION_DEPTH} models"
+                )));
+            }
+            let body: String = connection
+                .query_row("SELECT body FROM artifacts WHERE id=?", [&id], |row| {
+                    row.get(0)
+                })
+                .optional()?
+                .ok_or_else(|| Error::NotFound(format!("initialization artifact {id}")))?;
+            let artifact: ModelArtifact = serde_json::from_str(&body)?;
+            let own = stored_partitions(connection, &artifact.snapshot_id)?;
+            for run in run_partitions(connection, &artifact.job_id, &artifact.snapshot_id, own)? {
+                let digest = |sample: &SampleIdentity| sample.content_digest.clone();
+                lineage.trained.extend(run.train.iter().map(digest));
+                lineage.validated.extend(run.validation.iter().map(digest));
+            }
+            next = initialization_artifact(&artifact.manifest)?;
         }
-        let body: String = connection
-            .query_row(
-                "SELECT body FROM artifacts WHERE id=?",
-                [&id],
-                |row| row.get(0),
-            )
-            .optional()?
-            .ok_or_else(|| Error::NotFound(format!("initialization artifact {id}")))?;
-        let artifact: ModelArtifact = serde_json::from_str(&body)?;
-        let own = stored_partitions(connection, &artifact.snapshot_id)?;
-        for run in run_partitions(connection, &artifact.job_id, &artifact.snapshot_id, own)? {
-            digests.extend(run.fitted().map(|sample| sample.content_digest.clone()));
-        }
-        next = initialization_artifact(&artifact.manifest)?;
+        Ok(lineage)
     }
-    Ok(digests)
+
+    #[cfg(feature = "native")]
+    fn consumed(self) -> HashSet<String> {
+        let mut consumed = self.trained;
+        consumed.extend(self.validated);
+        consumed
+    }
 }
 
 /// Group IDs belong to one stream, so lineage from other streams links into this stream's
@@ -315,7 +329,7 @@ impl ConsumedGroups {
             PartitionIdentities::of(snapshot),
         )?;
         let lineage = match initialization_artifact(&artifact.manifest)? {
-            Some(source) => lineage_digests(connection, &source)?,
+            Some(source) => LineageContent::load(connection, &source)?.consumed(),
             None => HashSet::new(),
         };
         let mut groups: HashSet<String> = runs
@@ -355,14 +369,15 @@ impl ConsumedGroups {
     }
 }
 
-/// Held-out groups of a run (validation and test, including an experiment trial's full
-/// snapshot) that hold content `lineage` consumed.
+/// Held-out groups of a run, including an experiment trial's full snapshot, that would make
+/// its metrics dependent on the lineage: validation groups holding content the lineage was
+/// fitted on, and audit groups holding any lineage content.
 #[cfg(feature = "burn")]
 fn contaminated_groups(
     connection: &Connection,
     job_id: &str,
     snapshot: &DatasetSnapshot,
-    lineage: &HashSet<String>,
+    lineage: &LineageContent,
 ) -> Result<std::collections::BTreeSet<String>> {
     let runs = run_partitions(
         connection,
@@ -370,18 +385,29 @@ fn contaminated_groups(
         &snapshot.id,
         PartitionIdentities::of(snapshot),
     )?;
-    let linked: HashSet<&str> =
-        linked_groups(runs.iter().flat_map(|run| run.links()), lineage).collect();
-    Ok(runs
+    let trained: HashSet<&str> =
+        linked_groups(runs.iter().flat_map(|run| run.links()), &lineage.trained).collect();
+    let validated: HashSet<&str> =
+        linked_groups(runs.iter().flat_map(|run| run.links()), &lineage.validated).collect();
+    let validation = runs
         .iter()
-        .flat_map(|run| run.validation.iter().chain(&run.test))
+        .flat_map(|run| &run.validation)
         .map(|sample| sample.group_id.as_str())
-        .filter(|group| linked.contains(group))
-        .map(str::to_owned)
-        .collect())
+        .filter(|group| trained.contains(group));
+    let test = runs
+        .iter()
+        .flat_map(|run| &run.test)
+        .map(|sample| sample.group_id.as_str())
+        .filter(|group| trained.contains(group) || validated.contains(group));
+    Ok(validation.chain(test).map(str::to_owned).collect())
 }
 
-fn serialized_size<T: Serialize + ?Sized>(value: &T) -> Result<u64> {
+/// Training memory the Burn and EfficientAD engines charge per serialized snapshot byte: the
+/// parsed snapshot, its decoded samples and the tensors built from them.
+#[cfg(feature = "burn")]
+pub(crate) const SNAPSHOT_MEMORY_FACTOR: u64 = 12;
+
+pub(crate) fn serialized_size<T: Serialize + ?Sized>(value: &T) -> Result<u64> {
     struct Counter(u64);
     impl std::io::Write for Counter {
         fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
@@ -736,8 +762,14 @@ mod native_compute_tests {
             boost_target(&Annotation::Values { values: vec![2.5] }).unwrap(),
             2.5
         );
-        assert_eq!(boost_target(&Annotation::Scalar { value: -1. }).unwrap(), -1.);
-        assert_eq!(boost_target(&Annotation::Class { class_id: 1 }).unwrap(), 1.);
+        assert_eq!(
+            boost_target(&Annotation::Scalar { value: -1. }).unwrap(),
+            -1.
+        );
+        assert_eq!(
+            boost_target(&Annotation::Class { class_id: 1 }).unwrap(),
+            1.
+        );
         assert!(
             boost_target(&Annotation::Values {
                 values: vec![1., 2.]
@@ -914,7 +946,12 @@ mod independence_tests {
             &connection,
             &artifact("origin-model", "origin", serde_json::json!({})),
         );
-        let middle = snapshot("middle", vec![sample("m1", "lot-1", 20)], Vec::new(), Vec::new());
+        let middle = snapshot(
+            "middle",
+            vec![sample("m1", "lot-1", 20)],
+            Vec::new(),
+            Vec::new(),
+        );
         store_snapshot(&connection, &middle);
         store_artifact(
             &connection,
@@ -950,6 +987,46 @@ mod independence_tests {
     }
 
     #[test]
+    #[cfg(feature = "burn")]
+    fn initialization_rejects_selection_on_trained_content_and_audits_on_any_lineage_content() {
+        let (_directory, connection) = repository();
+        let origin = snapshot(
+            "origin",
+            vec![sample("o1", "lot-1", 10)],
+            vec![sample("o2", "lot-2", 11)],
+            Vec::new(),
+        );
+        store_snapshot(&connection, &origin);
+        store_artifact(
+            &connection,
+            &artifact("origin-model", "origin", serde_json::json!({})),
+        );
+        let lineage = LineageContent::load(&connection, "origin-model").unwrap();
+        // Reusing the origin's validation rows for validation only repeats its selection data.
+        let aligned = snapshot(
+            "aligned",
+            vec![sample("a1", "a", 10)],
+            vec![sample("a2", "b", 11)],
+            vec![sample("a3", "c", 12)],
+        );
+        assert!(
+            contaminated_groups(&connection, "job-aligned", &aligned, &lineage)
+                .unwrap()
+                .is_empty()
+        );
+        let reshuffled = snapshot(
+            "reshuffled",
+            vec![sample("r1", "a", 20)],
+            vec![sample("r2", "b", 10)],
+            vec![sample("r3", "c", 11), sample("r4", "d", 21)],
+        );
+        assert_eq!(
+            contaminated_groups(&connection, "job-reshuffled", &reshuffled, &lineage).unwrap(),
+            std::collections::BTreeSet::from(["b".to_owned(), "c".to_owned()])
+        );
+    }
+
+    #[test]
     fn feature_extractor_identity_requires_a_digest_and_prefers_declared_steps() {
         let mut manifest = serde_json::json!({
             "preprocessing":[{"kind":"features","names":["a"]}],
@@ -962,7 +1039,8 @@ mod independence_tests {
                 height: 4
             }]
         );
-        manifest["preprocessing"] = serde_json::json!([{"kind":"normalize","mean":[0.5],"std":[0.25]}]);
+        manifest["preprocessing"] =
+            serde_json::json!([{"kind":"normalize","mean":[0.5],"std":[0.25]}]);
         assert_eq!(
             expected_image_steps(&manifest).unwrap(),
             vec![PreprocessingStep::Normalize {

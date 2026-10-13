@@ -11678,6 +11678,7 @@ dependencies = [
  "reqwest 0.12.28",
  "rmcp",
  "rusqlite",
+ "rustix 1.1.5",
  "security-framework 3.7.0",
  "serde",
  "serde_json",

@@ -95,7 +95,7 @@ pub fn pretrained_source_features(
     compute.validate().map_err(engine_error)?;
     let source = authorized_source(repository, project_id, source_id, source_limit(compute))?;
     let config: burn::TrainingConfig = serde_json::from_value(source.manifest["config"].clone())?;
-    config.validate().map_err(engine_error)?;
+    config.validate_stored().map_err(engine_error)?;
     if !matches!(
         config.recipe,
         burn::Recipe::ResNet18 { .. }
@@ -164,7 +164,7 @@ pub fn validate_burn_pretrained_source(
     let source = authorized_source(repository, project_id, &reference.source_id, maximum_bytes)?;
     let source_config: burn::TrainingConfig =
         serde_json::from_value(source.manifest["config"].clone())?;
-    source_config.validate().map_err(engine_error)?;
+    source_config.validate_stored().map_err(engine_error)?;
     burn::validate_fine_tune(
         &source_config.recipe,
         &config.recipe,
@@ -211,18 +211,20 @@ pub fn validate_burn_pretrained_preprocessing(
         return Ok(());
     };
     let channels = expected.0.len().max(declared.0.len());
-    let compatible = (0..channels).all(|index| match (
-        channel(&expected.0, index),
-        channel(&expected.1, index),
-        channel(&declared.0, index),
-        channel(&declared.1, index),
-    ) {
-        (Some(mean), Some(deviation), Some(declared_mean), Some(declared_deviation)) => {
-            (mean - declared_mean).abs() <= 0.1
-                && declared_deviation > 0.0
-                && (deviation / declared_deviation).max(declared_deviation / deviation) <= 2.0
+    let compatible = (0..channels).all(|index| {
+        match (
+            channel(&expected.0, index),
+            channel(&expected.1, index),
+            channel(&declared.0, index),
+            channel(&declared.1, index),
+        ) {
+            (Some(mean), Some(deviation), Some(declared_mean), Some(declared_deviation)) => {
+                (mean - declared_mean).abs() <= 0.1
+                    && declared_deviation > 0.0
+                    && (deviation / declared_deviation).max(declared_deviation / deviation) <= 2.0
+            }
+            _ => false,
         }
-        _ => false,
     });
     if !compatible {
         return Err(invalid(format!(
@@ -291,17 +293,14 @@ fn channels_text(values: &[f64]) -> String {
         .join(", ")
 }
 
-/// Fine-tuning from an in-project model must not validate or audit on data that model's
-/// lineage consumed, or selection and final metrics would stop being independent.
-fn ensure_independent_initialization(
-    work: &TrainingWork,
-    source: &PretrainedSource,
-) -> Result<()> {
+/// Fine-tuning from an in-project model must not select on data that model's lineage was
+/// fitted on, nor audit on any of its lineage's data, or the metrics stop being independent.
+fn ensure_independent_initialization(work: &TrainingWork, source: &PretrainedSource) -> Result<()> {
     if source.source_kind != PretrainedSourceKind::TrainingArtifact {
         return Ok(());
     }
     let connection = work.repository.connection()?;
-    let lineage = lineage_digests(&connection, &source.id)?;
+    let lineage = LineageContent::load(&connection, &source.id)?;
     let groups = contaminated_groups(&connection, &work.job.id, &work.snapshot, &lineage)?;
     if let Some(example) = groups.first() {
         return Err(invalid(format!(
@@ -327,7 +326,7 @@ pub fn publish_burn_pretrained_source(
     let model_bytes = pack(directory, false, maximum_bytes)?;
     let state: Value = serde_json::from_slice(&fs::read(directory.join(burn::MANIFEST_FILE))?)?;
     let config: burn::TrainingConfig = serde_json::from_value(state["config"].clone())?;
-    config.validate().map_err(engine_error)?;
+    config.validate_stored().map_err(engine_error)?;
     let input_shape: Vec<usize> = serde_json::from_value(state["input_shape"].clone())?;
     let mut batch_shape = vec![1];
     batch_shape.extend(&input_shape);
@@ -442,9 +441,7 @@ pub(super) fn attention_workspace_bytes(
     };
     let tokens = (*height / patch) as u128 * (*width / patch) as u128 + 1;
     let elements = sample_shape.iter().map(|d| *d as u128).product::<u128>();
-    Some(
-        tokens * tokens * heads as u128 * 16 + tokens * embedding as u128 * 128 + elements * 16,
-    )
+    Some(tokens * tokens * heads as u128 * 16 + tokens * embedding as u128 * 128 + elements * 16)
 }
 
 /// Images per forward pass that keep attention workspaces inside the memory left after
@@ -524,8 +521,11 @@ impl TrainingEngine for BurnEngine {
             0
         };
         Ok(model
-            .saturating_add(dataset.saturating_mul(12))
+            .saturating_add(dataset.saturating_mul(SNAPSHOT_MEMORY_FACTOR))
             .saturating_add(source_memory))
+    }
+    fn snapshot_byte_limit(&self, budget: u64) -> u64 {
+        budget / SNAPSHOT_MEMORY_FACTOR
     }
     fn train(&self, work: &TrainingWork, control: &WorkerControl) -> Result<EngineOutput> {
         let mut recipe: BurnEngineRecipe = serde_json::from_value(work.job.request.recipe.clone())?;
@@ -1216,6 +1216,50 @@ mod tests {
         changed["seed"] = serde_json::json!(8);
         assert!(!same_training_config(&shortest, &changed));
         assert!(!same_training_config(&shortest, &serde_json::json!({})));
+    }
+
+    #[test]
+    fn mask_rcnn_sources_saved_above_the_roi_budget_still_initialize_fine_tunes() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository = TrainingRepository::open(directory.path().join("jobs.sqlite")).unwrap();
+        let saved = burn::TrainingConfig {
+            recipe: burn::Recipe::MaskRcnn {
+                config: burn::MaskRcnnConfig::default(),
+            },
+            backend: burn::BackendChoice::Cpu,
+            epochs: 1,
+            batch_size: 21,
+            learning_rate: 0.001,
+            seed: 1,
+            gradient_clip: 5.0,
+        };
+        assert!(
+            saved.validate().is_err(),
+            "the saved batch exceeds the budget"
+        );
+        let labels = vec!["scratch".to_string(), "dent".to_string()];
+        let source = repository
+            .register_pretrained_source(
+                "project",
+                b"weights",
+                serde_json::json!({"engine":"burn","format_version":1,"config":saved,"input_shape":[3,64,64],"labels":labels}),
+                serde_json::json!({}),
+                1024,
+                0,
+            )
+            .unwrap();
+        let target = burn::TrainingConfig {
+            batch_size: 2,
+            ..saved
+        };
+        target.validate().unwrap();
+        let reference = PretrainedSourceRef {
+            source_id: source.id,
+            replace_head: false,
+            freeze_backbone: false,
+        };
+        validate_burn_pretrained_source(&repository, "project", &reference, &target, &labels, 1024)
+            .unwrap();
     }
 
     fn source_with(manifest: Value) -> PretrainedSource {

@@ -74,6 +74,26 @@ fn split() -> SplitPolicy {
     }
 }
 
+/// 0.1 has no exact f32 form, so loading must not compare config JSON text.
+fn mlp_recipe() -> serde_json::Value {
+    json!({"config":{"recipe":{"architecture":"mlp","input_features":1,"hidden":8,"outputs":1,"objective":"regression"},"backend":{"backend":"cpu"},"epochs":12,"batch_size":6,"learning_rate":0.04,"seed":42,"gradient_clip":0.1},"labels":[]})
+}
+
+/// The smallest valid PDN-small teacher: one base and one feature channel.
+fn efficient_ad_recipe() -> serde_json::Value {
+    let convolution = |shape: [usize; 4]| {
+        let weight = vec![0.01; shape.iter().product()];
+        let bias = vec![0.01; shape[0]];
+        json!({"weight":{"shape":shape,"values":weight},"bias":{"shape":[shape[0]],"values":bias}})
+    };
+    let convolutions: Vec<serde_json::Value> =
+        [[1, 1, 4, 4], [2, 1, 4, 4], [2, 2, 3, 3], [1, 2, 4, 4]]
+            .into_iter()
+            .map(convolution)
+            .collect();
+    json!({"config":{"teacher":{"input_channels":1,"base_channels":1,"feature_channels":1,"convolutions":convolutions},"epochs":1,"batch_size":1,"learning_rate":0.001,"seed":42,"autoencoder_channels":2,"hard_quantile":0.99,"gradient_clip":5.0},"labels":[]})
+}
+
 #[test]
 fn native_worker_trains_a_model_that_roundtrips_through_registry() {
     let (_directory, repository, stream) = populated();
@@ -119,10 +139,9 @@ fn cancel_after_first_checkpoint(repository: &TrainingRepository) -> CheckpointO
 #[test]
 fn burn_worker_resumes_optimizer_checkpoint_and_loads_prediction_artifact() {
     let (_directory, repository, stream) = populated();
-    // 0.1 has no exact f32 form, so loading must not compare config JSON text.
     let request = TrainingRequest {
         engine: "burn".into(),
-        recipe: json!({"config":{"recipe":{"architecture":"mlp","input_features":1,"hidden":8,"outputs":1,"objective":"regression"},"backend":{"backend":"cpu"},"epochs":12,"batch_size":6,"learning_rate":0.04,"seed":42,"gradient_clip":0.1},"labels":[]}),
+        recipe: mlp_recipe(),
         compute: serde_json::to_value(ComputeConfig::default()).unwrap(),
     };
     let job = repository
@@ -167,6 +186,55 @@ fn burn_worker_resumes_optimizer_checkpoint_and_loads_prediction_artifact() {
         checkpoint.blob.bytes > artifact.blob.bytes,
         "training checkpoint includes optimizer while inference artifact does not"
     );
+}
+
+/// Burn and EfficientAD charge twelve bytes of training memory per stored snapshot byte, so
+/// a larger snapshot is refused from its stored size before it is parsed.
+#[test]
+fn vision_engines_refuse_snapshots_beyond_a_twelfth_of_the_budget_before_parsing() {
+    for (engine, recipe) in [
+        ("burn", mlp_recipe()),
+        ("efficient_ad", efficient_ad_recipe()),
+    ] {
+        let (_directory, repository, stream) = populated();
+        let request = TrainingRequest {
+            engine: engine.into(),
+            recipe,
+            compute: serde_json::to_value(ComputeConfig::default()).unwrap(),
+        };
+        let job = repository
+            .trigger_after_n(&stream, 30, request, split(), 1000)
+            .unwrap()
+            .unwrap();
+        let stored = serde_json::to_vec(&repository.get_snapshot(&job.snapshot_id).unwrap())
+            .unwrap()
+            .len() as u64;
+        let admit = |memory_budget_bytes: u64| {
+            let limits = WorkerLimits {
+                memory_budget_bytes,
+                ..WorkerLimits::default()
+            };
+            let mut worker = TrainingWorker::new(repository.clone(), limits).unwrap();
+            register_burn_engine(&mut worker).unwrap();
+            register_efficient_ad_engine(&mut worker).unwrap();
+            worker.run(&job.id).unwrap_err()
+        };
+        let refused = admit(stored * 12 - 1);
+        let limit = format!("exceeds the {} byte budget", stored - 1);
+        assert!(
+            matches!(&refused, Error::Invalid(message) if message.contains(&limit)),
+            "{engine}: {refused}"
+        );
+        let estimated = admit(stored * 12);
+        assert!(
+            matches!(&estimated, Error::Engine(message) if message.contains("needs an estimated")),
+            "{engine}: {estimated}"
+        );
+        assert_eq!(
+            repository.get_job(&job.id).unwrap().status,
+            JobStatus::Queued
+        );
+    }
 }
 
 #[test]

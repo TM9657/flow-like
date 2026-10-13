@@ -1749,11 +1749,12 @@ fn verify_cohort_seal(
             )
         })
         || digest(&serde_json::to_vec(&predictions)?) != report.evidence_digest
-        || report.truth_digest.as_deref()
-            != Some(
-                crate::repository::evaluation_truth_digest(connection, stream, &predictions)?
-                    .as_str(),
-            )
+        || !crate::repository::truth_digest_matches(
+            connection,
+            stream,
+            &predictions,
+            report.truth_digest.as_deref(),
+        )?
     {
         return Err(Error::Conflict(
             "learning audit predictions or accepted truth changed".into(),
@@ -2688,10 +2689,9 @@ fn next_actions(
         "SELECT body FROM learning_observations WHERE project_id=? AND json_extract(body,'$.captured_at_ms')<=? ORDER BY json_extract(body,'$.captured_at_ms') DESC,rowid DESC LIMIT ?",
     )?;
     let mut observations = statement
-        .query_map(
-            params![value.id, at_ms, window.saturating_mul(2)],
-            |r| r.get::<_, String>(0),
-        )?
+        .query_map(params![value.id, at_ms, window.saturating_mul(2)], |r| {
+            r.get::<_, String>(0)
+        })?
         .map(|row| Ok(serde_json::from_str(&row?)?))
         .collect::<Result<Vec<LearningObservation>>>()?;
     drop(statement);
@@ -2804,4 +2804,124 @@ fn next_actions(
         embedding_shift,
         observed_error,
     })
+}
+
+#[cfg(test)]
+mod seal_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn stream() -> StreamKey {
+        StreamKey {
+            project_id: "learning".into(),
+            stream_id: "line".into(),
+            inspection_version: "v1".into(),
+        }
+    }
+
+    /// Every sample carries a raw row, so full-body and immutable truth digests differ.
+    fn trained_model(repository: &TrainingRepository) -> ModelArtifact {
+        for index in 0..6 {
+            let sample = TrainingSample {
+                id: format!("sample-{index}"),
+                annotation_revision: 1,
+                group_id: format!("lot-{index}"),
+                captured_at_ms: 1,
+                label_available_at_ms: 1,
+                content_digest: format!("{index:064x}"),
+                source: LabelSource::Reviewed,
+                accepted: true,
+                payload: json!({"label":"good","feature_row":{"temperature":index}}),
+            };
+            repository.record_sample(&stream(), &sample).unwrap();
+        }
+        let request = TrainingRequest {
+            engine: "fixture".into(),
+            recipe: json!({}),
+            compute: json!({}),
+        };
+        let policy = SplitPolicy::Group {
+            train_fraction: 0.5,
+            validation_fraction: 0.25,
+            seed: 7,
+        };
+        let job = repository
+            .trigger_after_n(&stream(), 6, request, policy, 10)
+            .unwrap()
+            .unwrap();
+        let lease = repository.claim_job(&job.id, "worker", 60_000, 10).unwrap();
+        repository
+            .finish_training(&lease, b"model", json!({}), 11)
+            .unwrap()
+    }
+
+    fn reviewed(artifact: &ModelArtifact, sample_id: &str) -> PredictionRecord {
+        PredictionRecord {
+            sample_id: sample_id.into(),
+            artifact_id: artifact.id.clone(),
+            predicted_label: Some("good".into()),
+            teacher_label: None,
+            actual_label: Some("good".into()),
+            actual_source: Some(LabelSource::Reviewed),
+            latency_ms: 1.,
+            failed: false,
+            recorded_at_ms: 20,
+            details: json!({}),
+        }
+    }
+
+    fn sealed(
+        artifact: &ModelArtifact,
+        predictions: &[PredictionRecord],
+        truth_digest: String,
+    ) -> EvaluationReport {
+        EvaluationReport {
+            id: "audit".into(),
+            artifact_id: artifact.id.clone(),
+            dataset_digest: artifact.dataset_digest.clone(),
+            evidence_digest: digest(&serde_json::to_vec(predictions).unwrap()),
+            truth_digest: Some(truth_digest),
+            audited_samples: predictions.len(),
+            teacher_samples: 0,
+            metrics: BTreeMap::new(),
+            per_class_recall: BTreeMap::new(),
+            created_at_ms: 30,
+            task: EvaluationTask::Classification,
+        }
+    }
+
+    #[test]
+    fn audits_sealed_over_full_annotation_bodies_still_verify() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let artifact = trained_model(&repository);
+        let cohort: BTreeSet<String> = ["sample-0", "sample-1"].map(String::from).into();
+        for sample_id in &cohort {
+            repository
+                .record_prediction(&reviewed(&artifact, sample_id))
+                .unwrap();
+        }
+        let connection = repository.connection().unwrap();
+        let predictions = repository.predictions(&artifact.id).unwrap();
+        let truths = predictions
+            .iter()
+            .map(|prediction| {
+                crate::repository::current_prediction_truth(&connection, &stream(), prediction)
+            })
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+        let legacy = digest(&serde_json::to_vec(&truths).unwrap());
+        let current =
+            crate::repository::evaluation_truth_digest(&connection, &stream(), &predictions)
+                .unwrap();
+        assert_ne!(legacy, current, "the full body includes the raw row");
+        let verify = |truth_digest: String| {
+            let report = sealed(&artifact, &predictions, truth_digest);
+            verify_cohort_seal(&connection, &report, &cohort, &stream())
+        };
+        verify(legacy).unwrap();
+        verify(current).unwrap();
+        assert!(matches!(verify("0".repeat(64)), Err(Error::Conflict(_))));
+    }
 }

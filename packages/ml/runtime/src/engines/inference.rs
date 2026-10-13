@@ -71,8 +71,12 @@ impl LoadedArtifactPredictor {
             .bytes
             .checked_mul(4)
             .ok_or_else(|| invalid("artifact memory estimate overflows"))?;
-        let input_limit =
-            ((compute.memory_limit_bytes - reserved) / 64).min(64 * 1024 * 1024) as usize;
+        let available = compute.memory_limit_bytes.saturating_sub(reserved);
+        let input_limit = match engine {
+            #[cfg(feature = "burn")]
+            "efficient_ad" => efficient_ad_input_limit(&expected, available)?,
+            _ => (available / 64).min(64 * 1024 * 1024) as usize,
+        };
         if input_limit == 0 || expected.iter().product::<usize>() > input_limit {
             return Err(invalid(
                 "memory budget has no room for a trained input tensor and inference workspace",
@@ -105,11 +109,8 @@ impl LoadedArtifactPredictor {
                     }
                     let config: flow_like_ml_burn::TrainingConfig =
                         serde_json::from_value(state["config"].clone())?;
-                    let batch_limit = burn_adapter::inference_batch_limit(
-                        &config.recipe,
-                        &expected,
-                        compute.memory_limit_bytes.saturating_sub(reserved),
-                    )?;
+                    let batch_limit =
+                        burn_adapter::inference_batch_limit(&config.recipe, &expected, available)?;
                     let choice = burn_adapter::backend(compute)?;
                     effective_compute = burn_adapter::concrete_compute(compute, &choice)?;
                     let predictor = flow_like_ml_burn::Predictor::load(directory.path(), choice)
@@ -381,6 +382,30 @@ impl LoadedArtifactPredictor {
         }
         self.predict(input)
     }
+}
+
+/// Memory one EfficientAD image adds beyond the workspace: its f32 input and the three
+/// 256x256 output maps, both as f32 and as the JSON numbers they are returned in.
+#[cfg(feature = "burn")]
+fn efficient_ad_image_bytes(image_elements: u64) -> u64 {
+    let map_value = (size_of::<f32>() + size_of::<Value>()) as u64;
+    image_elements * size_of::<f32>() as u64 + 3 * 256 * 256 * map_value
+}
+
+/// Input elements an EfficientAD request may carry within `available_bytes`.
+#[cfg(feature = "burn")]
+fn efficient_ad_input_limit(expected: &[usize], available_bytes: u64) -> Result<usize> {
+    let workspace = flow_like_ml_burn::EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES;
+    let image_elements = expected.iter().product::<usize>() as u64;
+    let per_image = efficient_ad_image_bytes(image_elements);
+    let images = available_bytes.saturating_sub(workspace) / per_image;
+    if images == 0 {
+        return Err(invalid(format!(
+            "EfficientAD inference needs an estimated {} bytes for one image, but only {available_bytes} bytes remain after loading the model",
+            workspace + per_image
+        )));
+    }
+    Ok(images.saturating_mul(image_elements).min(64 * 1024 * 1024) as usize)
 }
 
 /// Split a batch along its first dimension into forward passes of at most `limit` samples.
@@ -878,7 +903,10 @@ mod tests {
         };
         let chunks: Vec<_> = batch_chunks(&input, 2).collect();
         assert_eq!(
-            chunks.iter().map(|chunk| chunk.shape.clone()).collect::<Vec<_>>(),
+            chunks
+                .iter()
+                .map(|chunk| chunk.shape.clone())
+                .collect::<Vec<_>>(),
             vec![vec![2, 2], vec![2, 2], vec![1, 2]]
         );
         assert_eq!(
@@ -910,13 +938,13 @@ mod tests {
         assert!(repository.read_blob_limited(&artifact.blob, 100).is_err());
     }
 
-    #[test]
+    /// Publishes the smallest EfficientAD model, trained on one image, and returns its packed
+    /// bytes and a one-image request.
     #[cfg(feature = "burn")]
-    fn efficient_ad_cached_predictions_preserve_calibration_and_maps() {
+    fn trained_efficient_ad(
+        repository: &TrainingRepository,
+    ) -> (ModelArtifact, Vec<u8>, TensorData) {
         use flow_like_ml_burn as burn;
-        let directory = tempfile::tempdir().unwrap();
-        let repository =
-            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
         let model_dir = tempfile::tempdir().unwrap();
         let shapes = [[1, 1, 4, 4], [2, 1, 4, 4], [2, 2, 3, 3], [1, 2, 4, 4]];
         let teacher = burn::PdnTeacherWeights {
@@ -977,7 +1005,7 @@ mod tests {
         let bytes =
             burn_adapter::pack_named(model_dir.path(), name, false, 32 * 1024 * 1024).unwrap();
         let artifact = publish(
-            &repository,
+            repository,
             0,
             &bytes,
             serde_json::json!({"engine":"efficient_ad","format_version":1,"architecture":state["architecture"],"input_shape":[1,256,256],"labels":[]}),
@@ -986,6 +1014,16 @@ mod tests {
             shape: validation.shape,
             values: validation.values,
         };
+        (artifact, bytes, input)
+    }
+
+    #[test]
+    #[cfg(feature = "burn")]
+    fn efficient_ad_cached_predictions_preserve_calibration_and_maps() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let (artifact, bytes, input) = trained_efficient_ad(&repository);
         let loaded =
             LoadedArtifactPredictor::load(&repository, &artifact.id, &ComputeConfig::default())
                 .unwrap();
@@ -1000,5 +1038,50 @@ mod tests {
         )
         .unwrap();
         assert_eq!(loaded.predict(&input).unwrap(), expected);
+    }
+
+    /// PDN activations run in a fixed workspace, while each image's input and returned maps
+    /// stay resident, so the budget admits whole images beyond that workspace.
+    #[test]
+    #[cfg(feature = "burn")]
+    fn efficient_ad_admission_charges_a_fixed_workspace_and_per_image_maps() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            TrainingRepository::open(directory.path().join("training.sqlite")).unwrap();
+        let (artifact, _, image) = trained_efficient_ad(&repository);
+        let per_image = efficient_ad_image_bytes(image.values.len() as u64);
+        let fixed =
+            artifact.blob.bytes * 4 + flow_like_ml_burn::EFFICIENT_AD_INFERENCE_WORKSPACE_BYTES;
+        let limited = |memory_limit_bytes| ComputeConfig {
+            memory_limit_bytes,
+            ..ComputeConfig::default()
+        };
+        let Err(error) = LoadedArtifactPredictor::load(
+            &repository,
+            &artifact.id,
+            &limited(fixed + per_image - 1),
+        ) else {
+            panic!("a budget without room for one image beyond the workspace must not load");
+        };
+        assert!(
+            error.to_string().contains("EfficientAD inference needs"),
+            "{error}"
+        );
+        let predictor = LoadedArtifactPredictor::load(
+            &repository,
+            &artifact.id,
+            &limited(fixed + per_image * 3 / 2),
+        )
+        .unwrap();
+        let pair = TensorData {
+            shape: vec![2, 1, 256, 256],
+            values: [image.values.clone(), image.values.clone()].concat(),
+        };
+        assert!(predictor.predict(&pair).is_err());
+        let prediction = predictor.predict(&image).unwrap();
+        assert_eq!(
+            prediction["anomaly_maps"]["shape"],
+            serde_json::json!([1, 1, 256, 256])
+        );
     }
 }

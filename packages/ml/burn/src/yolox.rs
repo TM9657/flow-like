@@ -314,34 +314,20 @@ impl YoloOutput {
             * self.scale.clone();
         Tensor::cat(vec![xy - wh.clone() * 0.5, wh], 2)
     }
-    pub(crate) fn loss(self, targets: &[Vec<BoundingBox>]) -> Tensor<1> {
+    fn simota_inputs(&self, decoded: &Tensor<3>) -> Result<[Vec<f32>; 4]> {
+        Ok([
+            read(decoded.clone())?,
+            read(self.logits.clone())?,
+            read(self.grid.clone())?,
+            read(self.scale.clone())?,
+        ])
+    }
+    pub(crate) fn loss(self, targets: &[Vec<BoundingBox>]) -> Result<Tensor<1>> {
         let device = self.logits.device();
         let [batch, count, columns] = self.logits.dims();
         let classes = columns - 5;
         let decoded = self.decoded();
-        let boxes = decoded
-            .clone()
-            .into_data()
-            .iter::<f32>()
-            .collect::<Vec<_>>();
-        let raw = self
-            .logits
-            .clone()
-            .into_data()
-            .iter::<f32>()
-            .collect::<Vec<_>>();
-        let grid = self
-            .grid
-            .clone()
-            .into_data()
-            .iter::<f32>()
-            .collect::<Vec<_>>();
-        let scale = self
-            .scale
-            .clone()
-            .into_data()
-            .iter::<f32>()
-            .collect::<Vec<_>>();
+        let [boxes, raw, grid, scale] = self.simota_inputs(&decoded)?;
         let mut object_targets = vec![0.0f32; batch * count];
         let mut selected = Vec::new();
         let mut target_boxes = Vec::new();
@@ -383,7 +369,7 @@ impl YoloOutput {
         .sum()
             / denom;
         if positives == 0 {
-            return object_loss;
+            return Ok(object_loss);
         }
         let indices = Tensor::<1, Int>::from_data(BurnData::new(selected, [positives]), &device);
         let pred_boxes = decoded
@@ -404,7 +390,7 @@ impl YoloOutput {
         )
         .sum()
             / denom;
-        object_loss + box_loss * 5.0 + cls_loss
+        Ok(object_loss + box_loss * 5.0 + cls_loss)
     }
     pub(crate) fn prediction(
         self,
@@ -413,8 +399,8 @@ impl YoloOutput {
         let shape = self.logits.dims();
         let [batch, count, columns] = shape;
         let classes = columns - 5;
-        let boxes = self.decoded().into_data().iter::<f32>().collect::<Vec<_>>();
-        let values = self.logits.into_data().iter::<f32>().collect::<Vec<_>>();
+        let boxes = read(self.decoded())?;
+        let values = read(self.logits)?;
         let mut result = Vec::new();
         for b in 0..batch {
             let mut detections = Vec::new();
@@ -451,6 +437,13 @@ impl YoloOutput {
         output.validate()?;
         Ok((output, result))
     }
+}
+fn read<const D: usize>(tensor: Tensor<D>) -> Result<Vec<f32>> {
+    Ok(tensor
+        .try_into_data()
+        .map_err(crate::execution::device_error)?
+        .iter::<f32>()
+        .collect())
 }
 fn bce<const D: usize>(logits: Tensor<D>, targets: Tensor<D>) -> Tensor<D> {
     -log_sigmoid(logits.clone()) * targets.clone() - log_sigmoid(-logits) * (-targets + 1.0)
@@ -638,8 +631,74 @@ mod tests {
             .iter::<f32>()
             .collect::<Vec<_>>();
         assert_eq!(logits.len(), 21 * 8);
-        for anchor in logits.chunks_exact(8) {
+        for anchor in logits.as_chunks::<8>().0 {
             assert!(anchor[4..].iter().all(|value| (value - prior).abs() < 1e-5));
         }
+    }
+    #[test]
+    fn predictions_drop_boxes_clamped_to_zero_area() {
+        let device = Device::flex();
+        // Two confident anchors: the first box lies inside the image, the second right of it.
+        let output = YoloOutput {
+            logits: Tensor::from_data([[[0.5f32, 0.5, 0.0, 0.0, 5.0, 5.0]; 2]], &device),
+            grid: Tensor::from_data([[[0.0f32, 0.0], [3.0, 0.0]]], &device),
+            scale: Tensor::from_data([[[0.5f32, 0.5]; 2]], &device),
+        };
+        let (_, detections) = output
+            .prediction(&DetectionOptions {
+                confidence_threshold: 0.5,
+                iou_threshold: 0.45,
+                max_detections: 10,
+            })
+            .unwrap();
+        assert_eq!(detections.len(), 1);
+        assert_eq!(detections[0].len(), 1);
+        let kept = &detections[0][0];
+        for (actual, expected) in [kept.x_min, kept.y_min, kept.x_max, kept.y_max]
+            .into_iter()
+            .zip([0.0, 0.0, 0.5, 0.5])
+        {
+            assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
+        }
+    }
+    #[test]
+    fn loss_scores_objectness_everywhere_and_box_and_class_at_the_assigned_anchor() {
+        let device = Device::flex();
+        // Anchor 0 is centred in the target and decodes to its top half (IoU 0.5). Anchor 1 is
+        // centred outside the box but within the centre radius, so SimOTA assigns anchor 0 alone.
+        let logits = [
+            [0.5f32, 0.25, 0.0, -std::f32::consts::LN_2, 2.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, -1.0, 0.0],
+        ];
+        let assert_loss = |targets: Vec<BoundingBox>, expected: f32| {
+            let output = YoloOutput {
+                logits: Tensor::from_data([logits], &device),
+                grid: Tensor::from_data([[[0.0f32, 0.0], [1.0, 0.0]]], &device),
+                scale: Tensor::from_data([[[0.5f32, 0.5]; 2]], &device),
+            };
+            let values = output
+                .loss(&[targets])
+                .unwrap()
+                .into_data()
+                .iter::<f32>()
+                .collect::<Vec<_>>();
+            assert_eq!(values.len(), 1);
+            let actual = values[0];
+            assert!((actual - expected).abs() < 1e-4, "{actual} != {expected}");
+        };
+        let softplus = |x: f32| (1.0 + x.exp()).ln();
+        assert_loss(Vec::new(), softplus(2.0) + softplus(-1.0));
+        let target = BoundingBox {
+            class_id: 0,
+            x_min: 0.0,
+            y_min: 0.0,
+            x_max: 0.5,
+            y_max: 0.5,
+        };
+        // Box term 1 - 0.5^2 at weight 5; the class target 0.5 (the IoU) costs ln 2 at logit 0.
+        assert_loss(
+            vec![target],
+            softplus(-2.0) + softplus(-1.0) + 5.0 * 0.75 + std::f32::consts::LN_2,
+        );
     }
 }

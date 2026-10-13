@@ -99,18 +99,18 @@ impl NodeLogic for FineTuneSam2Node {
         {
             context.deactivate_exec_pin("exec_out").await?;
             let request: FineTuneSam2Request = context.evaluate_pin("request").await?;
-            if request.maximum_bytes == 0 || request.maximum_bytes > 2 * 1024 * 1024 * 1024 {
+            if !(1..=2 * 1024 * 1024 * 1024).contains(&request.maximum_bytes) {
                 return Err(anyhow!(
-                    "SAM artifact byte limit must be between 1 and 2 GiB"
+                    "SAM artifact byte limit must be between 1 and 2 GiB, got {} bytes",
+                    request.maximum_bytes
                 ));
             }
             if context.is_cancelled() {
                 return Err(anyhow!("SAM fine-tuning cancelled"));
             }
             let (repo, project) = super::lifecycle::repository(context)?;
-            let cancellation = flow_like_ml_burn::CancellationToken::new();
-            let worker_cancellation = cancellation.clone();
-            let mut work = tokio::task::spawn_blocking(move || {
+            let token = context.get_cancellation_token();
+            let result = with_burn_cancellation(token, move |cancellation| {
                 flow_like_ml_runtime::engines::fine_tune_sam2_source(
                     &repo,
                     &project,
@@ -119,33 +119,95 @@ impl NodeLogic for FineTuneSam2Node {
                     &request.data,
                     &request.compute,
                     request.maximum_bytes,
-                    &worker_cancellation,
+                    &cancellation,
                     |_| {},
                     flow_like_types::json::json!({"fine_tuned_from": request.source_id}),
                     flow_like_ml_runtime::now_ms(),
                 )
-            });
-            let result = if let Some(token) = context.get_cancellation_token() {
-                tokio::select! {
-                    result = &mut work => result?,
-                    _ = token.cancelled() => {
-                        cancellation.cancel();
-                        work.await?
-                    }
-                }
-            } else {
-                work.await?
-            }?;
+                .map_err(flow_like_types::Error::from)
+            })
+            .await?;
             context
                 .set_pin_value("result", flow_like_types::json::json!(result))
                 .await?;
-            context.activate_exec_pin("exec_out").await?;
-            Ok(())
+            context.activate_exec_pin("exec_out").await
         }
         #[cfg(not(feature = "training"))]
         {
             let _ = context;
             Err(anyhow!("SAM fine-tuning requires a local training build"))
         }
+    }
+}
+
+/// Runs blocking SAM work with a Burn token that is cancelled when the run is cancelled or the
+/// node is dropped; fine-tuning checks it per batch and again before publishing weights.
+#[cfg(feature = "training")]
+async fn with_burn_cancellation<T, W>(
+    token: Option<flow_like_types::tokio_util::sync::CancellationToken>,
+    run: W,
+) -> Result<T>
+where
+    T: Send + 'static,
+    W: FnOnce(flow_like_ml_burn::CancellationToken) -> Result<T> + Send + 'static,
+{
+    let cancellation = flow_like_ml_burn::CancellationToken::new();
+    let worker = cancellation.clone();
+    let work = tokio::task::spawn_blocking(move || run(worker));
+    super::join_cancellable(token, move || cancellation.cancel(), work).await
+}
+
+#[cfg(all(test, feature = "training"))]
+mod tests {
+    use super::*;
+    use flow_like_types::tokio_util::sync::CancellationToken;
+    use futures::FutureExt;
+    use std::time::{Duration, Instant};
+
+    fn wait_until_cancelled(cancellation: &flow_like_ml_burn::CancellationToken) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !cancellation.is_cancelled() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        cancellation.is_cancelled()
+    }
+
+    #[tokio::test]
+    async fn dropping_a_fine_tune_cancels_the_burn_token_it_trains_with() {
+        let (stopped, observed) = std::sync::mpsc::channel();
+        let fine_tune = with_burn_cancellation(None, move |cancellation| {
+            let _ = stopped.send(wait_until_cancelled(&cancellation));
+            Ok(())
+        });
+        assert!(fine_tune.now_or_never().is_none());
+        assert!(observed.recv_timeout(Duration::from_secs(30)).unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_fired_run_token_cancels_the_burn_token_and_returns_the_training_error() {
+        let token = CancellationToken::new();
+        token.cancel();
+        let error = with_burn_cancellation(Some(token), |cancellation| {
+            if wait_until_cancelled(&cancellation) {
+                return Err(anyhow!("stopped by the Burn token"));
+            }
+            Ok(())
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(error.to_string(), "stopped by the Burn token");
+    }
+
+    #[tokio::test]
+    async fn a_finished_fine_tune_leaves_its_burn_token_untouched() {
+        let (token_out, token_in) = std::sync::mpsc::channel();
+        let value = with_burn_cancellation(Some(CancellationToken::new()), move |cancellation| {
+            let _ = token_out.send(cancellation);
+            Ok(3)
+        })
+        .await
+        .unwrap();
+        assert_eq!(value, 3);
+        assert!(!token_in.recv().unwrap().is_cancelled());
     }
 }

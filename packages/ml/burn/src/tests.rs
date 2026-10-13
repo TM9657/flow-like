@@ -451,20 +451,27 @@ fn cancelling_epoch_evaluation_checkpoints_the_trained_batches() {
     let token = CancellationToken::new();
     let (held, wait_for_hold) = std::sync::mpsc::channel();
     let mut holder = None;
-    let error = train(&config, &data, Some(&data), interrupted.path(), &token, |p| {
-        // After the first epoch's last batch, evaluation waits for the RNG until cancelled.
-        if p.epoch == 1 && p.batch == 2 && p.validation_loss.is_none() {
-            let token = token.clone();
-            let held = held.clone();
-            holder = Some(std::thread::spawn(move || {
-                let _rng = crate::execution::lock(None).unwrap();
-                held.send(()).unwrap();
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                token.cancel();
-            }));
-            wait_for_hold.recv().unwrap();
-        }
-    })
+    let error = train(
+        &config,
+        &data,
+        Some(&data),
+        interrupted.path(),
+        &token,
+        |p| {
+            // After the first epoch's last batch, evaluation waits for the RNG until cancelled.
+            if p.epoch == 1 && p.batch == 2 && p.validation_loss.is_none() {
+                let token = token.clone();
+                let held = held.clone();
+                holder = Some(std::thread::spawn(move || {
+                    let _rng = crate::execution::lock(None).unwrap();
+                    held.send(()).unwrap();
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                    token.cancel();
+                }));
+                wait_for_hold.recv().unwrap();
+            }
+        },
+    )
     .unwrap_err();
     holder.unwrap().join().unwrap();
     assert!(matches!(error, Error::Cancelled));
@@ -535,6 +542,97 @@ fn resume_cannot_end_inside_an_epoch_it_already_started() {
     )
     .unwrap();
     assert_eq!((report.completed_epochs, report.steps), (2, 4));
+}
+
+#[test]
+fn mask_rcnn_artifacts_saved_over_the_roi_budget_load_but_do_not_resume() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let pixels = (0..256)
+        .map(|i| {
+            if (4..12).contains(&(i / 16)) && (4..12).contains(&(i % 16)) {
+                1.0
+            } else {
+                0.0
+            }
+        })
+        .collect::<Vec<_>>();
+    let data = TensorDataset {
+        inputs: TensorData {
+            shape: vec![1, 1, 16, 16],
+            values: pixels.clone(),
+        },
+        targets: Targets::Instances {
+            values: vec![vec![InstanceTarget {
+                bbox: BoundingBox {
+                    class_id: 0,
+                    x_min: 0.25,
+                    y_min: 0.25,
+                    x_max: 0.75,
+                    y_max: 0.75,
+                },
+                mask: TensorData {
+                    shape: vec![16, 16],
+                    values: pixels,
+                },
+            }]],
+        },
+    };
+    // One image's training ROIs take 512 x 4 x 56 x 56 mask-head elements: 10 fit a batch.
+    let mut settings = config(
+        Recipe::MaskRcnn {
+            config: MaskRcnnConfig {
+                input_channels: 1,
+                classes: 1,
+                base_channels: 2,
+                anchor_scales: vec![0.5],
+                anchor_ratios: vec![1.0],
+                roi_size: 2,
+                mask_size: 56,
+                proposals: 8,
+                training_samples: 512,
+            },
+        },
+        1,
+    );
+    settings.batch_size = 1;
+    settings.learning_rate = 0.01;
+    let dir = tempfile::tempdir().unwrap();
+    train(
+        &settings,
+        &data,
+        None,
+        dir.path(),
+        &CancellationToken::new(),
+        |_| {},
+    )
+    .unwrap();
+    // Models trained before the budget existed may record a larger batch size.
+    settings.batch_size = 11;
+    let mut state = manifest(dir.path());
+    state["config"]["batch_size"] = serde_json::json!(settings.batch_size);
+    std::fs::write(
+        dir.path().join(MANIFEST_FILE),
+        serde_json::to_vec(&state).unwrap(),
+    )
+    .unwrap();
+    let prediction = Predictor::load(dir.path(), BackendChoice::Cpu)
+        .unwrap()
+        .predict(&data.inputs)
+        .unwrap();
+    assert_eq!(prediction.instances.unwrap().len(), 1);
+    let error = resume(
+        &settings,
+        &data,
+        None,
+        dir.path(),
+        &CancellationToken::new(),
+        |_| {},
+    )
+    .unwrap_err();
+    assert!(
+        error.to_string().contains("use at most 10 images"),
+        "{error}"
+    );
 }
 
 #[test]

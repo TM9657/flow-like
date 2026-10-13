@@ -220,6 +220,32 @@ describe("Flows Word document host", () => {
 		expect(messages("set-read-only").at(-1)).toMatchObject({ readOnly: true });
 	});
 
+	it("opens licenses in the app for read-only users without replacing the document", async () => {
+		await render(false);
+		const documentFrame = container.querySelector("iframe");
+		await act(async () => {
+			container
+				.querySelector<HTMLButtonElement>('[aria-label="About Flows Word"]')
+				?.click();
+		});
+		const dialog = document.querySelector('[role="dialog"]');
+		expect(dialog).not.toBeNull();
+		expect(dialog?.querySelector("iframe")?.getAttribute("src")).toBe(
+			"/wordcraft/licenses/index.html",
+		);
+		expect(dialog?.querySelector("iframe")?.title).toBe(
+			"Flows Word third-party licenses and source",
+		);
+		await act(async () => {
+			dialog
+				?.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+				?.click();
+		});
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
+		expect(container.querySelector("iframe")).toBe(documentFrame);
+		expect(saveDocument).not.toHaveBeenCalled();
+	});
+
 	it("uploads binary DOCX bytes and acknowledges only after storage succeeds", async () => {
 		const upload = deferred<void>();
 		saveDocument.mockReturnValue(upload.promise);

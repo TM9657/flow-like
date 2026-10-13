@@ -318,6 +318,52 @@ fn adding_evidence_invalidates_previous_promotion_proof() {
 }
 
 #[test]
+fn typed_evaluations_take_revised_truth_and_leave_out_withdrawn_annotations() {
+    let (_dir, repo, artifact) = fixture(Annotation::Scalar { value: 4. });
+    record(
+        &repo,
+        &artifact,
+        EvidencePrediction::Regression { values: vec![4.] },
+    );
+    let report = repo
+        .evaluate_task(&artifact.id, EvaluationTask::Regression, 2001)
+        .unwrap();
+    let test = repo.get_snapshot(&artifact.snapshot_id).unwrap().test;
+    assert_eq!(report.audited_samples, test.len());
+    assert_eq!(report.metrics["mae"], 0.);
+    let mut measured = test[1].clone();
+    measured.annotation_revision += 1;
+    measured.label_available_at_ms = 2100;
+    measured.source = LabelSource::ObservedOutcome;
+    measured.payload["annotation"] = json!({"kind":"scalar","value":6.0});
+    measured.payload["provenance"] = json!({"kind":"measured","source":"gauge"});
+    repo.record_sample(&artifact.stream, &measured).unwrap();
+    let mut withdrawn = test[0].clone();
+    withdrawn.annotation_revision += 1;
+    withdrawn.label_available_at_ms = 2100;
+    withdrawn.accepted = false;
+    repo.record_sample(&artifact.stream, &withdrawn).unwrap();
+    assert!(matches!(
+        repo.promote_metrics("stale", 0, &report.id, policy("mae", None, Some(1.)), 2101),
+        Err(Error::Conflict(_))
+    ));
+    let revised = repo
+        .evaluate_task(&artifact.id, EvaluationTask::Regression, 2101)
+        .unwrap();
+    assert_eq!(revised.audited_samples, test.len() - 1);
+    assert_eq!(revised.metrics["mae"], 2. / (test.len() - 1) as f64);
+    assert_ne!(revised.truth_digest, report.truth_digest);
+    repo.promote_metrics(
+        "revised",
+        0,
+        &revised.id,
+        policy("mae", None, Some(1.)),
+        2102,
+    )
+    .unwrap();
+}
+
+#[test]
 fn outcome_horizon_and_feature_overlap_are_purged() {
     let dir = tempfile::tempdir().unwrap();
     let repo = TrainingRepository::open(dir.path().join("ledger.sqlite")).unwrap();

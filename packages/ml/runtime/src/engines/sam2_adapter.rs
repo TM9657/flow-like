@@ -12,6 +12,28 @@ pub fn publish_sam2_source(
     at_ms: i64,
 ) -> Result<PretrainedSource> {
     repository.writable()?;
+    publish_bundle(
+        repository,
+        project_id,
+        directory,
+        origin,
+        maximum_bytes,
+        at_ms,
+        None,
+    )
+}
+
+/// Packing and verifying a large bundle takes seconds, so a fine-tune cancelled meanwhile
+/// is caught right before its weights are registered.
+fn publish_bundle(
+    repository: &TrainingRepository,
+    project_id: &str,
+    directory: &Path,
+    origin: Value,
+    maximum_bytes: u64,
+    at_ms: i64,
+    cancellation: Option<&burn::CancellationToken>,
+) -> Result<PretrainedSource> {
     let bytes =
         burn_adapter::pack_named(directory, burn::SAM2_MANIFEST_FILE, false, maximum_bytes)?;
     let snapshot = tempfile::tempdir()?;
@@ -24,6 +46,9 @@ pub fn publish_sam2_source(
     let state: Value =
         serde_json::from_slice(&fs::read(snapshot.path().join(burn::SAM2_MANIFEST_FILE))?)?;
     let manifest = source_manifest(&state)?;
+    if cancellation.is_some_and(|token| token.is_cancelled()) {
+        return Err(Error::Cancelled);
+    }
     repository.register_pretrained_source(
         project_id,
         &bytes,
@@ -162,13 +187,14 @@ pub fn fine_tune_sam2_source(
     let mut origin = origin;
     origin["initialization_source_id"] = Value::String(source.id);
     origin["initialization_blob_sha256"] = Value::String(source.blob.sha256);
-    let source = publish_sam2_source(
+    let source = publish_bundle(
         repository,
         project_id,
         target_directory.path(),
         origin,
         maximum_bytes,
         at_ms,
+        Some(cancellation),
     )?;
     Ok(Sam2FineTuneResult {
         source,
@@ -296,6 +322,19 @@ mod tests {
     use super::*;
 
     fn fixture(repository: &TrainingRepository, directory: &Path) -> PretrainedSource {
+        write_bundle(directory);
+        publish_sam2_source(
+            repository,
+            "project-a",
+            directory,
+            serde_json::json!({"source":"test"}),
+            1024 * 1024,
+            10,
+        )
+        .unwrap()
+    }
+
+    fn write_bundle(directory: &Path) {
         let model = serde_json::json!({"variant":"hiera_tiny"});
         fs::create_dir_all(directory.join("sam2-checkpoint-test")).unwrap();
         fs::write(
@@ -315,15 +354,42 @@ mod tests {
             serde_json::to_vec(&state).unwrap(),
         )
         .unwrap();
-        publish_sam2_source(
-            repository,
-            "project-a",
-            directory,
-            serde_json::json!({"source":"test"}),
-            1024 * 1024,
-            10,
-        )
-        .unwrap()
+    }
+
+    #[test]
+    fn cancelled_fine_tunes_never_register_their_packed_bundle() {
+        let root = tempfile::tempdir().unwrap();
+        let repository = TrainingRepository::open(root.path().join("training.sqlite")).unwrap();
+        let directory = root.path().join("model");
+        write_bundle(&directory);
+        let publish = |token: Option<&burn::CancellationToken>| {
+            publish_bundle(
+                &repository,
+                "project-a",
+                &directory,
+                serde_json::json!({"source":"test"}),
+                1024 * 1024,
+                10,
+                token,
+            )
+        };
+        let cancelled = burn::CancellationToken::new();
+        cancelled.cancel();
+        assert!(matches!(publish(Some(&cancelled)), Err(Error::Cancelled)));
+        assert!(
+            repository
+                .list_pretrained_sources("project-a", 10)
+                .unwrap()
+                .is_empty()
+        );
+        publish(Some(&burn::CancellationToken::new())).unwrap();
+        assert_eq!(
+            repository
+                .list_pretrained_sources("project-a", 10)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]

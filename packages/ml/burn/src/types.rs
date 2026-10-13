@@ -715,14 +715,21 @@ fn default_clip() -> f32 {
 }
 impl TrainingConfig {
     pub fn validate(&self) -> Result<()> {
-        self.recipe.validate()?;
+        self.validate_stored()?;
         if let Recipe::MaskRcnn { config } = &self.recipe {
-            if self.batch_size > 32 {
-                return Err(Error::Invalid(
-                    "Mask R-CNN batches are limited to 32 images".into(),
-                ));
-            }
             validate_mask_rcnn_roi_budget(config, self.batch_size)?;
+        }
+        Ok(())
+    }
+
+    /// The checks a saved model's configuration must pass to load. Training budgets stay in
+    /// validate(), so a model trained before a budget existed still loads.
+    pub fn validate_stored(&self) -> Result<()> {
+        self.recipe.validate()?;
+        if self.recipe.is_instance_segmentation() && self.batch_size > 32 {
+            return Err(Error::Invalid(
+                "Mask R-CNN batches are limited to 32 images".into(),
+            ));
         }
         if self.epochs == 0
             || self.epochs > 1_000_000
@@ -766,9 +773,9 @@ pub(crate) fn mask_rcnn_roi_elements(config: &crate::MaskRcnnConfig, rois: usize
 }
 
 pub(crate) fn instance_mask_elements(instances: &[crate::InstanceTarget]) -> Option<usize> {
-    instances
-        .iter()
-        .try_fold(0usize, |total, instance| total.checked_add(instance.mask.values.len()))
+    instances.iter().try_fold(0usize, |total, instance| {
+        total.checked_add(instance.mask.values.len())
+    })
 }
 
 fn validate_mask_rcnn_roi_budget(config: &crate::MaskRcnnConfig, batch_size: usize) -> Result<()> {
@@ -978,6 +985,18 @@ mod tests {
             ..Default::default()
         };
         assert!(mask_rcnn(oversized, 1).validate().is_err());
+    }
+
+    #[test]
+    fn stored_configs_skip_the_training_roi_budget_but_keep_their_limits() {
+        let config = crate::MaskRcnnConfig::default();
+        let over_budget = mask_rcnn(config.clone(), 21);
+        assert!(over_budget.validate().is_err());
+        assert!(over_budget.validate_stored().is_ok());
+        assert!(mask_rcnn(config.clone(), 33).validate_stored().is_err());
+        let mut no_epochs = mask_rcnn(config, 1);
+        no_epochs.epochs = 0;
+        assert!(no_epochs.validate_stored().is_err());
     }
 
     #[test]

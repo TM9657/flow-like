@@ -276,7 +276,8 @@ pub fn stft(
                 .iter()
                 .enumerate()
                 .map(|(k, v)| {
-                    v.norm_sqr() * one_sided_factor(k, window_samples) / squared_length
+                    v.norm_sqr() * one_sided_factor(k, window_samples)
+                        / squared_length
                         / mean_square
                 })
                 .collect(),
@@ -422,13 +423,7 @@ mod tests {
 
     #[test]
     fn flat_windows_have_no_shape_or_spectral_features_at_any_level() {
-        for (level, len) in [
-            (0.1, 3),
-            (0.1, 3000),
-            (5.0, 3000),
-            (-1e-9, 1000),
-            (0.0, 64),
-        ] {
+        for (level, len) in [(0.1, 3), (0.1, 3000), (5.0, 3000), (-1e-9, 1000), (0.0, 64)] {
             let features = window_features(&vec![level; len], 100.0).unwrap();
             assert_eq!(features.mean, level);
             assert_eq!(features.standard_deviation, 0.0);

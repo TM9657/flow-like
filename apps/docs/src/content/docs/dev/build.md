@@ -117,34 +117,86 @@ runs `apps/desktop/scripts/sync-version.ts` explicitly. It does not install the
 desktop workspace, so it cannot rely on the desktop postinstall script to
 synchronize versions.
 
-## Build and upgrade Flows Word
+## Build and upgrade the file editors
 
-Flows Word uses the WordCraft runtime. Web and desktop development and build
-scripts prepare it automatically. The first run downloads the pinned source and
-builds it with Rust's `wasm32-unknown-unknown` target and the matching
-`wasm-bindgen` CLI.
-Later runs reuse verified assets from `target/wordcraft`. Generated files in
-each app's `public/wordcraft` directory are excluded from Git. The browser
-loads them only when a DOCX file opens.
+Web and desktop development and build scripts prepare the pinned Storytold
+editor runtimes automatically. Development starts the app immediately and prepares
+missing runtimes in the background. Progress and failures are logged in
+`target/craft-viewers/development/build.log`. Production builds wait for all
+runtimes. The first run downloads their source and builds
+it with Rust's `wasm32-unknown-unknown` target and the matching `wasm-bindgen`
+CLI. This is a substantial build. Later runs reuse verified assets from
+`target/wordcraft` and `target/craft-viewers`. Generated files in each app's
+`public/wordcraft` and `public/craft` directories are excluded from Git.
 
-To upgrade WordCraft, update `packages/wordcraft/upstream.json` with the exact
-upstream commit, its workspace version, and the `wasm-bindgen` version from
-its `Cargo.lock`. Then run from the repository root:
+The browser loads only the selected viewer. PDFs and common media files use
+native previews and load their editing runtime after **Edit**. The
+container builds prepare these same assets before building the Next.js export.
+WASM payloads are compressed and split into files below the static hosting size
+limit; the host verifies their hashes before loading them.
+
+Each integration keeps its source pin and adapter separate from the upstream
+repository. WordCraft lives in `packages/wordcraft`; the other adapters live in
+`packages/craft-viewers/<runtime>`. To upgrade one, update its `upstream.json`
+with the exact commit, workspace version and `wasm-bindgen` version from the
+upstream `Cargo.lock`. Review changes to its readers and writers before changing
+the format registry in `packages/ui/components/storage/craft-viewers.ts`.
 
 ```bash
-bun run build:wordcraft
+# Build the complete suite, or just one runtime.
+bun run build:craft-viewers
+node packages/craft-viewers/build-runtime.mjs gridcraft
+
+# Validate storage controls, routing and the iframe protocol.
+bun run test:craft-viewers
 bun run test:wordcraft
+
+# Exercise the actual WASM readers and writers in Chrome.
+bun tests/craft-browser/verify.ts
+bun tests/craft-office-browser/verify.ts
+bun tests/craft-media-browser/verify.ts
+bun tests/craft-image-browser/verify.ts
 ```
 
-The host adapter lives separately in `packages/wordcraft`. The build checks
-the upstream integration points and fails if they have changed, so an upgrade
-cannot silently skip a required patch. The tests cover the storage controls,
-message protocol, and a browser round trip through viewing, editing, saving
-the selected file, and reopening it. Install the test browser with
-`bunx puppeteer browsers install chrome`, or set `CHROME_PATH` to an existing
-Chrome executable. Review representative documents in Microsoft Word after an
-upgrade, especially documents with complex layouts. DOCX editing remains
-experimental; saving updates the selected file.
+The adapters apply checked patches to known integration points. Builds fail if
+those points have changed, so upgrades require review. `CRAFT_SOURCE_GRIDCRAFT`
+(and the equivalent variable for another runtime) can select a local checkout
+at the pinned revision. Builds rewrite the adapter-owned integration files in
+that checkout. Leave it unset for an isolated checkout under `target`.
+
+Each runtime includes a license page at `/craft/<runtime>/licenses/index.html`
+or `/wordcraft/licenses/index.html`, available from its **About** button. Keep
+the complete `licenses` directory with the runtime in both web and desktop
+distributions. It contains dependency and asset notices, license texts, and
+exact MPL source archives as `.crate` files (gzip-compressed tar archives).
+MPL-covered files retain those terms; other files keep their stated licenses.
+Flow-Like's license does not restrict rights granted by third-party licenses.
+
+Normal builds run `cargo tree --offline --locked --target wasm32-unknown-unknown`
+with normal dependency edges and the runtime's build feature flags. The generated
+`licenses/manifest.json` records the resolved dependencies, selected licenses,
+source locations and registry source checksums. Reviewed SPDX license choices
+live in `packages/craft-viewers/licenses.mjs`. When a package omits notices,
+`packages/craft-viewers/license-data/overrides.json` supplies them for an exact
+`package@version`, with pinned upstream sources. It also records obligations
+disclosed in upstream notices that are missing from Cargo's license field.
+
+Builds stop for missing or unreviewed license expressions, missing notice texts,
+unavailable checksum-verified MPL archives, or local changes to MPL dependencies.
+To ship a modified MPL dependency, extend the packaging to include its modified
+source; the current check rejects it instead of publishing the original archive.
+Review dependency and embedded-asset changes during each upgrade, including
+changes that pass these checks. Update license choices or pinned notice overrides
+only after reviewing their terms, then rebuild and check the generated page and
+source downloads. These checks cover license packaging; they do not establish
+codec patent clearance.
+
+Install the test browser with `bunx puppeteer browsers install chrome`, or set
+`CHROME_PATH` to an existing Chrome executable. Video browser tests also require
+`ffmpeg` and `ffprobe` on `PATH`. Review representative saved files
+in their original applications after an upgrade, including complex formatting,
+formulas, layers and codec-dependent media. Browser smoke tests establish that
+imports and exports run; they do not establish complete format fidelity.
 
 ## Other useful tasks
 

@@ -39,7 +39,7 @@ export default function Page() {
 			appId={id ?? ""}
 			prefix={decodeURIComponent(prefix)}
 			fileToUrl={fileToUrl}
-			enableDocx
+			enableCraftEditors
 			canWrite={canWrite}
 			updatePrefix={(prefix) => {
 				router.push(

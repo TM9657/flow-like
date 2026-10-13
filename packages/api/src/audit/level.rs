@@ -227,6 +227,7 @@ mod tests {
         ("execution.event.start", AuditLevel::Verbose),
         ("file.access.authorize", AuditLevel::Verbose),
         ("file.delete", AuditLevel::Standard),
+        ("file.rename", AuditLevel::Standard),
         ("file.upload.authorize", AuditLevel::Standard),
         ("graph.edges.upsert", AuditLevel::Verbose),
         ("graph.nodes.upsert", AuditLevel::Verbose),

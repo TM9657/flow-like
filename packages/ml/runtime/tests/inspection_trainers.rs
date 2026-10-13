@@ -1,10 +1,10 @@
 #![cfg(all(feature = "native", feature = "burn"))]
 use flow_like_ml_burn as burn;
 use flow_like_ml_core::{
-    Annotation, BoundingBox, ComputeBackend, ComputeConfig, InstanceMask, LabelProvenance, Sample,
-    TensorData,
+    Annotation, BoundingBox, ComputeBackend, ComputeConfig, InspectionSpec, InstanceMask,
+    LabelProvenance, Sample, TaskKind, TensorData,
 };
-use flow_like_ml_runtime::{engines::*, worker::TrainingWorker, *};
+use flow_like_ml_runtime::{auto_training::*, engines::*, worker::TrainingWorker, *};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -203,6 +203,183 @@ fn assert_durable_inference(
     let second = load_artifact_predictions(&reopened, &artifact.id, &input, &compute()).unwrap();
     assert_eq!(first, second, "Reloaded adapter output changed");
     (dir, reopened, artifact, first)
+}
+
+fn inspection(kind: &str) -> InspectionSpec {
+    let (task, labels) = match kind {
+        "yolox" => (TaskKind::ObjectDetection, vec!["defect"]),
+        "unet" => (TaskKind::Segmentation, vec!["background", "defect"]),
+        "mask_rcnn" => (TaskKind::InstanceSegmentation, vec!["defect"]),
+        _ => unreachable!(),
+    };
+    InspectionSpec {
+        id: format!("{kind}-search"),
+        description: format!("{kind} controller fixture"),
+        task,
+        labels: labels.into_iter().map(String::from).collect(),
+        input_shape: vec![1, 32, 32],
+        prediction_horizon_ms: None,
+        minimum_examples: 2,
+        minimum_examples_per_class: 1,
+    }
+}
+
+/// Reviewed fixtures split 6/3/3, so validation and the final audit have audited truth.
+fn search_experiment(kind: &str) -> (tempfile::TempDir, TrainingRepository, Experiment) {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = TrainingRepository::open(dir.path().join("training.sqlite")).unwrap();
+    let key = StreamKey {
+        project_id: "factory".into(),
+        stream_id: kind.into(),
+        inspection_version: "search-v1".into(),
+    };
+    let rows = (0..12)
+        .map(|index| {
+            let sample = Sample {
+                provenance: LabelProvenance::Reviewed {
+                    reviewer: "fixture".into(),
+                    reviewed_at_ms: index as i64,
+                },
+                ..sample(index, kind)
+            };
+            let row = TrainingSample {
+                id: sample.id.clone(),
+                annotation_revision: 1,
+                group_id: sample.group_id.clone(),
+                captured_at_ms: sample.timestamp_ms,
+                label_available_at_ms: sample.timestamp_ms,
+                content_digest: format!(
+                    "{:x}",
+                    Sha256::digest(serde_json::to_vec(&sample.input).unwrap())
+                ),
+                source: LabelSource::Reviewed,
+                accepted: true,
+                payload: serde_json::to_value(&sample).unwrap(),
+            };
+            repo.record_sample(&key, &row).unwrap();
+            row
+        })
+        .collect::<Vec<_>>();
+    let snapshot = repo
+        .import_experiment_snapshot(DatasetSnapshot {
+            id: String::new(),
+            digest: String::new(),
+            stream: key.clone(),
+            as_of_ms: 1000,
+            cutoff_sequence: rows.len() as i64,
+            policy: split(),
+            train: rows[..6].to_vec(),
+            validation: rows[6..9].to_vec(),
+            test: rows[9..].to_vec(),
+            excluded: vec![],
+        })
+        .unwrap();
+    let spec = inspection(kind);
+    let mut goals = default_goals(&spec);
+    goals.minimum_audited_samples = 1;
+    let experiment = repo
+        .create_experiment(
+            ExperimentRequest {
+                stream: key,
+                snapshot_id: snapshot.id,
+                spec: serde_json::to_value(&spec).unwrap(),
+                candidates: vec![request(kind)],
+                goals,
+                budget: ExperimentBudget::default(),
+                source_table_versions: vec![],
+                created_tables: vec![],
+                updated_table_versions: vec![],
+                preprocessing_manifest: json!({}),
+                context: json!({}),
+            },
+            now_ms(),
+        )
+        .unwrap();
+    (dir, repo, experiment)
+}
+
+#[test]
+fn vision_search_validates_and_audits_detection_and_segmentation_models() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    for (kind, validation_keys) in [
+        (
+            "yolox",
+            vec![
+                "mean_average_precision",
+                "support/0",
+                "recall/0",
+                "average_precision/0",
+            ],
+        ),
+        (
+            "unet",
+            vec![
+                "mean_iou",
+                "mean_dice",
+                "iou/0",
+                "iou/1",
+                "dice/0",
+                "dice/1",
+            ],
+        ),
+        (
+            "mask_rcnn",
+            vec![
+                "mask_mean_average_precision",
+                "mask_mean_iou",
+                "support/0",
+                "recall/0",
+                "mask_iou/0",
+            ],
+        ),
+    ] {
+        let (_dir, repo, experiment) = search_experiment(kind);
+        let mut worker = TrainingWorker::new(
+            repo.clone(),
+            experiment.request.budget.worker_limits.clone(),
+        )
+        .unwrap();
+        register_burn_engine(&mut worker).unwrap();
+        let result = AutoTrainingController::new(repo.clone(), worker)
+            .run(&experiment.id)
+            .unwrap();
+        let trial = repo
+            .list_experiment_trials(&experiment.id)
+            .unwrap()
+            .remove(0);
+        assert_eq!(
+            trial.status,
+            ExperimentTrialStatus::Validated,
+            "{kind}: {:?}",
+            trial.error
+        );
+        for key in validation_keys {
+            assert!(
+                trial.validation_metrics.contains_key(key),
+                "{kind} validation lacks {key}: {:?}",
+                trial.validation_metrics
+            );
+        }
+        // Empty predicted instance masks score as false positives, so every audit completes.
+        assert_eq!(
+            result.status,
+            ExperimentStatus::Completed,
+            "{kind}: {:?}",
+            result.stop_reason
+        );
+        assert_eq!(result.selected_trial_id.as_deref(), Some(trial.id.as_str()));
+        let evaluation = repo
+            .get_evaluation(result.final_evaluation_id.as_ref().unwrap())
+            .unwrap();
+        assert_eq!(evaluation.audited_samples, 3, "{kind}");
+        assert!(
+            evaluation
+                .metrics
+                .contains_key(&experiment.request.goals.primary_metric),
+            "{kind}: {:?}",
+            evaluation.metrics
+        );
+    }
 }
 
 #[test]

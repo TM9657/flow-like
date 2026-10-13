@@ -273,7 +273,9 @@ impl eframe::App for Host {
             }
         }
         if self.opened {
-            deckcraft_ui_egui::SlideApp_LOGIC
+            if !self.read_only {
+                self.app.logic(ctx);
+            }
         }
         self.report_dirty();
     }

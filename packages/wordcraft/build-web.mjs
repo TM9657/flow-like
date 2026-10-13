@@ -14,6 +14,11 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
+import {
+	assertNoBrandArtwork,
+	bundleLicenses,
+	hashLicenseInputs,
+} from "../craft-viewers/licenses.mjs";
 import { wasmLinkerEnvironment } from "../device-crypto/build-web.mjs";
 
 const directory = dirname(fileURLToPath(import.meta.url));
@@ -51,6 +56,7 @@ for (const name of [
 	"rust-toolchain.toml",
 ])
 	hash.update(name).update(readFileSync(join(root, name)));
+hashLicenseInputs(hash);
 const fingerprint = hash.digest("hex");
 const stampPath = join(output, "runtime.json");
 const targets = ["apps/web/public/wordcraft", "apps/desktop/public/wordcraft"];
@@ -381,6 +387,7 @@ if (!cached()) {
 	// chunks leave room for upstream growth without changing hosting configuration.
 	const wasmPath = join(output, "wordcraft_bg.wasm");
 	const wasmBytes = readFileSync(wasmPath);
+	assertNoBrandArtwork(source, wasmBytes);
 	const compressed = gzipSync(wasmBytes, { level: 9 });
 	const wasm = {
 		compression: "gzip",
@@ -418,6 +425,7 @@ if (!cached()) {
 		name.endsWith(".txt"),
 	))
 		cpSync(join(source, "assets/fonts", name), join(licenses, name));
+	bundleLicenses({ source, output, pin, cargoPackage: "wordcraft-web", env });
 	const files = {};
 	for (const name of readdirSync(output, { recursive: true })) {
 		if (name === "runtime.json") continue;

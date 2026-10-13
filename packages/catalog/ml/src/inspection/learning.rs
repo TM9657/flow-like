@@ -1,4 +1,8 @@
 use super::auto_training::{AutoTrainRequest, AutoTrainingResult};
+#[cfg(feature = "training")]
+use super::cancellation::{CancelFlag, CancelOnDrop};
+#[cfg(feature = "training")]
+use flow_like::flow::execution::LogLevel;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
@@ -108,6 +112,25 @@ pub struct LearningRouteRequest {
     pub sample_id: String,
 }
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RollbackLearningModelRequest {
+    pub project_id: String,
+    /// The active model to roll back. Repeating the request after it was rolled back returns the
+    /// current deployment instead of restoring that model again.
+    #[serde(default)]
+    pub expected_artifact_id: Option<String>,
+    /// Deployment generation the caller observed. The rollback fails when the deployment changed.
+    #[serde(default)]
+    pub expected_generation: Option<i64>,
+}
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RejectLearningCandidateRequest {
+    pub project_id: String,
+    /// Learning project generation the caller observed. The rejection fails when the project
+    /// changed in the meantime.
+    #[serde(default)]
+    pub expected_generation: Option<i64>,
+}
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
 pub struct LearningProjectResult {
     pub project: LearningProject,
     pub next_actions: LearningNextActions,
@@ -195,11 +218,12 @@ async fn create(
     goals.minimum_audited_samples = goals
         .minimum_audited_samples
         .max(request.policy.minimum_audit_samples);
-    if request.automatic_promotion && goals.bounds.is_empty() {
+    if goals.bounds.is_empty() {
         return Err(anyhow!(
-            "Automatic promotion requires explicit quality bounds"
+            "Learning projects require explicit quality bounds; set training.goals.bounds"
         ));
     }
+    flow_like_ml_runtime::auto_training::validate_goals(spec, &goals)?;
     let stream = super::lifecycle::InspectionContext {
         stream_id: format!("learning:{}", uuid::Uuid::new_v4()),
         spec: spec.clone(),
@@ -240,6 +264,18 @@ async fn observe(
         return Err(anyhow!(
             "An observation batch may contain at most 4096 rows"
         ));
+    }
+    let project = repo.get_learning_project(&request.project_id)?;
+    // Canary replay rebuilds candidate traffic and window history from each raw row.
+    if project.request.policy.canary_fraction > 0. {
+        let mapping = training_template(&project)?.dataset.mapping;
+        for observation in &request.observations {
+            inference::validate_canary_sample(
+                observation,
+                &mapping,
+                &project.request.stream.stream_id,
+            )?;
+        }
     }
     for observation in request.observations {
         repo.record_learning_observation(&request.project_id, &observation)?;
@@ -340,12 +376,43 @@ async fn route(
 #[cfg(feature = "training")]
 async fn rollback(
     context: &mut ExecutionContext,
-    request: LearningProjectId,
+    request: RollbackLearningModelRequest,
 ) -> Result<LearningProjectResult> {
     let repo = project_repository(context, &request.project_id)?;
-    repo.rollback_learning_project(
+    let at_ms = flow_like_ml_runtime::now_ms();
+    match (&request.expected_artifact_id, request.expected_generation) {
+        (Some(_), Some(_)) => {
+            return Err(anyhow!(
+                "Rollback Learning Model accepts expected_artifact_id or expected_generation, not both"
+            ));
+        }
+        (Some(artifact_id), None) => {
+            repo.rollback_learning_project_from(&request.project_id, artifact_id, at_ms)?;
+        }
+        (None, Some(generation)) => {
+            repo.rollback_learning_project(&request.project_id, generation, at_ms)?;
+        }
+        (None, None) => {
+            let project = repo.get_learning_project(&request.project_id)?;
+            repo.rollback_learning_project(
+                &request.project_id,
+                deployment_generation(&repo, &project)?,
+                at_ms,
+            )?;
+        }
+    }
+    result(&repo, &request.project_id)
+}
+
+#[cfg(feature = "training")]
+async fn reject(
+    context: &mut ExecutionContext,
+    request: RejectLearningCandidateRequest,
+) -> Result<LearningProjectResult> {
+    let repo = project_repository(context, &request.project_id)?;
+    repo.reject_learning_candidate(
         &request.project_id,
-        deployment_generation(&repo, &repo.get_learning_project(&request.project_id)?)?,
+        request.expected_generation,
         flow_like_ml_runtime::now_ms(),
     )?;
     result(&repo, &request.project_id)
@@ -363,6 +430,59 @@ fn deployment_generation(
     }
 }
 
+/// The ledger's run lock for `learning:{project}`, at the path the runtime's LocalRunLock uses
+/// for that key. `None` while another step of the project holds it, in any process.
+#[cfg(feature = "training")]
+fn try_lock_learning_project(
+    repo: &flow_like_ml_runtime::TrainingRepository,
+    project_id: &str,
+) -> Result<Option<std::fs::File>> {
+    let database = repo.path().canonicalize()?;
+    let directory = database
+        .parent()
+        .ok_or_else(|| {
+            anyhow!(
+                "Training ledger {} has no parent directory",
+                database.display()
+            )
+        })?
+        .join(".training-locks");
+    std::fs::create_dir_all(&directory)?;
+    if !std::fs::symlink_metadata(&directory)?.is_dir() {
+        return Err(anyhow!(
+            "Training lock directory {} must be a real directory",
+            directory.display()
+        ));
+    }
+    let mut identity = database.as_os_str().as_encoded_bytes().to_vec();
+    identity.push(0);
+    identity.extend_from_slice(format!("learning:{project_id}").as_bytes());
+    let path = directory.join(format!(
+        "{}.lock",
+        flow_like_ml_core::content_digest(&identity)
+    ));
+    if std::fs::symlink_metadata(&path).is_ok_and(|metadata| !metadata.is_file()) {
+        return Err(anyhow!(
+            "Training lock {} must be a regular file",
+            path.display()
+        ));
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)?;
+    match file.try_lock() {
+        Ok(()) => Ok(Some(file)),
+        Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+        Err(std::fs::TryLockError::Error(error)) => Err(anyhow!(
+            "Could not lock learning project {project_id} at {}: {error}",
+            path.display()
+        )),
+    }
+}
+
 /// Prepare at most one experiment. A workflow timer can call this again after new evidence arrives.
 #[cfg(feature = "training")]
 pub async fn prepare_learning_cycle(
@@ -372,6 +492,10 @@ pub async fn prepare_learning_cycle(
     use super::auto_training_tables::{PinnedTableSource, TableLabelOverride};
     use flow_like_ml_runtime::{LabelSource, now_ms};
     let repo = project_repository(context, id)?;
+    // An overlapping step would re-read the sources and import another snapshot.
+    let Some(_preparing) = try_lock_learning_project(&repo, id)? else {
+        return result(&repo, id);
+    };
     let project = repo.get_learning_project(id)?;
     if matches!(
         project.state,
@@ -535,6 +659,7 @@ fn audit_champion(
     repo: &flow_like_ml_runtime::TrainingRepository,
     project: &LearningProject,
     cycle: &LearningCycle,
+    cancel: &CancelFlag,
 ) -> Result<()> {
     use flow_like_ml_runtime::{
         ExperimentResult,
@@ -546,6 +671,36 @@ fn audit_champion(
     if cycle.artifact_id.as_ref() == Some(artifact_id) {
         return Ok(());
     }
+    let recorded: std::collections::HashSet<_> = repo
+        .predictions(artifact_id)?
+        .into_iter()
+        .map(|prediction| prediction.sample_id)
+        .collect();
+    // The comparison reads champion predictions for the sealed audit samples only.
+    if cycle
+        .audit_sample_ids
+        .iter()
+        .all(|sample_id| recorded.contains(sample_id))
+    {
+        return Ok(());
+    }
+    let template = training_template(project)?;
+    let limit_ms = template.budget.worker_limits.maximum_duration_ms;
+    let started = std::time::Instant::now();
+    let check = || -> Result<()> {
+        if cancel.is_cancelled() {
+            return Err(anyhow!(
+                "Champion audit replay was cancelled; recorded predictions resume on the next step"
+            ));
+        }
+        if started.elapsed().as_millis() > u128::from(limit_ms) {
+            return Err(anyhow!(
+                "Champion audit replay exceeded its {limit_ms} ms step budget; recorded predictions resume on the next step"
+            ));
+        }
+        Ok(())
+    };
+    check()?;
     let experiment_id = cycle
         .experiment_id
         .as_ref()
@@ -584,16 +739,7 @@ fn audit_champion(
     let inputs = super::auto_training_tables::transform_table_rows(
         &preprocessing,
         &rows,
-        training_template(project)?
-            .dataset
-            .budget
-            .maximum_tensor_elements,
-    )?;
-    let compute = training_template(project)?.compute;
-    let mut predictor = super::auto_training_legacy::CatalogSearchPredictorFactory.load(
-        repo,
-        artifact_id,
-        &compute,
+        template.dataset.budget.maximum_tensor_elements,
     )?;
     let mut anomaly_scale = 1.;
     for previous in repo.learning_cycles(&project.id)? {
@@ -615,15 +761,12 @@ fn audit_champion(
             }
         }
     }
-    let recorded: std::collections::HashSet<_> = repo
-        .predictions(artifact_id)?
-        .into_iter()
-        .map(|prediction| prediction.sample_id)
-        .collect();
+    let mut predictor = None;
     for (row, input) in snapshot.test.iter().zip(inputs) {
         if recorded.contains(&row.id) {
             continue;
         }
+        check()?;
         let mut prepared = row.clone();
         spec.input_shape = input.shape.clone();
         let sample_payload = if prepared.payload.get("sample").is_some() {
@@ -634,8 +777,20 @@ fn audit_champion(
         sample_payload["input"] = json!(input);
         let mut batched = input;
         batched.shape.insert(0, 1);
-        let started = std::time::Instant::now();
-        let output = predictor.predict(&batched)?;
+        if predictor.is_none() {
+            predictor = Some(
+                super::auto_training_legacy::CatalogSearchPredictorFactory.load(
+                    repo,
+                    artifact_id,
+                    &template.compute,
+                )?,
+            );
+        }
+        let model = predictor
+            .as_mut()
+            .ok_or_else(|| anyhow!("Champion model {artifact_id} is not loaded"))?;
+        let predicted = std::time::Instant::now();
+        let output = model.predict(&batched)?;
         let record = prediction_record_from_output(
             &prepared,
             &spec,
@@ -643,11 +798,70 @@ fn audit_champion(
             artifact_id,
             &output,
             anomaly_scale,
-            started.elapsed().as_secs_f64() * 1000.,
+            predicted.elapsed().as_secs_f64() * 1000.,
         )?;
         repo.record_prediction(&record)?;
     }
     Ok(())
+}
+
+/// The executor drops a node future when its run is cancelled, before a select on the token
+/// can run, so the guard also stops the detached blocking work in that case.
+#[cfg(feature = "training")]
+async fn run_cancellable<T: Send + 'static>(
+    token: Option<flow_like_types::tokio_util::sync::CancellationToken>,
+    on_cancel: impl FnOnce() + Send + 'static,
+    cancelled: &str,
+    work: impl FnOnce() -> Result<T> + Send + 'static,
+) -> Result<T> {
+    let guard = CancelOnDrop::new(on_cancel);
+    let mut task = tokio::task::spawn_blocking(work);
+    let done = match token {
+        Some(token) => tokio::select! {
+            done = &mut task => done,
+            _ = token.cancelled() => {
+                drop(guard);
+                return Err(anyhow!("{cancelled}"));
+            }
+        },
+        None => task.await,
+    };
+    guard.disarm();
+    done?
+}
+
+/// Audit replays record one prediction at a time and stop before the next once cancelled.
+#[cfg(feature = "training")]
+async fn run_audit(
+    context: &ExecutionContext,
+    work: impl FnOnce(CancelFlag) -> Result<()> + Send + 'static,
+) -> Result<()> {
+    let cancel = CancelFlag::default();
+    let stop = cancel.clone();
+    run_cancellable(
+        context.get_cancellation_token(),
+        move || stop.cancel(),
+        "Learning audit replay was cancelled; recorded predictions resume on the next step",
+        move || work(cancel),
+    )
+    .await
+}
+
+/// A stopped experiment that cannot resume settles with its cycle, so the project can start
+/// another. Storage failures are retried by the next step instead.
+#[cfg(feature = "training")]
+fn settles_after_failed_resume(
+    status: flow_like_ml_runtime::ExperimentStatus,
+    error: &flow_like_types::Error,
+) -> bool {
+    use flow_like_ml_runtime::{Error, ExperimentStatus};
+    matches!(
+        status,
+        ExperimentStatus::Cancelled | ExperimentStatus::CancelRequested
+    ) && !matches!(
+        error.downcast_ref::<Error>(),
+        Some(Error::Sql(_) | Error::Io(_))
+    )
 }
 
 #[cfg(feature = "training")]
@@ -693,17 +907,34 @@ pub async fn finish_learning_cycle(
     if fresh.candidate_artifact_id != cycle.artifact_id {
         return result(&repo, id);
     }
-    let work_repo = repo.clone();
-    let work_project = fresh.clone();
-    let work_cycle = cycle.clone();
-    tokio::task::spawn_blocking(move || audit_champion(&work_repo, &work_project, &work_cycle))
-        .await??;
-    let comparison = repo.compare_learning_cycle(&cycle.id, now_ms())?;
+    let saved = match repo.get_learning_comparison(&cycle.id) {
+        Ok(saved) => Some(saved),
+        Err(flow_like_ml_runtime::Error::NotFound(_)) => None,
+        Err(error) => return Err(error.into()),
+    };
+    // A waiting candidate keeps its sealed comparison; promotion compares again before deciding.
+    let comparison = match saved
+        .filter(|_| matches!(fresh.state, LearningState::Shadow | LearningState::Canary))
+    {
+        Some(saved) => saved,
+        None => {
+            let work_repo = repo.clone();
+            let work_project = fresh.clone();
+            let work_cycle = cycle.clone();
+            run_audit(context, move |cancel| {
+                audit_champion(&work_repo, &work_project, &work_cycle, &cancel)
+            })
+            .await?;
+            repo.compare_learning_cycle(&cycle.id, now_ms())?
+        }
+    };
     if comparison.eligible && fresh.state == LearningState::Canary {
         let work_repo = repo.clone();
         let work_project = fresh.clone();
-        tokio::task::spawn_blocking(move || inference::audit_canary(&work_repo, &work_project))
-            .await??;
+        run_audit(context, move |cancel| {
+            inference::audit_canary(&work_repo, &work_project, &cancel)
+        })
+        .await?;
         if repo.get_learning_project(id)?.candidate_artifact_id != cycle.artifact_id {
             return result(&repo, id);
         }
@@ -746,32 +977,46 @@ async fn step(
     if prepared.project.state == LearningState::Paused {
         return Ok(prepared);
     }
-    if let Some(experiment) = prepared.experiment {
-        if matches!(
+    if let Some(experiment) = prepared.experiment
+        && matches!(
             experiment.status,
             ExperimentStatus::Running
                 | ExperimentStatus::Evaluating
                 | ExperimentStatus::Cancelled
                 | ExperimentStatus::CancelRequested
                 | ExperimentStatus::BudgetExhausted
-        ) && prepared.project.active_cycle_id.is_some()
-        {
-            let repo = project_repository(context, &request.project_id)?;
-            super::auto_training::resume_saved_experiment(&repo, &experiment.experiment_id)?;
-            let budget = repo
-                .get_experiment(&experiment.experiment_id)?
-                .request
-                .budget;
-            let controller = super::auto_training::controller(repo.clone(), &budget)?;
-            let id = experiment.experiment_id.clone();
-            let mut work = tokio::task::spawn_blocking(move || controller.run(&id));
-            if let Some(token) = context.get_cancellation_token() {
-                tokio::select! {done=&mut work=>{done??;},_ = token.cancelled()=>{repo.cancel_experiment(&experiment.experiment_id,now_ms())?;return Err(anyhow!("Learning cycle cancelled; its saved project can continue it later"));}}
-            } else {
-                work.await??;
-            }
-            super::auto_training::materialize_final_predictions(context, &experiment.experiment_id)
+        )
+        && prepared.project.active_cycle_id.is_some()
+    {
+        let repo = project_repository(context, &request.project_id)?;
+        let id = experiment.experiment_id;
+        match super::auto_training::resume_saved_experiment(&repo, &id) {
+            Ok(()) => {
+                let budget = repo.get_experiment(&id)?.request.budget;
+                let controller = super::auto_training::controller(repo.clone(), &budget)?;
+                let cancel_repo = repo.clone();
+                let cancel_id = id.clone();
+                let run_id = id.clone();
+                run_cancellable(
+                    context.get_cancellation_token(),
+                    move || {
+                        let _ = cancel_repo.cancel_experiment(&cancel_id, now_ms());
+                    },
+                    "Learning cycle cancelled; its saved project can continue it later",
+                    move || Ok(controller.run(&run_id)?),
+                )
                 .await?;
+                super::auto_training::materialize_final_predictions(context, &id).await?;
+            }
+            Err(error) if !settles_after_failed_resume(experiment.status, &error) => {
+                return Err(error);
+            }
+            Err(error) => context.log_message(
+                &format!(
+                    "Learning experiment {id} cannot resume; its cycle settles once the experiment has stopped: {error}"
+                ),
+                LogLevel::Warn,
+            ),
         }
     }
     finish_learning_cycle(context, &request.project_id).await
@@ -796,11 +1041,11 @@ async fn promote(
     let work_repo = repo.clone();
     let work_project = project.clone();
     let work_cycle = cycle.clone();
-    tokio::task::spawn_blocking(move || -> Result<()> {
-        audit_champion(&work_repo, &work_project, &work_cycle)?;
-        inference::audit_canary(&work_repo, &work_project)
+    run_audit(context, move |cancel| {
+        audit_champion(&work_repo, &work_project, &work_cycle, &cancel)?;
+        inference::audit_canary(&work_repo, &work_project, &cancel)
     })
-    .await??;
+    .await?;
     if repo
         .get_learning_project(&request.project_id)?
         .candidate_artifact_id
@@ -818,7 +1063,7 @@ async fn promote(
 }
 
 macro_rules! learning_node {
-    ($type:ident,$id:literal,$title:literal,$description:literal,$function:literal,$input:ty,$output:ty,$handler:ident) => {
+    ($type:ident,$id:literal,$title:literal,$description:literal,$function:literal,$input:ty,$output:ty,$handler:ident $(, version = $version:literal)?) => {
         #[flow_like_types::async_trait]
         impl NodeLogic for $type {
             fn get_node(&self) -> Node {
@@ -830,6 +1075,7 @@ macro_rules! learning_node {
                     "AI/ML/Continuous Learning",
                 );
                 node.set_long_running(true);
+                $(node.set_version($version);)?
                 node
             }
             async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
@@ -886,6 +1132,9 @@ pub struct PromoteLearningModelNode;
 pub struct RollbackLearningModelNode;
 #[crate::register_node]
 #[derive(Default)]
+pub struct RejectLearningCandidateNode;
+#[crate::register_node]
+#[derive(Default)]
 pub struct PauseLearningProjectNode;
 #[crate::register_node]
 #[derive(Default)]
@@ -902,7 +1151,8 @@ learning_node!(
     "createLearningProject",
     CreateLearningProjectRequest,
     LearningProjectResult,
-    create
+    create,
+    version = 1
 );
 learning_node!(
     GetLearningProjectNode,
@@ -912,17 +1162,19 @@ learning_node!(
     "getLearningProject",
     LearningProjectId,
     LearningProjectResult,
-    get
+    get,
+    version = 1
 );
 learning_node!(
     ObserveLearningSampleNode,
     "ml_observe_learning_sample",
     "Observe Learning Samples",
-    "Record sample predictions, embeddings and operating conditions for review and drift detection",
+    "Record sample predictions, embeddings and operating conditions for review and drift detection. With a positive canary fraction every observation needs its raw source row in sample",
     "observeLearningSamples",
     LearningObservationsRequest,
     LearningProjectResult,
-    observe
+    observe,
+    version = 1
 );
 learning_node!(
     ReviewLearningSampleNode,
@@ -932,7 +1184,8 @@ learning_node!(
     "reviewLearningSample",
     LearningReviewRequest,
     LearningProjectResult,
-    review
+    review,
+    version = 1
 );
 learning_node!(
     SelectSamplesForReviewNode,
@@ -962,7 +1215,8 @@ learning_node!(
     "notifyLearningProductChange",
     LearningProductChangeRequest,
     LearningProjectResult,
-    changed
+    changed,
+    version = 1
 );
 learning_node!(
     StepLearningProjectNode,
@@ -972,7 +1226,8 @@ learning_node!(
     "stepLearningProject",
     LearningProjectId,
     LearningProjectResult,
-    step
+    step,
+    version = 1
 );
 learning_node!(
     PromoteLearningModelNode,
@@ -982,17 +1237,29 @@ learning_node!(
     "promoteLearningModel",
     LearningProjectId,
     LearningProjectResult,
-    promote
+    promote,
+    version = 1
 );
 learning_node!(
     RollbackLearningModelNode,
     "ml_rollback_learning_model",
     "Rollback Learning Model",
-    "Restore the previous model in the project deployment",
+    "Restore the previous model in the project deployment. Pass the model being rolled back as expected_artifact_id so a repeated request cannot restore it",
     "rollbackLearningModel",
-    LearningProjectId,
+    RollbackLearningModelRequest,
     LearningProjectResult,
-    rollback
+    rollback,
+    version = 1
+);
+learning_node!(
+    RejectLearningCandidateNode,
+    "ml_reject_learning_candidate",
+    "Reject Learning Candidate",
+    "Discard the shadow or canary candidate without promoting it. The champion keeps serving, canary samples that judged the candidate stay sealed for audits and the next training cycle can start",
+    "rejectLearningCandidate",
+    RejectLearningCandidateRequest,
+    LearningProjectResult,
+    reject
 );
 learning_node!(
     PauseLearningProjectNode,
@@ -1002,7 +1269,8 @@ learning_node!(
     "pauseLearningProject",
     LearningProjectId,
     LearningProjectResult,
-    pause
+    pause,
+    version = 1
 );
 learning_node!(
     ResumeLearningProjectNode,
@@ -1012,7 +1280,8 @@ learning_node!(
     "resumeLearningProject",
     LearningProjectId,
     LearningProjectResult,
-    resume
+    resume,
+    version = 1
 );
 learning_node!(
     RouteLearningProjectNode,

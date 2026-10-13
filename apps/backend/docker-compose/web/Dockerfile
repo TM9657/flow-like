@@ -19,15 +19,19 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 WORKDIR /app
 COPY . .
 RUN rm -rf apps/web/public/device-crypto apps/desktop/public/device-crypto \
-    apps/web/public/wordcraft apps/desktop/public/wordcraft
+    apps/web/public/wordcraft apps/desktop/public/wordcraft \
+    apps/web/public/craft apps/desktop/public/craft
 RUN --mount=type=cache,target=/cargo-home,id=cargo-home-rust-beta-2026-09-27,sharing=shared \
     --mount=type=cache,target=/app/target,id=cargo-target-device-crypto-web-rust-beta-2026-09-27,sharing=locked \
     CARGO_HOME=/cargo-home node packages/device-crypto/build-web.mjs && \
-    CARGO_HOME=/cargo-home node packages/wordcraft/build-web.mjs && \
+    CARGO_HOME=/cargo-home node packages/craft-viewers/build-web.mjs && \
     test -s apps/web/public/device-crypto/flow_like_device_crypto_bg.wasm && \
     test -s apps/web/public/device-crypto/flow_like_device_crypto.js && \
     test -s apps/web/public/wordcraft/runtime.json && \
-    test -s apps/web/public/wordcraft/host.js
+    test -s apps/web/public/wordcraft/host.js && \
+    for runtime in packages/craft-viewers/*/upstream.json; do \
+      name=$(basename "$(dirname "$runtime")"); test -s "apps/web/public/craft/$name/runtime.json" || exit 1; \
+    done
 
 # ============================================================
 # Stage 2: Builder
@@ -47,7 +51,7 @@ WORKDIR /app
 # Use the reviewed root context so the frozen workspace graph includes locales,
 # widget SDK, root build scripts, and patched dependencies.
 COPY . .
-RUN rm -rf apps/web/public/device-crypto apps/web/public/wordcraft
+RUN rm -rf apps/web/public/device-crypto apps/web/public/wordcraft apps/web/public/craft
 RUN bun install --frozen-lockfile
 
 # Deployment URLs are public runtime settings, never image build arguments.
@@ -59,6 +63,7 @@ WORKDIR /app/apps/web
 RUN bun ../../scripts/sync-node-icons.ts
 COPY --from=device-crypto /app/apps/web/public/device-crypto /app/apps/web/public/device-crypto
 COPY --from=device-crypto /app/apps/web/public/wordcraft /app/apps/web/public/wordcraft
+COPY --from=device-crypto /app/apps/web/public/craft /app/apps/web/public/craft
 ARG TARGETARCH
 # TypeScript needs more than 4 GiB for the shared UI workspace. Keep the
 # limit configurable and reserve additional builder memory for native tooling.
@@ -70,7 +75,10 @@ RUN --mount=type=cache,id=flow-like-next-node24-next16-${TARGETARCH},target=/app
     /opt/node/bin/node /app/node_modules/next/dist/bin/next build --turbopack && \
     test -s out/device-crypto/flow_like_device_crypto_bg.wasm && \
     test -s out/wordcraft/runtime.json && \
-    test -s out/wordcraft/host.js
+    test -s out/wordcraft/host.js && \
+    for runtime in ../../packages/craft-viewers/*/upstream.json; do \
+      name=$(basename "$(dirname "$runtime")"); test -s "out/craft/$name/runtime.json" || exit 1; \
+    done
 
 # ============================================================
 # Stage 3: Runtime (nginx to serve static files)

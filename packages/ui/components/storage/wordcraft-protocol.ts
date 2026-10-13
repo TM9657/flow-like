@@ -5,7 +5,7 @@ export const MAX_DOCX_BYTES = 50 * 1024 * 1024;
 
 export type WordcraftMessage =
 	| { type: "ready" }
-	| { type: "opened" }
+	| { type: "opened"; warnings?: string[]; previewOnly?: boolean }
 	| { type: "save-request" }
 	| { type: "dirty"; dirty: boolean }
 	| { type: "error"; error: string; requestId?: string }
@@ -14,6 +14,7 @@ export type WordcraftMessage =
 			requestId: string;
 			bytes: ArrayBuffer;
 			revision: number;
+			warnings?: string[];
 	  };
 
 export function readWordcraftMessage(
@@ -21,21 +22,34 @@ export function readWordcraftMessage(
 	frame: Window | null,
 	origin: string,
 	session: string,
+	channel = WORDCRAFT_CHANNEL,
+	maxBytes = MAX_DOCX_BYTES,
 ): WordcraftMessage | null {
 	if (!frame || event.source !== frame || event.origin !== origin) return null;
 	const data = event.data;
 	if (
 		!data ||
 		typeof data !== "object" ||
-		data.channel !== WORDCRAFT_CHANNEL ||
+		data.channel !== channel ||
 		data.session !== session
 	)
 		return null;
+	const warnings = Array.isArray(data.warnings)
+		? data.warnings
+				.filter((value: unknown): value is string => typeof value === "string")
+				.slice(0, 8)
+				.map((value: string) => value.slice(0, 500))
+		: undefined;
 	switch (data.type) {
 		case "ready":
-		case "opened":
 		case "save-request":
 			return { type: data.type };
+		case "opened":
+			return {
+				type: "opened",
+				...(warnings?.length ? { warnings } : {}),
+				...(data.previewOnly === true ? { previewOnly: true } : {}),
+			};
 		case "dirty":
 			return typeof data.dirty === "boolean"
 				? { type: "dirty", dirty: data.dirty }
@@ -54,7 +68,7 @@ export function readWordcraftMessage(
 				typeof data.requestId !== "string" ||
 				!(data.bytes instanceof ArrayBuffer) ||
 				data.bytes.byteLength === 0 ||
-				data.bytes.byteLength > MAX_DOCX_BYTES ||
+				data.bytes.byteLength > maxBytes ||
 				!Number.isSafeInteger(data.revision) ||
 				data.revision < 0
 			)
@@ -64,6 +78,7 @@ export function readWordcraftMessage(
 				requestId: data.requestId,
 				bytes: data.bytes,
 				revision: data.revision,
+				...(warnings?.length ? { warnings } : {}),
 			};
 		default:
 			return null;

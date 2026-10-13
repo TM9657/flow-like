@@ -1,0 +1,11 @@
+{
+	"repository": "https://github.com/storytold/cadcraft.git",
+	"revision": "4cb9e8a535b2fc51799dc454099c644c235c3efd",
+	"version": "0.6.1",
+	"wasmBindgen": "0.2.129",
+	"cargoPackage": "cadcraft-web",
+	"label": "Flows CAD",
+	"canvasId": "craft_canvas",
+	"maxBytes": 104857600,
+	"extensions": ["dxf"]
+}
