@@ -14,6 +14,7 @@ WORKDIR /app
 
 # A Dockerfile RUN is `/bin/sh -c`, so `set -eu` has to be explicit for an
 # unresolved architecture to fail loudly instead of downloading nothing.
+# Vendored OpenSSL needs make and full Perl core modules; librdkafka uses CMake.
 RUN set -eu && \
     case "$TARGETARCH" in \
         amd64) onnx_arch=x64; onnx_sha="$ONNXRUNTIME_SHA256_AMD64"; protoc_arch=x86_64 ;; \
@@ -23,8 +24,11 @@ RUN set -eu && \
     yum update -y && \
     yum install -y \
         clang \
+        cmake \
         git \
         lld \
+        make \
+        perl \
         pkgconf-pkg-config \
         openssl-devel \
         libcurl-devel \

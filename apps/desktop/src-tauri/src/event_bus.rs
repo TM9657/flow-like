@@ -6,7 +6,7 @@ use crate::{
 use flow_like::app::App;
 use flow_like::flow::event::Event;
 use flow_like::flow::execution::rejection::{RejectedRun, RejectionStage};
-use flow_like::flow::execution::{InternalRun, LogMeta, UserExecutionContext};
+use flow_like::flow::execution::{InternalRun, LogMeta, RunStatus, UserExecutionContext};
 use flow_like::flow::oauth::OAuthToken;
 use flow_like::state::RunData;
 use flow_like::{flow::execution::RunPayload, state::FlowLikeState};
@@ -21,6 +21,31 @@ use tauri::{AppHandle, Manager};
 
 // Maximum number of events to queue. 100,000 should be plenty for local handling.
 const MAX_QUEUE_SIZE: usize = 100_000;
+
+/// Keeps an HTTP response tied to the whole execution, including setup and cleanup.
+pub(crate) struct EventRequestControl {
+    pub cancellation_token: CancellationToken,
+    completion: tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<bool>>>,
+}
+
+impl EventRequestControl {
+    pub(crate) fn new() -> (Arc<Self>, tokio::sync::oneshot::Receiver<bool>) {
+        let (completion, receiver) = tokio::sync::oneshot::channel();
+        (
+            Arc::new(Self {
+                cancellation_token: CancellationToken::new(),
+                completion: tokio::sync::Mutex::new(Some(completion)),
+            }),
+            receiver,
+        )
+    }
+
+    async fn complete(&self, succeeded: bool) {
+        if let Some(completion) = self.completion.lock().await.take() {
+            let _ = completion.send(succeeded);
+        }
+    }
+}
 
 /// Update the last_node_update timestamp for a run when we see run events
 fn touch_run_last_update(app_handle: &AppHandle, events: &[InterComEvent]) {
@@ -48,6 +73,7 @@ pub struct EventBusEvent {
     pub token: Option<String>,
 
     pub callback: Option<Arc<BufferedInterComHandler>>,
+    pub(crate) request_control: Option<Arc<EventRequestControl>>,
 
     /// OAuth tokens for third-party services
     pub oauth_tokens: std::collections::HashMap<String, OAuthToken>,
@@ -95,6 +121,9 @@ impl EventBusEvent {
             Err(error) => {
                 if !started.load(Ordering::Relaxed) {
                     self.record_rejection(&flow_like_state, &error).await;
+                }
+                if let Some(request) = &self.request_control {
+                    request.complete(false).await;
                 }
                 Err(error)
             }
@@ -151,6 +180,12 @@ impl EventBusEvent {
         started: Arc<AtomicBool>,
         authority: Option<(Event, UserExecutionContext)>,
     ) -> flow_like_types::Result<Option<LogMeta>> {
+        if let Some(request) = &self.request_control {
+            anyhow::ensure!(
+                !request.cancellation_token.is_cancelled(),
+                "HTTP request ended before execution started"
+            );
+        }
         let execution_state = Arc::new(flow_like_state.for_execution_run());
 
         let Ok(app) = App::load(self.app_id.clone(), execution_state.clone()).await else {
@@ -317,7 +352,11 @@ impl EventBusEvent {
             ))
             .await;
 
-        let cancellation_token = CancellationToken::new();
+        let cancellation_token = self
+            .request_control
+            .as_ref()
+            .map(|request| request.cancellation_token.clone())
+            .unwrap_or_default();
         internal_run.set_cancellation_token(cancellation_token.clone());
         let board_name = internal_run.board.name.clone();
         let run_data = RunData::with_metadata(
@@ -380,7 +419,13 @@ impl EventBusEvent {
         // Release the finished run from the registry; otherwise it stays
         // flagged "in use" and its logs can never be deleted from storage
         // management until restart.
+        let succeeded = !cancellation_token.is_cancelled()
+            && matches!(internal_run.get_status().await, RunStatus::Success);
         let _res = flow_like_state.remove_and_cancel_run(&run_id);
+
+        if let Some(request) = &self.request_control {
+            request.complete(succeeded).await;
+        }
 
         Ok(meta)
     }
@@ -411,6 +456,30 @@ impl EventBus {
         callback: Option<Arc<BufferedInterComHandler>>,
         oauth_tokens: Option<std::collections::HashMap<String, OAuthToken>>,
     ) -> Result<(), String> {
+        self.push_event_with_request(
+            payload,
+            app_id,
+            event_id,
+            offline,
+            token,
+            callback,
+            oauth_tokens,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_event_with_request(
+        &self,
+        payload: Option<Value>,
+        app_id: String,
+        event_id: String,
+        offline: bool,
+        token: Option<String>,
+        callback: Option<Arc<BufferedInterComHandler>>,
+        oauth_tokens: Option<std::collections::HashMap<String, OAuthToken>>,
+        request_control: Option<Arc<EventRequestControl>>,
+    ) -> Result<(), String> {
         if !offline && token.is_none() {
             return Err("No token registered, cannot send online events".to_string());
         }
@@ -422,6 +491,7 @@ impl EventBus {
             token,
             offline,
             callback,
+            request_control,
             oauth_tokens: oauth_tokens.unwrap_or_default(),
         };
 

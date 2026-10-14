@@ -293,6 +293,7 @@ pub async fn execute(
         offline: authority.offline,
         token: registration.personal_access_token.clone(),
         callback: Some(callback),
+        request_control: None,
         oauth_tokens: registration.oauth_tokens.clone(),
     }
     .execute_authorized(app, state, authority.event, authority.identity)
