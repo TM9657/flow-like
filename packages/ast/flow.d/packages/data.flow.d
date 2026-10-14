@@ -4817,6 +4817,18 @@ declare namespace google {
     }
 }
 
+declare namespace http {
+    // === Events/HTTP ===
+
+    /**
+     * Send a partial JSON response to an HTTP caller that requested streaming. The final result is unchanged.
+     * @node events_http_stream_response @alias eventsHttpStreamResponse
+     * @param response — Partial response serialized as JSON
+     * @impure has side effects / drives control flow
+     */
+    function streamResponse({ response: any }): void;
+}
+
 declare namespace jira {
     // === Data/Atlassian/Jira ===
 

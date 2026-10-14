@@ -5,19 +5,31 @@ use axum::{
     Json, Router,
     body::Body,
     extract::{Path as AxumPath, State},
-    response::IntoResponse,
+    response::{
+        IntoResponse, Response, Sse,
+        sse::{Event as SseEvent, KeepAlive},
+    },
 };
 use flow_like::flow_like_storage::object_store::ObjectStoreExt;
 use flow_like::flow_like_storage::{
     Path as StorePath, files::store::FlowLikeStore, object_store::PutPayload,
 };
 use flow_like_types::dispatch::REQUEST_FILES_STORE_REF;
-use flow_like_types::intercom::BufferedInterComHandler;
+use flow_like_types::http_streaming::{HTTP_RESPONSE_CHUNK, accepts_event_stream};
+use flow_like_types::intercom::{BufferedInterComHandler, InterComEvent};
+use flow_like_types::tokio_util::sync::CancellationToken;
 use flow_like_types::utils::constant_time_eq;
 use flow_like_types::{Bytes, create_id};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{
+    convert::Infallible,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 use tauri::{AppHandle, Manager};
 
 use super::manager::DbConnection;
@@ -35,6 +47,173 @@ pub struct HttpSink {
 }
 
 const HTTP_SINK_BODY_LIMIT_BYTES: usize = 10 * 1024 * 1024;
+const HTTP_SINK_TIMEOUT: Duration = Duration::from_secs(120);
+
+async fn publish_http_response_event(
+    mut event: InterComEvent,
+    output: &tokio::sync::mpsc::Sender<InterComEvent>,
+    cancel: &CancellationToken,
+    result_sent: &AtomicBool,
+) -> Result<()> {
+    event.event_type = match event.event_type.as_str() {
+        HTTP_RESPONSE_CHUNK => "chunk",
+        "generic_result" if !result_sent.swap(true, Ordering::Relaxed) => "result",
+        _ => return Ok(()),
+    }
+    .to_owned();
+    if serde_json::to_vec(&event.payload)?.len() > HTTP_SINK_BODY_LIMIT_BYTES {
+        cancel.cancel();
+        anyhow::bail!("HTTP response event exceeds the response limit");
+    }
+    tokio::select! {
+        _ = cancel.cancelled() => {},
+        result = output.send(event) => if result.is_err() { cancel.cancel(); },
+    }
+    Ok(())
+}
+
+fn streamed_http_response(
+    rx: tokio::sync::mpsc::Receiver<InterComEvent>,
+    completion: tokio::sync::oneshot::Receiver<bool>,
+    cancel: CancellationToken,
+    guard: flow_like_types::tokio_util::sync::DropGuard,
+    deadline: tokio::time::Instant,
+) -> Response {
+    let stream = futures::stream::unfold(
+        (rx, completion, cancel, guard, false),
+        move |(mut rx, mut completion, cancel, guard, ended)| async move {
+            if ended {
+                return None;
+            }
+            // Drain queued response events before acknowledging completion. Runtime
+            // callbacks may retain a sender after execution has finished.
+            let next = tokio::select! { biased;
+                _ = tokio::time::sleep_until(deadline) => { cancel.cancel(); Err(false) },
+                event = rx.recv() => match event {
+                    Some(event) => Ok(event),
+                    None => tokio::select! {
+                        result = &mut completion => Err(result.unwrap_or(false)),
+                        _ = tokio::time::sleep_until(deadline) => { cancel.cancel(); Err(false) },
+                    },
+                },
+                result = &mut completion => Err(result.unwrap_or(false)),
+            };
+            let (event, ended) = match next {
+                Ok(event) => (event, false),
+                Err(succeeded) => (
+                    InterComEvent::with_type(
+                        if succeeded { "done" } else { "error" },
+                        if succeeded {
+                            serde_json::json!({})
+                        } else {
+                            serde_json::json!({"error": "Workflow failed or exceeded its request deadline"})
+                        },
+                    ),
+                    true,
+                ),
+            };
+            let event = SseEvent::default()
+                .event(&event.event_type)
+                .json_data(&event.payload)
+                .unwrap_or_else(|_| SseEvent::default().event("error").data("{}"));
+            Some((
+                Ok::<_, Infallible>(event),
+                (rx, completion, cancel, guard, ended),
+            ))
+        },
+    );
+    let mut response = Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response();
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-cache, no-transform"),
+    );
+    response.headers_mut().insert(
+        "x-accel-buffering",
+        axum::http::HeaderValue::from_static("no"),
+    );
+    response
+        .headers_mut()
+        .append(header::VARY, axum::http::HeaderValue::from_static("Accept"));
+    response
+}
+
+fn start_streaming_request(
+    app_handle: &AppHandle,
+    event_id: &str,
+    payload: Option<flow_like_types::Value>,
+) -> Response {
+    let (request, completion) = crate::event_bus::EventRequestControl::new();
+    let cancel = request.cancellation_token.clone();
+    let guard = cancel.clone().drop_guard();
+    let deadline = tokio::time::Instant::now() + HTTP_SINK_TIMEOUT;
+    let deadline_cancel = cancel.clone();
+    tokio::spawn(async move {
+        tokio::select! {
+            _ = tokio::time::sleep_until(deadline) => deadline_cancel.cancel(),
+            _ = deadline_cancel.cancelled() => {},
+        }
+    });
+    let (output, receiver) = tokio::sync::mpsc::channel(32);
+    let callback_handle = app_handle.clone();
+    let callback_cancel = cancel.clone();
+    let result_sent = Arc::new(AtomicBool::new(false));
+    let callback = BufferedInterComHandler::new(
+        Arc::new(move |events| {
+            let output = output.clone();
+            let cancel = callback_cancel.clone();
+            let app_handle = callback_handle.clone();
+            let result_sent = result_sent.clone();
+            Box::pin(async move {
+                for event in &events {
+                    publish_http_response_event(event.clone(), &output, &cancel, &result_sent)
+                        .await?;
+                }
+                if let Some(first) = events.first() {
+                    crate::utils::emit_event_batch_throttled(
+                        &app_handle,
+                        UiEmitTarget::All,
+                        &first.event_type,
+                        events.clone(),
+                        Duration::from_millis(150),
+                    );
+                }
+                Ok(())
+            })
+        }),
+        Some(1),
+        Some(1),
+        Some(false),
+    );
+    let Some(manager_state) = app_handle.try_state::<crate::state::TauriEventSinkManagerState>()
+    else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "Event manager unavailable").into_response();
+    };
+    let result = match manager_state.0.try_lock() {
+        Ok(manager) => manager.fire_event_with_request(
+            app_handle,
+            event_id,
+            payload,
+            Some(callback),
+            Some(request),
+        ),
+        Err(_) => {
+            return (StatusCode::SERVICE_UNAVAILABLE, "Event manager busy, retry").into_response();
+        }
+    };
+    match result {
+        Ok(Ok(())) => streamed_http_response(receiver, completion, cancel, guard, deadline),
+        Ok(Err(reason)) => {
+            tracing::warn!(event_id, %reason, "HTTP event was not queued");
+            (StatusCode::SERVICE_UNAVAILABLE, "Failed to queue event").into_response()
+        }
+        Err(error) => {
+            tracing::warn!(event_id, %error, "HTTP event could not be started");
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to trigger event").into_response()
+        }
+    }
+}
 
 #[derive(Default)]
 struct ParsedHttpRequestPayload {
@@ -622,6 +801,15 @@ impl HttpSink {
 
         println!("[HTTP] Triggering event: {}", event_id);
 
+        if headers
+            .get_all(header::ACCEPT)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .any(accepts_event_stream)
+        {
+            return start_streaming_request(&app_handle, &event_id, parsed_payload.payload);
+        }
+
         let response = Arc::new(Mutex::new(None));
         let (tx, rx) = flow_like_types::tokio::sync::oneshot::channel::<()>();
         let tx = Arc::new(Mutex::new(Some(tx)));
@@ -703,15 +891,19 @@ impl HttpSink {
         // Wait for the callback to receive the response (with timeout).
         // Kept aligned with the server's HTTP sink timeout so a caller sees
         // the same window regardless of which transport served the request.
-        let timeout_result =
-            flow_like_types::tokio::time::timeout(std::time::Duration::from_secs(120), rx).await;
+        let timeout_result = flow_like_types::tokio::time::timeout(HTTP_SINK_TIMEOUT, rx).await;
 
         match timeout_result {
             Ok(Ok(())) => {
                 // Response received
                 if let Some(resp) = &*response.lock().await {
                     println!("[HTTP] Returning response for event {}", event_id);
-                    return (StatusCode::OK, Json(resp.clone())).into_response();
+                    return (
+                        StatusCode::OK,
+                        [(header::VARY, "Accept")],
+                        Json(resp.clone()),
+                    )
+                        .into_response();
                 }
             }
             Ok(Err(_)) => {
@@ -727,15 +919,176 @@ impl HttpSink {
             }
         }
 
-        (StatusCode::OK, "Event triggered").into_response()
+        (
+            StatusCode::OK,
+            [(header::VARY, "Accept")],
+            "Event triggered",
+        )
+            .into_response()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::StreamExt;
 
     const TOKEN: &str = "test-http-auth-token";
+
+    #[tokio::test]
+    async fn stream_sends_chunks_and_results_before_execution_completion() {
+        let result_sent = AtomicBool::new(false);
+        let (output, receiver) = tokio::sync::mpsc::channel(2);
+        let (finish, completion) = tokio::sync::oneshot::channel();
+        let cancel = CancellationToken::new();
+        let answer = streamed_http_response(
+            receiver,
+            completion,
+            cancel.clone(),
+            cancel.clone().drop_guard(),
+            tokio::time::Instant::now() + Duration::from_secs(1),
+        );
+        assert_eq!(answer.headers()["content-type"], "text/event-stream");
+        let mut body = answer.into_body().into_data_stream();
+        for event_type in [
+            "run_initiated",
+            "run:private-id",
+            "chat_stream_partial",
+            "log",
+        ] {
+            publish_http_response_event(
+                InterComEvent::with_type(event_type, serde_json::json!({"private": "detail"})),
+                &output,
+                &cancel,
+                &result_sent,
+            )
+            .await
+            .unwrap();
+        }
+        publish_http_response_event(
+            InterComEvent::with_type(
+                HTTP_RESPONSE_CHUNK,
+                serde_json::json!({"text":"hello\nworld"}),
+            ),
+            &output,
+            &cancel,
+            &result_sent,
+        )
+        .await
+        .unwrap();
+        let first = tokio::time::timeout(Duration::from_millis(100), body.next())
+            .await
+            .expect("chunk was buffered until completion")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            std::str::from_utf8(&first).unwrap(),
+            "event: chunk\ndata: {\"text\":\"hello\\nworld\"}\n\n"
+        );
+        publish_http_response_event(
+            InterComEvent::with_type("generic_result", serde_json::json!([1, true, null])),
+            &output,
+            &cancel,
+            &result_sent,
+        )
+        .await
+        .unwrap();
+        let result = body.next().await.unwrap().unwrap();
+        assert_eq!(
+            std::str::from_utf8(&result).unwrap(),
+            "event: result\ndata: [1,true,null]\n\n"
+        );
+        publish_http_response_event(
+            InterComEvent::with_type("generic_result", serde_json::json!({"discarded":true})),
+            &output,
+            &cancel,
+            &result_sent,
+        )
+        .await
+        .unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), body.next())
+                .await
+                .is_err(),
+            "generic_result ended the response before execution completed"
+        );
+        finish.send(true).unwrap();
+        let done = body.next().await.unwrap().unwrap();
+        assert_eq!(
+            std::str::from_utf8(&done).unwrap(),
+            "event: done\ndata: {}\n\n"
+        );
+        assert!(body.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn stream_failure_and_timeout_send_only_sanitized_terminal_errors() {
+        for timeout in [false, true] {
+            let (_output, receiver) = tokio::sync::mpsc::channel(1);
+            let (finish, completion) = tokio::sync::oneshot::channel();
+            let cancel = CancellationToken::new();
+            let deadline = tokio::time::Instant::now()
+                + if timeout {
+                    Duration::ZERO
+                } else {
+                    Duration::from_secs(1)
+                };
+            let answer = streamed_http_response(
+                receiver,
+                completion,
+                cancel.clone(),
+                cancel.clone().drop_guard(),
+                deadline,
+            );
+            if !timeout {
+                finish.send(false).unwrap();
+            }
+            let body = axum::body::to_bytes(answer.into_body(), 1024)
+                .await
+                .unwrap();
+            let body = std::str::from_utf8(&body).unwrap();
+            assert!(body.starts_with("event: error\n"), "{body}");
+            assert!(!body.contains("event: done"));
+            assert!(cancel.is_cancelled());
+        }
+    }
+
+    #[tokio::test]
+    async fn dropping_a_response_cancels_execution_and_releases_a_blocked_producer() {
+        let (output, receiver) = tokio::sync::mpsc::channel(1);
+        let (_finish, completion) = tokio::sync::oneshot::channel();
+        let cancel = CancellationToken::new();
+        let answer = streamed_http_response(
+            receiver,
+            completion,
+            cancel.clone(),
+            cancel.clone().drop_guard(),
+            tokio::time::Instant::now() + Duration::from_secs(1),
+        );
+        output
+            .send(InterComEvent::with_type("chunk", serde_json::json!(1)))
+            .await
+            .unwrap();
+        let producer_cancel = cancel.clone();
+        let producer = tokio::spawn(async move {
+            publish_http_response_event(
+                InterComEvent::with_type(HTTP_RESPONSE_CHUNK, serde_json::json!(2)),
+                &output,
+                &producer_cancel,
+                &AtomicBool::new(false),
+            )
+            .await
+            .unwrap();
+        });
+        tokio::task::yield_now().await;
+        assert!(!producer.is_finished());
+        drop(answer);
+        assert!(cancel.is_cancelled());
+        tokio::time::timeout(Duration::from_millis(100), producer)
+            .await
+            .unwrap()
+            .unwrap();
+    }
 
     fn authorization_headers(value: Option<&str>) -> HeaderMap {
         let mut headers = HeaderMap::new();

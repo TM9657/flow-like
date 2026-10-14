@@ -576,6 +576,14 @@ impl ExecutionContext {
         &self.callback
     }
 
+    /// Isolate a request's event delivery from a reusable execution context.
+    /// Descendants inherit the callback; dropping this clone leaves the source unchanged.
+    pub fn clone_with_callback(&self, callback: InterComCallback) -> Self {
+        let mut context = self.clone();
+        context.callback = callback;
+        context
+    }
+
     pub async fn event_id(&self) -> Option<String> {
         let run = self.run.upgrade()?;
         let run = run.lock().await;

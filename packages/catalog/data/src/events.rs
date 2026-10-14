@@ -6,5 +6,6 @@ pub mod generic_event;
 pub mod inbound_email;
 pub mod mail_event;
 pub mod simple_event;
+pub mod stream_http_response;
 pub mod teams;
 pub mod widget_action_event;

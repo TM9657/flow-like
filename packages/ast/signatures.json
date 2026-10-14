@@ -62733,6 +62733,28 @@
       "alias": "returnResult"
     },
     {
+      "node_type": "events_http_stream_response",
+      "display": "eventsHttpStreamResponse",
+      "friendly": "Stream HTTP Response",
+      "category": "Events/HTTP",
+      "inputs": [
+        {
+          "name": "response",
+          "ty": {
+            "base": "any",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Partial response serialized as JSON"
+        }
+      ],
+      "outputs": [],
+      "impure": true,
+      "doc": "Send a partial JSON response to an HTTP caller that requested streaming. The final result is unchanged.",
+      "namespace": "http",
+      "alias": "streamResponse"
+    },
+    {
       "node_type": "events_inbound_email",
       "display": "eventsInboundEmail",
       "friendly": "Inbound Email Event",

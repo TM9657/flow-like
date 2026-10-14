@@ -14,8 +14,9 @@ use crate::{
     error::ApiError,
     execution::{
         DispatchRequest, DispatchTrigger, ExecutionBackend, ExecutionJwtParams, TokenType,
-        collect_generic_result, collect_generic_result_bytes, is_jwt_configured, rejection,
-        resolve_wasm_packages, sign_execution_jwt, variant,
+        collect_generic_result, collect_generic_result_bytes, executor_response_bytes,
+        is_jwt_configured, rejection, resolve_wasm_packages, sign_execution_jwt,
+        stream_http_response, variant, wants_http_event_stream,
     },
     instances::schedules::{BOT_EVENT_TYPES, CLAIMED_EVENT_TYPES},
     routes::app::events::db::get_event_from_db,
@@ -1312,13 +1313,10 @@ pub async fn trigger_http(
 
     crate::audit::record_execution_dispatch_for(&state, &run_model, "sink:http").await?;
 
-    // Match the desktop HTTP sink: wait for the first `generic_result`
-    // event and return it as a single JSON response. External callers of
-    // this webhook want a synchronous request/response, not SSE —
-    // invoke_event is the streaming entry point for clients that want
-    // live updates. 120s covers typical LLM-bound flows; longer-running
-    // workloads should invoke via SSE or async.
+    // Requests buffer the final result unless the caller explicitly accepts
+    // SSE. Both modes retain the same execution deadline and run bookkeeping.
     const HTTP_SINK_RESULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+    let streaming = wants_http_event_stream(&headers);
 
     let backend = state.dispatcher.backend();
 
@@ -1328,8 +1326,17 @@ pub async fn trigger_http(
 
             match dispatch_result {
                 Ok((_dispatch_response, byte_stream)) => {
-                    tracing::info!(run_id = %run_id, "Got Lambda response, collecting result");
                     let db_arc = crate::audit::ExecutionAuditContext::from(&state);
+                    if streaming {
+                        return Ok(stream_http_response(
+                            byte_stream,
+                            run_id,
+                            Some(db_arc),
+                            HTTP_SINK_RESULT_TIMEOUT,
+                            std::convert::identity,
+                        ));
+                    }
+                    tracing::info!(run_id = %run_id, "Got Lambda response, collecting result");
                     let run_id_owned = run_id.clone();
                     let generic_result = collect_generic_result_bytes(
                         byte_stream,
@@ -1340,9 +1347,13 @@ pub async fn trigger_http(
                     .await;
 
                     match generic_result {
-                        Some(payload) => Ok((StatusCode::OK, Json(payload)).into_response()),
+                        Some(payload) => {
+                            Ok((StatusCode::OK, [(header::VARY, "Accept")], Json(payload))
+                                .into_response())
+                        }
                         None => Ok((
                             StatusCode::OK,
+                            [(header::VARY, "Accept")],
                             Json(TriggerResponse {
                                 triggered: true,
                                 run_id: Some(run_id),
@@ -1365,8 +1376,17 @@ pub async fn trigger_http(
 
             match dispatch_result {
                 Ok((_dispatch_response, executor_response)) => {
-                    tracing::info!(run_id = %run_id, "Got executor response, collecting result");
                     let db_arc = crate::audit::ExecutionAuditContext::from(&state);
+                    if streaming {
+                        return Ok(stream_http_response(
+                            executor_response_bytes(executor_response),
+                            run_id,
+                            Some(db_arc),
+                            HTTP_SINK_RESULT_TIMEOUT,
+                            std::convert::identity,
+                        ));
+                    }
+                    tracing::info!(run_id = %run_id, "Got executor response, collecting result");
                     let run_id_owned = run_id.clone();
                     let generic_result = collect_generic_result(
                         executor_response,
@@ -1377,9 +1397,13 @@ pub async fn trigger_http(
                     .await;
 
                     match generic_result {
-                        Some(payload) => Ok((StatusCode::OK, Json(payload)).into_response()),
+                        Some(payload) => {
+                            Ok((StatusCode::OK, [(header::VARY, "Accept")], Json(payload))
+                                .into_response())
+                        }
                         None => Ok((
                             StatusCode::OK,
+                            [(header::VARY, "Accept")],
                             Json(TriggerResponse {
                                 triggered: true,
                                 run_id: Some(run_id),

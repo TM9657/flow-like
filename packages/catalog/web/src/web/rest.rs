@@ -2207,16 +2207,38 @@ async fn handle_connection(
     .await
     {
         Ok(Some(request)) => {
-            route_request(
+            let streaming = request.headers.get("accept").is_some_and(|accept| {
+                flow_like_types::http_streaming::accepts_event_stream(accept)
+            });
+            let prepared = prepare_rest_request(
                 request,
                 &config,
-                &function_contexts,
                 &files,
                 &openapi_specs,
                 oauth_validator.as_ref().as_ref(),
-                &parent_node_id,
             )
-            .await
+            .await;
+            match prepared {
+                Err(response) => response,
+                Ok((route, args)) if streaming => {
+                    if let Err(error) = stream_rest_functions(
+                        &mut *stream,
+                        &route,
+                        &args,
+                        &function_contexts,
+                        &parent_node_id,
+                    )
+                    .await
+                    {
+                        tracing::warn!(%error, "REST response stream failed");
+                    }
+                    return;
+                }
+                Ok((route, args)) => {
+                    run_buffered_rest_functions(&route, &args, &function_contexts, &parent_node_id)
+                        .await
+                }
+            }
         }
         Ok(None) => return,
         Err(err) => super::http_runtime::HttpResponse::text(400, format!("Bad request: {}", err)),
@@ -2227,7 +2249,7 @@ async fn handle_connection(
     }
 }
 
-#[cfg(all(feature = "execute", not(feature = "remote")))]
+#[cfg(all(test, feature = "execute", not(feature = "remote")))]
 async fn route_request(
     request: super::http_runtime::HttpRequest,
     config: &RestServerConfig,
@@ -2237,25 +2259,41 @@ async fn route_request(
     oauth_validator: Option<&super::auth::OAuthValidator>,
     parent_node_id: &str,
 ) -> super::http_runtime::HttpResponse {
+    match prepare_rest_request(request, config, files, openapi_specs, oauth_validator).await {
+        Ok((route, args)) => {
+            run_buffered_rest_functions(&route, &args, function_contexts, parent_node_id).await
+        }
+        Err(response) => response,
+    }
+}
+
+#[cfg(all(feature = "execute", not(feature = "remote")))]
+async fn prepare_rest_request(
+    request: super::http_runtime::HttpRequest,
+    config: &RestServerConfig,
+    files: &[CachedFileRoute],
+    openapi_specs: &[CachedOpenApiRoute],
+    oauth_validator: Option<&super::auth::OAuthValidator>,
+) -> Result<(RestFunctionRoute, flow_like_types::Value), super::http_runtime::HttpResponse> {
     let client =
         match super::auth::authorize_client(&config.auth, oauth_validator, &request, "rest") {
             Ok(client) => client,
-            Err(response) => return response,
+            Err(response) => return Err(response),
         };
 
     if let Some(spec) = openapi_specs.iter().find(|spec| spec.path == request.path) {
         let mut headers = HashMap::new();
         headers.insert("content-type".to_string(), spec.content_type.clone());
-        return super::http_runtime::HttpResponse {
+        return Err(super::http_runtime::HttpResponse {
             status_code: 200,
             headers,
             body: spec.bytes.clone(),
-        };
+        });
     }
 
     for file in files {
         if let Some(response) = file_route_response(file, &request.path).await {
-            return response;
+            return Err(response);
         }
     }
 
@@ -2264,15 +2302,25 @@ async fn route_request(
         .iter()
         .find(|route| route.path == request.path && method_matches(route, &request.method))
     else {
-        return super::http_runtime::HttpResponse::text(404, "Not Found");
+        return Err(super::http_runtime::HttpResponse::text(404, "Not Found"));
     };
 
     let body = match parse_rest_body_value(&request) {
         Ok(body) => body,
-        Err(response) => return response,
+        Err(response) => return Err(response),
     };
-    let mut result = json!({"ok": true});
     let args = rest_arguments(&request, &client, body);
+    Ok((route.clone(), args))
+}
+
+#[cfg(all(feature = "execute", not(feature = "remote")))]
+async fn run_buffered_rest_functions(
+    route: &RestFunctionRoute,
+    args: &flow_like_types::Value,
+    function_contexts: &FunctionContextMap,
+    parent_node_id: &str,
+) -> super::http_runtime::HttpResponse {
+    let mut result = json!({"ok": true});
     for function_id in &route.function_refs {
         let Some(ctx) = function_contexts.get(function_id) else {
             return super::http_runtime::HttpResponse::text(
@@ -2282,7 +2330,7 @@ async fn route_request(
         };
         match super::http_runtime::trigger_shared_function_context(
             ctx,
-            &args,
+            args,
             parent_node_id,
             "REST route handler",
         )
@@ -2298,7 +2346,148 @@ async fn route_request(
         }
     }
 
-    response_from_value(result)
+    let mut response = response_from_value(result);
+    response
+        .headers
+        .entry("vary".to_string())
+        .and_modify(|vary| {
+            if !vary
+                .split(',')
+                .any(|value| value.trim().eq_ignore_ascii_case("accept"))
+            {
+                vary.push_str(", Accept");
+            }
+        })
+        .or_insert_with(|| "Accept".to_string());
+    response
+}
+
+#[cfg(all(feature = "execute", not(feature = "remote")))]
+async fn stream_rest_functions<S>(
+    stream: &mut S,
+    route: &RestFunctionRoute,
+    args: &flow_like_types::Value,
+    function_contexts: &FunctionContextMap,
+    parent_node_id: &str,
+) -> flow_like_types::Result<()>
+where
+    S: tokio::io::AsyncWrite + Unpin + ?Sized,
+{
+    use super::http_runtime::{
+        HttpResponse, trigger_streaming_function_context, write_http_response,
+    };
+
+    for function_id in &route.function_refs {
+        if !function_contexts.contains_key(function_id) {
+            return write_http_response(
+                stream,
+                HttpResponse::json(500, json!({"error": "Registered function not found"})),
+            )
+            .await;
+        }
+    }
+
+    let (chunks, receiver) = tokio::sync::mpsc::channel(32);
+    let execution = async move {
+        let mut result = json!({"ok": true});
+        for function_id in &route.function_refs {
+            let context = function_contexts
+                .get(function_id)
+                .expect("validated function reference");
+            result =
+                trigger_streaming_function_context(context, args, parent_node_id, chunks.clone())
+                    .await?;
+        }
+        Ok(result
+            .as_object()
+            .and_then(|object| object.get("body"))
+            .cloned()
+            .unwrap_or(result))
+    };
+    write_rest_stream(stream, receiver, execution).await
+}
+
+#[cfg(all(feature = "execute", not(feature = "remote")))]
+async fn write_rest_stream<S, F>(
+    stream: &mut S,
+    mut chunks: tokio::sync::mpsc::Receiver<flow_like_types::Value>,
+    execution: F,
+) -> flow_like_types::Result<()>
+where
+    S: tokio::io::AsyncWrite + Unpin + ?Sized,
+    F: std::future::Future<Output = flow_like_types::Result<flow_like_types::Value>>,
+{
+    use super::http_runtime::{write_sse_comment, write_sse_event, write_sse_response_head};
+    use std::time::Duration;
+    use tokio::io::AsyncWriteExt;
+
+    // A stalled peer may hold a handler for at most one write timeout. Chunks are
+    // bounded above, and each write flushes before polling the execution again.
+    let write_timeout = Duration::from_secs(30);
+    tokio::time::timeout(
+        write_timeout,
+        write_sse_response_head(stream, 200, &[("vary".to_string(), "Accept".to_string())]),
+    )
+    .await??;
+    tokio::pin!(execution);
+    let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
+    heartbeat.tick().await;
+    let mut chunks_open = true;
+    let result = loop {
+        tokio::select! {
+            chunk = chunks.recv(), if chunks_open => {
+                if let Some(chunk) = chunk {
+                    tokio::time::timeout(write_timeout, write_sse_event(
+                        stream, Some("chunk"), &json::to_string(&chunk)?, None,
+                    )).await??;
+                } else {
+                    chunks_open = false;
+                }
+            }
+            result = &mut execution => break result,
+            _ = heartbeat.tick() => {
+                tokio::time::timeout(write_timeout, write_sse_comment(stream, "keepalive")).await??;
+            }
+        }
+    };
+    // The execution can finish in the same poll that enqueues its last chunks.
+    chunks.close();
+    while let Some(chunk) = chunks.recv().await {
+        tokio::time::timeout(
+            write_timeout,
+            write_sse_event(stream, Some("chunk"), &json::to_string(&chunk)?, None),
+        )
+        .await??;
+    }
+    match result {
+        Ok(value) => {
+            tokio::time::timeout(
+                write_timeout,
+                write_sse_event(stream, Some("result"), &json::to_string(&value)?, None),
+            )
+            .await??;
+            tokio::time::timeout(
+                write_timeout,
+                write_sse_event(stream, Some("done"), "{}", None),
+            )
+            .await??;
+        }
+        Err(error) => {
+            tracing::warn!(%error, "REST streaming handler failed");
+            tokio::time::timeout(
+                write_timeout,
+                write_sse_event(
+                    stream,
+                    Some("error"),
+                    r#"{"error":"Workflow execution failed"}"#,
+                    None,
+                ),
+            )
+            .await??;
+        }
+    }
+    tokio::time::timeout(write_timeout, stream.shutdown()).await??;
+    Ok(())
 }
 
 #[cfg(all(feature = "execute", not(feature = "remote")))]
@@ -2732,6 +2921,347 @@ mod tests {
         node.add_output_pin("query", "Query", "Query", VariableType::Struct);
         node.add_output_pin("request", "Request", "Request", VariableType::Struct);
         internal_node_with_logic(node, Arc::new(RestQueryLogic))
+    }
+
+    struct RestStreamingLogic {
+        release: Option<Arc<tokio::sync::Notify>>,
+    }
+
+    #[async_trait]
+    impl NodeLogic for RestStreamingLogic {
+        fn get_node(&self) -> Node {
+            let mut node = Node::new("rest_stream_test", "REST Stream", "Streaming test", "Tests");
+            node.add_output_pin("name", "Name", "Request name", VariableType::String);
+            node
+        }
+
+        async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+            let name: String = context.evaluate_pin("name").await?;
+            context
+                .stream_response("progress", json!({"private": "runtime telemetry"}))
+                .await?;
+            // Real workflows emit from successor contexts, which must inherit this request's callback.
+            let mut child = context.create_sub_context(&context.node).await;
+            child
+                .stream_response(
+                    flow_like_types::http_streaming::HTTP_RESPONSE_CHUNK,
+                    json!({"name": name, "part": 1}),
+                )
+                .await?;
+            if let Some(release) = &self.release {
+                release.notified().await;
+            }
+            child
+                .stream_response(
+                    flow_like_types::http_streaming::HTTP_RESPONSE_CHUNK,
+                    json!({"name": name, "part": 2}),
+                )
+                .await?;
+            context.set_result(json!({"status_code": 201, "body": {"name": name}}));
+            Ok(())
+        }
+    }
+
+    async fn streaming_fixture(
+        release: Option<Arc<tokio::sync::Notify>>,
+    ) -> (Arc<RestServerConfig>, Arc<FunctionContextMap>) {
+        let logic = Arc::new(RestStreamingLogic { release });
+        let handler = internal_node_with_logic(logic.get_node(), logic);
+        let parent = internal_node(RestServerNode::new().get_node());
+        let context = test_context(parent, vec![handler.clone()]).await;
+        let functions = HashMap::from([(
+            handler.node_id().to_string(),
+            super::super::http_runtime::create_shared_function_context(&context, &handler).await,
+        )]);
+        let config = RestServerConfig {
+            function_routes: vec![RestFunctionRoute {
+                path: "/stream".to_string(),
+                methods: vec!["POST".to_string()],
+                function_refs: vec![handler.node_id().to_string()],
+            }],
+            ..Default::default()
+        };
+        (Arc::new(config), Arc::new(functions))
+    }
+
+    async fn connect_test_request(
+        config: Arc<RestServerConfig>,
+        functions: Arc<FunctionContextMap>,
+        accept: &str,
+        body: &str,
+    ) -> (tokio::io::DuplexStream, tokio::task::JoinHandle<()>) {
+        use tokio::io::AsyncWriteExt;
+        let (mut client, server) = tokio::io::duplex(4096);
+        let handler = tokio::spawn(handle_connection(
+            Box::new(server),
+            "127.0.0.1:1234".to_string(),
+            config,
+            functions,
+            Arc::new(Vec::new()),
+            Arc::new(Vec::new()),
+            Arc::new(None),
+            "parent".to_string(),
+        ));
+        client.write_all(format!(
+            "POST /stream HTTP/1.1\r\nHost: localhost\r\n{accept}Content-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len(),
+        ).as_bytes()).await.unwrap();
+        (client, handler)
+    }
+
+    #[tokio::test]
+    async fn rest_stream_delivers_chunks_before_completion_and_drains_them_before_result() {
+        use tokio::io::AsyncReadExt;
+        let release = Arc::new(tokio::sync::Notify::new());
+        let (config, functions) = streaming_fixture(Some(release.clone())).await;
+        let (mut client, handler) = connect_test_request(
+            config,
+            functions,
+            "Accept: text/event-stream\r\n",
+            r#"{"name":"first"}"#,
+        )
+        .await;
+        let mut bytes = Vec::new();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let mut buffer = [0; 1024];
+            while !String::from_utf8_lossy(&bytes)
+                .contains("event: chunk\ndata: {\"name\":\"first\",\"part\":1}\n\n")
+            {
+                let count = client.read(&mut buffer).await.unwrap();
+                assert!(count > 0, "response ended before the first chunk");
+                bytes.extend_from_slice(&buffer[..count]);
+            }
+        })
+        .await
+        .expect("first chunk must arrive while the function waits");
+        assert!(!handler.is_finished());
+        assert!(!String::from_utf8_lossy(&bytes).contains("event: result"));
+        release.notify_one();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client.read_to_end(&mut bytes),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        handler.await.unwrap();
+        let response = String::from_utf8(bytes).unwrap();
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(response.contains("Content-Type: text/event-stream\r\n"));
+        assert!(response.contains("Connection: close\r\n"));
+        assert!(response.contains("Vary: Accept\r\n"));
+        assert!(!response.contains("Content-Length:"));
+        assert!(!response.contains("runtime telemetry"));
+        let body = response.split_once("\r\n\r\n").unwrap().1;
+        assert_eq!(
+            body,
+            concat!(
+                "event: chunk\ndata: {\"name\":\"first\",\"part\":1}\n\n",
+                "event: chunk\ndata: {\"name\":\"first\",\"part\":2}\n\n",
+                "event: result\ndata: {\"name\":\"first\"}\n\n",
+                "event: done\ndata: {}\n\n",
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn rest_stream_opt_in_preserves_buffered_response_and_status() {
+        use tokio::io::AsyncReadExt;
+        let (config, functions) = streaming_fixture(None).await;
+        for accept in ["", "Accept: */*\r\n", "Accept: text/event-stream;q=0\r\n"] {
+            let (mut client, handler) = connect_test_request(
+                config.clone(),
+                functions.clone(),
+                accept,
+                r#"{"name":"buffered"}"#,
+            )
+            .await;
+            let mut response = String::new();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                client.read_to_string(&mut response),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            handler.await.unwrap();
+            assert!(response.starts_with("HTTP/1.1 201 Created\r\n"));
+            assert!(response.contains("Vary: Accept\r\n"));
+            assert!(!response.contains("text/event-stream"));
+            assert_eq!(
+                response.split_once("\r\n\r\n").unwrap().1,
+                r#"{"name":"buffered"}"#
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn rest_stream_authentication_and_body_validation_precede_stream_headers() {
+        use tokio::io::AsyncReadExt;
+        let (config, functions) = streaming_fixture(None).await;
+        let mut protected = (*config).clone();
+        protected.auth = RestAuthConfig::BearerToken {
+            token: "secret".to_string(),
+        };
+        for (config, body, status) in [
+            (Arc::new(protected), r#"{"name":"blocked"}"#, 401),
+            (config, "invalid json", 400),
+        ] {
+            let (mut client, handler) = connect_test_request(
+                config,
+                functions.clone(),
+                "Accept: text/event-stream\r\n",
+                body,
+            )
+            .await;
+            let mut response = String::new();
+            tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                client.read_to_string(&mut response),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            handler.await.unwrap();
+            assert!(response.starts_with(&format!("HTTP/1.1 {status} ")));
+            assert!(!response.contains("text/event-stream"));
+            assert!(!response.contains("event: chunk"));
+        }
+    }
+
+    #[tokio::test]
+    async fn rest_stream_failure_is_sanitized_and_does_not_emit_done() {
+        use tokio::io::AsyncReadExt;
+        let (mut client, mut server) = tokio::io::duplex(4096);
+        let (chunks, receiver) = tokio::sync::mpsc::channel(1);
+        let handler = tokio::spawn(async move {
+            write_rest_stream(&mut server, receiver, async move {
+                chunks.send(json!({"partial": true})).await.unwrap();
+                Err(flow_like_types::anyhow!("private failure details"))
+            })
+            .await
+            .unwrap();
+        });
+        let mut response = String::new();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client.read_to_string(&mut response),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        handler.await.unwrap();
+        assert!(response.contains("event: chunk\n"));
+        assert!(
+            response.contains("event: error\ndata: {\"error\":\"Workflow execution failed\"}\n\n")
+        );
+        assert!(!response.contains("private failure details"));
+        assert!(!response.contains("event: done"));
+        assert!(!response.contains("event: result"));
+    }
+
+    #[tokio::test]
+    async fn cancelled_rest_stream_does_not_leak_callback_to_next_request() {
+        use super::super::http_runtime::{
+            trigger_shared_function_context, trigger_streaming_function_context,
+        };
+        let release = Arc::new(tokio::sync::Notify::new());
+        let (_config, functions) = streaming_fixture(Some(release.clone())).await;
+        let context = functions.values().next().unwrap().clone();
+        let telemetry = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let recorded = telemetry.clone();
+        let original: flow_like_types::intercom::InterComCallback = Some(Arc::new(move |event| {
+            let recorded = recorded.clone();
+            Box::pin(async move {
+                recorded.lock().await.push(event);
+                Ok(())
+            })
+        }));
+        {
+            let mut context = context.lock().await;
+            *context = context.clone_with_callback(original.clone());
+        }
+        let (first, mut first_receiver) = tokio::sync::mpsc::channel(4);
+        let first_context = context.clone();
+        let first_request = tokio::spawn(async move {
+            trigger_streaming_function_context(
+                &first_context,
+                &json!({"name": "cancelled"}),
+                "parent",
+                first,
+            )
+            .await
+        });
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(5), first_receiver.recv())
+                .await
+                .unwrap()
+                .unwrap()["name"],
+            "cancelled"
+        );
+        first_request.abort();
+        assert!(first_request.await.unwrap_err().is_cancelled());
+        assert!(
+            first_receiver.recv().await.is_none(),
+            "request sender must be dropped on cancellation"
+        );
+        assert!(Arc::ptr_eq(
+            context.lock().await.callback().as_ref().unwrap(),
+            original.as_ref().unwrap()
+        ));
+
+        let (second, mut second_receiver) = tokio::sync::mpsc::channel(4);
+        release.notify_one();
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            trigger_streaming_function_context(
+                &context,
+                &json!({"name": "second"}),
+                "parent",
+                second,
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(result["body"]["name"], "second");
+        assert_eq!(
+            second_receiver.recv().await.unwrap(),
+            json!({"name": "second", "part": 1})
+        );
+        assert_eq!(
+            second_receiver.recv().await.unwrap(),
+            json!({"name": "second", "part": 2})
+        );
+        assert!(second_receiver.recv().await.is_none());
+        let events = telemetry.lock().await;
+        assert!(events.iter().any(|event| event.event_type == "progress"));
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.event_type
+                    == flow_like_types::http_streaming::HTTP_RESPONSE_CHUNK)
+        );
+        drop(events);
+
+        release.notify_one();
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            trigger_shared_function_context(
+                &context,
+                &json!({"name": "buffered"}),
+                "parent",
+                "REST route handler",
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(result["body"]["name"], "buffered");
+        assert!(Arc::ptr_eq(
+            context.lock().await.callback().as_ref().unwrap(),
+            original.as_ref().unwrap()
+        ));
     }
 
     #[tokio::test]
