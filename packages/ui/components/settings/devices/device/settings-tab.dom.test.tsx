@@ -206,12 +206,71 @@ describe("host operations", () => {
 		);
 		await click(update);
 		expect(commandTypes(view)).not.toContain("update_agent");
+		const reads = commandTypes(view).filter(
+			(type) => type === "inspect_page",
+		).length;
 		await click(byRole("button", "Check for agent update", agent));
 		await view.settle();
+		expect(
+			commandTypes(view).filter((type) => type === "inspect_page").length,
+		).toBeGreaterThan(reads);
 		expect(text(agent)).toMatch(
 			/Checked at \d\d:\d\d:\d\d: 0\.9\.4 is the latest verified release\./,
 		);
 	});
+
+	test("checking for an update retries a failed live read and restores remote update support", async () => {
+		const fake = await createFakeWorkspace(settledSeed("0.9.2"), {
+			unlock: "none",
+		});
+		const restore = fake
+			.agent(IDS.edge)
+			.reject("inspect_page", "failed", "Status could not be read.");
+		await fake.unlock(IDS.edge);
+		const view = await open(IDS.edge, { fake });
+		const agent = layer(view, "agent");
+		expect(text(agent)).toContain("Remote updateUnknown until it is read live");
+		expect(text(agent)).toContain(
+			"The device agent hasn't reported what it supports yet.",
+		);
+		expect(
+			byRole("button", "Update agent…", agent).getAttribute("aria-disabled"),
+		).toBe("true");
+		const reads = commandTypes(view).filter(
+			(type) => type === "inspect_page",
+		).length;
+		expect(reads).toBeGreaterThan(0);
+
+		restore();
+		await click(byRole("button", "Check for agent update", agent));
+		await view.settle();
+		expect(
+			commandTypes(view).filter((type) => type === "inspect_page").length,
+		).toBeGreaterThan(reads);
+		expect(text(agent)).toContain("Running0.9.2live read");
+		expect(text(agent)).toContain("Remote updateAvailable on this device");
+		expect(
+			byRole("button", "Update agent…", agent).getAttribute("aria-disabled"),
+		).toBeNull();
+		expect(commandTypes(view)).not.toContain("update_agent");
+	});
+
+	for (const [state, deviceId, options] of [
+		["locked", IDS.edge, { unlock: "none" }],
+		["offline", IDS.warehouse, {}],
+	] as const) {
+		test(`${state}: checking for an agent update reads the hub without sending a device command`, async () => {
+			const view = await open(deviceId, options);
+			const agent = layer(view, "agent");
+			const commands = view.fake.api.commands.length;
+			await click(byRole("button", "Check for agent update", agent));
+			await view.settle();
+			expect(view.fake.api.commands).toHaveLength(commands);
+			expect(text(agent)).toMatch(
+				/Checked at \d\d:\d\d:\d\d: 0\.9\.4 is the latest verified release\./,
+			);
+		});
+	}
 
 	test("an older agent release can be updated: acknowledgement, then the signed release goes to the device", async () => {
 		const view = await open(IDS.edge, { seed: settledSeed("0.9.2") });
