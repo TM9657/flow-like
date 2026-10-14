@@ -53,6 +53,7 @@ import {
 	useDeviceAction,
 	useGate,
 	useInlineResults,
+	useLiveSession,
 	useReleaseTrust,
 } from "../workspace";
 import { GateFix } from "./device-header";
@@ -408,6 +409,8 @@ export function AgentUpdateActions({ page }: Readonly<{ page: DevicePage }>) {
 	const actions = useDeviceAction();
 	const rows = useHostRows(page, true);
 	const release = useReleaseTrust();
+	const live = useLiveSession(page.deviceId);
+	const refresh = useGate("refresh_status", page.deviceId);
 	// The one verdict about the hub's release: a list that failed a check or ran out is never sent to a device.
 	const verdict = useAgentReleaseVerdict();
 	const usable = usableRelease(verdict);
@@ -446,7 +449,11 @@ export function AgentUpdateActions({ page }: Readonly<{ page: DevicePage }>) {
 	const check = async () => {
 		setChecking(true);
 		try {
-			await release.refetch();
+			// Update support comes from a live read, which may have failed when the session opened.
+			await Promise.all([
+				release.refetch(),
+				refresh.ok && !page.identity ? live.refresh() : Promise.resolve(),
+			]);
 		} finally {
 			setChecking(false);
 			setChecked({ at: Math.floor(time.now / 1000) });

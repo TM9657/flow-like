@@ -906,6 +906,83 @@ fn validate_packaged_artifacts(
 }
 
 impl PackagedBitMetadata {
+    /// Hub inventories can repeat the root and use hub-qualified dependency references.
+    /// Call after verifying the original metadata bytes against their pin. Only identical
+    /// records may share an ID; qualified references must match the selected Bit's hub.
+    pub fn normalize_dependencies(&mut self) -> Result<()> {
+        if self.dependencies().len() > PACKAGED_BIT_MAX_DEPENDENCIES {
+            return Err(ProtocolError::Invalid("packaged Bit dependency count"));
+        }
+        let mut selected = HashMap::new();
+        let mut unique = Vec::new();
+        for bit in std::iter::once(self.bit()).chain(self.dependencies()) {
+            let id = bit
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or(ProtocolError::Invalid("packaged Bit identity"))?;
+            validate_artifact_project_id(id)?;
+            if bit.get("hub").is_some_and(|hub| !hub.is_string()) {
+                return Err(ProtocolError::Invalid("packaged Bit hub"));
+            }
+            if let Some(previous) = selected.get(id) {
+                if *previous != bit {
+                    return Err(ProtocolError::Invalid(
+                        "conflicting packaged Bit dependency",
+                    ));
+                }
+            } else {
+                selected.insert(id, bit);
+                unique.push(bit);
+            }
+        }
+        let normalize = |bit: &Value| -> Result<Value> {
+            let mut normalized = bit.clone();
+            let Some(dependencies) = normalized.get_mut("dependencies") else {
+                return Ok(normalized);
+            };
+            let dependencies = dependencies
+                .as_array_mut()
+                .ok_or(ProtocolError::Invalid("packaged Bit dependencies"))?;
+            for dependency in dependencies {
+                let reference = dependency
+                    .as_str()
+                    .ok_or(ProtocolError::Invalid("packaged Bit dependency reference"))?;
+                let (hub, id) = match reference.rsplit_once(':') {
+                    Some((hub, id)) => (Some(hub), id),
+                    None => (None, reference),
+                };
+                validate_artifact_project_id(id)?;
+                let target = selected
+                    .get(id)
+                    .ok_or(ProtocolError::Invalid("unpackaged Bit dependency"))?;
+                if let Some(hub) = hub
+                    && (hub.is_empty() || target.get("hub").and_then(Value::as_str) != Some(hub))
+                {
+                    return Err(ProtocolError::Invalid("packaged Bit dependency hub"));
+                }
+                *dependency = Value::String(id.to_owned());
+            }
+            Ok(normalized)
+        };
+        let bit = normalize(self.bit())?;
+        let dependencies = unique
+            .into_iter()
+            .skip(1)
+            .map(normalize)
+            .collect::<Result<Vec<_>>>()?;
+        match self {
+            Self::V1(metadata) => {
+                metadata.bit = bit;
+                metadata.dependencies = dependencies;
+            }
+            Self::V2(metadata) => {
+                metadata.bit = bit;
+                metadata.dependencies = dependencies;
+            }
+        }
+        Ok(())
+    }
+
     pub fn bit(&self) -> &Value {
         match self {
             Self::V1(metadata) => &metadata.bit,
@@ -1005,6 +1082,169 @@ mod packaged_bit_tests {
 
     fn checked(metadata: PackagedBitMetadataV2) -> Result<()> {
         PackagedBitMetadata::V2(metadata).validate("model")
+    }
+
+    fn legacy_inventory(model_store: bool) -> PackagedBitMetadata {
+        let mut metadata = v2();
+        metadata.bit["hub"] = json!("models.test");
+        metadata.bit["dependencies"] = json!(["assets.test:tokenizer", "config"]);
+        let mut tokenizer = metadata.dependencies.remove(0);
+        tokenizer["hub"] = json!("assets.test");
+        tokenizer["dependencies"] = json!(["assets.test:8443:config"]);
+        metadata.dependencies = vec![
+            metadata.bit.clone(),
+            tokenizer.clone(),
+            json!({"id": "config", "hub": "assets.test:8443", "parameters": {}}),
+            tokenizer,
+            metadata.bit.clone(),
+        ];
+        if model_store {
+            PackagedBitMetadata::V2(metadata)
+        } else {
+            metadata
+                .artifacts
+                .push(artifact("bits/weights-hash/model.gguf", 4096));
+            PackagedBitMetadata::V1(PackagedBitMetadataV1 {
+                bit: metadata.bit,
+                dependencies: metadata.dependencies,
+                artifacts: metadata.artifacts,
+            })
+        }
+    }
+
+    #[test]
+    fn legacy_inventories_normalize_repeated_bits_and_qualified_edges() {
+        for model_store in [false, true] {
+            let mut metadata = legacy_inventory(model_store);
+            let artifacts = metadata.artifacts().to_vec();
+            let assets = metadata.assets().to_vec();
+            metadata.normalize_dependencies().unwrap();
+            metadata.validate("model").unwrap();
+            assert_eq!(
+                metadata.bit()["dependencies"],
+                json!(["tokenizer", "config"])
+            );
+            assert_eq!(metadata.bit()["hub"], "models.test");
+            assert_eq!(metadata.dependencies().len(), 2);
+            assert_eq!(metadata.dependencies()[0]["id"], "tokenizer");
+            assert_eq!(
+                metadata.dependencies()[0]["dependencies"],
+                json!(["config"])
+            );
+            assert_eq!(metadata.dependencies()[1]["id"], "config");
+            assert!(metadata.dependencies()[1].get("dependencies").is_none());
+            assert_eq!(metadata.artifacts(), artifacts);
+            assert_eq!(metadata.assets(), assets);
+            let once = metadata.clone();
+            metadata.normalize_dependencies().unwrap();
+            assert_eq!(metadata, once);
+        }
+    }
+
+    #[test]
+    fn duplicate_bit_conflicts_are_checked_before_normalization() {
+        for model_store in [false, true] {
+            for (index, field, value) in [
+                (0, "hub", json!("other.test")),
+                (0, "hash", json!("different-weights")),
+                (0, "parameters", json!({"provider": "different"})),
+                (0, "future_field", json!(true)),
+                (0, "dependencies", json!(["tokenizer", "config"])),
+                (3, "hash", json!("different-tokenizer")),
+            ] {
+                let mut wire = serde_json::to_value(legacy_inventory(model_store)).unwrap();
+                wire["dependencies"][index][field] = value;
+                let mut metadata: PackagedBitMetadata = serde_json::from_value(wire).unwrap();
+                let original = metadata.clone();
+                assert!(matches!(
+                    metadata.normalize_dependencies(),
+                    Err(ProtocolError::Invalid(
+                        "conflicting packaged Bit dependency"
+                    ))
+                ));
+                assert_eq!(
+                    metadata, original,
+                    "failed normalization preserves its input"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn normalization_requires_dependency_targets_and_matching_hubs() {
+        for (reference, error) in [
+            ("missing", "unpackaged Bit dependency"),
+            ("assets.test:missing", "unpackaged Bit dependency"),
+            ("other.test:tokenizer", "packaged Bit dependency hub"),
+            (":tokenizer", "packaged Bit dependency hub"),
+        ] {
+            let mut metadata = legacy_inventory(true);
+            metadata.normalize_dependencies().unwrap();
+            let mut wire = serde_json::to_value(metadata).unwrap();
+            wire["bit"]["dependencies"] = json!([reference]);
+            let mut metadata: PackagedBitMetadata = serde_json::from_value(wire).unwrap();
+            assert!(matches!(
+                metadata.normalize_dependencies(),
+                Err(ProtocolError::Invalid(message)) if message == error
+            ));
+        }
+        let mut metadata = legacy_inventory(true);
+        metadata.normalize_dependencies().unwrap();
+        let mut wire = serde_json::to_value(metadata).unwrap();
+        wire["bit"]["dependencies"] = json!(["assets.test:tokenizer"]);
+        wire["dependencies"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("hub");
+        let mut metadata: PackagedBitMetadata = serde_json::from_value(wire).unwrap();
+        assert!(metadata.normalize_dependencies().is_err());
+    }
+
+    #[test]
+    fn normalization_rejects_malformed_bit_identities_and_dependency_fields() {
+        for (field, value) in [
+            ("id", Value::Null),
+            ("id", json!(17)),
+            ("id", json!("")),
+            ("id", json!("../model")),
+            ("hub", json!(17)),
+            ("dependencies", Value::Null),
+            ("dependencies", json!("tokenizer")),
+            ("dependencies", json!([17])),
+            ("dependencies", json!([""])),
+            ("dependencies", json!(["assets.test:../tokenizer"])),
+        ] {
+            let mut metadata = legacy_inventory(false);
+            metadata.normalize_dependencies().unwrap();
+            let mut wire = serde_json::to_value(metadata).unwrap();
+            wire["bit"][field] = value;
+            let mut metadata: PackagedBitMetadata = serde_json::from_value(wire).unwrap();
+            assert!(metadata.normalize_dependencies().is_err(), "{field}");
+        }
+    }
+
+    #[test]
+    fn normalization_checks_dependency_bound_before_collapsing_duplicates() {
+        for count in [
+            PACKAGED_BIT_MAX_DEPENDENCIES,
+            PACKAGED_BIT_MAX_DEPENDENCIES + 1,
+        ] {
+            let bit = json!({"id": "model"});
+            let mut metadata = PackagedBitMetadata::V1(PackagedBitMetadataV1 {
+                bit: bit.clone(),
+                dependencies: vec![bit; count],
+                artifacts: vec![],
+            });
+            if count == PACKAGED_BIT_MAX_DEPENDENCIES {
+                metadata.normalize_dependencies().unwrap();
+                assert!(metadata.dependencies().is_empty());
+            } else {
+                assert!(matches!(
+                    metadata.normalize_dependencies(),
+                    Err(ProtocolError::Invalid("packaged Bit dependency count"))
+                ));
+            }
+        }
     }
 
     #[test]
