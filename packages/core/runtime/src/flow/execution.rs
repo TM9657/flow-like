@@ -80,6 +80,65 @@ async fn wait_for_flush_tick_or_cancel(
     }
 }
 
+async fn flush_run_periodically(
+    run: Arc<Mutex<Run>>,
+    flush_interval: Duration,
+    cancel: CancellationToken,
+) {
+    // The first flush belongs one period from now. Awaiting an immediate tick
+    // before checking cancellation adds a timer-resolution delay to short runs.
+    let mut interval = flow_like_types::tokio::time::interval_at(
+        flow_like_types::tokio::time::Instant::now() + flush_interval,
+        flush_interval,
+    );
+
+    while wait_for_flush_tick_or_cancel(&mut interval, &cancel).await {
+        if cancel.is_cancelled() {
+            break;
+        }
+        let prepared: Option<PreparedFlush> =
+            match lock_with_timeout(run.as_ref(), "run_flush_prepare").await {
+                Ok(mut run) => {
+                    if run.traces.is_empty() {
+                        None
+                    } else {
+                        match run.prepare_flush(false) {
+                            Ok(prepared) => prepared,
+                            Err(err) => {
+                                eprintln!("[Error] preparing background log flush: {:?}", err);
+                                None
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    eprintln!("[Error] {}", err);
+                    None
+                }
+            };
+
+        if let Some(prepared) = prepared {
+            match prepared.write().await {
+                Ok(result) => {
+                    if result.created_table {
+                        match lock_with_timeout(run.as_ref(), "run_flush_finalize").await {
+                            Ok(mut run) => {
+                                run.log_initialized = true;
+                            }
+                            Err(err) => {
+                                eprintln!("[Error] {}", err);
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    eprintln!("[Error] background log flush: {:?}", err);
+                }
+            }
+        }
+    }
+}
+
 pub(super) async fn lock_with_timeout<'a, T>(
     mutex: &'a Mutex<T>,
     label: &str,
@@ -1818,62 +1877,11 @@ impl InternalRun {
         let flush_cancel = CancellationToken::new();
         // A dropped execution future must also release the flush task's run snapshot.
         let _flush_cancel_on_drop = flush_cancel.clone().drop_guard();
-        let flush_cancel_clone = flush_cancel.clone();
-        let flush_task = flow_like_types::tokio::spawn(async move {
-            let mut interval = flow_like_types::tokio::time::interval(flush_interval);
-            interval.tick().await; // Skip first immediate tick
-
-            while wait_for_flush_tick_or_cancel(&mut interval, &flush_cancel_clone).await {
-                if flush_cancel_clone.is_cancelled() {
-                    break;
-                }
-                let prepared: Option<PreparedFlush> =
-                    match lock_with_timeout(run_clone.as_ref(), "run_flush_prepare").await {
-                        Ok(mut run) => {
-                            if run.traces.is_empty() {
-                                None
-                            } else {
-                                match run.prepare_flush(false) {
-                                    Ok(prepared) => prepared,
-                                    Err(err) => {
-                                        eprintln!(
-                                            "[Error] preparing background log flush: {:?}",
-                                            err
-                                        );
-                                        None
-                                    }
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            eprintln!("[Error] {}", err);
-                            None
-                        }
-                    };
-
-                if let Some(prepared) = prepared {
-                    match prepared.write().await {
-                        Ok(result) => {
-                            if result.created_table {
-                                match lock_with_timeout(run_clone.as_ref(), "run_flush_finalize")
-                                    .await
-                                {
-                                    Ok(mut run) => {
-                                        run.log_initialized = true;
-                                    }
-                                    Err(err) => {
-                                        eprintln!("[Error] {}", err);
-                                    }
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            eprintln!("[Error] background log flush: {:?}", err);
-                        }
-                    }
-                }
-            }
-        });
+        let flush_task = flow_like_types::tokio::spawn(flush_run_periodically(
+            run_clone,
+            flush_interval,
+            flush_cancel.clone(),
+        ));
 
         let mut stack_hash = self.stack.hash();
         let mut current_stack_len = self.stack.len();
@@ -3289,24 +3297,60 @@ mod tests {
         }
     }
 
+    async fn background_flush_run() -> InternalRun {
+        let state = state_with_noop_node().await;
+        InternalRun::new(
+            "test-app",
+            Arc::new(Board::new_detached(
+                Some("background-flush".into()),
+                Path::default(),
+            )),
+            None,
+            &state,
+            &Profile::default(),
+            &RunPayload {
+                id: "unused-entry".into(),
+                payload: None,
+                runtime_variables: None,
+                filter_secrets: None,
+            },
+            false,
+            test_intercom_callback(),
+            None,
+            None,
+            std::collections::HashMap::new(),
+        )
+        .await
+        .expect("build run")
+    }
+
+    #[tokio::test]
+    async fn background_flush_cancelled_before_start_never_waits_for_timer() {
+        let run = background_flush_run().await;
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        let task = flush_run_periodically(run.run.clone(), Duration::from_secs(60), cancel);
+        futures::pin_mut!(task);
+
+        assert!(
+            futures::poll!(&mut task).is_ready(),
+            "a completed short run must not wait for the initial timer tick"
+        );
+    }
+
     #[tokio::test]
     async fn background_flush_wait_is_interrupted_by_cancellation() {
+        let run = background_flush_run().await;
         let cancel = CancellationToken::new();
-        let task_cancel = cancel.clone();
-        let task = flow_like_types::tokio::spawn(async move {
-            let mut interval = flow_like_types::tokio::time::interval(Duration::from_secs(60));
-            interval.tick().await;
-            wait_for_flush_tick_or_cancel(&mut interval, &task_cancel).await
-        });
+        let task = flush_run_periodically(run.run.clone(), Duration::from_secs(60), cancel.clone());
+        futures::pin_mut!(task);
 
-        flow_like_types::tokio::task::yield_now().await;
+        assert!(futures::poll!(&mut task).is_pending());
         cancel.cancel();
-
-        let ticked = flow_like_types::tokio::time::timeout(Duration::from_secs(1), task)
-            .await
-            .expect("flush wait should stop promptly")
-            .expect("flush wait task should complete");
-        assert!(!ticked);
+        assert!(
+            futures::poll!(&mut task).is_ready(),
+            "cancellation must interrupt the first flush wait"
+        );
     }
 
     #[cfg(feature = "flow-runtime")]
