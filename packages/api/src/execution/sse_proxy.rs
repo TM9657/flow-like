@@ -6,13 +6,15 @@
 use crate::audit::{ExecutionAuditContext, record_execution_result};
 use crate::entity::sea_orm_active_enums::{AuditActorType, ExecutionStatus, RunStatus};
 use crate::entity::{execution_run, execution_usage_tracking, prelude::*};
-use crate::execution::dispatch::ByteStream;
+use crate::execution::dispatch::{ByteStream, DispatchError};
 use crate::execution::page_action_sealer::{PageActionSealingContext, PageActionSealingReport};
 use crate::execution::run_summary::{RunSummary, apply_run_summary, without_nodes};
 use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::{http::HeaderMap, response::IntoResponse};
 use eventsource_stream::Eventsource;
 use flow_like::flow::execution::rejection::REJECTION_OPERATION_PREFIX;
 use flow_like_types::create_id;
+use flow_like_types::http_streaming::{HTTP_RESPONSE_CHUNK, accepts_event_stream};
 use futures_util::{Stream, StreamExt};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
@@ -137,6 +139,167 @@ pub fn proxy_sse_response_with_page_actions(
             .text("keep-alive")
             .interval(Duration::from_secs(1)),
     )
+}
+
+pub(crate) fn wants_http_event_stream(headers: &HeaderMap) -> bool {
+    let accept = headers
+        .get_all(axum::http::header::ACCEPT)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect::<Vec<_>>()
+        .join(",");
+    accepts_event_stream(&accept)
+}
+
+pub(crate) fn executor_response_bytes(response: reqwest::Response) -> ByteStream {
+    Box::pin(
+        response
+            .bytes_stream()
+            .map(|result| result.map_err(|error| DispatchError::Network(error.to_string()))),
+    )
+}
+
+fn public_http_event(name: &'static str, payload: serde_json::Value) -> Event {
+    Event::default().event(name).data(payload.to_string())
+}
+
+fn public_http_error(message: &'static str) -> Event {
+    public_http_event("error", serde_json::json!({ "error": message }))
+}
+
+fn finish_http_stream(
+    output: &mut Option<flow_like_types::tokio::sync::mpsc::Sender<Event>>,
+    terminal: &mut Option<flow_like_types::tokio::sync::oneshot::Sender<Event>>,
+    event: Event,
+) {
+    output.take();
+    if let Some(terminal) = terminal.take() {
+        let _ = terminal.send(event);
+    }
+}
+
+/// Stream only the workflow's explicit HTTP output. The executor's other
+/// messages remain private, and its completion still updates the run record.
+pub(crate) fn stream_http_response(
+    bytes: ByteStream,
+    run_id: String,
+    db: Option<ExecutionAuditContext>,
+    timeout: Duration,
+    map_result: fn(serde_json::Value) -> serde_json::Value,
+) -> axum::response::Response {
+    // Reserve a separate terminal slot so a full queue cannot hide a timeout.
+    // After a disconnect, drain until the original execution deadline to keep
+    // authenticated completion events available for run bookkeeping.
+    let (tx, mut rx) = flow_like_types::tokio::sync::mpsc::channel::<Event>(16);
+    let (terminal_tx, terminal_rx) = flow_like_types::tokio::sync::oneshot::channel();
+    let deadline = flow_like_types::tokio::time::Instant::now() + timeout;
+    flow_like_types::tokio::spawn(async move {
+        let mut es = bytes.eventsource();
+        let mut output = Some(tx);
+        let mut terminal = Some(terminal_tx);
+        let mut has_result = false;
+        let final_event = loop {
+            let next = flow_like_types::tokio::time::timeout_at(deadline, es.next()).await;
+            let sse_event = match next {
+                Ok(Some(Ok(event))) => event,
+                Ok(None) => {
+                    break public_http_error("Response stream ended before completion");
+                }
+                Ok(Some(Err(error))) => {
+                    tracing::warn!(run_id = %run_id, %error, "HTTP response stream failed");
+                    break public_http_error("Response stream failed");
+                }
+                Err(_) => {
+                    break public_http_error("Response stream timed out");
+                }
+            };
+            let parsed = match serde_json::from_str::<serde_json::Value>(&sse_event.data) {
+                Ok(value) => value,
+                Err(error) => {
+                    tracing::warn!(run_id = %run_id, %error, "Invalid executor HTTP response event");
+                    break public_http_error("Response stream failed");
+                }
+            };
+            let event_type = parsed.get("event_type").and_then(|value| value.as_str());
+            if event_type == Some("completed") {
+                let completed = parse_completed_payload(&parsed);
+                let successful = matches!(completed.status, RunStatus::Completed);
+                if let Some(db) = &db
+                    && let Err(error) = update_run_on_completed_event(db, &run_id, completed).await
+                {
+                    tracing::error!(run_id = %run_id, %error, "Failed to update HTTP run on completion");
+                }
+                break if successful {
+                    public_http_event("done", serde_json::json!({}))
+                } else {
+                    public_http_error("Workflow execution failed")
+                };
+            }
+            if event_type == Some("error") {
+                // Close the public response immediately, then drain the
+                // executor's completion event for its authenticated status.
+                finish_http_stream(
+                    &mut output,
+                    &mut terminal,
+                    public_http_error("Workflow execution failed"),
+                );
+                continue;
+            }
+            let event = match event_type {
+                Some(HTTP_RESPONSE_CHUNK) => Some(public_http_event(
+                    "chunk",
+                    parsed.get("payload").cloned().unwrap_or_default(),
+                )),
+                Some("generic_result") if !has_result => {
+                    has_result = true;
+                    Some(public_http_event(
+                        "result",
+                        map_result(parsed.get("payload").cloned().unwrap_or_default()),
+                    ))
+                }
+                _ => None,
+            };
+            if let (Some(tx), Some(event)) = (output.as_ref(), event) {
+                match flow_like_types::tokio::time::timeout_at(deadline, tx.send(event)).await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(_)) => output = None,
+                    Err(_) => {
+                        break public_http_error("Response stream timed out");
+                    }
+                }
+            }
+        };
+        finish_http_stream(&mut output, &mut terminal, final_event);
+    });
+
+    let stream = async_stream::stream! {
+        while let Some(event) = rx.recv().await {
+            yield Ok::<_, Infallible>(event);
+        }
+        if let Ok(event) = terminal_rx.await {
+            yield Ok(event);
+        }
+    };
+    let mut response = Sse::new(stream)
+        .keep_alive(
+            KeepAlive::new()
+                .text("keep-alive")
+                .interval(Duration::from_secs(15)),
+        )
+        .into_response();
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-cache, no-transform"),
+    );
+    response.headers_mut().insert(
+        "x-accel-buffering",
+        axum::http::HeaderValue::from_static("no"),
+    );
+    response.headers_mut().append(
+        axum::http::header::VARY,
+        axum::http::HeaderValue::from_static("Accept"),
+    );
+    response
 }
 
 fn create_sse_stream(
@@ -597,7 +760,222 @@ async fn track_execution_usage_from_run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flow_like_types::tokio;
     use std::collections::HashSet;
+
+    fn executor_event(event_type: &str, payload: serde_json::Value) -> bytes::Bytes {
+        bytes::Bytes::from(format!(
+            "event: message\ndata: {}\n\n",
+            serde_json::json!({ "event_type": event_type, "payload": payload })
+        ))
+    }
+
+    async fn http_stream_text(bytes: ByteStream) -> String {
+        let response = stream_http_response(
+            bytes,
+            "run-http-test".into(),
+            None,
+            Duration::from_secs(1),
+            std::convert::identity,
+        );
+        String::from_utf8(
+            axum::body::to_bytes(response.into_body(), 1024 * 1024)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn http_stream_negotiation_reads_all_accept_headers() {
+        let mut headers = HeaderMap::new();
+        assert!(!wants_http_event_stream(&headers));
+        headers.append("accept", "application/json, */*".parse().unwrap());
+        headers.append("accept", "text/event-stream;q=0".parse().unwrap());
+        assert!(!wants_http_event_stream(&headers));
+        headers.append("accept", "text/event-stream;q=0.5".parse().unwrap());
+        assert!(wants_http_event_stream(&headers));
+    }
+
+    #[tokio::test]
+    async fn http_stream_delivers_chunk_before_workflow_completion_and_filters_telemetry() {
+        let (finish, completed) = tokio::sync::oneshot::channel();
+        let bytes: ByteStream = Box::pin(async_stream::stream! {
+            yield Ok(executor_event("log", serde_json::json!({"secret": "private"})));
+            let chunk = executor_event(HTTP_RESPONSE_CHUNK, serde_json::json!({"text": "first\nline"}));
+            let split = chunk.len() / 2;
+            yield Ok(chunk.slice(..split));
+            yield Ok(chunk.slice(split..));
+            completed.await.unwrap();
+            yield Ok(executor_event("generic_result", serde_json::json!({"body": "final"})));
+            yield Ok(executor_event("generic_result", serde_json::json!("duplicate")));
+            yield Ok(executor_event("completed", serde_json::json!({"status": "completed"})));
+        });
+        let response = stream_http_response(
+            bytes,
+            "run-http-test".into(),
+            None,
+            Duration::from_secs(2),
+            std::convert::identity,
+        );
+        assert_eq!(response.headers()["content-type"], "text/event-stream");
+        assert_eq!(response.headers()["x-accel-buffering"], "no");
+        assert_eq!(response.headers()["vary"], "Accept");
+        let mut events = response.into_body().into_data_stream().eventsource();
+        let chunk = tokio::time::timeout(Duration::from_secs(1), events.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(chunk.event, "chunk");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&chunk.data).unwrap(),
+            serde_json::json!({"text": "first\nline"})
+        );
+        // The workflow is still waiting on this signal when the first chunk arrives.
+        finish.send(()).unwrap();
+        let result = events.next().await.unwrap().unwrap();
+        assert_eq!(result.event, "result");
+        assert_eq!(result.data, r#"{"body":"final"}"#);
+        let done = events.next().await.unwrap().unwrap();
+        assert_eq!(done.event, "done");
+        assert_eq!(done.data, "{}");
+        assert!(events.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn http_stream_errors_are_terminal_and_sanitized() {
+        for bytes in [
+            Box::pin(futures_util::stream::empty()) as ByteStream,
+            Box::pin(futures_util::stream::iter([Err(DispatchError::Network(
+                "private executor URL and token".into(),
+            ))])),
+            Box::pin(futures_util::stream::iter([Ok(bytes::Bytes::from_static(
+                b"data: private invalid JSON\n\n",
+            ))])),
+            Box::pin(futures_util::stream::iter([Ok(executor_event(
+                "completed",
+                serde_json::json!({"status": "failed", "error": "private trace"}),
+            ))])),
+        ] {
+            let text = http_stream_text(bytes).await;
+            assert!(text.contains("event: error"), "{text}");
+            assert!(!text.contains("private"), "{text}");
+            assert!(!text.contains("event: done"), "{text}");
+        }
+    }
+
+    #[tokio::test]
+    async fn http_stream_drains_completion_after_a_public_error() {
+        let (observed, completion) = tokio::sync::oneshot::channel();
+        let bytes: ByteStream = Box::pin(async_stream::stream! {
+            yield Ok(executor_event("error", serde_json::json!({"error": "private trace"})));
+            observed.send(()).unwrap();
+            yield Ok(executor_event("completed", serde_json::json!({"status": "failed"})));
+        });
+        let text = http_stream_text(bytes).await;
+        tokio::time::timeout(Duration::from_secs(1), completion)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(text.matches("event: error").count(), 1);
+        assert!(!text.contains("private"));
+        assert!(!text.contains("event: done"));
+    }
+
+    #[tokio::test]
+    async fn http_stream_keeps_reading_completion_after_the_client_disconnects() {
+        let (release, resume) = tokio::sync::oneshot::channel();
+        let (observed, completion) = tokio::sync::oneshot::channel();
+        let bytes: ByteStream = Box::pin(async_stream::stream! {
+            resume.await.unwrap();
+            yield Ok(executor_event(HTTP_RESPONSE_CHUNK, serde_json::json!("partial")));
+            observed.send(()).unwrap();
+            yield Ok(executor_event("completed", serde_json::json!({"status": "completed"})));
+        });
+        let response = stream_http_response(
+            bytes,
+            "run-http-test".into(),
+            None,
+            Duration::from_secs(2),
+            std::convert::identity,
+        );
+        drop(response);
+        release.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(1), completion)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn http_stream_timeout_terminates_even_when_the_output_queue_is_full() {
+        struct OnDrop(Option<tokio::sync::oneshot::Sender<()>>);
+        impl Drop for OnDrop {
+            fn drop(&mut self) {
+                if let Some(sender) = self.0.take() {
+                    let _ = sender.send(());
+                }
+            }
+        }
+        let (dropped, stopped) = tokio::sync::oneshot::channel();
+        let bytes: ByteStream = Box::pin(async_stream::stream! {
+            let _on_drop = OnDrop(Some(dropped));
+            for index in 0..100 {
+                yield Ok(executor_event(HTTP_RESPONSE_CHUNK, serde_json::json!(index)));
+            }
+            futures_util::future::pending::<()>().await;
+        });
+        let response = stream_http_response(
+            bytes,
+            "run-http-test".into(),
+            None,
+            Duration::from_millis(20),
+            std::convert::identity,
+        );
+        // Wait without reading the body, leaving the producer's queue full.
+        tokio::time::timeout(Duration::from_secs(1), stopped)
+            .await
+            .unwrap()
+            .unwrap();
+        let text = String::from_utf8(
+            axum::body::to_bytes(response.into_body(), 1024 * 1024)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+        assert_eq!(text.matches("event: chunk").count(), 16);
+        assert!(text.contains("Response stream timed out"));
+        assert_eq!(text.matches("event: error").count(), 1);
+    }
+
+    #[tokio::test]
+    async fn buffered_http_result_ignores_partial_responses() {
+        let bytes = Box::pin(futures_util::stream::iter([
+            Ok(executor_event(
+                HTTP_RESPONSE_CHUNK,
+                serde_json::json!("partial"),
+            )),
+            Ok(executor_event(
+                "generic_result",
+                serde_json::json!({"answer": 42}),
+            )),
+            Ok(executor_event(
+                "completed",
+                serde_json::json!({"status": "completed"}),
+            )),
+        ]));
+        let result = collect_generic_result_bytes(
+            bytes,
+            "run-buffered-test".into(),
+            None,
+            Duration::from_secs(1),
+        )
+        .await;
+        assert_eq!(result, Some(serde_json::json!({"answer": 42})));
+    }
 
     fn page_action_context() -> PageActionSealingContext {
         crate::backend_jwt::init_for_tests();

@@ -8945,6 +8945,15 @@
     "class": null,
     "category": "Events/Generic"
   },
+  "events_http_stream_response": {
+    "qualified": "http::streamResponse",
+    "namespace": "http",
+    "alias": "streamResponse",
+    "flat": "eventsHttpStreamResponse",
+    "receiver": null,
+    "class": null,
+    "category": "Events/HTTP"
+  },
   "events_inbound_email": {
     "qualified": "events::inboundEmail",
     "namespace": "events",

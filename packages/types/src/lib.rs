@@ -47,6 +47,7 @@ pub mod cache {
     pub use flow_like_types_contracts::cache::*;
 }
 pub mod channel;
+pub mod http_streaming;
 pub mod interaction;
 pub mod intercom;
 pub mod maintenance {

@@ -53,10 +53,11 @@ use crate::{
     },
     error::ApiError,
     execution::{
-        DispatchRequest, DispatchTrigger, ExecutionBackend, ExecutionJwtParams, TokenType,
-        collect_generic_result, collect_generic_result_bytes, is_jwt_configured, rejection,
-        resolve_wasm_packages, sign_execution_jwt,
+        ByteStream, DispatchRequest, DispatchTrigger, ExecutionBackend, ExecutionJwtParams,
+        TokenType, collect_generic_result_bytes, executor_response_bytes, is_jwt_configured,
+        rejection, resolve_wasm_packages, sign_execution_jwt, stream_http_response,
         variant::{self, ResolvedTarget, STABLE_VARIANT, SplitKey, dispatch_event_json},
+        wants_http_event_stream,
     },
     middleware::jwt::{AppUser, OpenIDUser},
     permission::role_permission::RolePermissions,
@@ -764,7 +765,7 @@ pub(crate) async fn dispatch_rest_for_event(
 
     match registration.kind.as_str() {
         "rest_fn" => {
-            let result = dispatch_rest_fn(
+            dispatch_rest_fn(
                 state,
                 event_row,
                 &served.target,
@@ -778,8 +779,7 @@ pub(crate) async fn dispatch_rest_for_event(
                 client,
                 caller,
             )
-            .await?;
-            Ok(materialize_response(result))
+            .await
         }
         "rest_openapi" => {
             // `extras_json` is populated at setup-time with the actual
@@ -2599,7 +2599,7 @@ async fn dispatch_rest_fn(
     body: &Bytes,
     client: Value,
     caller: &ProxyCallerContext,
-) -> Result<Value, ApiError> {
+) -> Result<Response, ApiError> {
     let content_type = headers
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
@@ -2680,7 +2680,7 @@ async fn dispatch_rest_fn(
         }),
     );
 
-    dispatch_event_collect(
+    let (bytes, run_id, db) = dispatch_event_stream(
         state,
         event_row,
         target,
@@ -2688,7 +2688,32 @@ async fn dispatch_rest_fn(
         Some(Value::Object(args)),
         caller,
     )
-    .await
+    .await?;
+    if wants_http_event_stream(headers) {
+        Ok(stream_http_response(
+            bytes,
+            run_id,
+            Some(db),
+            INBOUND_RESULT_TIMEOUT,
+            rest_stream_result,
+        ))
+    } else {
+        let mut response = materialize_response(collect_inbound_result(bytes, run_id, db).await?);
+        response.headers_mut().append(
+            axum::http::header::VARY,
+            axum::http::HeaderValue::from_static("Accept"),
+        );
+        Ok(response)
+    }
+}
+
+fn rest_stream_result(result: Value) -> Value {
+    result
+        .get("__inbound_response")
+        .cloned()
+        .or_else(|| local_response_envelope(&result))
+        .map(|envelope| envelope.get("body").cloned().unwrap_or(Value::Null))
+        .unwrap_or(result)
 }
 
 /// Dispatch an inbound request into the served variant's board and collect
@@ -2703,6 +2728,31 @@ async fn dispatch_event_collect(
     payload: Option<Value>,
     caller: &ProxyCallerContext,
 ) -> Result<Value, ApiError> {
+    let (bytes, run_id, db) =
+        dispatch_event_stream(state, event_row, target, target_node_id, payload, caller).await?;
+    collect_inbound_result(bytes, run_id, db).await
+}
+
+async fn collect_inbound_result(
+    bytes: ByteStream,
+    run_id: String,
+    db: crate::audit::ExecutionAuditContext,
+) -> Result<Value, ApiError> {
+    collect_generic_result_bytes(bytes, run_id, Some(db), INBOUND_RESULT_TIMEOUT)
+        .await
+        .ok_or_else(|| {
+            ApiError::gateway_timeout("flow did not return a result within the allotted time")
+        })
+}
+
+async fn dispatch_event_stream(
+    state: &AppState,
+    event_row: &event::Model,
+    target: &ResolvedTarget,
+    target_node_id: String,
+    payload: Option<Value>,
+    caller: &ProxyCallerContext,
+) -> Result<(ByteStream, String, crate::audit::ExecutionAuditContext), ApiError> {
     if !is_jwt_configured() {
         return Err(ApiError::internal_error(flow_like_types::anyhow!(
             "Execution JWT signing not configured (missing BACKEND_KEY/BACKEND_PUB)"
@@ -2919,8 +2969,8 @@ async fn dispatch_event_collect(
 
     crate::audit::record_execution_dispatch_for(state, &run_model, "inbound").await?;
 
-    let db = Some(crate::audit::ExecutionAuditContext::from(state));
-    match state.dispatcher.backend() {
+    let db = crate::audit::ExecutionAuditContext::from(state);
+    let bytes = match state.dispatcher.backend() {
         ExecutionBackend::LambdaStream => {
             let (_dispatch_response, byte_stream) =
                 match state.dispatcher.dispatch_streaming(request).await {
@@ -2932,13 +2982,7 @@ async fn dispatch_event_collect(
                     }
                 }
                 .map_err(ApiError::from)?;
-            collect_generic_result_bytes(byte_stream, run_id, db, INBOUND_RESULT_TIMEOUT)
-                .await
-                .ok_or_else(|| {
-                    ApiError::gateway_timeout(
-                        "flow did not return a result within the allotted time",
-                    )
-                })
+            byte_stream
         }
         _ => {
             let (_dispatch_response, executor_response) =
@@ -2951,15 +2995,10 @@ async fn dispatch_event_collect(
                     }
                 }
                 .map_err(ApiError::from)?;
-            collect_generic_result(executor_response, run_id, db, INBOUND_RESULT_TIMEOUT)
-                .await
-                .ok_or_else(|| {
-                    ApiError::gateway_timeout(
-                        "flow did not return a result within the allotted time",
-                    )
-                })
+            executor_response_bytes(executor_response)
         }
-    }
+    };
+    Ok((bytes, run_id, db))
 }
 
 fn parse_rest_body_value(body: &Bytes, content_type: &str) -> Result<Value, ApiError> {
@@ -4545,8 +4584,29 @@ mod tests {
         PROXY_EVENT_AUTHORIZATION_HEADER, ProxyCallerContext, canonical_auth_kind, client_metadata,
         inbound_base_path, is_asymmetric_jwt_algorithm, jwk_matches_oauth_header, jwks_object_path,
         mcp_resource_url, parse_query_single, registration_auth_headers,
-        rest_args_from_body_and_query, with_inbound_openapi_server,
+        rest_args_from_body_and_query, rest_stream_result, with_inbound_openapi_server,
     };
+
+    #[test]
+    fn streamed_rest_result_matches_buffered_response_envelopes() {
+        let body = json!({"answer": 42});
+        for result in [
+            body.clone(),
+            json!({"body": body}),
+            json!({"status_code": 201, "headers": {"x-test": "value"}, "body": body}),
+            json!({"__inbound_response": {"status": 201, "body": body}}),
+        ] {
+            assert_eq!(rest_stream_result(result), body);
+        }
+        assert_eq!(
+            rest_stream_result(json!({"status_code": 204})),
+            serde_json::Value::Null
+        );
+        assert_eq!(
+            rest_stream_result(json!("text result")),
+            json!("text result")
+        );
+    }
 
     #[tokio::test]
     async fn identity_discovery_preserves_private_http_and_large_documents() {

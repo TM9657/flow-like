@@ -539,6 +539,17 @@ impl EventSinkManager {
         payload: Option<flow_like_types::Value>,
         callback: Option<Arc<BufferedInterComHandler>>,
     ) -> Result<Result<(), String>> {
+        self.fire_event_with_request(app_handle, event_id, payload, callback, None)
+    }
+
+    pub(crate) fn fire_event_with_request(
+        &self,
+        app_handle: &AppHandle,
+        event_id: &str,
+        payload: Option<flow_like_types::Value>,
+        callback: Option<Arc<BufferedInterComHandler>>,
+        request_control: Option<Arc<crate::event_bus::EventRequestControl>>,
+    ) -> Result<Result<(), String>> {
         tracing::debug!("🔥 [FIRE_EVENT] Starting fire_event for: {}", event_id);
 
         let conn = self.db.lock().unwrap();
@@ -597,7 +608,7 @@ impl EventSinkManager {
         if let Some(event_bus_state) = app_handle.try_state::<crate::state::TauriEventBusState>() {
             let event_bus = &event_bus_state.0;
 
-            Ok(event_bus.push_event_with_token(
+            Ok(event_bus.push_event_with_request(
                 payload,
                 app_id.clone(),
                 event_id.to_string(),
@@ -605,6 +616,7 @@ impl EventSinkManager {
                 personal_access_token,
                 callback,
                 oauth_tokens_opt,
+                request_control,
             ))
         } else {
             Ok(Err("event bus not available".to_owned()))

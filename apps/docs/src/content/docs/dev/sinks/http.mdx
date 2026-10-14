@@ -179,7 +179,61 @@ Inspect the run and its logs; do not automatically retry a request that may
 already have produced effects. A reverse proxy or caller can impose a shorter
 timeout than the sink's result wait.
 
-For progress events, use the Event invocation API:
+### Stream partial responses
+
+HTTP/API events and REST function routes return their usual buffered response
+unless the caller sends `Accept: text/event-stream`. This works on hosted
+servers, the desktop HTTP listener, standalone device endpoints, and local
+REST servers. Wildcard values such as `*/*` do not enable streaming, and
+`text/event-stream;q=0` keeps the buffered response.
+
+Add **Stream HTTP Response** to the Flow and connect its generic **Response**
+input to each partial value. Its execution output continues the Flow, so the
+node can run repeatedly inside a loop. Keep **Return Generic Result** for the
+final result. Partial values do not replace or merge into that result, and
+ordinary HTTP callers do not receive the partial values.
+
+For example, with the Event active, request a stream from the hosted endpoint:
+
+```bash
+curl --no-buffer -X POST \
+  "https://your-domain.com/api/v1/sink/trigger/http/app_abc123/webhook" \
+  -H "Accept: text/event-stream" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"hello"}'
+```
+
+The response uses Server-Sent Events (SSE), with a JSON value in every `data`
+field. A Flow that emits a partial value and then returns its final result
+produces events like these:
+
+```text
+event: chunk
+data: {"text":"Hello"}
+
+event: result
+data: {"message":"Hello world"}
+
+event: done
+data: {}
+
+```
+
+`chunk` carries a partial value, `result` carries the final response payload,
+and `done` confirms successful completion. A failed or timed-out execution
+ends with an `error` event instead. The stream can complete without a
+`result` if the Flow does not return one. Internal execution logs and chat
+messages are not included.
+
+Authentication and request validation run before streaming starts. After the
+response headers have been sent, failures use SSE `error` events and cannot
+change the HTTP status. REST response envelopes contribute their `body` as
+the final result; late status codes and headers cannot change the open stream.
+Callers should read through `done` or `error`, and treat a connection that ends
+without either event as incomplete. Configure reverse proxies to forward SSE
+without buffering, and keep their timeouts long enough for the request.
+
+For the full execution event protocol, use the Event invocation API:
 `POST /api/v1/apps/{app_id}/events/{event_id}/invoke`. The SDKs expose it as
 [`triggerEvent()`](/dev/sdks/nodejs/#trigger-an-event) and
 [`trigger_event()`](/dev/sdks/python/#trigger-an-event). Their asynchronous

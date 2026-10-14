@@ -171,9 +171,9 @@ class StandaloneReleaseValidityTests(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         return Path(folder.name)
 
-    def prepare(self, validity_days):
+    def prepare(self, validity_days, repository=REPOSITORY):
         outputs = self.directory() / "outputs"
-        result = run_script(script(step("prepare", "id: inputs")), REPOSITORY, {
+        result = run_script(script(step("prepare", "id: inputs")), repository, {
             "RELEASE_SEQUENCE": "3", "RELEASE_VALIDITY_DAYS": validity_days,
             "RELEASE_ARTIFACT_BASE": BASE, "RELEASE_CONFIGURED_BASE": BASE, "RELEASE_BUCKET": "releases",
             "RELEASE_PREFIX": "standalone", "RELEASE_PUBLIC_KEYS": KEYS, "RELEASE_REGION": "auto",
@@ -197,6 +197,25 @@ class StandaloneReleaseValidityTests(unittest.TestCase):
         preflight = step("prepare", "name: Refuse a sequence that is already published or partly uploaded, and an agent version that was not bumped")
         self.assertIn("RELEASE_VERSION: ${{ steps.inputs.outputs.version }}", preflight)
         self.assertIn('--release-version "$RELEASE_VERSION"', preflight)
+
+    def test_prepare_refuses_a_stale_or_missing_agent_lock_entry_before_anything_is_built(self):
+        repository = self.directory()
+        for name in ["apps/standalone/Cargo.toml", ".github/scripts/standalone_release.py"]:
+            destination = repository / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes((REPOSITORY / name).read_bytes())
+        with (repository / "apps/standalone/Cargo.toml").open("rb") as manifest:
+            version = tomllib.load(manifest)["package"]["version"]
+        for name, locked_version in [("flow-like-standalone", "0.0.0"), ("unrelated", version)]:
+            with self.subTest(name=name, locked_version=locked_version):
+                (repository / "Cargo.lock").write_text(
+                    f'version = 4\n\n[[package]]\nname = "{name}"\nversion = "{locked_version}"\n'
+                )
+                result, outputs = self.prepare("365", repository)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"Cargo.lock must contain flow-like-standalone {version}", result.stderr)
+                self.assertIn("cargo update --workspace", result.stderr)
+                self.assertEqual(outputs, {})
 
     def test_prepare_refuses_a_validity_outside_the_range_before_anything_is_built(self):
         for days, reason in [("0", "between 1 and 1825 days"), ("1826", "between 1 and 1825 days"),

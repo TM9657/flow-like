@@ -118,7 +118,19 @@ where
         let Some((name, value)) = line.split_once(':') else {
             continue;
         };
-        headers.insert(name.trim().to_lowercase(), value.trim().to_string());
+        let name = name.trim().to_lowercase();
+        let value = value.trim();
+        if name == "accept" {
+            headers
+                .entry(name)
+                .and_modify(|existing: &mut String| {
+                    existing.push_str(", ");
+                    existing.push_str(value);
+                })
+                .or_insert_with(|| value.to_string());
+        } else {
+            headers.insert(name, value.to_string());
+        }
     }
 
     let content_length = headers
@@ -209,7 +221,8 @@ where
     bytes.extend_from_slice(format!("HTTP/1.1 {} {}\r\n", status_code, reason).as_bytes());
     bytes.extend_from_slice(b"Content-Type: text/event-stream\r\n");
     bytes.extend_from_slice(b"Cache-Control: no-cache, no-transform\r\n");
-    bytes.extend_from_slice(b"Connection: keep-alive\r\n");
+    // Events are written without chunked transfer coding, so EOF delimits this body.
+    bytes.extend_from_slice(b"Connection: close\r\n");
     bytes.extend_from_slice(b"X-Accel-Buffering: no\r\n");
     for (name, value) in extra_headers {
         bytes.extend_from_slice(
@@ -312,15 +325,62 @@ pub(crate) async fn trigger_shared_function_context(
     parent_node_id: &str,
     log_name: &'static str,
 ) -> flow_like_types::Result<Value> {
+    let mut context = context.lock().await;
+    trigger_function_context(&mut context, arguments, parent_node_id, log_name).await
+}
+
+#[cfg(all(feature = "execute", not(feature = "remote")))]
+pub(crate) async fn trigger_streaming_function_context(
+    context: &SharedFunctionContext,
+    arguments: &Value,
+    parent_node_id: &str,
+    chunks: tokio::sync::mpsc::Sender<Value>,
+) -> flow_like_types::Result<Value> {
+    use flow_like_types::{http_streaming::HTTP_RESPONSE_CHUNK, intercom::InterComEvent};
+
+    // Keep the function lock for the whole invocation, but install the request callback
+    // only on a clone. Cancellation must not leave a sender on the reusable context.
+    let shared = context.lock().await;
+    let original_callback = shared.callback().clone();
+    let mut invocation = shared.clone_with_callback(Some(Arc::new(move |event: InterComEvent| {
+        let chunks = chunks.clone();
+        let original_callback = original_callback.clone();
+        Box::pin(async move {
+            if event.event_type == HTTP_RESPONSE_CHUNK {
+                chunks
+                    .send(event.payload)
+                    .await
+                    .map_err(|_| anyhow!("HTTP client disconnected"))?;
+                Ok(())
+            } else {
+                event.call(&original_callback).await
+            }
+        })
+    })));
+    trigger_function_context(
+        &mut invocation,
+        arguments,
+        parent_node_id,
+        "REST route handler",
+    )
+    .await
+}
+
+#[cfg(all(feature = "execute", not(feature = "remote")))]
+async fn trigger_function_context(
+    context: &mut ExecutionContext,
+    arguments: &Value,
+    parent_node_id: &str,
+    log_name: &'static str,
+) -> flow_like_types::Result<Value> {
     let args = arguments
         .as_object()
         .ok_or_else(|| anyhow!("Registered function arguments must be a JSON object"))?;
-    let mut context = context.lock().await;
     let observer = context.service_observer().await;
     let invocation = observer.as_ref().map(|observer| {
         observer.begin(json::to_vec(arguments).map_or(0, |value| value.len() as u64))
     });
-    reset_function_output_pins(&context).await;
+    reset_function_output_pins(context).await;
 
     let pins: Vec<_> = context
         .node
@@ -342,7 +402,7 @@ pub(crate) async fn trigger_shared_function_context(
     let mut recursion_guard = Some(recursion_guard);
 
     let mut log_message = LogMessage::new(log_name, LogLevel::Debug, None);
-    let run = InternalNode::trigger(&mut context, &mut recursion_guard, true).await;
+    let run = InternalNode::trigger(context, &mut recursion_guard, true).await;
     let result = context.result.clone();
     context.result = None;
     log_message.end();
@@ -487,6 +547,34 @@ fn reason_phrase(status: u16) -> &'static str {
 #[cfg(all(test, feature = "execute", not(feature = "remote")))]
 mod tests {
     use super::split_target;
+
+    #[tokio::test]
+    async fn repeated_accept_headers_preserve_all_media_ranges() {
+        for accept in [
+            "Accept: text/event-stream\r\nAccept: application/json",
+            "Accept: application/json\r\naCcEpT: text/event-stream;q=0.5",
+        ] {
+            let wire = format!("GET /stream HTTP/1.1\r\n{accept}\r\n\r\n");
+            let request = super::read_http_request(&mut wire.as_bytes(), "local".to_string(), 1024)
+                .await
+                .unwrap()
+                .unwrap();
+            let accept = request.headers.get("accept").unwrap();
+            assert!(flow_like_types::http_streaming::accepts_event_stream(
+                accept
+            ));
+            assert!(accept.contains("application/json"));
+        }
+        let mut wire =
+            &b"GET /stream HTTP/1.1\r\nAccept: text/event-stream;q=0\r\nAccept: */*\r\n\r\n"[..];
+        let request = super::read_http_request(&mut wire, "local".to_string(), 1024)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!flow_like_types::http_streaming::accepts_event_stream(
+            request.headers.get("accept").unwrap()
+        ));
+    }
 
     #[test]
     fn split_target_decodes_query_plus_like_space_and_percent_plus_literally() {

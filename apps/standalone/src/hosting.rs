@@ -25,6 +25,7 @@ use flow_like_runtime::{
     state::FlowLikeState,
 };
 use flow_like_types::{
+    http_streaming::{HTTP_RESPONSE_CHUNK, accepts_event_stream},
     intercom::{InterComCallback, InterComEvent},
     utils::constant_time_eq,
 };
@@ -773,9 +774,19 @@ impl PreparedHost {
 
 async fn no_store(request: Request, next: axum::middleware::Next) -> Response {
     let mut response = next.run(request).await;
+    let cache_control = if response
+        .headers()
+        .get("cache-control")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.split(',').any(|part| part.trim() == "no-transform"))
+    {
+        "no-store, no-transform"
+    } else {
+        "no-store"
+    };
     response.headers_mut().insert(
         "cache-control",
-        axum::http::HeaderValue::from_static("no-store"),
+        axum::http::HeaderValue::from_static(cache_control),
     );
     response.headers_mut().insert(
         "x-content-type-options",
@@ -862,6 +873,12 @@ async fn dispatch(State(host): State<Arc<HostState>>, request: Request) -> Respo
         )
             .into_response();
     };
+    let stream_response = request
+        .headers()
+        .get_all(axum::http::header::ACCEPT)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .any(accepts_event_stream);
     let query = request.uri().query().map(str::to_owned);
     let body = tokio::select! {_=host.cancel.cancelled()=>return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     result=tokio::time::timeout(host.timeout,to_bytes(request.into_body(),BODY_LIMIT))=>match result {Ok(Ok(body))=>body,Ok(Err(_))=>return StatusCode::PAYLOAD_TOO_LARGE.into_response(),Err(_)=>return StatusCode::REQUEST_TIMEOUT.into_response()}};
@@ -901,7 +918,7 @@ async fn dispatch(State(host): State<Arc<HostState>>, request: Request) -> Respo
         };
         (invocation, payload, door)
     };
-    if door != Door::Endpoint {
+    if door != Door::Endpoint || stream_response {
         let run = Streamed {
             prepared,
             payload,
@@ -946,17 +963,22 @@ async fn dispatch(State(host): State<Arc<HostState>>, request: Request) -> Respo
         )
             .into_response();
     }
-    axum::Json(
+    let mut response = axum::Json(
         response
             .lock()
             .await
             .clone()
             .unwrap_or(serde_json::json!({"completed":true})),
     )
-    .into_response()
+    .into_response();
+    response.headers_mut().append(
+        axum::http::header::VARY,
+        axum::http::HeaderValue::from_static("Accept"),
+    );
+    response
 }
 
-/// A run whose events the answer streams: a chat, a Page action, or a run of the service page.
+/// A run whose events the answer streams to its caller.
 struct Streamed {
     prepared: PreparedInvocation,
     payload: Option<Value>,
@@ -981,7 +1003,9 @@ fn streamed_run(
     let (tx, rx) = mpsc::channel(32);
     let (finished, completion) = tokio::sync::oneshot::channel();
     let cancel = host.cancel.child_token();
-    let run_cancel = cancel.clone();
+    let run_cancel = cancel.child_token();
+    let response_cancel = cancel.clone();
+    let deadline = tokio::time::Instant::now() + host.timeout;
     #[cfg(feature = "on-demand")]
     let counted = host
         .run_door
@@ -993,7 +1017,8 @@ fn streamed_run(
         });
     tokio::spawn(async move {
         let _permit = permit;
-        let callback = stream_callback(door, tx, run_cancel.clone());
+        let final_result = Arc::new(Mutex::new(None));
+        let callback = stream_callback(door, tx.clone(), run_cancel.clone(), final_result.clone());
         let end = invoke(
             &host,
             &prepared,
@@ -1008,9 +1033,12 @@ fn streamed_run(
         if let Some(counted) = counted {
             counted.end(end);
         }
-        let _ = finished.send(end == RunEnd::Succeeded);
+        let succeeded = end == RunEnd::Succeeded
+            && (door != Door::Endpoint
+                || finish_endpoint_response(final_result, tx, &response_cancel, deadline).await);
+        let _ = finished.send(succeeded);
     });
-    event_answer(rx, completion, cancel.drop_guard())
+    event_answer(rx, completion, cancel.drop_guard(), door)
 }
 
 /// Sends the run events the answer of `door` carries to `output`; a reader that went away
@@ -1019,22 +1047,54 @@ fn stream_callback(
     door: Door,
     output: mpsc::Sender<InterComEvent>,
     cancel: CancellationToken,
+    final_result: Arc<Mutex<Option<InterComEvent>>>,
 ) -> InterComCallback {
-    Some(Arc::new(move |event: InterComEvent| {
+    Some(Arc::new(move |mut event: InterComEvent| {
         let output = output.clone();
         let cancel = cancel.clone();
+        let final_result = final_result.clone();
         Box::pin(async move {
             if streams(door, &event.event_type) {
                 let payload_bytes = serde_json::to_vec(&event.payload)?.len();
+                if door == Door::Endpoint && payload_bytes > BODY_LIMIT {
+                    cancel.cancel();
+                }
                 ensure!(
                     payload_bytes <= BODY_LIMIT,
-                    "Chat event exceeds the service response limit"
+                    "Event exceeds the service response limit"
                 );
+                if door == Door::Endpoint {
+                    if event.event_type == "generic_result" {
+                        *final_result.lock().await = Some(event);
+                        return Ok(());
+                    }
+                    event.event_type = "chunk".to_owned();
+                }
                 tokio::select! {_=cancel.cancelled()=>{},result=output.send(event)=>{if result.is_err() {cancel.cancel();} else {crate::usage::response_payload(payload_bytes);}}}
             }
             Ok(())
         })
     }))
+}
+
+async fn finish_endpoint_response(
+    final_result: Arc<Mutex<Option<InterComEvent>>>,
+    output: mpsc::Sender<InterComEvent>,
+    cancel: &CancellationToken,
+    deadline: tokio::time::Instant,
+) -> bool {
+    let Some(mut event) = final_result.lock().await.take() else {
+        return true;
+    };
+    event.event_type = "result".to_owned();
+    let payload_bytes = serde_json::to_vec(&event.payload).map_or(0, |bytes| bytes.len());
+    tokio::select! {
+        _ = cancel.cancelled() => false,
+        sent = tokio::time::timeout_at(deadline, output.send(event)) => match sent {
+            Ok(Ok(())) => { crate::usage::response_payload(payload_bytes); true },
+            _ => { cancel.cancel(); false },
+        },
+    }
 }
 
 /// The answer to a streamed run: its events, then `done` or `error` once `completion` says
@@ -1043,37 +1103,70 @@ fn event_answer(
     rx: mpsc::Receiver<InterComEvent>,
     completion: oneshot::Receiver<bool>,
     guard: tokio_util::sync::DropGuard,
+    door: Door,
 ) -> Response {
     // Completion has its own channel. Retained runtime callbacks may still
     // own a sender, so closing their event channel cannot end the HTTP stream.
     let stream = futures_util::stream::unfold(
-        (rx, completion, guard, false),
-        |(mut rx, mut completion, guard, ended)| async move {
+        (rx, completion, guard, false, door),
+        |(mut rx, mut completion, guard, ended, door)| async move {
             if ended {
                 return None;
             }
             let (event, ended) = tokio::select! {biased;
                 event=rx.recv()=>match event {
                     Some(event)=>(event,false),
-                    None=>{let ok=(&mut completion).await.unwrap_or(false);(InterComEvent::with_type(if ok {"done"} else {"error"},serde_json::json!({"completed":ok})),true)},
+                    None=>{let ok=(&mut completion).await.unwrap_or(false);(stream_completion(door,ok),true)},
                 },
-                result=&mut completion=>{let ok=result.unwrap_or(false);(InterComEvent::with_type(if ok {"done"} else {"error"},serde_json::json!({"completed":ok})),true)}
+                result=&mut completion=>{let ok=result.unwrap_or(false);(stream_completion(door,ok),true)}
             };
             let event = SseEvent::default()
                 .event(&event.event_type)
                 .json_data(&event.payload)
                 .unwrap_or_else(|_| SseEvent::default().event("error").data("{}"));
-            Some((Ok::<_, Infallible>(event), (rx, completion, guard, ended)))
+            Some((
+                Ok::<_, Infallible>(event),
+                (rx, completion, guard, ended, door),
+            ))
         },
     );
-    Sse::new(stream)
+    let mut response = Sse::new(stream)
         .keep_alive(KeepAlive::default())
-        .into_response()
+        .into_response();
+    if door == Door::Endpoint {
+        response.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store, no-transform"),
+        );
+        response.headers_mut().append(
+            axum::http::header::VARY,
+            axum::http::HeaderValue::from_static("Accept"),
+        );
+        response.headers_mut().insert(
+            "x-accel-buffering",
+            axum::http::HeaderValue::from_static("no"),
+        );
+    }
+    response
+}
+
+fn stream_completion(door: Door, succeeded: bool) -> InterComEvent {
+    let payload = if door != Door::Endpoint {
+        serde_json::json!({"completed": succeeded})
+    } else if succeeded {
+        serde_json::json!({})
+    } else {
+        serde_json::json!({"error": "Workflow failed or exceeded its request deadline"})
+    };
+    InterComEvent::with_type(if succeeded { "done" } else { "error" }, payload)
 }
 
 /// Run events a streamed answer carries: a chat its messages; a Page also its renders and its
 /// result; the run route of a quick action or form also its text output.
 fn streams(door: Door, event_type: &str) -> bool {
+    if door == Door::Endpoint {
+        return matches!(event_type, HTTP_RESPONSE_CHUNK | "generic_result");
+    }
     event_type == "run_initiated"
         || event_type.starts_with("chat_")
         || (door != Door::Chat && matches!(event_type, "a2ui" | "generic_result"))
@@ -1479,6 +1572,9 @@ mod tests {
             if payload.get("render") == Some(&Value::Bool(true)) {
                 context.stream_response("a2ui", serde_json::json!({"type":"createElement", "component":{"id":"new-button", "component":{"type":"button", "eventHandlers":{"click":[{"name":"workflow_event", "context":{"nodeId":"entry"}}]}}}})).await?;
             }
+            context
+                .stream_response(HTTP_RESPONSE_CHUNK, payload.clone())
+                .await?;
             if payload.get("wait") == Some(&Value::Bool(true)) {
                 self.entered.notify_one();
                 std::future::pending::<()>().await;
@@ -1492,6 +1588,10 @@ mod tests {
                     serde_json::json!({"count":count,"payload":payload}),
                 )
                 .await?;
+            anyhow::ensure!(
+                payload.get("fail") != Some(&Value::Bool(true)),
+                "private failure detail"
+            );
             Ok(())
         }
     }
@@ -1812,6 +1912,264 @@ mod tests {
         let wrong_method = client.post(&endpoint).bearer_auth(SERVICE_TOKEN).send();
         assert_eq!(wrong_method.await.unwrap().status(), StatusCode::NOT_FOUND);
         assert_eq!(served.calls.load(Ordering::SeqCst), 2);
+        served.stop().await;
+    }
+
+    #[tokio::test]
+    async fn endpoint_stream_adapter_delivers_before_completion_and_filters_runtime_events() {
+        use futures_util::StreamExt;
+        let (output, receiver) = mpsc::channel(2);
+        let (finish, completion) = oneshot::channel();
+        let cancel = CancellationToken::new();
+        let final_result = Arc::new(Mutex::new(None));
+        let callback = stream_callback(
+            Door::Endpoint,
+            output.clone(),
+            cancel.clone(),
+            final_result.clone(),
+        );
+        let answer = event_answer(
+            receiver,
+            completion,
+            cancel.clone().drop_guard(),
+            Door::Endpoint,
+        );
+        assert_eq!(answer.headers()["vary"], "Accept");
+        assert_eq!(answer.headers()["cache-control"], "no-store, no-transform");
+        assert_eq!(answer.headers()["x-accel-buffering"], "no");
+        let mut body = answer.into_body().into_data_stream();
+        for event_type in [
+            "run_initiated",
+            "chat_stream_partial",
+            "a2ui",
+            "run:private",
+        ] {
+            InterComEvent::with_type(event_type, serde_json::json!({"private":true}))
+                .call(&callback)
+                .await
+                .unwrap();
+        }
+        InterComEvent::with_type(HTTP_RESPONSE_CHUNK, serde_json::json!("first\nchunk"))
+            .call(&callback)
+            .await
+            .unwrap();
+        let first = tokio::time::timeout(Duration::from_millis(100), body.next())
+            .await
+            .expect("response waited for completion")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            std::str::from_utf8(&first).unwrap(),
+            "event: chunk\ndata: \"first\\nchunk\"\n\n"
+        );
+        InterComEvent::with_type("generic_result", serde_json::json!({"discarded":true}))
+            .call(&callback)
+            .await
+            .unwrap();
+        InterComEvent::with_type("generic_result", serde_json::json!({"final":true}))
+            .call(&callback)
+            .await
+            .unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), body.next())
+                .await
+                .is_err(),
+            "a return value streamed before execution finished"
+        );
+        assert!(
+            finish_endpoint_response(
+                final_result,
+                output,
+                &cancel,
+                tokio::time::Instant::now() + Duration::from_secs(1)
+            )
+            .await
+        );
+        finish.send(true).unwrap();
+        let result = body.next().await.unwrap().unwrap();
+        assert_eq!(
+            std::str::from_utf8(&result).unwrap(),
+            "event: result\ndata: {\"final\":true}\n\n"
+        );
+        let done = body.next().await.unwrap().unwrap();
+        assert_eq!(
+            std::str::from_utf8(&done).unwrap(),
+            "event: done\ndata: {}\n\n"
+        );
+        assert!(body.next().await.is_none());
+        assert!(cancel.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn endpoint_stream_adapter_cancels_on_disconnect_and_oversized_events() {
+        let (output, receiver) = mpsc::channel(1);
+        let (_finish, completion) = oneshot::channel();
+        let cancel = CancellationToken::new();
+        let callback = stream_callback(
+            Door::Endpoint,
+            output,
+            cancel.clone(),
+            Arc::new(Mutex::new(None)),
+        );
+        let answer = event_answer(
+            receiver,
+            completion,
+            cancel.clone().drop_guard(),
+            Door::Endpoint,
+        );
+        InterComEvent::with_type(HTTP_RESPONSE_CHUNK, serde_json::json!(1))
+            .call(&callback)
+            .await
+            .unwrap();
+        let blocked = tokio::spawn(async move {
+            InterComEvent::with_type(HTTP_RESPONSE_CHUNK, serde_json::json!(2))
+                .call(&callback)
+                .await
+                .unwrap();
+        });
+        tokio::task::yield_now().await;
+        assert!(!blocked.is_finished());
+        drop(answer);
+        assert!(cancel.is_cancelled());
+        tokio::time::timeout(Duration::from_millis(100), blocked)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let (output, _receiver) = mpsc::channel(1);
+        let cancel = CancellationToken::new();
+        let callback = stream_callback(
+            Door::Endpoint,
+            output,
+            cancel.clone(),
+            Arc::new(Mutex::new(None)),
+        );
+        let oversized = InterComEvent::with_type(HTTP_RESPONSE_CHUNK, "x".repeat(BODY_LIMIT));
+        assert!(oversized.call(&callback).await.is_err());
+        assert!(cancel.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn existing_streams_keep_runtime_names_and_completion_payloads() {
+        for door in [Door::Chat, Door::Page, Door::Run] {
+            let (output, receiver) = mpsc::channel(2);
+            let (finish, completion) = oneshot::channel();
+            let cancel = CancellationToken::new();
+            let callback =
+                stream_callback(door, output, cancel.clone(), Arc::new(Mutex::new(None)));
+            InterComEvent::with_type(HTTP_RESPONSE_CHUNK, serde_json::json!({"hidden":true}))
+                .call(&callback)
+                .await
+                .unwrap();
+            InterComEvent::with_type("chat_stream_partial", serde_json::json!({"text":"hello"}))
+                .call(&callback)
+                .await
+                .unwrap();
+            finish.send(true).unwrap();
+            let answer = event_answer(receiver, completion, cancel.drop_guard(), door);
+            assert!(answer.headers().get("vary").is_none());
+            let body = axum::body::to_bytes(answer.into_body(), 1024)
+                .await
+                .unwrap();
+            assert_eq!(
+                std::str::from_utf8(&body).unwrap(),
+                "event: chat_stream_partial\ndata: {\"text\":\"hello\"}\n\nevent: done\ndata: {\"completed\":true}\n\n"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn endpoint_streams_only_public_response_events_when_requested() {
+        let directory = tempfile::tempdir().unwrap();
+        let served = endpoints(directory.path()).await;
+        for (accept, streams) in [
+            ("text/event-stream", true),
+            ("application/json, text/event-stream;q=0.5", true),
+            ("*/*", false),
+            ("text/event-stream;q=0", false),
+        ] {
+            let answer = served
+                .client
+                .post(served.url("/run/x"))
+                .bearer_auth(SERVICE_TOKEN)
+                .header("accept", accept)
+                .json(&serde_json::json!({"text": "hello\nworld"}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(answer.status(), StatusCode::OK);
+            let content_type = answer.headers()["content-type"]
+                .to_str()
+                .unwrap()
+                .to_owned();
+            if streams {
+                assert!(content_type.starts_with("text/event-stream"));
+                let body = answer.text().await.unwrap();
+                let frames: Vec<_> = body
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("event: "))
+                    .collect();
+                assert_eq!(frames, ["chunk", "result", "done"], "{body}");
+                assert!(body.contains("data: {\"text\":\"hello\\nworld\"}"));
+                assert!(body.ends_with("event: done\ndata: {}\n\n"));
+            } else {
+                assert!(content_type.starts_with("application/json"));
+                let body: Value = answer.json().await.unwrap();
+                assert_eq!(body["payload"]["text"], "hello\nworld");
+            }
+        }
+        served.stop().await;
+    }
+
+    #[tokio::test]
+    async fn endpoint_delivers_a_chunk_before_a_waiting_workflow_times_out() {
+        let directory = tempfile::tempdir().unwrap();
+        let served = endpoints(directory.path()).await;
+        let mut answer = served
+            .client
+            .post(served.url("/run/x"))
+            .bearer_auth(SERVICE_TOKEN)
+            .header("accept", "text/event-stream")
+            .json(&serde_json::json!({"wait": true}))
+            .send()
+            .await
+            .unwrap();
+        let first = tokio::time::timeout(Duration::from_millis(500), answer.chunk())
+            .await
+            .expect("chunk was held until the workflow ended")
+            .unwrap()
+            .unwrap();
+        let first = String::from_utf8(first.to_vec()).unwrap();
+        assert!(first.contains("event: chunk"), "{first}");
+        assert!(!first.contains("event: error"));
+        let remainder = answer.text().await.unwrap();
+        assert!(remainder.contains("event: error"), "{remainder}");
+        assert!(!remainder.contains("event: done"));
+        served.stop().await;
+    }
+
+    #[tokio::test]
+    async fn endpoint_stream_failure_never_sends_done_or_private_details() {
+        let directory = tempfile::tempdir().unwrap();
+        let served = endpoints(directory.path()).await;
+        let body = served
+            .client
+            .post(served.url("/run/x"))
+            .bearer_auth(SERVICE_TOKEN)
+            .header("accept", "text/event-stream")
+            .json(&serde_json::json!({"fail": true}))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let frames: Vec<_> = body
+            .lines()
+            .filter_map(|line| line.strip_prefix("event: "))
+            .collect();
+        assert_eq!(frames, ["chunk", "error"], "{body}");
+        assert!(!body.contains("private failure detail"));
         served.stop().await;
     }
 

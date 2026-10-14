@@ -60,7 +60,8 @@ pub use sse_proxy::{
     proxy_sse_response_with_page_actions, update_run_on_completion,
 };
 pub(crate) use sse_proxy::{
-    is_completed_event, parse_completed_payload, update_run_on_completed_event,
+    executor_response_bytes, is_completed_event, parse_completed_payload, stream_http_response,
+    update_run_on_completed_event, wants_http_event_stream,
 };
 pub use state::{
     CreateEventInput, CreateRunInput, EventQuery, ExecutionEventRecord, ExecutionRunRecord,
