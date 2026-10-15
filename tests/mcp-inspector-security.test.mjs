@@ -18,8 +18,11 @@ function inspector() {
     atob,
     fetch: async () => { throw new Error('<img src=x onerror="alert(1)">'); },
   });
-  const script = template.match(/<script>([\s\S]*?)<\/script>/)[1]
-    .replace("__ENDPOINT_PATH_JSON__", JSON.stringify("/mcp"));
+  const parsedTemplate = window.document.createElement("template");
+  parsedTemplate.innerHTML = template;
+  const scripts = parsedTemplate.content.querySelectorAll("script");
+  assert.equal(scripts.length, 1);
+  const script = scripts[0].textContent.replace("__ENDPOINT_PATH_JSON__", JSON.stringify("/mcp"));
   vm.runInContext(script, context);
   return { window, context };
 }

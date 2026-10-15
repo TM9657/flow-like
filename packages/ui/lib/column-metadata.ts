@@ -75,6 +75,18 @@ function jsonStringArray(raw: string): string[] | undefined {
 	}
 }
 
+function trimDelimiters(
+	value: string,
+	leading: string,
+	trailing = leading,
+): string {
+	let start = 0;
+	let end = value.length;
+	while (start < end && value[start] === leading) start++;
+	while (end > start && value[end - 1] === trailing) end--;
+	return value.slice(start, end);
+}
+
 /** `flow-like:read-attributes` holds a JSON string array; comma-separated text is read too. */
 export function parseReadAttributes(value: unknown): string[] {
 	if (Array.isArray(value)) return normalizeAttributes(value);
@@ -82,11 +94,9 @@ export function parseReadAttributes(value: unknown): string[] {
 	const raw = value.trim();
 	const listed =
 		jsonStringArray(raw) ??
-		raw
-			.replace(/^\[+/, "")
-			.replace(/\]+$/, "")
+		trimDelimiters(raw, "[", "]")
 			.split(",")
-			.map((attribute) => attribute.trim().replace(/^"+|"+$/g, ""));
+			.map((attribute) => trimDelimiters(attribute.trim(), '"'));
 	return normalizeAttributes(listed);
 }
 
