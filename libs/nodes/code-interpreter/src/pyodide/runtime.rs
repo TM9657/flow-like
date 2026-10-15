@@ -339,20 +339,47 @@ pub async fn workspace_file_server(
 
 /// Walk `ws_puts_dir` recursively and upload every file to the object store.
 pub async fn upload_ws_puts(ws_puts_dir: &PathBuf, store: &Arc<dyn ObjectStore>, prefix: &str) {
-    let mut stack = vec![ws_puts_dir.clone()];
-    while let Some(dir) = stack.pop() {
+    // The guest can create symlinks. Only files still inside its output directory
+    // may be read by the host after execution finishes.
+    let Ok(metadata) = tokio::fs::symlink_metadata(ws_puts_dir).await else {
+        return;
+    };
+    if !metadata.is_dir() {
+        return;
+    }
+    let Ok(root) = tokio::fs::canonicalize(ws_puts_dir).await else {
+        return;
+    };
+    let mut stack = vec![(ws_puts_dir.clone(), vec![root.clone()])];
+    while let Some((dir, ancestors)) = stack.pop() {
         let mut entries = match tokio::fs::read_dir(&dir).await {
             Ok(e) => e,
             Err(_) => continue,
         };
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
+            let Ok(resolved) = tokio::fs::canonicalize(&path).await else {
+                continue;
+            };
+            if !resolved.starts_with(&root) {
+                continue;
+            }
+            let Ok(metadata) = tokio::fs::metadata(&resolved).await else {
+                continue;
+            };
+            if metadata.is_dir() {
+                if !ancestors.contains(&resolved) {
+                    let mut descendants = ancestors.clone();
+                    descendants.push(resolved);
+                    stack.push((path, descendants));
+                }
+                continue;
+            }
+            if !metadata.is_file() {
                 continue;
             }
 
-            let data = match tokio::fs::read(&path).await {
+            let data = match tokio::fs::read(&resolved).await {
                 Ok(d) => d,
                 Err(e) => {
                     warn!("workspace upload: read {:?} failed: {}", path, e);
@@ -750,6 +777,84 @@ impl PyodideRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn workspace_uploads_stay_within_the_guest_output_directory() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let output = temp.path().join("ws_puts");
+        let nested = output.join("nested");
+        tokio::fs::create_dir_all(&nested).await.unwrap();
+        tokio::fs::write(nested.join("good.txt"), b"workspace")
+            .await
+            .unwrap();
+        let outside = temp.path().join("host-secret");
+        tokio::fs::write(&outside, b"secret").await.unwrap();
+        symlink(&outside, output.join("leak.txt")).unwrap();
+        symlink(temp.path(), output.join("host-directory")).unwrap();
+        symlink(&output, nested.join("cycle")).unwrap();
+        symlink(nested.join("good.txt"), output.join("alias.txt")).unwrap();
+        symlink(&nested, output.join("alias-directory")).unwrap();
+
+        let store: Arc<dyn ObjectStore> =
+            Arc::new(flow_like_storage::object_store::memory::InMemory::new());
+        tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            upload_ws_puts(&output, &store, "workspace"),
+        )
+        .await
+        .expect("symlink cycles must terminate");
+        for path in ["nested/good.txt", "alias.txt", "alias-directory/good.txt"] {
+            assert_eq!(
+                store
+                    .get(&workspace_object_path("workspace", path))
+                    .await
+                    .unwrap()
+                    .bytes()
+                    .await
+                    .unwrap(),
+                "workspace"
+            );
+        }
+        for path in [
+            "leak.txt",
+            "host-directory/host-secret",
+            "nested/cycle/alias.txt",
+        ] {
+            assert!(
+                store
+                    .head(&workspace_object_path("workspace", path))
+                    .await
+                    .is_err()
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn workspace_uploads_reject_a_replaced_output_directory() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let outside = temp.path().join("host");
+        tokio::fs::create_dir(&outside).await.unwrap();
+        tokio::fs::write(outside.join("secret"), b"secret")
+            .await
+            .unwrap();
+        let output = temp.path().join("ws_puts");
+        symlink(&outside, &output).unwrap();
+        let store: Arc<dyn ObjectStore> =
+            Arc::new(flow_like_storage::object_store::memory::InMemory::new());
+        upload_ws_puts(&output, &store, "workspace").await;
+        assert!(
+            store
+                .head(&workspace_object_path("workspace", "secret"))
+                .await
+                .is_err()
+        );
+    }
 
     #[tokio::test]
     async fn python_network_option_preserves_protocol_grants_without_enabling_dns() {

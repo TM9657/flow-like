@@ -434,12 +434,15 @@ export function useCopilotCommands({
 					command.command_type === "ConnectPins" ||
 					command.command_type === "DisconnectPins",
 			);
-			let latestBoardNodes: Record<string, INode> = board.data?.nodes ?? {};
-			let latestBoardLayers: Record<string, ILayer> = board.data?.layers ?? {};
-			let latestBoardVariables: Record<string, IVariable> =
-				board.data?.variables ?? {};
-			let latestBoardComments: Record<string, IComment> =
-				board.data?.comments ?? {};
+			// Batch planning writes these maps before the backend confirms the commands.
+			let latestBoardNodes: Record<string, INode> = { ...board.data?.nodes };
+			let latestBoardLayers: Record<string, ILayer> = { ...board.data?.layers };
+			let latestBoardVariables: Record<string, IVariable> = {
+				...board.data?.variables,
+			};
+			let latestBoardComments: Record<string, IComment> = {
+				...board.data?.comments,
+			};
 			let appliedGenericCommandCount = 0;
 			const commandFailures: FlowPilotCommandApplyFailure[] = [];
 			const recordedFailureKeys = new Set<string>();
@@ -667,10 +670,10 @@ export function useCopilotCommands({
 				const freshBoard = await board.refetch();
 				if (freshBoard.error) throw freshBoard.error;
 				const data = freshBoard.data ?? board.data;
-				latestBoardNodes = data?.nodes ?? latestBoardNodes;
-				latestBoardLayers = data?.layers ?? latestBoardLayers;
-				latestBoardVariables = data?.variables ?? latestBoardVariables;
-				latestBoardComments = data?.comments ?? latestBoardComments;
+				latestBoardNodes = { ...(data?.nodes ?? latestBoardNodes) };
+				latestBoardLayers = { ...(data?.layers ?? latestBoardLayers) };
+				latestBoardVariables = { ...(data?.variables ?? latestBoardVariables) };
+				latestBoardComments = { ...(data?.comments ?? latestBoardComments) };
 				rebuildPinMappings();
 				return freshBoard;
 			};

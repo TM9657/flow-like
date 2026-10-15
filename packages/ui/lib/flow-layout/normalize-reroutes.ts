@@ -5,10 +5,10 @@ export interface AutoRerouteChain {
 	to: string;
 	fromPin: string;
 	toPin: string;
-	/** Original nodes in wire order, retained for reuse and undo. */
+	/** Original path in wire order. Shared trunks occur in multiple paths. */
 	nodes: INode[];
 }
-/** Treat generated, unbranched reroutes as wire geometry during placement. */
+/** Treat complete generated data trees and execution chains as wire geometry. */
 export function normalizeAutoReroutes(input: AutoLayoutInput): {
 	input: AutoLayoutInput;
 	chains: AutoRerouteChain[];
@@ -45,6 +45,26 @@ export function normalizeAutoReroutes(input: AutoLayoutInput): {
 	const referenced = new Set(
 		input.layerNodes.flatMap((node) => node.fn_refs?.fn_refs ?? []),
 	);
+	const generated = new Map(
+		input.layerNodes
+			.filter((node) => node.name === "reroute" && node.auto_reroute === true)
+			.map((node) => [node.id, node]),
+	);
+	const neighbors = new Map<string, Set<string>>();
+	for (const [from, targets] of outgoing) {
+		const source = owners.get(from);
+		if (!source || !generated.has(source)) continue;
+		for (const to of targets) {
+			const target = owners.get(to);
+			if (!target || !generated.has(target)) continue;
+			const sourceNeighbors = neighbors.get(source) ?? new Set<string>();
+			sourceNeighbors.add(target);
+			neighbors.set(source, sourceNeighbors);
+			const targetNeighbors = neighbors.get(target) ?? new Set<string>();
+			targetNeighbors.add(source);
+			neighbors.set(target, targetNeighbors);
+		}
+	}
 	const candidates = new Map<
 		string,
 		{
@@ -53,14 +73,8 @@ export function normalizeAutoReroutes(input: AutoLayoutInput): {
 			output: IPin;
 		}
 	>();
-	for (const node of input.layerNodes) {
-		if (
-			node.name !== "reroute" ||
-			node.auto_reroute !== true ||
-			node.wasm ||
-			referenced.has(node.id)
-		)
-			continue;
+	for (const node of generated.values()) {
+		if (node.wasm || referenced.has(node.id)) continue;
 		const values = Object.values(node.pins);
 		const routeIn = values.find(
 			(pin) => pin.name === "route_in" && pin.pin_type === "Input",
@@ -70,53 +84,124 @@ export function normalizeAutoReroutes(input: AutoLayoutInput): {
 		);
 		if (values.length !== 2 || !routeIn || !routeOut) continue;
 		if (routeIn.connected_to.length || routeOut.depends_on.length) continue;
+		const isExecution = routeIn.data_type === "Execution";
 		if (
 			(incoming.get(routeIn.id)?.size ?? 0) !== 1 ||
-			(outgoing.get(routeOut.id)?.size ?? 0) !== 1
+			(incoming.get(routeOut.id)?.size ?? 0) !== 0 ||
+			(outgoing.get(routeIn.id)?.size ?? 0) !== 0 ||
+			(outgoing.get(routeOut.id)?.size ?? 0) === 0 ||
+			(isExecution && outgoing.get(routeOut.id)?.size !== 1) ||
+			isExecution !== (routeOut.data_type === "Execution")
 		)
 			continue;
 		candidates.set(node.id, { node, input: routeIn, output: routeOut });
 	}
 	const chains: AutoRerouteChain[] = [];
-	for (const id of [...candidates.keys()].sort()) {
-		const start = required(candidates.get(id));
+	const visited = new Set<string>();
+	// A malformed branch protects its entire generated tree, including valid
+	// suffixes that would otherwise appear to start at a retained reroute.
+	for (const id of [...generated.keys()].sort()) {
+		if (visited.has(id)) continue;
+		const component = [id];
+		visited.add(id);
+		for (let index = 0; index < component.length; index++) {
+			for (const neighbor of neighbors.get(component[index]) ?? []) {
+				if (visited.has(neighbor)) continue;
+				visited.add(neighbor);
+				component.push(neighbor);
+			}
+		}
+		if (component.some((member) => !candidates.has(member))) continue;
+		const members = new Set(component);
+		const roots = component.filter((member) => {
+			const route = required(candidates.get(member));
+			const source = [...required(incoming.get(route.input.id))][0];
+			return !members.has(owners.get(source) ?? "");
+		});
+		if (roots.length !== 1) continue;
+		const start = required(candidates.get(roots[0]));
 		const sourcePin = [...required(incoming.get(start.input.id))][0];
 		const sourceId = owners.get(sourcePin);
-		if (!sourceId || candidates.has(sourceId)) continue;
-		const nodes: INode[] = [];
-		const seen = new Set<string>();
-		let current: typeof start | undefined = start;
-		let targetPin: string | undefined;
-		let targetId: string | undefined;
-		while (current && !seen.has(current.node.id)) {
-			seen.add(current.node.id);
-			nodes.push(current.node);
-			targetPin = [...required(outgoing.get(current.output.id))][0];
-			targetId = owners.get(targetPin);
-			current = targetId ? candidates.get(targetId) : undefined;
-			if (current && current.input.id !== targetPin) break;
-		}
-		if (current || !targetId || !targetPin || sourceId === targetId) continue;
+		const source = pins.get(sourcePin);
+		if (
+			!sourceId ||
+			source?.pin_type !== "Output" ||
+			(input.only && !input.only.has(sourceId))
+		)
+			continue;
 		// The two boundary boxes of an open layer share a runtime pin owner.
 		// A direct same-owner wire is invalid, so keep their reroute topology.
 		const boundaryIds = input.currentLayer
 			? new Set([`${input.currentLayer}-input`, `${input.currentLayer}-return`])
 			: undefined;
-		if (boundaryIds?.has(sourceId) && boundaryIds.has(targetId)) continue;
-		if (input.only && (!input.only.has(sourceId) || !input.only.has(targetId)))
-			continue;
-		if (
-			pins.get(sourcePin)?.pin_type !== "Output" ||
-			pins.get(targetPin)?.pin_type !== "Input"
-		)
-			continue;
-		chains.push({
-			from: sourceId,
-			to: targetId,
-			fromPin: sourcePin,
-			toPin: targetPin,
-			nodes,
-		});
+		const paths: AutoRerouteChain[] = [];
+		const parents = new Map<string, string | null>([[start.node.id, null]]);
+		const terminals = new Set<string>();
+		const queue = [start.node.id];
+		let valid = true;
+		for (let index = 0; index < queue.length && valid; index++) {
+			const current = required(candidates.get(queue[index]));
+			if (
+				(current.input.data_type === "Execution") !==
+				(source.data_type === "Execution")
+			) {
+				valid = false;
+				break;
+			}
+			for (const targetPin of [
+				...required(outgoing.get(current.output.id)),
+			].sort()) {
+				const targetId = owners.get(targetPin);
+				const target = pins.get(targetPin);
+				if (
+					!targetId ||
+					target?.pin_type !== "Input" ||
+					(target.data_type === "Execution") !==
+						(source.data_type === "Execution")
+				) {
+					valid = false;
+					break;
+				}
+				if (members.has(targetId)) {
+					if (
+						candidates.get(targetId)?.input.id !== targetPin ||
+						parents.has(targetId)
+					) {
+						valid = false;
+						break;
+					}
+					parents.set(targetId, current.node.id);
+					queue.push(targetId);
+					continue;
+				}
+				if (
+					sourceId === targetId ||
+					(boundaryIds?.has(sourceId) && boundaryIds.has(targetId)) ||
+					(input.only && !input.only.has(targetId)) ||
+					terminals.has(targetPin) ||
+					(target.data_type !== "Execution" &&
+						incoming.get(targetPin)?.size !== 1)
+				) {
+					valid = false;
+					break;
+				}
+				terminals.add(targetPin);
+				const nodes: INode[] = [];
+				let member: string | null = current.node.id;
+				while (member) {
+					nodes.push(required(generated.get(member)));
+					member = parents.get(member) ?? null;
+				}
+				paths.push({
+					from: sourceId,
+					to: targetId,
+					fromPin: sourcePin,
+					toPin: targetPin,
+					nodes: nodes.reverse(),
+				});
+			}
+		}
+		if (valid && parents.size === component.length) chains.push(...paths);
 	}
 	if (!chains.length) return { input, chains };
 	const removed = new Set(

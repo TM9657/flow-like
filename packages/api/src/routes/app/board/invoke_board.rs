@@ -135,7 +135,7 @@ pub async fn invoke_board(
     Extension(user): Extension<AppUser>,
     Path((app_id, board_id)): Path<(String, String)>,
     Query(query): Query<InvokeBoardQuery>,
-    Json(params): Json<InvokeBoardRequest>,
+    Json(mut params): Json<InvokeBoardRequest>,
 ) -> Result<Response, ApiError> {
     super::ensure_connected_app_board_invoke_denied(&user)?;
     let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ExecuteBoards);
@@ -148,6 +148,8 @@ pub async fn invoke_board(
         .master_board_shared(&app_id, &board_id, &state, params.version)
         .await?;
     let technical_user_id = permission.technical_user_id().map(ToOwned::to_owned);
+    crate::routes::oauth::authorize_incoming_oauth_tokens(&state, &user, &mut params.oauth_tokens)
+        .await?;
     let caller_app_chain = match &user {
         AppUser::ConnectedApp(connected) => Some(connected.app_chain.clone()),
         _ => None,

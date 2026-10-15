@@ -122,7 +122,11 @@ fn prefix_reserved_user_query(query: &str) -> String {
         .filter(|pair| !pair.is_empty())
         .map(|pair| {
             let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
-            if RESERVED_QUERY_KEYS.contains(&key) {
+            let decoded_key = urlencoding::decode(key);
+            if decoded_key
+                .as_deref()
+                .is_ok_and(|decoded| RESERVED_QUERY_KEYS.contains(&decoded))
+            {
                 if pair.contains('=') {
                     format!("_{key}={value}")
                 } else {
@@ -392,6 +396,10 @@ mod tests {
 
     #[test]
     fn prefixes_reserved_user_query_keys() {
+        assert_eq!(
+            build_notification_link("app1", Some("/mail?%69%64=xyz&%65ventId=evt&%72oute=bad")),
+            "/use?id=app1&route=%2Fmail&_%69%64=xyz&_%65ventId=evt&_%72oute=bad"
+        );
         assert_eq!(
             build_notification_link("app1", Some("/mail?id=xyz")),
             "/use?id=app1&route=%2Fmail&_id=xyz"

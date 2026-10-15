@@ -1,13 +1,14 @@
 "use client";
+import { NodeResizer } from "./board-runtime-primitives";
+
+import { useReactFlow } from "./board-runtime";
 
 import { useTranslation } from "@flow-like/locales";
 import {
 	type Node,
 	type NodeProps,
-	NodeResizer,
 	type ResizeDragEvent,
 	type ResizeParams,
-	useReactFlow,
 } from "@xyflow/react";
 import {
 	AlertCircleIcon,
@@ -31,6 +32,7 @@ export type MediaNode = Node<
 		boardId: string;
 		appId: string;
 		hash: string;
+		readOnly?: boolean;
 	},
 	"mediaNode"
 >;
@@ -43,11 +45,13 @@ export function MediaNode(props: NodeProps<MediaNode>) {
 	const [hasError, setHasError] = useState(false);
 
 	const isLocked = props.data.comment.is_locked ?? false;
+	const readOnly = props.data.readOnly ?? false;
 	const presignedUrl = props.data.presignedUrl;
 	const isImage = props.data.comment.comment_type === ICommentType.Image;
 	const isVideo = props.data.comment.comment_type === ICommentType.Video;
 
 	const toggleLock = useCallback(async () => {
+		if (readOnly) return;
 		const next = !isLocked;
 		const node = getNodes().find((n) => n.id === props.id);
 		if (node) {
@@ -61,10 +65,11 @@ export function MediaNode(props: NodeProps<MediaNode>) {
 				// noop
 			}
 		}
-	}, [getNodes, isLocked, props.data.onUpsert, props.id]);
+	}, [getNodes, isLocked, readOnly, props.data.onUpsert, props.id]);
 
 	const onResizeEnd = useCallback(
 		async (_event: ResizeDragEvent, params: ResizeParams) => {
+			if (readOnly) return;
 			const node = getNodes().find((n) => n.id === props.id);
 			if (!node) return;
 			const comment = node.data.comment as IComment;
@@ -75,11 +80,12 @@ export function MediaNode(props: NodeProps<MediaNode>) {
 				height: params.height,
 			});
 		},
-		[props.data.comment, props.data.onUpsert, getNodes, props.id],
+		[props.data.comment, props.data.onUpsert, getNodes, props.id, readOnly],
 	);
 
 	const onMoveLayer = useCallback(
 		async (by: number) => {
+			if (readOnly) return;
 			const node = getNodes().find((n) => n.id === props.id);
 			if (!node) return;
 			const comment = node.data.comment as IComment;
@@ -88,7 +94,7 @@ export function MediaNode(props: NodeProps<MediaNode>) {
 				z_index: (props.data.comment.z_index ?? 1) + by,
 			});
 		},
-		[props.data.comment, props.data.onUpsert, getNodes, props.id],
+		[props.data.comment, props.data.onUpsert, getNodes, props.id, readOnly],
 	);
 
 	// Reset loading state when URL changes
@@ -168,7 +174,7 @@ export function MediaNode(props: NodeProps<MediaNode>) {
 					)}
 					<video
 						src={presignedUrl}
-						className="w-full h-full object-contain"
+						className="nodrag nopan w-full h-full object-contain"
 						crossOrigin="anonymous"
 						controls
 						onLoadedData={handleLoad}
@@ -191,7 +197,7 @@ export function MediaNode(props: NodeProps<MediaNode>) {
 					height: 10,
 					zIndex: (props.data.comment.z_index ?? 1) + 1,
 				}}
-				isVisible={!isLocked && props.selected}
+				isVisible={!readOnly && !isLocked && props.selected}
 				onResizeEnd={onResizeEnd}
 				minWidth={100}
 				minHeight={100}
@@ -201,7 +207,7 @@ export function MediaNode(props: NodeProps<MediaNode>) {
 				onMouseEnter={() => setIsHovered(true)}
 				onMouseLeave={() => setIsHovered(false)}
 			>
-				{(props.selected || isHovered) && (
+				{!readOnly && (props.selected || isHovered) && (
 					<MediaNodeToolbar
 						isLocked={isLocked}
 						onMoveUp={() => onMoveLayer(1)}
@@ -215,25 +221,27 @@ export function MediaNode(props: NodeProps<MediaNode>) {
 						props.selected ? "ring-2 ring-primary" : ""
 					} ${isLocked ? "cursor-not-allowed" : ""}`}
 				>
-					<div className="absolute top-1 right-1 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-						<Button
-							variant="secondary"
-							size="icon"
-							title={isLocked ? "Unlock media" : "Lock media"}
-							onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								toggleLock();
-							}}
-							className="h-6 w-6"
-						>
-							{isLocked ? (
-								<LockIcon className="w-3.5 h-3.5" />
-							) : (
-								<UnlockIcon className="w-3.5 h-3.5" />
-							)}
-						</Button>
-					</div>
+					{!readOnly && (
+						<div className="absolute top-1 right-1 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+							<Button
+								variant="secondary"
+								size="icon"
+								title={isLocked ? "Unlock media" : "Lock media"}
+								onClick={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									toggleLock();
+								}}
+								className="h-6 w-6"
+							>
+								{isLocked ? (
+									<LockIcon className="w-3.5 h-3.5" />
+								) : (
+									<UnlockIcon className="w-3.5 h-3.5" />
+								)}
+							</Button>
+						</div>
+					)}
 					<div className="w-full h-full relative">{renderMediaContent()}</div>
 				</div>
 			</div>

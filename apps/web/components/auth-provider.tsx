@@ -4,6 +4,8 @@ import { LoadingScreen, useBackend } from "@flow-like/flow-like-ui";
 import type { IProfile } from "@flow-like/flow-like-ui";
 import { createAccountTokenProvider } from "@flow-like/flow-like-ui/components/account/account-session";
 import { ApiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
+import { coordinateOidcRenewal } from "@flow-like/flow-like-ui/lib/auth/oidc-renewal";
+import { useQueryClient } from "@tanstack/react-query";
 import { Amplify } from "aws-amplify";
 import {
 	type AuthTokens,
@@ -12,7 +14,7 @@ import {
 } from "aws-amplify/auth";
 import { usePathname } from "next/navigation";
 import { UserManager, type UserManagerSettings } from "oidc-client-ts";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { get } from "../lib/api";
 import { getWebOidcSettings } from "../lib/oidc-settings";
@@ -29,6 +31,12 @@ const PUBLIC_PATHS = [
 	"/store",
 	"/store/explore",
 ];
+
+const OAuthCallbackReadyContext = createContext(false);
+
+export function useOAuthCallbackReady(): boolean {
+	return useContext(OAuthCallbackReadyContext);
+}
 
 function defaultProfile(): IProfile {
 	return {
@@ -62,6 +70,7 @@ export class OIDCTokenProvider implements TokenProvider {
 export function WebAuthProvider({
 	children,
 }: Readonly<{ children: React.ReactNode }>) {
+	const pathname = usePathname();
 	const [openIdAuthConfig, setOpenIdAuthConfig] =
 		useState<UserManagerSettings>();
 	const [userManager, setUserManager] = useState<UserManager>();
@@ -69,6 +78,8 @@ export function WebAuthProvider({
 	const [configurationError, setConfigurationError] = useState(false);
 
 	useEffect(() => {
+		let cancelled = false;
+		let manager: UserManager | undefined;
 		(async () => {
 			try {
 				getPublicWebConfig();
@@ -78,10 +89,13 @@ export function WebAuthProvider({
 			}
 			setLoadingProgress(30);
 			const response = await get<any>(defaultProfile(), "auth/openid");
+			if (cancelled) return;
 			if (response) {
 				setLoadingProgress(60);
 				const settings = getWebOidcSettings(response);
 				const userManagerInstance = new UserManager(settings);
+				manager = userManagerInstance;
+				coordinateOidcRenewal(userManagerInstance);
 				const tokenProvider = new OIDCTokenProvider(userManagerInstance);
 				if (response.cognito)
 					Amplify.configure(
@@ -104,6 +118,10 @@ export function WebAuthProvider({
 				setOpenIdAuthConfig(settings);
 			}
 		})();
+		return () => {
+			cancelled = true;
+			manager?.stopSilentRenew();
+		};
 	}, []);
 
 	if (configurationError) {
@@ -118,11 +136,16 @@ export function WebAuthProvider({
 		return <LoadingScreen progress={loadingProgress} />;
 	}
 
+	// Third-party state belongs to the workflow connection, not Hub sign-in.
+	const skipSigninCallback =
+		pathname === "/thirdparty/callback" || pathname === "/thirdparty/callback/";
+
 	return (
 		<AuthProvider
 			key={openIdAuthConfig.client_id}
 			{...openIdAuthConfig}
 			userManager={userManager}
+			skipSigninCallback={skipSigninCallback}
 		>
 			<AuthInner>{children}</AuthInner>
 		</AuthProvider>
@@ -134,6 +157,7 @@ const AUTH_CHANNEL = "flow-like-auth";
 function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 	const auth = useAuth();
 	const backend = useBackend();
+	const queryClient = useQueryClient();
 	const pathname = usePathname();
 	const [profileLoaded, setProfileLoaded] = useState(false);
 	const [authPushed, setAuthPushed] = useState(false);
@@ -253,10 +277,50 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 			if (cancelled) return;
 
 			try {
-				const profile = await backend.userState.getProfile();
+				const settingsProfile = await backend.userState.getSettingsProfile();
 				if (cancelled) return;
-				if (profile && backend instanceof WebBackend) {
-					backend.pushProfile(profile);
+				if (settingsProfile && backend instanceof WebBackend) {
+					const profileKey = [backend.userState.getProfile.name || "backendFn"];
+					const settingsKey = [
+						backend.userState.getSettingsProfile.name || "backendFn",
+					];
+					const appsKey = [backend.appState.getApps.name || "backendFn"];
+					const groupsKey = [backend.appState.getMyGroups.name || "backendFn"];
+					// These lists belong to the signed-in session. Keep retries from
+					// restoring another session's lists when query observers mount.
+					for (const queryKey of [appsKey, groupsKey]) {
+						queryClient.setQueryDefaults(queryKey, {
+							...queryClient.getQueryDefaults(queryKey),
+							persister: undefined,
+						});
+					}
+					// Public callback pages can start these reads before auth is ready.
+					// Cancel them so a late signed-out response cannot replace this session.
+					await Promise.all(
+						[profileKey, settingsKey, appsKey, groupsKey].map((queryKey) =>
+							queryClient.cancelQueries({ queryKey }),
+						),
+					);
+					if (cancelled) return;
+					backend.pushProfile(settingsProfile.hub_profile);
+					queryClient.setQueryData(profileKey, settingsProfile.hub_profile);
+					queryClient.setQueryData(settingsKey, settingsProfile);
+					// Bypass lazy persistence as well as fresh in-memory data for login.
+					// Start before mounting the library; other pages need not wait for apps.
+					void Promise.allSettled([
+						queryClient.fetchQuery({
+							queryKey: appsKey,
+							queryFn: () => backend.appState.getApps(),
+							staleTime: 0,
+							persister: undefined,
+						}),
+						queryClient.fetchQuery({
+							queryKey: groupsKey,
+							queryFn: () => backend.appState.getMyGroups(),
+							staleTime: 0,
+							persister: undefined,
+						}),
+					]);
 					setProfileLoaded(true);
 				}
 			} catch (error) {
@@ -278,6 +342,7 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 		auth?.isAuthenticated,
 		auth?.user?.access_token,
 		backend,
+		queryClient,
 		sessionRecovery,
 	]);
 
@@ -302,6 +367,28 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 	}
 
 	if (sessionRecovery === "sign-in-required") return <SignInRequired />;
+	if (sessionRecovery === "retry-required") {
+		return (
+			<div
+				role="alert"
+				className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center"
+			>
+				<p>
+					Your session could not be renewed. Check your connection and try
+					again.
+				</p>
+				<button
+					type="button"
+					className="rounded-md border px-4 py-2"
+					onClick={() =>
+						window.dispatchEvent(new Event("flow-like:retry-session"))
+					}
+				>
+					Try again
+				</button>
+			</div>
+		);
+	}
 	if (sessionRecovery === "redirecting") return <LoadingScreen progress={98} />;
 
 	// Show loading state while redirecting to sign-in
@@ -319,5 +406,14 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 		return <LoadingScreen progress={99} />;
 	}
 
-	return <>{children}</>;
+	const oauthCallbackReady =
+		!auth.isLoading &&
+		(!auth.isAuthenticated ||
+			(authPushed && profileLoaded && sessionRecovery === "ready"));
+
+	return (
+		<OAuthCallbackReadyContext.Provider value={oauthCallbackReady}>
+			{children}
+		</OAuthCallbackReadyContext.Provider>
+	);
 }

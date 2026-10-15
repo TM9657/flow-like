@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { setAppQueryParam } from "../../lib/app-route-url";
 import { useClientRouter } from "../../lib/client-navigation";
+import { isScriptNavigationUrl } from "../../lib/navigation-url";
 import { getCurrentPageContext } from "../../lib/page-context";
 import { classifyPageContractError } from "../../lib/page-contract-drift";
 import type { IIntercomEvent } from "../../lib/schema/events/intercom-event";
@@ -1181,7 +1182,7 @@ export function useExecuteAction() {
 					}
 					case "external_link": {
 						const url = targetContext.url as string | undefined;
-						if (url) {
+						if (url && !isScriptNavigationUrl(url)) {
 							window.open(url, "_blank", "noopener,noreferrer");
 						}
 						break;

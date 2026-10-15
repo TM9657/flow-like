@@ -160,7 +160,7 @@ test.each(transports.filter(({ name }) => name !== "WebApiState.stream"))(
 	},
 );
 
-test.each(transports.slice(0, 4).filter(({ name }) => name !== "fetcher"))(
+test.each(transports.slice(0, 4))(
 	"$name does not attribute a caller's separate bearer token to the account",
 	async ({ request }) => {
 		const auth = makeAuth();

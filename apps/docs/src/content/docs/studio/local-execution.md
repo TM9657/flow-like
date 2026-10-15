@@ -14,6 +14,10 @@ layers. If any node is local-only, the pre-run result marks the complete Flow as
 requiring local execution. A single run is not divided between local and remote
 workers.
 
+The Kubernetes, Docker Compose, and local backend services run Flows remotely.
+Their executor bundles omit desktop and browser automation. Run these automations
+through Desktop's local runner, including when the backend runs on your computer.
+
 ## Capabilities that run locally
 
 The current [Automation catalog](/nodes/automation/) contains the main

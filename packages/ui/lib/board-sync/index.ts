@@ -7,10 +7,13 @@ export {
 	toNode,
 	type CatalogByName,
 	type IAppliedBoardSync,
+	type BoardChangeSet,
 } from "./apply";
+export { BoardMediaProjector } from "./media";
 export {
 	BoardSyncClient,
 	type BoardSyncTransport,
+	type BoardSyncUpdate,
 	requestMatchesManifest,
 } from "./client";
 export type {

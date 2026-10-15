@@ -1,10 +1,13 @@
 extern crate flow_like_runtime as flow_like;
 
+mod vertex;
+pub use vertex::validate_vertex_endpoint;
+
 /// The `custom:vertex` media providers fall back to Google application-default
 /// credentials when the provider carries neither an access token nor a
 /// service-account key. This uses the host process's own identity. Refuse that
-/// server-side before any provider dispatch; the resolved bearer token would
-/// otherwise be sent to a flow-supplied `endpoint`.
+/// server-side before any provider dispatch so a flow cannot use the executor's
+/// Google identity.
 pub fn ensure_vertex_credentials_explicit(
     context: &flow_like::flow::execution::context::ExecutionContext,
     provider: &flow_like_model_provider::provider::ModelProvider,

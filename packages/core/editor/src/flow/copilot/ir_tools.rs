@@ -1919,6 +1919,8 @@ impl FlowIrDraftStore {
                 catalog_fingerprint,
                 commands: snapshot.evaluation.commands.clone(),
             });
+            // Match check_flowscript: a valid head replaces the older recovery revision.
+            snapshot.salvage = None;
         }
         let Some(checked) = snapshot.checked.as_ref().filter(|checked| {
             checked.revision == snapshot.revision
@@ -12784,6 +12786,71 @@ eventsSimple() { notify::send({ message: "customer message" }) }
             store.global_evaluation_count(),
             2,
             "a live catalog change must trigger exactly one re-evaluation"
+        );
+    }
+
+    #[test]
+    fn successful_inline_check_supersedes_salvage_after_dismissal() {
+        let store = FlowIrDraftStore::new();
+        let board = empty_board();
+        let catalog = flowscript_catalog();
+        let draft_id = "inline-salvage";
+        store.write_flowscript(
+            &board,
+            &catalog,
+            WriteFlowScriptArgs {
+                draft_id: draft_id.into(),
+                replace_existing: false,
+                mode: FlowIrDraftMode::Additive,
+                source: valid_flowscript("hello"),
+                edits: vec![],
+                allow_scope_reduction: false,
+            },
+        );
+        let checked = store.check_flowscript(
+            &board,
+            &catalog,
+            CheckFlowScriptArgs {
+                draft_id: draft_id.into(),
+                expected_revision: 0,
+            },
+        );
+        assert_eq!(checked.status, "valid");
+        let patched = store.patch_flowscript(
+            &board,
+            &catalog,
+            PatchFlowScriptArgs {
+                draft_id: draft_id.into(),
+                expected_revision: 0,
+                old_text: "hello".into(),
+                new_text: "goodbye".into(),
+                allow_scope_reduction: false,
+            },
+        );
+        assert_eq!(patched.revision, Some(1));
+        let commit = |expected_revision| CommitFlowScriptArgs {
+            draft_id: draft_id.into(),
+            expected_revision,
+            allow_deletions: false,
+            remove_node_ids: vec![],
+            remove_variable_ids: vec![],
+            remove_layer_ids: vec![],
+            remove_comment_ids: vec![],
+        };
+        let queued = store.commit_flowscript(&board, &catalog, commit(1));
+        assert_eq!(queued.status, "queued", "{queued:#?}");
+        let token = store.latest_pending_commit_token(&board.id).unwrap();
+        assert!(store.release_commit_if_matches(
+            &token.draft_id,
+            token.revision,
+            &token.base_fingerprint,
+            &token.claim_id,
+        ));
+        let stale = store.commit_flowscript(&board, &catalog, commit(0));
+        assert_eq!(stale.code.as_deref(), Some("FLOWSCRIPT_REVISION_CONFLICT"));
+        assert_eq!(
+            store.commit_flowscript(&board, &catalog, commit(1)).status,
+            "queued"
         );
     }
 

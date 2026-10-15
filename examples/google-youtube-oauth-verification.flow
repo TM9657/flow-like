@@ -1,0 +1,60 @@
+// Part 2 of 2: Google YouTube OAuth verification.
+// Paste into a new board's FlowScript editor and apply it.
+// Import google-oauth-verification.flow into a separate board.
+// OAuth scope collection scans the whole board, including other events and functions.
+// Fill demoPlaylistId and demoVideoId below, then run runYouTubeVerification.
+// Each run adds one video to the playlist and reads the playlist items back.
+// Use a disposable private playlist owned by the Google account you connect.
+
+@category("Verification / Required")
+@description("ID of an existing private YouTube playlist owned by the connected account.")
+let demoPlaylistId = ""
+@category("Verification / Required")
+@description("ID of a real YouTube video to add to the private playlist.")
+let demoVideoId = ""
+
+function reportFailure(stage: string, message: string) {
+    log::error({ message: `${stage}: ${message}`, toast: true })
+}
+
+// Scopes: youtube and youtube.readonly. The playlist must already exist.
+function verifyYouTube(provider: Struct): (passed: bool) {
+    let passed = false
+    const added = google::youtube::addToPlaylist({ provider: provider, playlistId: demoPlaylistId, videoId: demoVideoId, position: 0 })
+    added {
+        execOut: {
+            log::info({ message: `YouTube added item ${added.itemId}. Playlist: https://www.youtube.com/playlist?list=${demoPlaylistId}`, toast: false })
+            const readBack = google::youtube::getPlaylistItems({ provider: provider, playlistId: demoPlaylistId, maxResults: 10 })
+            readBack {
+                execOut: {
+                    log::info({ message: readBack.items, toast: false })
+                    passed = true
+                }
+                error: {
+                    reportFailure("YouTube / read playlist", readBack.errorMessage)
+                }
+            }
+        }
+        error: {
+            reportFailure("YouTube / add video", added.errorMessage)
+        }
+    }
+    return passed
+}
+
+eventsSimple runYouTubeVerification() {
+    if (demoPlaylistId == "" || demoVideoId == "") {
+        log::error({ message: "Set demoPlaylistId and demoVideoId in Variables before running this workflow. Use a private YouTube playlist owned by the connected account.", toast: true })
+    } else {
+        // The Hub adds openid, email and profile. Never log the provider object.
+        const provider = google::provider()
+        log::info({ message: "Starting YouTube verification. The workflow adds a video and reads the playlist back.", toast: false })
+        const youtubePassed = verifyYouTube(provider)
+        log::info({ message: `Results: YouTube=${youtubePassed}`, toast: false })
+        if (youtubePassed) {
+            log::info({ message: "YouTube verification completed. Open the logged playlist link to show the result in Google.", toast: true })
+        } else {
+            log::warn({ message: "YouTube verification is incomplete. Review the error logs before recording or submitting the video.", toast: true })
+        }
+    }
+}

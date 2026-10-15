@@ -1,4 +1,2 @@
 "use client";
-import { FlowNode } from "./flow-node";
-
-export const CallFunctionNode = FlowNode;
+export { FlowNode as CallFunctionNode } from "./flow-node";

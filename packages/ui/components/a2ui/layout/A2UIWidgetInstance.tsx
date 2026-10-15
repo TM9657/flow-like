@@ -87,12 +87,28 @@ function setDeep(
 	let cursor = target;
 	for (let i = 0; i < parts.length - 1; i++) {
 		const key = parts[i];
-		if (typeof cursor[key] !== "object" || cursor[key] === null) {
-			cursor[key] = {};
+		if (
+			!Object.hasOwn(cursor, key) ||
+			typeof cursor[key] !== "object" ||
+			cursor[key] === null
+		) {
+			Object.defineProperty(cursor, key, {
+				value: {},
+				writable: true,
+				enumerable: true,
+				configurable: true,
+			});
 		}
 		cursor = cursor[key] as Record<string, unknown>;
 	}
-	cursor[parts[parts.length - 1]] = value;
+	const key = parts[parts.length - 1];
+	Object.defineProperty(
+		cursor,
+		key,
+		Object.hasOwn(cursor, key)
+			? { value }
+			: { value, writable: true, enumerable: true, configurable: true },
+	);
 }
 
 /**

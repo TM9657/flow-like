@@ -41,6 +41,7 @@ export function PinEditorRow({
 }: Readonly<{ children: ReactNode; className?: string }>) {
 	return (
 		<div
+			data-board-dom-control
 			className={cn(
 				"flex flex-row items-center justify-start min-w-0 max-w-full ml-1 overflow-hidden",
 				className,

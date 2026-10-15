@@ -1,6 +1,6 @@
 "use client";
 import { useTranslation } from "@flow-like/locales";
-import { type Node, useStore } from "@xyflow/react";
+import { type Node } from "@xyflow/react";
 import { Layers } from "lucide-react";
 import { memo, useMemo } from "react";
 import { type PeerUserInfo, colorFromSub } from "../../hooks/use-peer-users";
@@ -11,6 +11,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "../ui/tooltip";
+import { useStore } from "./board-runtime";
 
 interface PeerPresence {
 	clientId: number;

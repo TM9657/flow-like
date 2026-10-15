@@ -12,6 +12,7 @@ import {
 import type { IOAuthConsentStore } from "../../db/oauth-db";
 import {
 	checkOAuthTokens,
+	hasRequiredScopes,
 	checkOAuthTokensFromPrerun,
 } from "../../lib/oauth/helpers";
 import type { OAuthService } from "../../lib/oauth/service";
@@ -136,7 +137,7 @@ export function OAuthExecutionProvider({
 			const remainingProviders = pendingAutoConsent.slice(1);
 			setPendingAutoConsent(remainingProviders);
 
-			const existingToken = await tokenStore.getToken(provider.id);
+			const existingToken = await tokenStore.getToken(provider.id, provider);
 			const requiredScopes = provider.merged_scopes ?? provider.scopes ?? [];
 
 			// Check if token exists, is not expired, AND has all required scopes
@@ -216,7 +217,7 @@ export function OAuthExecutionProvider({
 			const needsScopeUpgrade: Set<string> = new Set();
 
 			for (const provider of allMissing) {
-				const existingToken = await tokenStore.getToken(provider.id);
+				const existingToken = await tokenStore.getToken(provider.id, provider);
 				const requiredScopes = provider.merged_scopes ?? provider.scopes ?? [];
 
 				// Check if token exists but is missing required scopes
@@ -309,7 +310,11 @@ export function OAuthExecutionProvider({
 			// Only persist consent if "remember" is checked
 			if (rememberConsent && appId) {
 				for (const provider of providers) {
-					await consentStore.setConsent(appId, provider.id, provider.scopes);
+					await consentStore.setConsent(
+						appId,
+						provider.id,
+						provider.merged_scopes ?? provider.scopes,
+					);
 				}
 				console.log(
 					"[OAuthExecutionProvider] Consent saved for providers:",
@@ -344,6 +349,14 @@ export function OAuthExecutionProvider({
 	const handleDeviceFlowSuccess = useCallback(
 		(token: IStoredOAuthToken) => {
 			setDeviceFlowProvider(null);
+			const provider = missingProvidersRef.current.find(
+				(p) => p.id === token.providerId,
+			);
+			if (
+				!provider ||
+				!hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
+			)
+				return;
 			setAuthorizedProviders((prev) => {
 				const next = new Set(prev);
 				next.add(token.providerId);
@@ -420,6 +433,14 @@ export function OAuthExecutionProvider({
 	// Register callback handler for OAuth callbacks
 	const handleOAuthCallbackInternal = useCallback(
 		(providerId: string, token: IStoredOAuthToken) => {
+			const provider = missingProvidersRef.current.find(
+				(p) => p.id === providerId,
+			);
+			if (
+				!provider ||
+				!hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
+			)
+				return;
 			setAuthorizedProviders((prev) => {
 				const next = new Set(prev);
 				next.add(providerId);

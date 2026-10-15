@@ -1468,7 +1468,7 @@ fn build_known_entities(graph_context: &GraphContext) -> HashMap<String, KnownEn
                         name: pin.name.clone(),
                         data_type: pin.type_name.clone(),
                         direction: PinDirection::Input,
-                        has_default_value: pin.default_value.is_some(),
+                        has_default_value: pin.has_default_value(),
                     })
                     .chain(node.outputs.iter().map(|pin| KnownPin {
                         name: pin.name.clone(),
@@ -1495,7 +1495,7 @@ fn build_known_entities(graph_context: &GraphContext) -> HashMap<String, KnownEn
                         name: pin.name.clone(),
                         data_type: pin.type_name.clone(),
                         direction: PinDirection::Input,
-                        has_default_value: pin.default_value.is_some(),
+                        has_default_value: pin.has_default_value(),
                     })
                     .chain(layer.outputs.iter().map(|pin| KnownPin {
                         name: pin.name.clone(),
@@ -2045,6 +2045,60 @@ mod tests {
             name: name.to_string(),
             type_name: type_name.to_string(),
             default_value: None,
+            default_redacted: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn configured_sensitive_inputs_stay_valid_without_exposing_their_values() {
+        use crate::flow::{board::Board, node::Node, pin::PinOptions, variable::VariableType};
+
+        for (default_value, configured) in [
+            (Some(b"\"secret-value\"".to_vec()), true),
+            (Some(b"\"\"".to_vec()), true),
+            (None, false),
+            (Some(Vec::new()), false),
+            (Some(b"null".to_vec()), false),
+        ] {
+            let mut board = Board::new_detached(
+                Some("secret-validation".into()),
+                flow_like_storage::Path::default(),
+            );
+            let mut node = Node::new("http_fetch", "Fetch", "", "web");
+            let token = node.add_input_pin("token", "Token", "", VariableType::String);
+            token.default_value = default_value;
+            token.options = Some(PinOptions::new().set_sensitive(true).build());
+            node.add_input_pin("url", "URL", "", VariableType::String);
+            let node_id = node.id.clone();
+            board.nodes.insert(node_id.clone(), node);
+
+            let context = super::super::context::prepare_context(&board, &[]).unwrap();
+            assert!(
+                !serde_json::to_string(&context)
+                    .unwrap()
+                    .contains("secret-value")
+            );
+            let args = EmitCommandsArgs {
+                commands: vec![BoardCommand::UpdateNodePin {
+                    node_id,
+                    pin_id: "url".into(),
+                    value: serde_json::json!("https://example.com"),
+                    summary: None,
+                }],
+                explanation: "Update the public URL".into(),
+            };
+            let outcome = validate_emit_commands(&args, &context, &EmptyCatalogProvider).await;
+            assert_eq!(
+                outcome.errors.is_empty(),
+                configured,
+                "configured={configured}: {:?}",
+                outcome.errors
+            );
+            if !configured {
+                assert!(outcome.errors.iter().any(|issue| {
+                    issue.code == "missing-required-inputs" && issue.message.contains("token")
+                }));
+            }
         }
     }
 

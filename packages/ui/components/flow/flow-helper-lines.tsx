@@ -5,8 +5,6 @@ import {
 	type NodePositionChange,
 	type ReactFlowState,
 	type XYPosition,
-	useStore,
-	useStoreApi,
 } from "@xyflow/react";
 import {
 	memo,
@@ -16,6 +14,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import { snapGroupToGrid } from "../../lib/board-canvas/interaction";
 import {
 	type GuideBox,
 	type HelperLine,
@@ -29,6 +28,7 @@ import {
 	createSignalStore,
 } from "../../lib/realtime/presence-signals-store";
 import { cn } from "../../lib/utils";
+import { useStore, useStoreApi } from "./board-runtime";
 
 const SNAP_DISTANCE_PX = 6;
 const NEAREST_REFERENCES = 12;
@@ -55,6 +55,8 @@ interface HelperLineSession {
 	pins: WiredPin[];
 	lockAxis: boolean;
 	bypass: boolean;
+	pointerStart?: XYPosition;
+	pointer?: XYPosition;
 }
 
 type DraggingChange = NodePositionChange & { position: XYPosition };
@@ -190,6 +192,26 @@ export function useHelperLines(): HelperLines {
 	);
 	const sessionRef = useRef<HelperLineSession | undefined>(undefined);
 	const detachRef = useRef<(() => void) | undefined>(undefined);
+	const pointerDown = useRef<XYPosition | undefined>(undefined);
+	useEffect(() => {
+		const down = (event: PointerEvent) => {
+			const state = store.getState();
+			if (
+				event.button !== 0 ||
+				!(event.target instanceof Element) ||
+				!state.domNode?.contains(event.target)
+			)
+				return;
+			const bounds = state.domNode.getBoundingClientRect();
+			const [x, y, zoom] = state.transform;
+			pointerDown.current = {
+				x: (event.clientX - bounds.left - x) / zoom,
+				y: (event.clientY - bounds.top - y) / zoom,
+			};
+		};
+		window.addEventListener("pointerdown", down, true);
+		return () => window.removeEventListener("pointerdown", down, true);
+	}, [store]);
 
 	const end = useCallback(() => {
 		sessionRef.current = undefined;
@@ -207,9 +229,18 @@ export function useHelperLines(): HelperLines {
 				new Set(carried),
 			);
 			readModifiers(session, event);
+			if ("clientX" in event && "clientY" in event) {
+				session.pointerStart = pointerDown.current;
+				session.pointer = {
+					x: Number(event.clientX),
+					y: Number(event.clientY),
+				};
+			}
 			sessionRef.current = session;
 			const track = (next: Event) => {
 				readModifiers(session, next as KeyboardEvent | PointerEvent);
+				if (next instanceof PointerEvent)
+					session.pointer = { x: next.clientX, y: next.clientY };
 				if (session.bypass) lines.set(NO_LINES);
 			};
 			// pointerup also covers drags xyflow aborts without an onNodeDragStop.
@@ -217,7 +248,17 @@ export function useHelperLines(): HelperLines {
 				["pointermove", track],
 				["keydown", track],
 				["keyup", track],
-				["pointerup", end],
+				[
+					"pointerup",
+					(event) => {
+						track(event);
+						// WebKit can flush microtasks between capture listeners. The native
+						// surface still needs this session to snap the release coordinates.
+						setTimeout(() => {
+							if (sessionRef.current === session) end();
+						}, 0);
+					},
+				],
 				["pointercancel", end],
 			];
 			const options = { capture: true, passive: true };
@@ -240,9 +281,40 @@ export function useHelperLines(): HelperLines {
 					isDragging(change) && session.starts.has(change.id),
 			);
 			if (dragging.length === 0) return;
+			const state = store.getState();
+			// xyflow also snaps before this callback. Reconstruct the raw group delta
+			// so Ctrl/Meta can bypass grid snapping without changing selection offsets.
+			if (
+				state.snapToGrid &&
+				session.pointerStart &&
+				session.pointer &&
+				state.domNode
+			) {
+				const bounds = state.domNode.getBoundingClientRect();
+				const [tx, ty, zoom] = state.transform;
+				const dx =
+					(session.pointer.x - bounds.left - tx) / zoom -
+					session.pointerStart.x;
+				const dy =
+					(session.pointer.y - bounds.top - ty) / zoom - session.pointerStart.y;
+				for (const change of dragging) {
+					const start = session.starts.get(change.id);
+					if (start) {
+						change.position.x = start.x + dx;
+						change.position.y = start.y + dy;
+					}
+				}
+			}
 
 			const axes = lockToAxis(session, dragging);
 			if (session.bypass) {
+				lines.set(NO_LINES);
+				return;
+			}
+			if (state.snapToGrid) {
+				const snapped = snapGroupToGrid(dragging, state.snapGrid, axes);
+				for (let i = 0; i < dragging.length; i++)
+					Object.assign(dragging[i].position, snapped[i].position);
 				lines.set(NO_LINES);
 				return;
 			}

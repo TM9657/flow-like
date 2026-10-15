@@ -156,6 +156,8 @@ backend-executor-k8s
 backend-executor-aws
 backend-executor-azure
 backend-executor-gcp
+backend-runtime-local
+backend-runtime-docker
 api-remote-catalog
 api-aws-catalog
 api-local-ml-catalog
@@ -290,6 +292,8 @@ if [ "${#BOUNDARIES[@]}" -eq 0 ]; then
         backend-executor-aws
         backend-executor-azure
         backend-executor-gcp
+        backend-runtime-local
+        backend-runtime-docker
         api-remote-catalog
         api-aws-catalog
         api-local-ml-catalog
@@ -747,26 +751,24 @@ configure_boundary() {
             FORBIDDEN_FEATURES=(package-automation)
             ;;
         catalog-executor)
-            # The base full executor includes automation and database support,
-            # but ONNX is reserved for the explicit executor-local-ml variant.
+            # Network executors exclude desktop automation. ONNX remains an
+            # explicit executor-local-ml capability.
             DEPENDENCY_ONLY=1
             CHECK_ARGS=(--package flow-like-catalog --no-default-features --features executor)
-            FORBIDDEN=(flow-like-catalog-onnx ort ort-sys face_id tract-tflite)
-            REQUIRED=(flow-like-catalog-automation flow-like-browser)
+            FORBIDDEN=(flow-like-catalog-automation enigo rdev xcap flow-like-browser flow-like-catalog-onnx ort ort-sys face_id tract-tflite)
             FEATURE_PACKAGE="flow-like-catalog"
-            REQUIRED_FEATURES=(executor remote-metadata package-automation portable-execute remote runtime-catalog)
-            FORBIDDEN_FEATURES=(package-onnx local-ml portable-metadata)
+            REQUIRED_FEATURES=(executor server remote-metadata portable-execute remote runtime-catalog)
+            FORBIDDEN_FEATURES=(package-automation package-onnx local-ml portable-metadata)
             ;;
         catalog-local-runtime)
-            # The local runtime name describes an in-process executor. Local Bit
-            # model support remains an explicit local-runtime-ml capability.
+            # Local and Docker backend services use a complete remote catalog.
+            # Local Bit model support remains an explicit local-runtime-ml capability.
             DEPENDENCY_ONLY=1
             CHECK_ARGS=(--package flow-like-catalog --no-default-features --features local-runtime)
-            FORBIDDEN=(flow-like-catalog-onnx ort ort-sys face_id tract-tflite)
-            REQUIRED=(flow-like-catalog-automation flow-like-browser)
+            FORBIDDEN=(flow-like-catalog-automation enigo rdev xcap flow-like-browser flow-like-catalog-onnx ort ort-sys face_id tract-tflite)
             FEATURE_PACKAGE="flow-like-catalog"
-            REQUIRED_FEATURES=(local-runtime remote-metadata package-automation portable-execute remote runtime-catalog)
-            FORBIDDEN_FEATURES=(package-onnx local-ml portable-metadata)
+            REQUIRED_FEATURES=(local-runtime server remote-metadata package-std package-data package-web package-media package-ml package-industrial package-llm package-processing package-geo portable-execute remote runtime-catalog)
+            FORBIDDEN_FEATURES=(package-automation package-onnx local-ml portable-metadata)
             ;;
         catalog-modifier-local-ml)
             # Representative self-registration check for a modifier spanning
@@ -813,18 +815,20 @@ configure_boundary() {
             # metadata for nodes that the remote server cannot execute.
             DEPENDENCY_ONLY=1
             CHECK_ARGS=(--package flow-like-executor --no-default-features --features server)
-            FORBIDDEN=(flow-like flow-like-editor flow-like-catalog-onnx ort ort-sys face_id tract-tflite burn burn-flex)
+            FORBIDDEN=(flow-like flow-like-editor flow-like-catalog-automation enigo rdev xcap flow-like-browser flow-like-catalog-onnx ort ort-sys face_id tract-tflite burn burn-flex)
             REQUIRED=(flow-like-runtime)
             FEATURE_PACKAGE="flow-like-catalog"
             REQUIRED_FEATURES=(remote-metadata package-std package-data package-web runtime-catalog)
-            FORBIDDEN_FEATURES=(portable-metadata package-onnx local-ml ml-inference)
+            FORBIDDEN_FEATURES=(package-automation portable-metadata package-onnx local-ml ml-inference)
             ;;
         backend-executor-k8s|backend-executor-aws|backend-executor-azure|backend-executor-gcp)
             # Real executor products must use runtime directly. Checking only
             # the shared executor crate misses a binary's own facade dependency.
             DEPENDENCY_ONLY=1
-            FORBIDDEN=(flow-like flow-like-editor)
+            FORBIDDEN=(flow-like flow-like-editor flow-like-catalog-automation enigo rdev xcap flow-like-browser)
             REQUIRED=(flow-like-runtime flow-like-executor)
+            FEATURE_PACKAGE="flow-like-catalog"
+            FORBIDDEN_FEATURES=(package-automation)
             case "$boundary" in
                 backend-executor-k8s) CHECK_ARGS=(--package k8s-executor) ;;
                 backend-executor-aws) CHECK_ARGS=(--package aws-executor --package aws-executor-ecs --package aws-executor-async) ;;
@@ -838,6 +842,18 @@ configure_boundary() {
                     FORBIDDEN+=(burn burn-flex)
                     ;;
             esac
+            ;;
+        backend-runtime-local|backend-runtime-docker)
+            DEPENDENCY_ONLY=1
+            case "$boundary" in
+                backend-runtime-local) CHECK_ARGS=(--package local-runtime) ;;
+                backend-runtime-docker) CHECK_ARGS=(--package docker-compose-runtime) ;;
+            esac
+            FORBIDDEN=(flow-like-catalog-automation enigo rdev xcap flow-like-browser)
+            REQUIRED=(flow-like-executor flow-like-catalog-onnx)
+            FEATURE_PACKAGE="flow-like-catalog"
+            REQUIRED_FEATURES=(local-runtime-ml local-runtime server package-onnx local-ml ml-inference)
+            FORBIDDEN_FEATURES=(package-automation)
             ;;
         api-remote-catalog)
             # Azure and GCP APIs publish the same catalog as their remote-only
@@ -862,14 +878,14 @@ configure_boundary() {
             ;;
         api-local-ml-catalog)
             # Local, Kubernetes, and Docker APIs mirror executors that support
-            # local ONNX and automation without linking either implementation.
+            # local ONNX without advertising desktop automation.
             DEPENDENCY_ONLY=1
             CHECK_ARGS=(--package local-api --package k8s-api --package docker-compose-api)
-            FORBIDDEN=(ort ort-sys face_id tract-tflite enigo rdev xcap flow-like-browser burn burn-flex)
-            REQUIRED=(flow-like-catalog-onnx flow-like-catalog-automation)
+            FORBIDDEN=(flow-like-catalog-automation ort ort-sys face_id tract-tflite enigo rdev xcap flow-like-browser burn burn-flex)
+            REQUIRED=(flow-like-catalog-onnx)
             FEATURE_PACKAGE="flow-like-catalog"
-            REQUIRED_FEATURES=(executor-local-metadata server-local-metadata remote-metadata package-onnx package-automation runtime-catalog)
-            FORBIDDEN_FEATURES=(local-ml portable-execute ml-inference)
+            REQUIRED_FEATURES=(executor-local-metadata server-local-metadata remote-metadata package-onnx runtime-catalog)
+            FORBIDDEN_FEATURES=(package-automation local-ml portable-execute ml-inference)
             ;;
         *)
             fail "unknown boundary '$boundary' (run --list to see valid names)"

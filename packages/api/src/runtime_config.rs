@@ -80,6 +80,8 @@ pub(crate) struct OAuthProviderConfig {
     #[serde(default)]
     pub(crate) client_id: Option<String>,
     pub(crate) client_secret_env: Option<String>,
+    #[serde(default)]
+    pub(crate) requires_secret_proxy: bool,
     pub(crate) token_url: String,
     pub(crate) revoke_url: Option<String>,
     pub(crate) userinfo_url: Option<String>,

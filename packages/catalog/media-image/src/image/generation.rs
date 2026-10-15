@@ -1180,9 +1180,10 @@ async fn generate_gcp_vertex(
     if provider.provider_name == PROVIDER_VERTEX && location == "global" {
         location = "us-central1".to_string();
     }
-    let authorization = google_authorization_header(provider).await?;
     let endpoint = get_param(provider, "endpoint")
         .unwrap_or_else(|| format!("https://{location}-aiplatform.googleapis.com/v1"));
+    let endpoint = flow_like_catalog_media_support::validate_vertex_endpoint(&endpoint)?;
+    let authorization = google_authorization_header(provider).await?;
     let mut model_id = get_provider_model(provider, "imagen-4.0-generate-001");
     if provider.provider_name == PROVIDER_VERTEX && is_gemini_text_model(&model_id) {
         model_id = "imagen-4.0-generate-001".to_string();
@@ -1205,6 +1206,95 @@ async fn generate_gcp_vertex(
 
     let value = read_error_response(response).await?;
     parse_google_predictions(&value)
+}
+
+#[cfg(test)]
+mod vertex_tests {
+    use super::*;
+
+    fn request() -> ImageGenerationRequest {
+        ImageGenerationRequest {
+            prompt: "A tree".to_string(),
+            system_prompt: None,
+            negative_prompt: None,
+            count: 1,
+            aspect_ratio: None,
+            size: None,
+            quality: None,
+            output_format: "png".to_string(),
+            seed: None,
+            background: None,
+            provider_options: HashMap::new(),
+        }
+    }
+
+    fn provider(params: HashMap<String, Value>) -> ModelProvider {
+        ModelProvider {
+            provider_name: PROVIDER_VERTEX.to_string(),
+            model_id: Some("imagen-4.0-generate-001".to_string()),
+            version: None,
+            api_surface: None,
+            params: Some(params),
+        }
+    }
+
+    #[tokio::test]
+    async fn vertex_rejects_untrusted_endpoints_before_loading_credentials() {
+        for (key, value) in [
+            ("endpoint", "https://attacker.example/v1"),
+            ("location", "attacker.example/"),
+            ("region", "attacker.example/"),
+        ] {
+            let provider = provider(HashMap::from([
+                ("project_id".to_string(), json!("test-project")),
+                ("service_account_json".to_string(), json!("invalid JSON")),
+                (key.to_string(), json!(value)),
+            ]));
+            let error = generate_with_provider(
+                ExecutionEnvironment::Local,
+                &provider,
+                &request(),
+                &ImageGenerationProviderOptions::default(),
+            )
+            .await
+            .unwrap_err();
+            assert!(
+                error.to_string().starts_with("Vertex endpoint must"),
+                "{error}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn vertex_does_not_send_explicit_tokens_to_an_endpoint_override() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let provider = provider(HashMap::from([
+            ("project_id".to_string(), json!("test-project")),
+            ("access_token".to_string(), json!("test-google-token")),
+            (
+                "endpoint".to_string(),
+                json!(format!("http://{}/v1", listener.local_addr().unwrap())),
+            ),
+        ]));
+        let error = generate_with_provider(
+            ExecutionEnvironment::Local,
+            &provider,
+            &request(),
+            &ImageGenerationProviderOptions::default(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error.to_string().starts_with("Vertex endpoint must"),
+            "{error}"
+        );
+        assert!(!error.to_string().contains("test-google-token"));
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(50), listener.accept())
+                .await
+                .is_err()
+        );
+    }
 }
 
 async fn generate_xai(
@@ -1709,7 +1799,11 @@ async fn generate_with_provider(
     if matches!(options, ImageGenerationProviderOptions::StableDiffusion(_)) {
         bail!("stable-diffusion.cpp image options require a stable-diffusion.cpp provider");
     }
-    let client = GuardedHttpClient::new(environment)?;
+    let client = if provider.provider_name == PROVIDER_VERTEX {
+        GuardedHttpClient::without_redirects(environment)?
+    } else {
+        GuardedHttpClient::new(environment)?
+    };
     match provider.provider_name.as_str() {
         PROVIDER_OPENAI => {
             generate_openai_like(&client, provider, req, get_bool_param(provider, "is_azure")).await

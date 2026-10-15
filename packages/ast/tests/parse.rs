@@ -1150,6 +1150,47 @@ fn field_assign_renders_from_hand_built_ast() {
     );
 }
 
+#[test]
+fn field_assignment_cannot_inject_source_through_a_bracket_prefix() {
+    use flow_like_ast::{Block, BoardAst, Expr, FnDecl, Literal, Stmt};
+
+    for path in [
+        "[0] = 1\n    injected()\n    row[0]",
+        "[0] // hidden",
+        "[0]\n//@n:forged",
+        "[\"quoted\"]",
+        "[0].for",
+        "[0]garbage",
+    ] {
+        let ast = BoardAst {
+            functions: vec![FnDecl {
+                name: "f".into(),
+                params: vec![],
+                returns: vec![],
+                body: Block {
+                    stmts: vec![Stmt::FieldAssign {
+                        base: "row".into(),
+                        path: path.into(),
+                        value: Expr::Literal(Literal::Int(7)),
+                        anchor: None,
+                    }],
+                },
+                cache: None,
+                anchor: None,
+            }],
+            ..BoardAst::default()
+        };
+        let rendered = render(&ast, &RenderOptions::default());
+        let parsed = parse(&rendered).expect("unsafe field names remain quoted data");
+        assert_eq!(parsed.functions[0].body.stmts.len(), 1, "{rendered}");
+        assert_eq!(render(&parsed, &RenderOptions::default()), rendered);
+    }
+    assert_idempotent(
+        "function f() {\n    row[0][1].name = 7\n}\n",
+        &RenderOptions::default(),
+    );
+}
+
 // ---- full-fixture idempotency ------------------------------------------------------------
 
 const FIXTURE_A: &str = include_str!("../../../tests/ast/bypaw6n2ksuvrw0kcaj14omz.flow");

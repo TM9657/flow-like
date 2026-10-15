@@ -14,6 +14,7 @@ import { ThemeProvider } from "@flow-like/flow-like-ui/components/theme-provider
 import { Toaster } from "@flow-like/flow-like-ui/components/ui/sonner";
 import { TooltipProvider } from "@flow-like/flow-like-ui/components/ui/tooltip";
 import { getApiUrl } from "@flow-like/flow-like-ui/lib/api-url";
+import { coordinateOidcRenewal } from "@flow-like/flow-like-ui/lib/auth/oidc-renewal";
 import { QueryParamNavigationContext } from "@flow-like/flow-like-ui/lib/set-query-params";
 import { parseUint8ArrayToJson } from "@flow-like/flow-like-ui/lib/uint8";
 import { useBackendStore } from "@flow-like/flow-like-ui/state/backend-state";
@@ -21,7 +22,7 @@ import { ExecutionEngineProviderComponent } from "@flow-like/flow-like-ui/state/
 import { I18nProvider } from "@flow-like/locales";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import type { UserManagerSettings } from "oidc-client-ts";
+import { UserManager, type UserManagerSettings } from "oidc-client-ts";
 import {
 	type ReactElement,
 	type RefObject,
@@ -32,7 +33,11 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { AuthProvider, useAuth } from "react-oidc-context";
+import {
+	type AuthContextProps,
+	AuthProvider,
+	useAuth,
+} from "react-oidc-context";
 import { toast } from "sonner";
 import {
 	type HostedAccessToken,
@@ -51,6 +56,7 @@ import {
 
 import { getWebOidcSettings } from "../lib/oidc-settings";
 import { saveReturnUrl } from "../lib/return-url";
+import { useSessionRecovery } from "./use-session-recovery";
 
 function Status({
 	error,
@@ -127,11 +133,52 @@ export function HostedFrontend() {
 	}, []);
 	if (error) return <Status error>{error}</Status>;
 	if (!settings) return <Status>Loading…</Status>;
+	return <HostedAuth settings={settings} initialData={publicBootstrap} />;
+}
+
+function HostedAuth({
+	settings,
+	initialData,
+}: {
+	settings: UserManagerSettings;
+	initialData?: HostedBootstrap;
+}) {
+	const [manager] = useState(() => {
+		const manager = new UserManager(settings);
+		coordinateOidcRenewal(manager);
+		return manager;
+	});
+	useEffect(() => {
+		if (settings.automaticSilentRenew !== false) manager.startSilentRenew();
+		return () => manager.stopSilentRenew();
+	}, [manager, settings.automaticSilentRenew]);
 	return (
-		<AuthProvider {...settings} skipSigninCallback>
-			<HostedSession initialData={publicBootstrap} />
+		<AuthProvider userManager={manager} skipSigninCallback>
+			<HostedRecovery isPublic={Boolean(initialData)}>
+				<HostedSession initialData={initialData} />
+			</HostedRecovery>
 		</AuthProvider>
 	);
+}
+
+function HostedRecovery({
+	isPublic,
+	children,
+}: {
+	isPublic: boolean;
+	children: React.ReactNode;
+}) {
+	const state = useSessionRecovery(useAuth(), isPublic);
+	if (state === "retry-required")
+		return (
+			<Status error>
+				Your session could not be renewed. Check your connection and try again.
+			</Status>
+		);
+	if (state === "sign-in-required")
+		return <Status error>Sign in again to continue.</Status>;
+	if (state === "redirecting") return <Status>Renewing your session…</Status>;
+	return children;
 }
 
 type HostedRequest = ReturnType<typeof createHostedRequest>;
@@ -139,9 +186,10 @@ type HostedRequest = ReturnType<typeof createHostedRequest>;
 function tokenBoundRequest(
 	target: HostedTarget,
 	token: RefObject<string | undefined>,
+	auth: RefObject<AuthContextProps>,
 ): HostedRequest {
 	return (suffix, init) =>
-		createHostedRequest(target, token.current)(suffix, init);
+		createHostedRequest(target, token.current, auth.current)(suffix, init);
 }
 
 export function HostedSession({
@@ -162,17 +210,20 @@ export function HostedSession({
 	const redirecting = useRef(false);
 	const token = auth.user?.access_token;
 	const tokenRef = useRef(token);
+	const authRef = useRef(auth);
 	useLayoutEffect(() => {
 		tokenRef.current = token;
-	}, [token]);
+		authRef.current = auth;
+	}, [token, auth]);
 	const accessToken = useCallback(() => tokenRef.current, []);
+	const authContext = useCallback(() => authRef.current, []);
 	const session = auth.isAuthenticated ? (auth.user?.profile.sub ?? "") : null;
 	const data =
 		initialData ?? (loaded?.session === session ? loaded.data : undefined);
 	const hasData = data !== undefined;
 	const settled = !auth.isLoading && !auth.activeNavigator;
 	const request = useMemo(
-		() => (target ? tokenBoundRequest(target, tokenRef) : null),
+		() => (target ? tokenBoundRequest(target, tokenRef, authRef) : null),
 		[target],
 	);
 	useEffect(() => {
@@ -222,7 +273,10 @@ export function HostedSession({
 	}, [initialData, hasData, request, settled, session, auth.signinRedirect]);
 	const variant = data?.bootstrap.servedVariant ?? "stable";
 	const runtimeRequest = useMemo(
-		() => (target ? tokenBoundRequest({ ...target, variant }, tokenRef) : null),
+		() =>
+			target
+				? tokenBoundRequest({ ...target, variant }, tokenRef, authRef)
+				: null,
 		[target, variant],
 	);
 	if (auth.error) return <Status error>{auth.error.message}</Status>;
@@ -247,6 +301,7 @@ export function HostedSession({
 			target={target}
 			request={runtimeRequest}
 			accessToken={accessToken}
+			authContext={authContext}
 			queryParams={Object.fromEntries(searchParams.entries())}
 		/>
 	);
@@ -257,17 +312,19 @@ function HostedRuntime({
 	target,
 	request,
 	accessToken,
+	authContext,
 	queryParams,
 }: {
 	data: HostedBootstrap;
 	target: HostedTarget;
 	request: HostedRequest;
 	accessToken: HostedAccessToken;
+	authContext: () => AuthContextProps;
 	queryParams: Record<string, string>;
 }) {
 	const backend = useMemo(
-		() => createHostedBackend(data, request, accessToken),
-		[data, request, accessToken],
+		() => createHostedBackend(data, request, accessToken, authContext),
+		[data, request, accessToken, authContext],
 	);
 	const config = useMemo(
 		() => parseUint8ArrayToJson(data.bootstrap.event.config) ?? {},

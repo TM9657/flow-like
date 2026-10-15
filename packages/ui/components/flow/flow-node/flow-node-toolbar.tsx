@@ -1,7 +1,8 @@
 "use client";
 import { i18n as i18next } from "@flow-like/locales";
 import { InfoCircledIcon } from "@radix-ui/react-icons";
-import { useStore } from "@xyflow/react";
+import { useStore } from "../board-runtime";
+
 import {
 	AlignCenterVerticalIcon,
 	AlignEndVerticalIcon,
@@ -68,6 +69,7 @@ const AlignmentMenu = memo(
 			<DropdownMenuTrigger asChild>
 				<button
 					type="button"
+					aria-label={i18next.t("alignSelection", "Align selection")}
 					className="h-5 w-5 flex items-center justify-center rounded transition-colors hover:bg-white/10"
 					onClick={(e) => e.stopPropagation()}
 				>
@@ -237,6 +239,7 @@ const FlowNodeToolbar = memo(
 				{/* Invisible bridge to maintain hover */}
 				<div className="absolute -top-3 left-0 right-0 h-3" />
 				<div
+					data-board-dom-control
 					className="absolute -top-9 left-1/2 -translate-x-1/2 z-50 flex items-center gap-0.5
 						bg-zinc-900 text-zinc-100
 						rounded-full shadow-lg shadow-black/25

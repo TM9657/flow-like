@@ -80,7 +80,7 @@ export function buildCategoryTree<T extends ICategorized>(
 		name: "",
 		path: "",
 		items: [],
-		children: {},
+		children: Object.create(null),
 	};
 
 	for (const item of items) {
@@ -93,7 +93,7 @@ export function buildCategoryTree<T extends ICategorized>(
 					name: segment,
 					path,
 					items: [],
-					children: {},
+					children: Object.create(null),
 				};
 			node = node.children[segment];
 		}

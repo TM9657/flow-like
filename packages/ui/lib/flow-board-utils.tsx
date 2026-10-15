@@ -72,8 +72,7 @@ function stringHash(value: string): number {
 	return hash;
 }
 
-// Identity-based instead of updated_at-based: react-query structural sharing
-// keeps unchanged sub-objects referentially stable across refetches, so this
+// Incremental sync preserves unchanged objects across refetches, so this
 // token only changes when variables/refs/layers content or node membership
 // actually changes — letting parseBoard reuse rendered nodes by reference
 // across unrelated board edits. The membership hash is order-independent
@@ -295,7 +294,7 @@ function hasSelectedPageText(): boolean {
 }
 
 export function shouldIgnoreBoardClipboardEvent(
-	event?: ClipboardEvent,
+	event?: Pick<Event, "target">,
 ): boolean {
 	return (
 		isEditableClipboardTarget(event?.target ?? null) ||
@@ -305,23 +304,24 @@ export function shouldIgnoreBoardClipboardEvent(
 }
 
 export function isValidConnection(
-	connection: any,
+	connection: { sourceHandle?: string | null; targetHandle?: string | null },
 	cache: Map<string, [IPin, INode | ILayer, boolean]>,
 	refs: { [key: string]: string },
 ) {
+	const { sourceHandle, targetHandle } = connection;
+	if (!sourceHandle || !targetHandle) return false;
+
 	const refIn =
-		connection.sourceHandle.startsWith("ref_in_") ||
-		connection.targetHandle.startsWith("ref_in_");
+		sourceHandle.startsWith("ref_in_") || targetHandle.startsWith("ref_in_");
 	const refOut =
-		connection.sourceHandle.startsWith("ref_out_") ||
-		connection.targetHandle.startsWith("ref_out_");
+		sourceHandle.startsWith("ref_out_") || targetHandle.startsWith("ref_out_");
 
 	if (refIn || refOut) {
 		return refIn && refOut;
 	}
 
-	const [sourcePin, sourceNode] = cache.get(connection.sourceHandle) || [];
-	const [targetPin, targetNode] = cache.get(connection.targetHandle) || [];
+	const [sourcePin, sourceNode] = cache.get(sourceHandle) || [];
+	const [targetPin, targetNode] = cache.get(targetHandle) || [];
 
 	if (!sourcePin || !targetPin) {
 		console.warn(
@@ -459,21 +459,15 @@ export function doPinsMatch(
 	sourceNode?: INode | ILayer,
 	targetNode?: INode | ILayer,
 ) {
-	if (sourceNode?.id.endsWith("-return")) {
-		sourcePin.pin_type = invertPinType(sourcePin.pin_type);
-	}
-
-	if (sourceNode?.id.endsWith("-input")) {
-		sourcePin.pin_type = invertPinType(sourcePin.pin_type);
-	}
-
-	if (targetNode?.id.endsWith("-return")) {
-		targetPin.pin_type = invertPinType(targetPin.pin_type);
-	}
-
-	if (targetNode?.id.endsWith("-input")) {
-		targetPin.pin_type = invertPinType(targetPin.pin_type);
-	}
+	// Boundary nodes reverse the visible direction without changing shared board pins.
+	const sourcePinType =
+		sourceNode?.id.endsWith("-return") || sourceNode?.id.endsWith("-input")
+			? invertPinType(sourcePin.pin_type)
+			: sourcePin.pin_type;
+	const targetPinType =
+		targetNode?.id.endsWith("-return") || targetNode?.id.endsWith("-input")
+			? invertPinType(targetPin.pin_type)
+			: targetPin.pin_type;
 
 	if (
 		(sourcePin.name === "route_in" &&
@@ -490,9 +484,9 @@ export function doPinsMatch(
 	)
 		return true;
 
-	if (sourcePin.pin_type === targetPin.pin_type) {
+	if (sourcePinType === targetPinType) {
 		console.warn(
-			`Invalid connection: source and target pins have the same type (${sourcePin.pin_type})`,
+			`Invalid connection: source and target pins have the same type (${sourcePinType})`,
 		);
 		return false;
 	}
@@ -503,7 +497,7 @@ export function doPinsMatch(
 	) {
 		if (sourcePin.value_type !== targetPin.value_type) return false;
 		const [output, input] =
-			sourcePin.pin_type === IPinType.Output
+			sourcePinType === IPinType.Output
 				? [sourcePin, targetPin]
 				: [targetPin, sourcePin];
 		return geometrySchemasCompatible(output.schema, input.schema, refs);
@@ -514,7 +508,7 @@ export function doPinsMatch(
 	const schemaSource = resolvePinSchema(sourcePin, refs);
 	const schemaTarget = resolvePinSchema(targetPin, refs);
 	const [schemaOutput, schemaInput] =
-		sourcePin.pin_type === IPinType.Output
+		sourcePinType === IPinType.Output
 			? [schemaSource, schemaTarget]
 			: [schemaTarget, schemaSource];
 
@@ -614,6 +608,8 @@ export function parseBoard(
 	const addedNodeIds = new Set<string>(); // Track which node IDs have been added
 	const boardVersionToken = boardDataVersion(board);
 	const boardContentToken = boardContentVersion(board);
+	const isOffline = remoteBoardExecution?.isOffline ?? true;
+	const hasRemoteExecute = remoteBoardExecution?.onRemoteExecute !== undefined;
 
 	// Hash only nodes that actually reference functions (sorted — serde HashMap
 	// order is unstable), so adding/removing unrelated nodes doesn't force every
@@ -684,8 +680,8 @@ export function parseBoard(
 		const hash = node.hash ?? -1;
 		const canRunWasmOnServer =
 			Boolean(node.wasm?.package_id) &&
-			!remoteBoardExecution?.isOffline &&
-			remoteBoardExecution?.onRemoteExecute !== undefined &&
+			!isOffline &&
+			hasRemoteExecute &&
 			board.execution_mode !== IExecutionMode.Local &&
 			!node.only_offline;
 		const isUnavailable = catalogLookup
@@ -703,14 +699,19 @@ export function parseBoard(
 		const sel = selected.has(node.id);
 		if (
 			oldNode &&
+			oldNode.data?.sourceNode === node &&
 			oldNode.selected === sel &&
 			oldNode.data?.isUnavailable === isUnavailable &&
+			oldNode.data?.executionMode === board.execution_mode &&
+			oldNode.data?.isOffline === isOffline &&
+			(oldNode.data?.onRemoteExecute !== undefined) === hasRemoteExecute &&
 			oldNode.data?.fnRefsHash === fnRefsHash &&
 			oldNode.data?.boardDataVersion === boardVersionToken &&
+			oldNode.data?.version?.join(".") === version?.join(".") &&
 			oldNode.data?.selectorDataRef === selectorDataRef &&
 			oldNode.data?.selectorDataVersion === selectorDataVersion
 		) {
-			// Hash + selected + isUnavailable + fnRefsHash all match — reuse exact reference
+			// The sync object also covers presentation fields absent from the runtime hash.
 			nodes.push(oldNode);
 		} else if (oldNode) {
 			// Hash matches but some derived state changed — shallow update
@@ -720,14 +721,32 @@ export function parseBoard(
 			);
 			nodes.push({
 				...oldNode,
+				position:
+					!oldNode.dragging &&
+					((oldNode.data?.sourceNode?.coordinates?.[0] ?? 0) !==
+						(node.coordinates?.[0] ?? 0) ||
+						(oldNode.data?.sourceNode?.coordinates?.[1] ?? 0) !==
+							(node.coordinates?.[1] ?? 0))
+						? { x: node.coordinates?.[0] ?? 0, y: node.coordinates?.[1] ?? 0 }
+						: oldNode.position,
 				data: {
 					...oldNode.data,
 					isUnavailable,
 					fnRefsHash,
 					node: nodeForData,
+					sourceNode: node,
 					boardRef,
 					boardDataVersion: boardVersionToken,
 					boardContentVersion: boardContentToken,
+					executionMode: board.execution_mode,
+					isOffline,
+					onRemoteExecute: hasRemoteExecute
+						? (oldNode.data?.onRemoteExecute ??
+							(async (node: INode, payload?: object) => {
+								await remoteBoardExecution?.onRemoteExecute?.(node, payload);
+							}))
+						: undefined,
+					version,
 					functionLayerId,
 					functionCache,
 					selectorDataRef,
@@ -759,6 +778,7 @@ export function parseBoard(
 					selectorDataVersion,
 					fnRefsHash: fnRefsHash,
 					node: nodeForData,
+					sourceNode: node,
 					hash: hash,
 					boardId: board.id,
 					appId: appId,
@@ -778,7 +798,7 @@ export function parseBoard(
 								await remoteBoardExecution.onRemoteExecute?.(node, payload);
 							}
 						: undefined,
-					isOffline: remoteBoardExecution?.isOffline ?? true,
+					isOffline,
 					onCopy: async () => {
 						handleCopy();
 					},
@@ -829,8 +849,9 @@ export function parseBoard(
 						id: layer.id + "-input",
 						type: "layerInnerNode",
 						position: {
-							x: layer.in_coordinates?.[0],
-							y: layer.in_coordinates?.[1],
+							// Match the runtime cleanup/import defaults before coordinates are saved.
+							x: layer.in_coordinates?.[0] ?? -200,
+							y: layer.in_coordinates?.[1] ?? 0,
 						},
 						zIndex: 19,
 						data: {
@@ -839,6 +860,7 @@ export function parseBoard(
 							appId: appId,
 							boardRef: boardRef,
 							boardDataVersion: boardVersionToken,
+							version,
 							selectorDataRef,
 							selectorDataVersion,
 							type: InnerLayerNodeType.INPUT,
@@ -851,6 +873,7 @@ export function parseBoard(
 								pushLayer(layer);
 							},
 							onLayerUpdate: async (layer: ILayer) => {
+								if (version !== undefined) return;
 								// These boundary nodes live *inside* the layer, so `currentLayer` is
 								// the layer itself — its own parent is the only correct value here.
 								const command = upsertLayerCommand({
@@ -861,6 +884,7 @@ export function parseBoard(
 								await executeCommand(command, false);
 							},
 							onLayerRemove: async (layer: ILayer, preserve_nodes: boolean) => {
+								if (version !== undefined) return;
 								const command = removeLayerCommand({
 									layer,
 									child_layers: [],
@@ -878,8 +902,8 @@ export function parseBoard(
 						id: layer.id + "-return",
 						type: "layerInnerNode",
 						position: {
-							x: layer.out_coordinates?.[0],
-							y: layer.out_coordinates?.[1],
+							x: layer.out_coordinates?.[0] ?? 200,
+							y: layer.out_coordinates?.[1] ?? 0,
 						},
 						zIndex: 19,
 						data: {
@@ -888,6 +912,7 @@ export function parseBoard(
 							appId: appId,
 							boardRef: boardRef,
 							boardDataVersion: boardVersionToken,
+							version,
 							selectorDataRef,
 							selectorDataVersion,
 							type: InnerLayerNodeType.RETURN,
@@ -900,6 +925,7 @@ export function parseBoard(
 								pushLayer(layer);
 							},
 							onLayerUpdate: async (layer: ILayer) => {
+								if (version !== undefined) return;
 								// These boundary nodes live *inside* the layer, so `currentLayer` is
 								// the layer itself — its own parent is the only correct value here.
 								const command = upsertLayerCommand({
@@ -910,6 +936,7 @@ export function parseBoard(
 								await executeCommand(command, false);
 							},
 							onLayerRemove: async (layer: ILayer, preserve_nodes: boolean) => {
+								if (version !== undefined) return;
 								const command = removeLayerCommand({
 									layer,
 									child_layers: [],
@@ -959,6 +986,7 @@ export function parseBoard(
 						pushLayer(layer);
 					},
 					onLayerUpdate: async (layer: ILayer) => {
+						if (version !== undefined) return;
 						const command = upsertLayerCommand({
 							current_layer: currentLayer,
 							layer: layer,
@@ -967,6 +995,7 @@ export function parseBoard(
 						await executeCommand(command, false);
 					},
 					onLayerRemove: async (layer: ILayer, preserve_nodes: boolean) => {
+						if (version !== undefined) return;
 						const command = removeLayerCommand({
 							layer,
 							child_layers: [],
@@ -1050,6 +1079,7 @@ export function parseBoard(
 
 			if (
 				oldEdge &&
+				!oldEdge.animated &&
 				visible === connectedVisible &&
 				oldEdge.source === sourceNodeId &&
 				oldEdge.target === targetNodeId &&
@@ -1074,7 +1104,7 @@ export function parseBoard(
 						data_type: pin.data_type,
 						reduceMotion: reduceEdgeMotion,
 					},
-					animated: !reduceEdgeMotion && pin.data_type !== "Execution",
+					animated: false,
 					reconnectable: true,
 					target: targetNodeId,
 					targetHandle: conntectedPin.id,
@@ -1111,6 +1141,9 @@ export function parseBoard(
 
 				if (
 					existingEdge &&
+					!existingEdge.animated &&
+					existingEdge.selected === selected.has(edgeId) &&
+					existingEdge.data?.pathType === connectionMode &&
 					existingEdge.data?.reduceMotion === reduceEdgeMotion
 				) {
 					edges.push(existingEdge);
@@ -1129,7 +1162,7 @@ export function parseBoard(
 							pathType: connectionMode,
 							reduceMotion: reduceEdgeMotion,
 						},
-						animated: !reduceEdgeMotion,
+						animated: false,
 						reconnectable: true,
 						style: {
 							stroke: "var(--pin-fn-ref)",
@@ -1151,7 +1184,10 @@ export function parseBoard(
 				? undefined
 				: oldNodesMap.get(renderedNodeCacheKey(comment.id, hash));
 		// Media URLs are resolved after sync and are not part of the comment hash.
-		if (oldNode && oldNode.data?.readOnly === (typeof version !== "undefined")) {
+		if (
+			oldNode &&
+			oldNode.data?.readOnly === (typeof version !== "undefined")
+		) {
 			nodes.push(
 				oldNode.data?.presignedUrl === comment.presigned_url
 					? oldNode
@@ -1190,7 +1226,8 @@ export function parseBoard(
 				comment: { ...comment, is_locked: comment.is_locked ?? false },
 				presignedUrl: comment.presigned_url,
 				onUpsert: async (comment: IComment) => {
-					if (typeof version !== "undefined") throw new Error("Historical board versions are read-only.");
+					if (typeof version !== "undefined")
+						throw new Error("Historical board versions are read-only.");
 					const command = upsertCommentCommand({
 						comment: comment,
 						current_layer: currentLayer,
@@ -1208,20 +1245,12 @@ export function parseBoard(
 	return { nodes, edges, cache };
 }
 
-export function handleCopy(
+export function boardClipboardData(
 	nodes: any[],
 	board: IBoard,
 	cursorPosition?: { x: number; y: number },
-	event?: ClipboardEvent,
 	currentLayer?: string,
 ) {
-	if (shouldIgnoreBoardClipboardEvent(event)) {
-		return;
-	}
-
-	event?.preventDefault();
-	event?.stopPropagation();
-
 	const allLayer = Object.values(board.layers);
 
 	const startLayer: ILayer[] = nodes
@@ -1316,23 +1345,58 @@ export function handleCopy(
 		board.refs,
 	);
 
-	try {
-		navigator.clipboard.writeText(
-			JSON.stringify(
-				{
-					nodes: selectedNodes,
-					comments: selectedComments,
-					cursorPosition,
-					layers: Array.from(foundLayer.values()),
-					variables: selectedVariables,
-					refs: referencedRefs,
-				},
-				null,
-				2,
-			),
-		);
-		toastSuccess("Nodes copied to clipboard", <CopyIcon className="w-4 h-4" />);
+	return {
+		nodes: selectedNodes,
+		comments: selectedComments,
+		cursorPosition,
+		layers: Array.from(foundLayer.values()),
+		variables: selectedVariables,
+		refs: referencedRefs,
+	};
+}
+
+export function duplicateSelectionCommand(
+	nodes: any[],
+	board: IBoard,
+	currentLayer?: string,
+) {
+	const data = boardClipboardData(nodes, board, { x: 0, y: 0 }, currentLayer);
+	if (!data.nodes.length && !data.comments.length && !data.layers.length)
 		return;
+	return copyPasteCommand({
+		original_nodes: data.nodes.map(deserializeNode),
+		original_comments: data.comments,
+		original_layers: data.layers,
+		original_variables: data.variables,
+		original_refs: data.refs,
+		new_nodes: [],
+		new_comments: [],
+		new_layers: [],
+		current_layer: currentLayer,
+		old_mouse: [0, 0, 0],
+		offset: [24, 24, 0],
+	});
+}
+
+export async function handleCopy(
+	nodes: any[],
+	board: IBoard,
+	cursorPosition?: { x: number; y: number },
+	event?: ClipboardEvent,
+	currentLayer?: string,
+) {
+	if (shouldIgnoreBoardClipboardEvent(event)) return false;
+	const data = boardClipboardData(nodes, board, cursorPosition, currentLayer);
+	if (!data.nodes.length && !data.comments.length && !data.layers.length)
+		return false;
+	event?.preventDefault();
+	event?.stopPropagation();
+	try {
+		const text = JSON.stringify(data, null, 2);
+		if (event?.clipboardData) event.clipboardData.setData("text/plain", text);
+		else await navigator.clipboard.writeText(text);
+		toastSuccess("Nodes copied to clipboard", <CopyIcon className="w-4 h-4" />);
+		return true;
 	} catch (error) {
 		toast.error("Failed to copy nodes to clipboard");
 		throw error;
@@ -1353,13 +1417,16 @@ export async function handlePaste(
 
 	event.preventDefault();
 	event.stopPropagation();
+	const clipboard =
+		event.clipboardData?.getData("text/plain") ||
+		(await navigator.clipboard.readText());
 
-	// 1. Try flow-like clipboard format (copy/paste within editor)
+	// Parse separately so a rejected graph command cannot fall through into a text comment.
+	let graphCommand: IGenericCommand | undefined;
 	try {
-		const clipboard = await navigator.clipboard.readText();
 		const data = JSON.parse(clipboard);
-		if (!data) return;
-		if (!data.nodes && !data.comments) return;
+		if (!data || (!data.nodes && !data.comments))
+			throw new Error("Not a graph clipboard payload");
 		const oldPosition = data.cursorPosition;
 		const rawNodes = Array.isArray(data.nodes)
 			? data.nodes
@@ -1381,7 +1448,7 @@ export async function handlePaste(
 		const variables: IVariable[] = rawVariables;
 		const refs: Record<string, string> = data.refs ?? {};
 
-		const command = copyPasteCommand({
+		graphCommand = copyPasteCommand({
 			original_comments: comments,
 			original_nodes: nodes,
 			original_layers: layers,
@@ -1394,55 +1461,47 @@ export async function handlePaste(
 			old_mouse: oldPosition ? [oldPosition.x, oldPosition.y, 0] : undefined,
 			offset: [cursorPosition.x, cursorPosition.y, 0],
 		});
-		await executeCommand(command);
+	} catch {}
+	if (graphCommand) {
+		await executeCommand(graphCommand);
 		return;
-	} catch (error) {}
+	}
 
-	// 2. Try an exported workflow (BPMN, n8n, Dify)
+	let imported: ReturnType<typeof translateImport> | undefined;
+	let format = "";
 	try {
-		const clipboard = await navigator.clipboard.readText();
 		const detection = detectFormat(clipboard);
-		const result = translateImport(detection, catalog);
-
-		if (result && Object.keys(result.board.nodes).length > 0) {
-			const plan = buildImportCommands(
-				result,
-				{ kind: "layer", layerId: currentLayer },
-				[cursorPosition.x, cursorPosition.y, 0],
-			);
-			for (const command of plan.commands) await executeCommand(command);
-			toastSuccess(
-				result.stats.todo > 0
-					? `Imported ${result.stats.totalNodes} elements from ${detection.format} (${result.stats.todo} need modelling)`
-					: `Imported ${result.stats.totalNodes} elements from ${detection.format}`,
-				<Import className="w-4 h-4" />,
-			);
-			return;
-		}
-	} catch (error) {}
-
-	// 3. Fallback: paste as text comment
-	try {
-		const clipboard = await navigator.clipboard.readText();
-		const comment: IComment = {
-			comment_type: ICommentType.Text,
-			content: clipboard,
-			coordinates: [cursorPosition.x, cursorPosition.y, 0],
-			id: createId(),
-			timestamp: {
-				nanos_since_epoch: 0,
-				secs_since_epoch: 0,
-			},
-		};
-
-		const command = upsertCommentCommand({
-			comment: comment,
-			current_layer: currentLayer,
-		});
-
-		await executeCommand(command);
+		format = detection.format;
+		imported = translateImport(detection, catalog);
+	} catch {
+		imported = undefined;
+	}
+	if (imported && Object.keys(imported.board.nodes).length > 0) {
+		const plan = buildImportCommands(
+			imported,
+			{ kind: "layer", layerId: currentLayer },
+			[cursorPosition.x, cursorPosition.y, 0],
+		);
+		for (const command of plan.commands) await executeCommand(command);
+		toastSuccess(
+			imported.stats.todo > 0
+				? `Imported ${imported.stats.totalNodes} elements from ${format} (${imported.stats.todo} need modelling)`
+				: `Imported ${imported.stats.totalNodes} elements from ${format}`,
+			<Import className="w-4 h-4" />,
+		);
 		return;
-	} catch (error) {}
+	}
+	if (!clipboard) return;
+	const comment: IComment = {
+		comment_type: ICommentType.Text,
+		content: clipboard,
+		coordinates: [cursorPosition.x, cursorPosition.y, 0],
+		id: createId(),
+		timestamp: { nanos_since_epoch: 0, secs_since_epoch: 0 },
+	};
+	await executeCommand(
+		upsertCommentCommand({ comment, current_layer: currentLayer }),
+	);
 }
 
 /**

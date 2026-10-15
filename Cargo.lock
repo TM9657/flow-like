@@ -12312,7 +12312,7 @@ dependencies = [
 
 [[package]]
 name = "flow-like-standalone"
-version = "0.1.8"
+version = "0.1.10"
 dependencies = [
  "anyhow",
  "argon2",

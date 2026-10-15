@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Action, ActionBinding } from "../types";
 import {
 	type WidgetInstanceContextValue,
+	applyExposedProps,
 	applyRuntimeChildUpdates,
 	resolveWidgetInstanceEventRoute,
 } from "./A2UIWidgetInstance";
@@ -13,6 +14,91 @@ const INHERITED_ACTION_IDS = ["constructor", "toString", "__proto__"];
 const workflowBinding: ActionBinding = {
 	workflow: { flowId: "flow-id", inputMappings: {} },
 };
+
+describe("applyExposedProps", () => {
+	test("preserves array length updates", () => {
+		const original = [{ id: "text", component: { rows: [1, 2, 3] } }];
+		const updated = applyExposedProps(
+			original,
+			[
+				{
+					id: "length",
+					targetComponentId: "text",
+					propertyPath: "rows.length",
+					propType: "Json",
+				},
+			],
+			{ length: 1 },
+		);
+		expect(updated[0].component.rows).toEqual([1]);
+		expect(original[0].component.rows).toEqual([1, 2, 3]);
+	});
+
+	test("keeps prototype-named paths local to the copied component", () => {
+		const original = [{ id: "text", component: { type: "text" } }];
+		for (const propertyPath of [
+			"__proto__.widgetPolluted",
+			"constructor.prototype.widgetPolluted",
+			"data.__proto__.widgetPolluted",
+		]) {
+			const updated = applyExposedProps(
+				original,
+				[
+					{
+						id: "value",
+						targetComponentId: "text",
+						propertyPath,
+						propType: "Json",
+					},
+				],
+				{ value: "local" },
+			);
+			expect(Object.hasOwn(Object.prototype, "widgetPolluted")).toBe(false);
+			expect(original).toEqual([{ id: "text", component: { type: "text" } }]);
+			let local: unknown = updated[0].component;
+			for (const key of propertyPath.split(".")) {
+				expect(Object.hasOwn(local as object, key)).toBe(true);
+				local = (local as Record<string, unknown>)[key];
+			}
+			expect(local).toBe("local");
+		}
+	});
+
+	test("preserves normal nested values and own prototype-named JSON properties", () => {
+		const original = [
+			{
+				id: "text",
+				component: JSON.parse(
+					'{"type":"text","data":{"__proto__":{"before":1},"rows":[{"before":2}]}}',
+				),
+			},
+		];
+		const updated = applyExposedProps(
+			original,
+			[
+				{
+					id: "first",
+					targetComponentId: "text",
+					propertyPath: "data.__proto__.after",
+					propType: "Json",
+				},
+				{
+					id: "second",
+					targetComponentId: "text",
+					propertyPath: "data.rows.0.after",
+					propType: "Json",
+				},
+			],
+			{ first: 3, second: 4 },
+		);
+		expect(updated[0].component.data.__proto__).toEqual({
+			before: 1,
+			after: 3,
+		});
+		expect(updated[0].component.data.rows).toEqual([{ before: 2, after: 4 }]);
+		expect(original[0].component.data.rows).toEqual([{ before: 2 }]);
+	});
+});
 
 const widgetInstance = (
 	overrides: Partial<WidgetInstanceContextValue> = {},

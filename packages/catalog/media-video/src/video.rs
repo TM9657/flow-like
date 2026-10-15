@@ -18,6 +18,7 @@ use flow_like::{
     },
 };
 use flow_like_catalog_core::FlowPath;
+use flow_like_catalog_media_support::validate_vertex_endpoint;
 use flow_like_model_provider::provider::{
     ImageGenerationModelProvider, ModelProvider, VideoGenerationModelProvider,
 };
@@ -1302,9 +1303,10 @@ async fn generate_replicate(
     bail!("Replicate video generation timed out waiting for prediction")
 }
 
-fn vertex_endpoint(provider: &ModelProvider, location: &str) -> String {
-    get_param(provider, "endpoint")
-        .unwrap_or_else(|| format!("https://{location}-aiplatform.googleapis.com/v1"))
+fn vertex_endpoint(provider: &ModelProvider, location: &str) -> flow_like_types::Result<String> {
+    let endpoint = get_param(provider, "endpoint")
+        .unwrap_or_else(|| format!("https://{location}-aiplatform.googleapis.com/v1"));
+    validate_vertex_endpoint(&endpoint)
 }
 
 fn vertex_media_object(input: &MediaInput) -> Value {
@@ -1324,7 +1326,7 @@ async fn generate_vertex_veo(
     let location = get_param(provider, "location")
         .or_else(|| get_param(provider, "region"))
         .unwrap_or_else(|| "us-central1".to_string());
-    let endpoint = vertex_endpoint(provider, &location);
+    let endpoint = vertex_endpoint(provider, &location)?;
     let authorization = google_authorization_header(provider).await?;
     let mut model_id = get_provider_model(provider, "veo-3.1-fast-generate-preview");
     if !looks_like_video_model(&model_id) {
@@ -1442,7 +1444,11 @@ async fn generate_video_with_provider(
     provider: &ModelProvider,
     req: &VideoGenerationRequest,
 ) -> flow_like_types::Result<Vec<GeneratedVideo>> {
-    let client = &GuardedHttpClient::new(environment)?;
+    let client = &if provider.provider_name == PROVIDER_VERTEX {
+        GuardedHttpClient::without_redirects(environment)?
+    } else {
+        GuardedHttpClient::new(environment)?
+    };
     match provider.provider_name.as_str() {
         PROVIDER_OPENAI => generate_openai_sora(client, provider, req).await,
         PROVIDER_VERTEX => generate_vertex_veo(client, provider, req).await,
@@ -2460,6 +2466,58 @@ impl NodeLogic for GenerateVideoNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn vertex_video_rejects_untrusted_endpoints_before_resolving_credentials() {
+        let request = VideoGenerationRequest {
+            prompt: "Test video".to_string(),
+            negative_prompt: None,
+            first_frame: None,
+            last_frame: None,
+            input_video: None,
+            aspect_ratio: None,
+            size: None,
+            duration_seconds: None,
+            seed: None,
+            generate_audio: None,
+            count: 1,
+            provider_options: HashMap::new(),
+            poll_interval_seconds: 1,
+            max_wait_seconds: 1,
+        };
+
+        for (parameter, value) in [
+            ("endpoint", "https://attacker.example/v1"),
+            ("location", "attacker.example/"),
+            ("region", "attacker.example/"),
+        ] {
+            let provider = ModelProvider {
+                provider_name: PROVIDER_VERTEX.to_string(),
+                model_id: None,
+                version: None,
+                api_surface: None,
+                params: Some(HashMap::from([
+                    ("project_id".to_string(), json!("test-project")),
+                    ("service_account_json".to_string(), json!("invalid json")),
+                    (parameter.to_string(), json!(value)),
+                ])),
+            };
+            let location = if parameter == "endpoint" {
+                "us-central1"
+            } else {
+                value
+            };
+            let expected = vertex_endpoint(&provider, location)
+                .unwrap_err()
+                .to_string();
+            for environment in [ExecutionEnvironment::Local, ExecutionEnvironment::Server] {
+                let error = generate_video_with_provider(environment, &provider, &request)
+                    .await
+                    .unwrap_err();
+                assert_eq!(error.to_string(), expected, "{parameter}");
+            }
+        }
+    }
 
     #[test]
     fn media_file_name_is_the_decoded_file_name_for_raw_and_listed_paths() {

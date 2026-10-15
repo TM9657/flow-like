@@ -2,7 +2,36 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { prepareBrowserMedia } from "./media-patch.mjs";
 
+export function patchThumbnailVisibility(source, replaceOnce) {
+	const start = "        let wpx = (tw * ppp).round() as u32;\n";
+	const end =
+		"        if selected {\n            p.rect_stroke(img.expand(2.0)";
+	replaceOnce(source, start, start, "slide thumbnail start");
+	replaceOnce(source, end, end, "slide thumbnail end");
+	const begin = source.indexOf(start);
+	const finish = source.indexOf(end);
+	if (finish <= begin)
+		throw new Error("Review the slide thumbnail paint order.");
+	const paint = source.slice(begin, finish);
+	const guarded = paint
+		.trimEnd()
+		.split("\n")
+		.map((line) => `    ${line}`)
+		.join("\n");
+	return replaceOnce(
+		source,
+		paint,
+		`        if ui.is_rect_visible(img) {\n${guarded}\n        }\n`,
+		"visible slide thumbnails",
+	);
+}
+
 export default function prepare({ directory, original, write, replaceOnce }) {
+	const thumbsPath = "crates/ui-egui/src/thumbs.rs";
+	write(
+		thumbsPath,
+		patchThumbnailVisibility(original(thumbsPath), replaceOnce),
+	);
 	const uiPath = "crates/ui-egui/src/lib.rs";
 	let ui = original(uiPath);
 	ui = replaceOnce(

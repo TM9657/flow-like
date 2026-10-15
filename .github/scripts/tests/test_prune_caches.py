@@ -36,6 +36,14 @@ class PlanDeletionsTests(unittest.TestCase):
                    entry("v0-rust-a-Linux-x64-aaaaaaaa-44444444", 100, 4, ref="refs/heads/alpha")]
         self.assertEqual([item["id"] for item in prune.plan_deletions(entries, NOW)], [1])
 
+    def test_restoring_an_old_generation_does_not_replace_the_newest(self):
+        old = entry("rust-aaaaaaaa-11111111", 100, 1)
+        newest = entry("rust-aaaaaaaa-22222222", 10, 2)
+        old["last_accessed_at"] = entry("unused", 3)["last_accessed_at"]
+        self.assertEqual([item["id"] for item in prune.plan_deletions([old, newest], NOW)], [1])
+        old["last_accessed_at"] = entry("unused", 0.5)["last_accessed_at"]
+        self.assertEqual(prune.plan_deletions([old, newest], NOW), [])
+
     def test_in_flight_entries_are_never_deleted(self):
         prefix = "v0-rust-workspace-v2-X64-clippy-check-Linux-x64-7a658b95"
         entries = [entry(f"{prefix}-11111111", 0.5, 1), entry(f"{prefix}-22222222", 0.1, 2)]

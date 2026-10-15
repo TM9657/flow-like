@@ -31,7 +31,7 @@ Industrial nodes connect a workflow to a device or broker, keep the connection f
 | IO-Link | Master discovery, process data, indexed ISDU access, polling | Master implementing the [IO-Link JSON Integration 2.0 REST API](https://github.com/iolinkcommunity/JSON_for_IO-Link/tree/2.0.0) |
 | HART | Commands and read-only command polling over serial, transparent TCP, or HART-IP v1 Token Passing | Local HART serial modem or compatible network endpoint |
 
-The cifX nodes call the installed controller's native driver. The card firmware runs the fieldbus. They do not provide a portable software PROFINET controller or configure an arbitrary vendor's stack. Linux uses the supported LinuxCIFXDrv 3.x ABI; Windows uses the installed system driver. Supply absolute driver and firmware paths. The driver and protocol firmware are not bundled.
+The cifX nodes call the installed controller's native driver. The card firmware runs the fieldbus. They do not provide a portable software PROFINET controller or configure an arbitrary vendor's stack. Linux uses the supported LinuxCIFXDrv 3.x ABI; Windows uses the installed system driver. An operator must [approve the installed driver before connecting](#approve-the-installed-cifx-driver). Supply an absolute firmware directory when using LinuxCIFXDrv. The driver and protocol firmware are not bundled.
 
 The embedded MQTT broker keeps retained messages in memory for its current run. It does not provide durable sessions or a broker account/ACL system. Use an existing MQTT broker when the deployment needs those features. The MQTT client also supports QoS 2 when connected to a broker that implements it. MQTT acknowledgements confirm transport receipt, independently of workflow handler completion.
 
@@ -71,6 +71,25 @@ Use its result as `session` in **Read Modbus**:
 ```
 
 Register addresses are zero-based. Use **Decode Sensor Registers** when the device encodes a number across multiple registers; byte order and word order must match its register map.
+
+## Approve the installed cifX driver
+
+cifX connections require an operator-approved native library on the local or desktop executor. A workflow's `library_path` must exactly match the path approved in the executor's launch environment. Missing approval, a different path, or a SHA-256 mismatch stops the connection before the library loads.
+
+1. Install and independently approve the Hilscher driver for the target controller. Protect its installation directory and native dependencies from writes by untrusted users and workflows. Use an absolute local file path. UNC and device paths are rejected; Windows requires a local fixed drive. On Unix, the operator must ensure the installation is on a local filesystem. A library symlink must resolve within the configured path's parent installation directory.
+2. Obtain the approved library's SHA-256 digest. To inspect an already trusted installed file, use `sha256sum /absolute/path/to/library` on Linux or `Get-FileHash -Algorithm SHA256 -LiteralPath 'C:\absolute\path\to\library.dll'` in PowerShell. Hashing a file alone does not establish that it came from Hilscher.
+3. Set these variables in the environment that launches the desktop application or local executor, then restart that process:
+
+   | Variable | Value |
+   |---|---|
+   | `FLOW_LIKE_CIFX_LIBRARY_PATH` | Exact absolute path to the approved installed library |
+   | `FLOW_LIKE_CIFX_LIBRARY_SHA256` | Approved SHA-256 digest as 64 hexadecimal characters, without a filename or spaces |
+
+4. Set the Connect node's `library_path` to exactly the configured path, then run the workflow. These environment variables belong to the executor's launch configuration; workflow inputs cannot supply the approval.
+
+The executor checks the library's digest before loading it. That digest covers only the selected file; it does not authenticate the native dependencies loaded with it. Keep those dependencies and the installation directory protected. `expected_version_prefix` remains a compatibility check performed after loading, so it does not approve a library.
+
+Existing workflows retain their `library_path` field but fail until the operator configures both environment variables and restarts the executor. When upgrading the driver, approve the replacement and update its digest before restarting. If its location changes, update both the launch configuration and the workflow path.
 
 ## Supply OPC UA client certificates
 

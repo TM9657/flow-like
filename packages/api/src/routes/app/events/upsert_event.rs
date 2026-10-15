@@ -65,11 +65,13 @@ pub async fn upsert_event(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path((app_id, event_id)): Path<(String, String)>,
-    Json(params): Json<EventUpsertBody>,
+    Json(mut params): Json<EventUpsertBody>,
 ) -> Result<Json<Event>, ApiError> {
     let permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteEvents);
     let sub = permission.sub()?;
     let user_context = permission.to_user_context();
+    crate::routes::oauth::authorize_incoming_oauth_tokens(&state, &user, &mut params.oauth_tokens)
+        .await?;
 
     let mut event = params.event;
     event.id = event_id.clone();

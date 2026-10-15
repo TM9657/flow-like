@@ -15,6 +15,7 @@ import { isRecord } from "../response-shape";
 import type { IBoard } from "../schema/flow/board";
 import type { INode } from "../schema/flow/node";
 import {
+	type BoardChangeSet,
 	type CatalogByName,
 	type IAppliedBoardSync,
 	applyBoardSync,
@@ -33,6 +34,56 @@ export type BoardSyncTransport = (
 interface HeldBoard {
 	board: IBoard;
 	manifest: IBoardSyncManifest;
+	incomplete?: true;
+	confirmed?: HeldBoard;
+}
+
+interface SettledBoardSync extends IAppliedBoardSync {
+	base: HeldBoard | undefined;
+}
+
+export interface BoardSyncUpdate {
+	previous: IBoard | undefined;
+	board: IBoard;
+	changes: BoardChangeSet;
+}
+
+type BoardSyncListener = (update: BoardSyncUpdate) => void;
+
+function mergedChanges(
+	previous: IBoard | undefined,
+	first: IAppliedBoardSync,
+	last: IAppliedBoardSync,
+): BoardChangeSet {
+	const entities = (part: "nodes" | "layers") => {
+		const touched = new Set([
+			...first.changes[part].upserted,
+			...first.changes[part].removed,
+			...last.changes[part].upserted,
+			...last.changes[part].removed,
+		]);
+		const upserted: string[] = [];
+		const removed: string[] = [];
+		for (const id of touched) {
+			if (Object.hasOwn(last.board[part], id)) {
+				if (last.board[part][id] !== previous?.[part][id]) upserted.push(id);
+			} else if (previous && Object.hasOwn(previous[part], id))
+				removed.push(id);
+		}
+		return { upserted, removed };
+	};
+	return {
+		meta: first.changes.meta || last.changes.meta,
+		variables:
+			first.board.variables !== previous?.variables || last.changes.variables,
+		comments:
+			first.board.comments !== previous?.comments || last.changes.comments,
+		refs: [...new Set([...first.changes.refs, ...last.changes.refs])].filter(
+			(id) => last.board.refs[id] !== previous?.refs[id],
+		),
+		nodes: entities("nodes"),
+		layers: entities("layers"),
+	};
 }
 
 /** Bound on "the held revision moved while my response was in flight" retries. */
@@ -43,7 +94,7 @@ function boardKey(
 	boardId: string,
 	version?: [number, number, number],
 ): string {
-	return `${appId}${boardId}${version ? version.join(".") : ""}`;
+	return JSON.stringify([appId, boardId, version ?? null]);
 }
 
 function sameTokens(
@@ -81,6 +132,42 @@ export class BoardSyncClient {
 	 */
 	private readonly queued = new Map<string, Promise<IBoard>>();
 	private readonly catalogs = new Map<string, CatalogByName>();
+	private readonly listeners = new Map<string, Set<BoardSyncListener>>();
+
+	/** Emits confirmed changes; hydration retries never publish a partial board. */
+	subscribe(
+		appId: string,
+		boardId: string,
+		version: [number, number, number] | undefined,
+		listener: BoardSyncListener,
+	): () => void {
+		const key = boardKey(appId, boardId, version);
+		let listeners = this.listeners.get(key);
+		if (!listeners) {
+			listeners = new Set();
+			this.listeners.set(key, listeners);
+		}
+		listeners.add(listener);
+		return () => {
+			listeners.delete(listener);
+			if (listeners.size === 0) this.listeners.delete(key);
+		};
+	}
+
+	private publish(
+		key: string,
+		previous: IBoard | undefined,
+		applied: IAppliedBoardSync,
+	): void {
+		if (!applied.changed) return;
+		for (const listener of this.listeners.get(key) ?? []) {
+			try {
+				listener({ previous, board: applied.board, changes: applied.changes });
+			} catch (error) {
+				console.error("Board sync listener failed:", error);
+			}
+		}
+	}
 
 	/**
 	 * Make this app's catalog available for hydration. Hydration is opportunistic: without a
@@ -96,17 +183,16 @@ export class BoardSyncClient {
 		boardId: string,
 		version?: [number, number, number],
 	): IBoard | undefined {
-		return this.held.get(boardKey(appId, boardId, version))?.board;
+		const held = this.held.get(boardKey(appId, boardId, version));
+		return held?.incomplete ? held.confirmed?.board : held?.board;
 	}
 
 	/** Drop every held revision of a board. Without `appId`, matches the board id alone. */
 	forget(appId: string | undefined, boardId: string): void {
-		const marker = `${boardId}`;
 		for (const key of [...this.held.keys()]) {
+			const [heldAppId, heldBoardId] = JSON.parse(key) as [string, string];
 			const matches =
-				appId === undefined
-					? key.includes(marker)
-					: key.startsWith(`${appId}${marker}`);
+				heldBoardId === boardId && (appId === undefined || heldAppId === appId);
 			if (matches) this.held.delete(key);
 		}
 	}
@@ -122,7 +208,8 @@ export class BoardSyncClient {
 		version?: [number, number, number],
 	): IBoardSyncRequest | undefined {
 		const held = this.held.get(boardKey(appId, boardId, version));
-		if (!held) return undefined;
+		// Commands issued during hydration use their normal follow-up sync path.
+		if (!held || held.incomplete) return undefined;
 		return this.requestFor(held, appId);
 	}
 
@@ -144,7 +231,12 @@ export class BoardSyncClient {
 	): IBoard | undefined {
 		const key = boardKey(appId, boardId, version);
 		const held = this.held.get(key);
-		if (!held || !requestMatchesManifest(base, held.manifest)) return undefined;
+		if (
+			!held ||
+			held.incomplete ||
+			!requestMatchesManifest(base, held.manifest)
+		)
+			return undefined;
 		const applied = applyBoardSync(
 			held.board,
 			response,
@@ -155,6 +247,7 @@ export class BoardSyncClient {
 			return undefined;
 		}
 		this.held.set(key, { board: applied.board, manifest: applied.manifest });
+		this.publish(key, held.board, applied);
 		return applied.board;
 	}
 
@@ -241,7 +334,9 @@ export class BoardSyncClient {
 				response,
 				transport,
 			);
-			if (!applied) {
+			// settle yields even when hydration was unnecessary. A command can commit
+			// during that gap, so validate the base again before publishing this result.
+			if (!applied || this.held.get(key) !== applied.base) {
 				if (attempt < MAX_STALE_BASE_RETRIES) continue;
 				throw new Error(
 					"Board sync could not converge: the held revision kept moving during the fetch.",
@@ -251,6 +346,7 @@ export class BoardSyncClient {
 				board: applied.board,
 				manifest: applied.manifest,
 			});
+			this.publish(key, held?.board, applied);
 			return applied.board;
 		}
 	}
@@ -269,14 +365,14 @@ export class BoardSyncClient {
 		request: IBoardSyncRequest,
 		response: IBoardSyncResponse,
 		transport: BoardSyncTransport,
-	): Promise<IAppliedBoardSync | undefined> {
+	): Promise<SettledBoardSync | undefined> {
 		const catalog = request.hydrate ? this.catalogs.get(appId) : undefined;
 		const applied = applyBoardSync(held?.board, response, catalog, request);
 		const incomplete = new Set([
 			...applied.unhydratable,
 			...applied.unpatchable,
 		]);
-		if (incomplete.size === 0) return applied;
+		if (incomplete.size === 0) return { ...applied, base: held };
 
 		const segments = { ...applied.manifest.segments };
 		for (const segmentId of incomplete) delete segments[segmentId];
@@ -292,10 +388,28 @@ export class BoardSyncClient {
 		const partial: HeldBoard = {
 			board: applied.board,
 			manifest: applied.manifest,
+			incomplete: true,
+			confirmed: held?.incomplete ? held.confirmed : held,
 		};
 		this.held.set(key, partial);
-		const retried = await transport(retry);
-		if (this.held.get(key) !== partial) return undefined;
-		return applyBoardSync(applied.board, retried, undefined, retry);
+		try {
+			const retried = await transport(retry);
+			if (this.held.get(key) !== partial) return undefined;
+			const settled = applyBoardSync(applied.board, retried, undefined, retry);
+			if (settled.unhydratable.size || settled.unpatchable.size)
+				throw new Error("Board sync could not restore complete node segments.");
+			return {
+				...settled,
+				base: partial,
+				changed: applied.changed || settled.changed,
+				changes: mergedChanges(held?.board, applied, settled),
+			};
+		} catch (error) {
+			if (this.held.get(key) === partial) {
+				if (held) this.held.set(key, held);
+				else this.held.delete(key);
+			}
+			throw error;
+		}
 	}
 }

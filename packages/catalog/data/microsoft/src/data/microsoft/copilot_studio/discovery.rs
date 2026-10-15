@@ -6,14 +6,12 @@ use super::{
     provider::{CopilotStudioProvider, add_provider_input_pin},
     scores,
 };
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
-        pin::{PinOptions, ValueType},
-        variable::VariableType,
-    },
-    hub::Hub,
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic},
+    oauth::{OAuthToken, refresh_on_hub},
+    pin::{PinOptions, ValueType},
+    variable::VariableType,
 };
 use flow_like_types::{
     JsonSchema, Result, Value, anyhow, async_trait,
@@ -350,71 +348,56 @@ fn parse_bot(instance: &DataverseInstance, value: &Value) -> Option<CopilotStudi
 
 struct DataverseSession {
     client: reqwest::Client,
-    token_url: String,
-    client_id: String,
-    refresh_token: String,
+    hub: String,
+    secure: bool,
+    authorization: String,
+    token: OAuthToken,
 }
 
 impl DataverseSession {
-    /// Reads the Hub's `microsoft_dataverse` app registration so the refresh token is redeemed by
-    /// the same client that obtained it.
-    async fn open(context: &ExecutionContext, refresh_token: String) -> Result<Self> {
-        let hub = Hub::new(&context.profile.hub, context.app_state.http_client.clone())
-            .await
-            .map_err(|error| {
-                anyhow!(
-                    "Could not load the Hub OAuth configuration from '{}': {error}",
-                    context.profile.hub
-                )
-            })?;
-        let config = hub.oauth_providers.get(DATAVERSE_PROVIDER_ID).ok_or_else(|| {
-            anyhow!(
-                "The Hub has no '{DATAVERSE_PROVIDER_ID}' OAuth provider configured, so Dataverse tokens cannot be issued"
-            )
-        })?;
-        if config.requires_secret_proxy || config.client_secret_env.is_some() {
-            return Err(anyhow!(
-                "The Hub's '{DATAVERSE_PROVIDER_ID}' provider needs a client secret; per-environment Dataverse tokens need a public (PKCE) client"
-            ));
+    async fn open(context: &ExecutionContext, token: OAuthToken) -> Result<Self> {
+        let executor = context.executor_api_auth.as_ref();
+        if executor.is_none()
+            && (token.hub_origin.is_some()
+                || token
+                    .refresh_token
+                    .as_deref()
+                    .is_some_and(|value| value.starts_with("fl_oauth_")))
+        {
+            token.ensure_hub(&context.profile.hub, context.profile.secure)?;
         }
+        let authorization = executor
+            .map(|auth| auth.token())
+            .or(context.token.as_deref())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                anyhow!("Dataverse token renewal requires an authenticated Hub session")
+            })?;
         Ok(Self {
             client: http_client()?,
-            token_url: config.token_url.clone(),
-            client_id: config.client_id.clone(),
-            refresh_token,
+            hub: executor
+                .map(|auth| auth.api_url())
+                .unwrap_or(&context.profile.hub)
+                .to_owned(),
+            secure: context.profile.secure,
+            authorization: authorization.to_owned(),
+            token,
         })
     }
 
-    /// Entra refresh tokens are valid for every resource the user consented to for this client;
-    /// the Global Discovery sign-in grants the Dynamics CRM consent every org URL needs.
+    /// Resource-specific access tokens share the Hub's canonical refresh grant.
     async fn environment_token(&self, instance: &DataverseInstance) -> Result<String> {
         let scope = format!("{}/user_impersonation", instance.url);
-        let response = self
-            .client
-            .post(&self.token_url)
-            .form(&[
-                ("grant_type", "refresh_token"),
-                ("client_id", self.client_id.as_str()),
-                ("refresh_token", self.refresh_token.as_str()),
-                ("scope", scope.as_str()),
-            ])
-            .send()
-            .await
-            .map_err(|error| {
-                anyhow!(
-                    "Requesting a Dataverse token for {} failed: {error}",
-                    instance.url
-                )
-            })?;
-        if !response.status().is_success() {
-            let operation = format!("Requesting a Dataverse token for {}", instance.url);
-            return Err(anyhow!(http_failure(&operation, response).await));
-        }
-        let body: Value = response.json().await?;
-        body["access_token"]
-            .as_str()
-            .map(str::to_string)
-            .ok_or_else(|| anyhow!("Entra returned no access_token for {}", instance.url))
+        let token = refresh_on_hub(
+            &self.hub,
+            self.secure,
+            &self.authorization,
+            DATAVERSE_PROVIDER_ID,
+            &self.token,
+            Some(&scope),
+        )
+        .await?;
+        Ok(token.access_token)
     }
 
     async fn agents(
@@ -559,10 +542,12 @@ impl CopilotStudioListAgentsNode {
         if instances.is_empty() {
             return Ok(Vec::new());
         }
-        let refresh_token = token.refresh_token.ok_or_else(|| {
-            anyhow!("The Dataverse sign-in has no refresh token, so per-environment tokens cannot be issued; sign in again")
-        })?;
-        let session = DataverseSession::open(context, refresh_token).await?;
+        if token.refresh_token.is_none() {
+            return Err(anyhow!(
+                "The Dataverse sign-in has no refresh token; sign in again"
+            ));
+        }
+        let session = DataverseSession::open(context, token).await?;
         let results = session.agents_in(instances, published_only).await;
         merge_agent_results(context, results, requested_host.is_some())
     }

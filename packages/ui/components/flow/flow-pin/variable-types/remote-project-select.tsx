@@ -1,5 +1,6 @@
 import { useTranslation } from "@flow-like/locales";
-import { useReactFlow } from "@xyflow/react";
+import { useReactFlow } from "../../board-runtime";
+
 import {
 	type RefObject,
 	useCallback,

@@ -15,7 +15,7 @@ pub enum CifxDriverMode {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct CifxConfig {
-    /// Absolute path to the installed vendor DLL or shared library.
+    /// Must match the operator's FLOW_LIKE_CIFX_LIBRARY_PATH; workflows cannot approve libraries.
     pub library_path: String,
     pub driver_mode: CifxDriverMode,
     pub board: String,
@@ -91,7 +91,18 @@ pub struct CifxState {
 pub use execution::CifxClient;
 
 #[cfg(feature = "execute")]
+#[cfg_attr(
+    not(any(target_os = "linux", target_os = "windows", test)),
+    allow(dead_code)
+)]
+mod driver;
+
+#[cfg(all(test, unix, feature = "execute"))]
+mod loader_tests;
+
+#[cfg(feature = "execute")]
 mod execution {
+    use super::driver::DriverPolicy;
     use super::*;
     use crate::Error;
     use libloading::Library;
@@ -226,13 +237,20 @@ mod execution {
         restore_bus: Option<u32>,
     }
     impl NativeChannel {
-        fn open(config: &CifxConfig, stop: &CancellationToken) -> Result<(Self, CifxInfo)> {
+        fn open(
+            config: &CifxConfig,
+            policy: &DriverPolicy,
+            stop: &CancellationToken,
+        ) -> Result<(Self, CifxInfo)> {
             config.validate()?;
             require(!stop.is_cancelled(), "cifX connection cancelled")?;
             #[cfg(not(any(target_os = "linux", target_os = "windows", test)))]
-            return Err(Error::Invalid(
-                "The installed cifX driver adapter requires Linux or Windows".into(),
-            ));
+            {
+                let _ = policy;
+                Err(Error::Invalid(
+                    "The installed cifX driver adapter requires Linux or Windows".into(),
+                ))
+            }
             #[cfg(any(target_os = "linux", target_os = "windows", test))]
             {
                 // A native call already in progress must finish, but cancellation prevents
@@ -248,11 +266,23 @@ mod execution {
                     matches!(config.driver_mode, CifxDriverMode::SystemDriver),
                     "Windows requires the cifX system driver mode",
                 )?;
-                let path = Path::new(&config.library_path).canonicalize()?;
-                require(path.is_file(), "cifX library path must point to a file")?;
-                let lease = LibraryLease::acquire(&path)?;
-                // Loading a native library executes its initializer. The catalog permits local execution only.
-                let library = unsafe { Library::new(&path) }.map_err(|e| {
+                let verified = policy.verify(&config.library_path)?;
+                let path = &verified.path;
+                let lease = LibraryLease::acquire(path)?;
+                check_startup()?;
+                // Verification must precede loading because native initializers run during the load.
+                #[cfg(windows)]
+                let loaded = unsafe {
+                    libloading::os::windows::Library::load_with_flags(
+                        path,
+                        libloading::os::windows::LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
+                            | libloading::os::windows::LOAD_LIBRARY_SEARCH_SYSTEM32,
+                    )
+                }
+                .map(Library::from);
+                #[cfg(not(windows))]
+                let loaded = unsafe { Library::new(path) };
+                let library = loaded.map_err(|e| {
                     Error::Invalid(format!("Cannot load the installed cifX library: {e}"))
                 })?;
                 check_startup()?;
@@ -580,6 +610,10 @@ mod execution {
     }
     impl CifxClient {
         pub async fn connect(config: CifxConfig) -> Result<Self> {
+            Self::connect_with_policy(config, DriverPolicy::from_environment()?).await
+        }
+
+        async fn connect_with_policy(config: CifxConfig, policy: DriverPolicy) -> Result<Self> {
             config.validate()?;
             let timeout = Duration::from_millis(u64::from(config.timeout_ms) * 4 + 5000);
             let (commands, mut receiver) = mpsc::channel(32);
@@ -589,13 +623,14 @@ mod execution {
             std::thread::Builder::new()
                 .name("flow-cifx".into())
                 .spawn(move || {
-                    let (mut native, info) = match NativeChannel::open(&config, &startup_stop) {
-                        Ok(result) => result,
-                        Err(error) => {
-                            let _ = ready.send(Err(error));
-                            return;
-                        }
-                    };
+                    let (mut native, info) =
+                        match NativeChannel::open(&config, &policy, &startup_stop) {
+                            Ok(result) => result,
+                            Err(error) => {
+                                let _ = ready.send(Err(error));
+                                return;
+                            }
+                        };
                     if ready.send(Ok(info)).is_err() {
                         return;
                     }
@@ -778,6 +813,18 @@ mod execution {
                     start_bus: true,
                 }
             }
+
+            fn policy(&self) -> DriverPolicy {
+                use sha2::{Digest, Sha256};
+                DriverPolicy::from_settings(
+                    Some(self.path.clone()),
+                    Some(format!(
+                        "{:x}",
+                        Sha256::digest(std::fs::read(&self.path).unwrap())
+                    )),
+                )
+                .unwrap()
+            }
         }
         impl Drop for Fixture {
             fn drop(&mut self) {
@@ -801,14 +848,18 @@ mod execution {
                 fixture.count(23) as usize,
                 offset_of!(LinuxInitOptions, logfd)
             );
-            let client = CifxClient::connect(fixture.config()).await.unwrap();
+            let client = CifxClient::connect_with_policy(fixture.config(), fixture.policy())
+                .await
+                .unwrap();
             assert_eq!(client.info().driver_version, "test-api-1");
             assert_eq!(client.info().firmware_name, "PN Controller");
             assert_eq!(client.info().firmware_version, "1.2.3.4");
             assert_eq!(client.info().input_areas, 1);
             assert!(client.state().await.unwrap().bus_on);
             assert!(
-                CifxClient::connect(fixture.config()).await.is_err(),
+                CifxClient::connect_with_policy(fixture.config(), fixture.policy())
+                    .await
+                    .is_err(),
                 "Concurrent initialization of the process-global driver is forbidden"
             );
             client
@@ -860,7 +911,9 @@ mod execution {
                 "C ABI, handle, timeout and cleanup-order checks"
             );
             // A completed close releases the driver lease before its acknowledgment.
-            let second = CifxClient::connect(fixture.config()).await.unwrap();
+            let second = CifxClient::connect_with_policy(fixture.config(), fixture.policy())
+                .await
+                .unwrap();
             second.disconnect().await.unwrap();
             assert_eq!(fixture.count(5), 2);
         }
@@ -870,13 +923,21 @@ mod execution {
             let fixture = Fixture::build();
             let mut config = fixture.config();
             config.board = "fail".into();
-            assert!(CifxClient::connect(config).await.is_err());
+            assert!(
+                CifxClient::connect_with_policy(config, fixture.policy())
+                    .await
+                    .is_err()
+            );
             assert_eq!(fixture.count(3), 0);
             assert_eq!(fixture.count(4), 1);
             assert_eq!(fixture.count(5), 1);
             let mut config = fixture.config();
             config.expected_version_prefix = Some("different-api".into());
-            assert!(CifxClient::connect(config).await.is_err());
+            assert!(
+                CifxClient::connect_with_policy(config, fixture.policy())
+                    .await
+                    .is_err()
+            );
             assert_eq!(
                 fixture.count(2),
                 1,
@@ -884,7 +945,9 @@ mod execution {
             );
             assert_eq!(fixture.count(4), 2);
             assert_eq!(fixture.count(5), 2);
-            let client = CifxClient::connect(fixture.config()).await.unwrap();
+            let client = CifxClient::connect_with_policy(fixture.config(), fixture.policy())
+                .await
+                .unwrap();
             client.disconnect().await.unwrap();
             assert_eq!(fixture.count(10), 0);
         }
@@ -894,7 +957,10 @@ mod execution {
             for stage in [1, 2] {
                 let fixture = Fixture::build();
                 fixture.block(stage);
-                let connecting = tokio::spawn(CifxClient::connect(fixture.config()));
+                let connecting = tokio::spawn(CifxClient::connect_with_policy(
+                    fixture.config(),
+                    fixture.policy(),
+                ));
                 let entered = tokio::time::timeout(Duration::from_secs(5), async {
                     while fixture.count(13) != stage {
                         tokio::time::sleep(Duration::from_millis(1)).await;

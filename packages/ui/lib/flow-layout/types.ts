@@ -29,6 +29,8 @@ export interface AutoLayoutInput {
 	/** Measured handle centres relative to the node, including collapsed pin rows. */
 	pinOffsets?: ReadonlyMap<string, { x: number; y: number }>;
 	edgePathType?: "default" | "straight" | "step" | "smoothstep";
+	/** Keep generated reroutes when the caller applies coordinates without graph edits. */
+	preserveAutoReroutes?: boolean;
 	comments?: readonly LayoutComment[];
 	/** Restricts layout to these node ids (layout-of-selection). */
 	only?: ReadonlySet<string>;

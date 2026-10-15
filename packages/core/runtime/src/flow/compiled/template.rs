@@ -15,7 +15,7 @@ use super::codes;
 use super::format::{CompiledBoard, NONE_IDX};
 use super::view::reconstruct_board;
 use crate::flow::board::{Board, ExecutionStage, LayerType};
-use crate::flow::execution::LogLevel;
+use crate::flow::execution::{ExecutionEnvironment, LogLevel};
 use crate::flow::node::{Node, NodeLogic};
 use crate::flow::pin::{PinType, ValueType};
 use crate::flow::variable::{Variable, VariableType};
@@ -49,6 +49,8 @@ pub struct TemplateNode {
     /// mutex exists for API compatibility with `InternalNode.node`.
     pub node: Arc<Mutex<Node>>,
     pub logic: Arc<dyn NodeLogic>,
+    /// Trusted catalog restriction, independent of board or artifact metadata.
+    pub(crate) only_offline: bool,
     /// This node's pins as arena indices; order matches the lookup offsets.
     pub pins: Box<[u32]>,
     pub lookup: Arc<NodePinLookup>,
@@ -89,6 +91,18 @@ pub struct CompiledRunTemplate {
 }
 
 impl CompiledRunTemplate {
+    /// Validate every resolved node, including function bodies, against the
+    /// host environment before a cached template is used for a run.
+    pub fn ensure_execution_environment(&self, environment: ExecutionEnvironment) -> Result<()> {
+        if environment != ExecutionEnvironment::Server {
+            return Ok(());
+        }
+        for node in self.nodes.iter() {
+            environment.ensure_node_execution(&node.name, node.only_offline)?;
+        }
+        Ok(())
+    }
+
     /// Build a template from a fully prepared board (post `node_updates`).
     pub fn from_board(board: Arc<Board>, registry: &FlowNodeRegistryInner) -> Result<Self> {
         let compiled = super::compile::compile_board_with_catalog(&board, registry)?;
@@ -180,6 +194,7 @@ impl CompiledRunTemplate {
                 })?
                 .clone();
             let logic = registry.instantiate(&node)?;
+            let only_offline = registry.get_node(&node.name)?.only_offline;
 
             let mut lookup = NodePinLookup::default();
             for (offset, &arena_idx) in cn.pins.iter().enumerate() {
@@ -198,6 +213,7 @@ impl CompiledRunTemplate {
             nodes.push(TemplateNode {
                 node: Arc::new(Mutex::new(node)),
                 logic,
+                only_offline,
                 pins: cn.pins.clone().into_boxed_slice(),
                 lookup: Arc::new(lookup),
                 is_pure,

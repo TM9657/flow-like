@@ -18,6 +18,7 @@ import VideoIcon from "lucide-react/dist/esm/icons/video.js";
 import XIcon from "lucide-react/dist/esm/icons/x.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useIsMobile } from "../../../hooks/use-mobile";
+import { openImagePreview } from "../../../lib/open-image-preview";
 import { cn, humanFileSize } from "../../../lib/utils";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -913,12 +914,7 @@ export function FileDialogPreview({ file }: Readonly<FileDialogPreviewProps>) {
 	const handleFileClick = (file: ProcessedAttachment) => {
 		if (file.isDataUrl) {
 			if (file.type === "image") {
-				const newWindow = window.open();
-				if (newWindow) {
-					newWindow.document.write(
-						`<img src="${file.url}" style="max-width: 100%; height: auto;" />`,
-					);
-				}
+				openImagePreview(file.url);
 			} else {
 				const link = document.createElement("a");
 				link.href = file.url;

@@ -8,6 +8,7 @@ import {
 import { getApiUrl } from "@flow-like/flow-like-ui/lib/api-url";
 import type { AuthContextProps } from "react-oidc-context";
 import { reportUnauthorized } from "./auth-session";
+import { fetchWithSession } from "./session-request";
 
 const PROTECTED_APP_ROUTE_SEGMENTS = new Set([
 	"payments",
@@ -102,16 +103,19 @@ export async function get<T>(
 		: {};
 
 	const url = constructUrl(profile, path);
-	const response = await fetch(url, {
-		method: "GET",
-		headers: {
-			"Content-Type": "application/json",
-			...authHeader,
+	const response = await fetchWithSession(
+		url,
+		{
+			method: "GET",
+			headers: {
+				"Content-Type": "application/json",
+				...authHeader,
+			},
 		},
-	});
+		auth,
+	);
 
 	if (!response.ok) {
-		if (response.status === 401) reportUnauthorized(auth, accessToken);
 		await response.text();
 		console.error(`HTTP error: ${response.status}`);
 		return undefined;
@@ -133,17 +137,20 @@ export async function post<T>(
 		: {};
 
 	const url = constructUrl(profile, path);
-	const response = await fetch(url, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			...authHeader,
+	const response = await fetchWithSession(
+		url,
+		{
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				...authHeader,
+			},
+			body: body ? JSON.stringify(body) : undefined,
 		},
-		body: body ? JSON.stringify(body) : undefined,
-	});
+		auth,
+	);
 
 	if (!response.ok) {
-		if (response.status === 401) reportUnauthorized(auth, accessToken);
 		await response.text();
 		console.error(`HTTP error: ${response.status}`);
 		return undefined;
@@ -165,17 +172,20 @@ export async function put<T>(
 		: {};
 
 	const url = constructUrl(profile, path);
-	const response = await fetch(url, {
-		method: "PUT",
-		headers: {
-			"Content-Type": "application/json",
-			...authHeader,
+	const response = await fetchWithSession(
+		url,
+		{
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				...authHeader,
+			},
+			body: body ? JSON.stringify(body) : undefined,
 		},
-		body: body ? JSON.stringify(body) : undefined,
-	});
+		auth,
+	);
 
 	if (!response.ok) {
-		if (response.status === 401) reportUnauthorized(auth, accessToken);
 		await response.text();
 		console.error(`HTTP error: ${response.status}`);
 		return undefined;
@@ -196,16 +206,19 @@ export async function del<T>(
 		: {};
 
 	const url = constructUrl(profile, path);
-	const response = await fetch(url, {
-		method: "DELETE",
-		headers: {
-			"Content-Type": "application/json",
-			...authHeader,
+	const response = await fetchWithSession(
+		url,
+		{
+			method: "DELETE",
+			headers: {
+				"Content-Type": "application/json",
+				...authHeader,
+			},
 		},
-	});
+		auth,
+	);
 
 	if (!response.ok) {
-		if (response.status === 401) reportUnauthorized(auth, accessToken);
 		await response.text();
 		console.error(`HTTP error: ${response.status}`);
 		return undefined;
@@ -230,12 +243,9 @@ export async function fetcher<T>(
 	new Headers(options?.headers).forEach((value, key) =>
 		headers.set(key, value),
 	);
-	if (accessToken) {
+	if (accessToken && !headers.has("Authorization")) {
 		headers.set("Authorization", `Bearer ${accessToken}`);
 	}
-	const usesAccountToken =
-		headers.get("Authorization") ===
-		(accessToken ? `Bearer ${accessToken}` : null);
 
 	// Check network status before attempting request
 	if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -246,16 +256,17 @@ export async function fetcher<T>(
 
 	const url = constructUrl(profile, path);
 	try {
-		const response = await fetch(url, {
-			...options,
-			headers,
-			keepalive: true,
-		});
+		const response = await fetchWithSession(
+			url,
+			{
+				...options,
+				headers,
+				keepalive: true,
+			},
+			auth,
+		);
 
 		if (!response.ok) {
-			if (response.status === 401 && usesAccountToken) {
-				reportUnauthorized(auth, accessToken);
-			}
 			const errorText = await response.text();
 			const error = apiResponseError(response, errorText, path);
 			const safePath = redactApiPathSecrets(path);

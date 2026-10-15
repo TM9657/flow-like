@@ -31,6 +31,7 @@ import {
 	Workflow,
 } from "lucide-react";
 import { type ComponentType, useCallback, useState } from "react";
+import { isScriptNavigationUrl } from "../lib/navigation-url";
 import { AnimatedPinIcon } from "./animated-icons";
 import { AnimatedNewProjectIcon } from "./animated-icons/animated-plus";
 import { CreateFlowDialog } from "./create-flow-dialog";
@@ -502,7 +503,7 @@ function SortableShortcutItem({
 					isActive={isActive}
 				>
 					<motion.a
-						href={shortcut.path}
+						href={isScriptNavigationUrl(shortcut.path) ? undefined : shortcut.path}
 						aria-current={isActive ? "page" : undefined}
 						onClick={(event) => {
 							if (
@@ -516,7 +517,7 @@ function SortableShortcutItem({
 								return;
 							}
 							event.preventDefault();
-							onNavigate(shortcut.path);
+							if (!isScriptNavigationUrl(shortcut.path)) onNavigate(shortcut.path);
 						}}
 						initial="initial"
 						whileHover="hover"

@@ -14,8 +14,8 @@ export interface IOAuthProvider {
 	pkce_required: boolean;
 	/**
 	 * Whether this provider requires the secret proxy for token exchange.
-	 * If true, token exchange and refresh requests go through the API server
-	 * which adds the client_secret. The client handles all token storage.
+	 * If true, token exchange goes through the Hub, which adds the client secret.
+	 * Refreshable connections use Hub-owned refresh tokens regardless of this flag.
 	 */
 	requires_secret_proxy: boolean;
 	revoke_url?: string;
@@ -50,6 +50,8 @@ export interface IDeviceAuthResponse {
  * This matches the Rust OAuthToken struct.
  */
 export interface IOAuthToken {
+	hub_origin?: string;
+	hub_subject?: string;
 	access_token: string;
 	refresh_token?: string;
 	expires_at?: number;
@@ -61,6 +63,7 @@ export interface IOAuthToken {
  */
 export interface IStoredOAuthToken extends IOAuthToken {
 	providerId: string;
+	binding?: IOAuthBinding;
 	scopes: string[];
 	storedAt: number;
 	userInfo?: {
@@ -69,6 +72,12 @@ export interface IStoredOAuthToken extends IOAuthToken {
 		name?: string;
 		picture?: string;
 	};
+}
+
+export interface IOAuthBinding {
+	sessionKey: string;
+	providerKey: string;
+	apiBaseUrl: string;
 }
 
 /**
@@ -84,11 +93,24 @@ export interface IOAuthTokenCheckResult {
  * Desktop app uses Dexie, web app might use different storage.
  */
 export interface IOAuthTokenStore {
-	getToken(providerId: string): Promise<IStoredOAuthToken | undefined>;
+	getToken(
+		providerId: string,
+		provider?: IOAuthProvider,
+	): Promise<IStoredOAuthToken | undefined>;
 	setToken(token: IStoredOAuthToken): Promise<void>;
 	deleteToken(providerId: string): Promise<void>;
 	getAllTokens(): Promise<IStoredOAuthToken[]>;
 	isExpired(token: IStoredOAuthToken, bufferMs?: number): boolean;
+	getBinding?(provider: IOAuthProvider): Promise<IOAuthBinding>;
+	isCurrentBinding?(binding: IOAuthBinding): Promise<boolean>;
+	replaceToken?(
+		expected: IStoredOAuthToken,
+		replacement?: IStoredOAuthToken,
+	): Promise<boolean>;
+	withRefreshLock?<T>(
+		token: IStoredOAuthToken,
+		operation: () => Promise<T>,
+	): Promise<T>;
 }
 
 /**
@@ -96,6 +118,7 @@ export interface IOAuthTokenStore {
  */
 export interface IOAuthPendingAuth {
 	state: string;
+	binding?: IOAuthBinding;
 	providerId: string;
 	codeVerifier: string;
 	redirectUri: string;
@@ -131,6 +154,7 @@ export interface IOAuthRuntime {
 		url: string,
 		body: string,
 		headers?: Record<string, string>,
+		binding?: IOAuthBinding,
 	): Promise<{
 		ok: boolean;
 		status: number;
@@ -141,6 +165,7 @@ export interface IOAuthRuntime {
 	httpGet(
 		url: string,
 		headers?: Record<string, string>,
+		binding?: IOAuthBinding,
 	): Promise<{
 		ok: boolean;
 		status: number;

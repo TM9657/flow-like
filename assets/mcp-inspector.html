@@ -566,7 +566,7 @@
         };
         render();
       } catch (error) {
-        $("error").innerHTML = `<div class="error">${error.message}</div>`;
+        $("error").innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
         if (error.call) {
           lastResult = { calls: [error.call], tools: [], resources: [], prompts: [], protocolVersion, sessionId, totalDurationMs: Math.round(performance.now() - started) };
           render();
@@ -830,7 +830,7 @@
         if (typeof content.blob !== "string") {
           return `<div class="resource-content">${meta}<pre>${escapeHtml(pretty(content))}</pre></div>`;
         }
-        const dataUrl = `data:${mime};base64,${content.blob}`;
+        const dataUrl = escapeHtml(`data:${mime};base64,${content.blob}`);
         if (mime.startsWith("image/")) {
           return `<div class="resource-content">${meta}<img src="${dataUrl}" alt="${escapeHtml(filename)}"></div>`;
         }
@@ -862,7 +862,7 @@
       if (text !== null) return `<div class="content-block">${meta}${renderSmartText(text)}</div>`;
       if (isObject(content.resource)) return `<div class="content-block">${meta}${renderResourceResponse({ contents: [content.resource] })}</div>`;
       if (typeof data !== "string") return `<div class="content-block">${meta}${renderStructuredValue(content)}</div>`;
-      const dataUrl = `data:${mime};base64,${data}`;
+      const dataUrl = escapeHtml(`data:${mime};base64,${data}`);
       if (String(mime).startsWith("image/")) return `<div class="content-block">${meta}<img src="${dataUrl}" alt="${escapeHtml(type)}"></div>`;
       if (String(mime).startsWith("audio/")) return `<div class="content-block">${meta}<audio src="${dataUrl}" controls></audio></div>`;
       if (String(mime).startsWith("video/")) return `<div class="content-block">${meta}<video src="${dataUrl}" controls></video></div>`;
