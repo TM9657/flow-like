@@ -65,6 +65,33 @@ describe("parseReadAttributes", () => {
 		expect(parseReadAttributes(["hr", 3, " eu "])).toEqual(["hr", "eu"]);
 	});
 
+	test("preserves JSON identifiers containing commas, quotes and brackets", () => {
+		const attributes = ['team,"finance"', "[regional]", '"]', "研发"];
+		expect(parseReadAttributes(JSON.stringify(attributes))).toEqual(attributes);
+	});
+
+	test("preserves legacy trimming of repeated and unpaired delimiters", () => {
+		for (const value of [
+			'[[""hr"", "finance"]]]',
+			'[["hr, finance',
+			'hr", finance]]]',
+		]) {
+			expect(parseReadAttributes(value)).toEqual(["hr", "finance"]);
+		}
+		expect(parseReadAttributes('[["""", ]]]')).toEqual([]);
+		expect(parseReadAttributes('hr]ops, fi"nance')).toEqual([
+			"hr]ops",
+			'fi"nance',
+		]);
+	});
+
+	test("handles long runs of internal delimiters with non-delimiter suffixes", () => {
+		for (const delimiter of ["]", '"']) {
+			const attribute = `team${delimiter.repeat(100_000)}member`;
+			expect(parseReadAttributes(attribute)).toEqual([attribute]);
+		}
+	});
+
 	test("anything else holds no attributes", () => {
 		for (const value of [undefined, null, 7, "", "   ", "[]"]) {
 			expect(parseReadAttributes(value)).toEqual([]);

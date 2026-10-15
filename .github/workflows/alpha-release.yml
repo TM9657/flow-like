@@ -31,6 +31,11 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Install pinned Rust toolchain and WASM target
+        uses: ./.github/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2
         with:

@@ -38,7 +38,7 @@ function sourceFixture(t, name = "test-source", version = "1.0.0", files = {}) {
 	put(join(original, "src/lib.rs"), "pub fn answer() -> u8 { 42 }\n");
 	put(
 		join(original, "LICENSE"),
-		"Fixture license notice: <script>alert('notice')</script>\n",
+		"Fixture license notice: <script>alert('notice')</script>\n<SCRIPT >alert('upper')</SCRIPT >\n<ScRiPt/x>alert('slash')</ScRiPt>\n",
 	);
 	for (const [path, text] of Object.entries(files))
 		put(join(original, path), text);
@@ -243,8 +243,10 @@ test(
 		assert.match(html, /MPL source downloads/);
 		assert.ok(html.includes(`href="${pkg.sourceArchive}"`));
 		assert.match(html, /Editor &lt;test&gt;/);
-		assert.doesNotMatch(html, /<script>/);
+		assert.doesNotMatch(html, /<script\b/i);
 		assert.match(html, /&lt;script&gt;/);
+		assert.match(html, /&lt;SCRIPT &gt;/);
+		assert.match(html, /&lt;ScRiPt\/x&gt;/);
 		assert.match(html, /Mozilla Public License Version 2\.0/);
 		assert.equal(
 			JSON.parse(readFileSync(join(fixture.output, "licenses/manifest.json")))
