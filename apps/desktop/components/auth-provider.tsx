@@ -9,6 +9,7 @@ import type { IProfile } from "@flow-like/flow-like-ui";
 import { createAccountTokenProvider } from "@flow-like/flow-like-ui/components/account/account-session";
 import { ApiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
 import { getApiOrigin } from "@flow-like/flow-like-ui/lib/api-url";
+import { coordinateOidcRenewal } from "@flow-like/flow-like-ui/lib/auth/oidc-renewal";
 import { isRecord } from "@flow-like/flow-like-ui/lib/response-shape";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
@@ -23,6 +24,7 @@ import {
 	type INavigator,
 	type IWindow,
 	type NavigateParams,
+	type NavigateResponse,
 	UserManager,
 	type UserManagerSettings,
 	WebStorageStateStore,
@@ -43,6 +45,7 @@ import {
 	useAuth,
 } from "react-oidc-context";
 import { get } from "../lib/api";
+import { bindHubAuth, renewHubAuth, setHubAuthActive } from "../lib/hub-auth";
 import { ProfileSyncer, TauriBackend } from "./tauri-provider";
 
 const AUTH_CHANGED_EVENT = "fl-auth-changed";
@@ -110,18 +113,12 @@ export class OIDCTokenProvider implements TokenProvider {
 }
 
 class TauriWindow implements IWindow {
-	private abort: ((reason: Error) => void) | undefined;
 	close() {
 		return;
 	}
-	async navigate(params: NavigateParams): Promise<never> {
-		openUrl(params.url);
-
-		const promise = new Promise((resolve, reject) => {
-			this.abort = reject;
-		});
-
-		return promise as Promise<never>;
+	async navigate(params: NavigateParams): Promise<NavigateResponse> {
+		await openUrl(params.url);
+		return { url: params.url };
 	}
 }
 
@@ -151,16 +148,24 @@ interface LiftedAuth {
 function AuthContextBridge({
 	providerKey,
 	scope,
+	hub,
+	active,
 	onChange,
 }: Readonly<{
 	providerKey: string;
 	scope: number;
+	hub: string;
+	active: boolean;
 	onChange: (lifted: LiftedAuth) => void;
 }>) {
 	const auth = useAuth();
 	useLayoutEffect(() => {
+		const bound = bindHubAuth(auth, hub);
+		setHubAuthActive(auth, active && bound);
 		onChange({ auth, providerKey, scope });
-	}, [auth, providerKey, scope, onChange]);
+	}, [auth, providerKey, scope, hub, active, onChange]);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: events identifies the manager whose session is being detached.
+	useLayoutEffect(() => () => setHubAuthActive(auth, false), [auth.events]);
 	return null;
 }
 
@@ -184,6 +189,21 @@ export function DesktopAuthProvider({
 
 	const hubUrl = currentProfile.data?.hub ?? "api.flow-like.com";
 	const hubSecure = currentProfile.data?.secure ?? true;
+	const currentHub = getApiOrigin({
+		hub: hubUrl,
+		secure: hubSecure,
+	} as IProfile);
+	const matchesHub = authConfig?.hub === currentHub;
+	const visibleAuth =
+		lifted?.auth && !matchesHub && authConfig
+			? { ...lifted.auth, user: null, isAuthenticated: false, isLoading: true }
+			: lifted?.auth;
+
+	useEffect(() => {
+		if (matchesHub) userManager?.startSilentRenew();
+		else userManager?.stopSilentRenew();
+		return () => userManager?.stopSilentRenew();
+	}, [matchesHub, userManager]);
 
 	useEffect(() => {
 		const effectiveProfile = {
@@ -213,6 +233,7 @@ export function DesktopAuthProvider({
 			response.automaticSilentRenew = true;
 			const navigator = new TauriRedirectNavigator();
 			const userManagerInstance = new UserManager(response, navigator);
+			coordinateOidcRenewal(userManagerInstance);
 			response.userManager = userManagerInstance;
 			const tokenProvider = new OIDCTokenProvider(userManagerInstance);
 			if (response.cognito)
@@ -471,6 +492,8 @@ export function DesktopAuthProvider({
 					<AuthContextBridge
 						providerKey={providerKey}
 						scope={scope}
+						hub={authConfig?.hub ?? currentHub}
+						active={matchesHub}
 						onChange={setLifted}
 					/>
 				</AuthProvider>
@@ -479,11 +502,13 @@ export function DesktopAuthProvider({
 					<AuthContextBridge
 						providerKey={providerKey}
 						scope={scope}
+						hub={currentHub}
+						active={false}
 						onChange={setLifted}
 					/>
 				</AuthProvider>
 			)}
-			<AuthContext.Provider value={lifted?.auth}>
+			<AuthContext.Provider value={visibleAuth}>
 				{lifted?.scope === scope && (
 					<Fragment key={scope}>
 						{authConfig && lifted.providerKey === providerKey && (
@@ -563,42 +588,30 @@ function AuthInner({ hub }: Readonly<{ hub: string }>) {
 		hub,
 	]);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: Expired-session recovery runs once per signed-in subject, not on every auth state change.
 	useEffect(() => {
-		if (!auth) return;
-
-		(async () => {
+		if (!userManager || auth.isLoading) return;
+		let cancelled = false;
+		const recover = async () => {
 			try {
-				const existingUser = auth.user;
-
-				if (existingUser && !existingUser.expired) {
-					return;
-				}
-
-				if (existingUser?.expired) {
-					try {
-						const user = await auth?.signinSilent();
-						if (!user) {
-							console.warn(
-								"Silent login returned no user, attempting redirect login.",
-							);
-							await auth?.signinRedirect();
-						}
-					} catch {
-						console.warn("Silent login failed, attempting normal login");
-
-						try {
-							await auth?.signinRedirect();
-						} catch {
-							console.error("Both silent and redirect login failed");
-						}
-					}
-				}
+				const existing = await userManager.getUser();
+				if (!existing?.expired || cancelled) return;
+				await renewHubAuth(auth);
 			} catch {
-				console.error("Login process failed");
+				// Renewal preserves outages and starts sign-in only for an explicit provider refusal.
 			}
-		})();
-	}, [auth.user?.profile?.sub]);
+		};
+		const onVisible = () => {
+			if (document.visibilityState === "visible") void recover();
+		};
+		void recover();
+		window.addEventListener("online", recover);
+		document.addEventListener("visibilitychange", onVisible);
+		return () => {
+			cancelled = true;
+			window.removeEventListener("online", recover);
+			document.removeEventListener("visibilitychange", onVisible);
+		};
+	}, [userManager, auth]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: The signed-in subject is a refetch trigger; another account must reload hub-backed queries.
 	useEffect(() => {
@@ -646,6 +659,7 @@ function AuthInner({ hub }: Readonly<{ hub: string }>) {
 
 	return (
 		<ProfileSyncer
+			hub={hub}
 			auth={{
 				isAuthenticated: auth.isAuthenticated,
 				accessToken: auth.user?.access_token,

@@ -13,13 +13,18 @@ interface Point {
 	y: number;
 }
 
+export interface RouteWaypoint extends Point {
+	/** Shared only by routes from the same data output, with the same predecessor. */
+	shared?: string;
+}
+
 export interface WireRoute {
 	from: string;
 	to: string;
 	fromPin: string;
 	toPin: string;
 	/** Top-left positions of the reroute nodes, in connection order. */
-	waypoints: Point[];
+	waypoints: RouteWaypoint[];
 	/** No bounded candidate cleared the nodes; retain the original connection. */
 	unresolved?: boolean;
 }
@@ -54,12 +59,17 @@ interface WireSegment extends Segment {
 }
 
 const CLEARANCE = 8;
+const REROUTE_CLEARANCE = 2;
 const LANE_GAP = 24;
 const CELL_SIZE = 128;
 const FLATNESS = 0.25;
 const MAX_CANDIDATES = 64;
+// A crossing may justify a short detour, but not a trip around the whole board.
+const CROSSING_COST = 800;
+const WAYPOINT_COST = 80;
 const BRANCH_DISTANCE_COST = 80;
 const MAX_BRANCH_STEPS = 20_000;
+const MAX_TRUNK_FANOUT = 16;
 
 /** Exclusive execution descendants define branches; joins belong to neither sibling. */
 function branchAffinities(graph: LGraph) {
@@ -256,6 +266,23 @@ function branchCost(wire: Wire, segments: Segment[]): number {
 		bottom = Math.max(bottom, segment.bottom);
 	}
 	return branchDistance(wire, top, bottom) * BRANCH_DISTANCE_COST;
+}
+
+function detourCost(wire: Wire, segments: Segment[]): number {
+	let top = Math.min(wire.source.y, wire.target.y);
+	let bottom = Math.max(wire.source.y, wire.target.y);
+	for (const segment of segments) {
+		top = Math.min(top, segment.top);
+		bottom = Math.max(bottom, segment.bottom);
+	}
+	const excursion =
+		Math.min(wire.source.y, wire.target.y) -
+		top +
+		bottom -
+		Math.max(wire.source.y, wire.target.y);
+	// Local lanes need room for bends. Beyond that, each extra row is harder to
+	// follow, so a few crossings should win over successively larger outer loops.
+	return Math.max(0, excursion - 64) ** 2 / 16;
 }
 
 function corridorLaneCost(wire: Wire, points: Point[]): number {
@@ -665,6 +692,7 @@ function candidates(
 	wire: Wire,
 	boxes: Obstacle[],
 	pathType: AutoLayoutInput["edgePathType"],
+	pinLanes = false,
 ): Point[][] {
 	const { source, target } = wire;
 	const left = Math.min(source.x, target.x) - 64;
@@ -675,9 +703,10 @@ function candidates(
 		for (const delta of [-48, -24, 0, 24, 48])
 			values.add(Math.round(y + delta));
 	}
+	const boundaries = new Set<number>();
 	for (const box of nearby) {
-		values.add(Math.floor(box.top - LANE_GAP));
-		values.add(Math.ceil(box.bottom + LANE_GAP));
+		boundaries.add(Math.floor(box.top - LANE_GAP));
+		boundaries.add(Math.ceil(box.bottom + LANE_GAP));
 	}
 	const corridorLanes: number[] = [];
 	if (Number.isFinite(wire.corridor?.top))
@@ -696,13 +725,18 @@ function candidates(
 		Math.abs(source.y - y) +
 		Math.abs(target.y - y) +
 		branchDistance(wire, y, y) * BRANCH_DISTANCE_COST;
-	const nearbyLanes = [...values]
+	const nearbyLanes = [...new Set([...values, ...(pinLanes ? boundaries : [])])]
 		.sort((a, b) => cost(a) - cost(b) || a - b)
-		.slice(0, 14);
-	// Reserve local boundary lanes even when nearer samples all run through a node.
+		.slice(0, pinLanes ? 14 : 8);
+	const boundaryLanes = [...boundaries]
+		.sort((a, b) => cost(a) - cost(b) || a - b)
+		.slice(0, 10);
+	// Reserve nearby obstacle boundaries. Pin-height samples can all lie inside
+	// the same row of nodes, leaving only the board's distant outer rails.
 	const lanes = [
 		...new Set([
 			...corridorLanes,
+			...(pinLanes ? [] : boundaryLanes),
 			...nearbyLanes,
 			Math.floor(minY),
 			Math.ceil(maxY),
@@ -719,16 +753,14 @@ function candidates(
 		pathType === "step" || pathType === "smoothstep"
 			? [40, 48, 56]
 			: [24, 32, 40];
-	for (const y of [...new Set(lanes)]) {
+	for (const y of lanes) {
 		if (forward >= 48 && forward < 104) {
 			result.push([dot((source.x + target.x - REROUTE_WIDTH) / 2, y)]);
 		} else if (forward >= 104) {
-			for (const inset of insets) {
-				result.push([
-					dot(source.x + inset, y),
-					dot(target.x - inset - REROUTE_WIDTH, y),
-				]);
-			}
+			result.push([
+				dot(source.x + insets[0], y),
+				dot(target.x - insets[0] - REROUTE_WIDTH, y),
+			]);
 		} else {
 			// Backward links leave both endpoints outward before using an outer lane.
 			result.push([
@@ -747,6 +779,17 @@ function candidates(
 				dot(target.x - 76, y),
 				dot(target.x - 36, target.y),
 			]);
+		}
+	}
+	// Try every local lane before spending the budget on alternate vertical leads.
+	if (forward >= 104) {
+		for (const inset of insets.slice(1)) {
+			for (const y of lanes) {
+				result.push([
+					dot(source.x + inset, y),
+					dot(target.x - inset - REROUTE_WIDTH, y),
+				]);
+			}
 		}
 	}
 	return result.slice(0, MAX_CANDIDATES);
@@ -840,6 +883,7 @@ function routeInOrder(
 				}
 			};
 			if (
+				route.waypoints.length === 0 &&
 				originalHits === 0 &&
 				originalCrossings === 0 &&
 				originalBranchCost === 0
@@ -849,15 +893,20 @@ function routeInOrder(
 			}
 			let bestCost = originalHits
 				? Number.POSITIVE_INFINITY
-				: originalCrossings * 2000 +
+				: originalCrossings * CROSSING_COST +
 					originalBranchCost +
-					route.waypoints.length * 80 +
+					detourCost(wire, wire.segments) +
+					route.waypoints.length * WAYPOINT_COST +
 					wire.segments.reduce(
 						(sum, line) => sum + distance(line.a, line.b),
 						0,
 					);
 			let bestSegments: Segment[] | undefined;
-			for (const points of candidates(wire, boxes, input.edgePathType)) {
+			// Later wires can free a direct connection or a shorter route.
+			for (const points of [
+				[],
+				...candidates(wire, boxes, input.edgePathType, order === "reverse"),
+			]) {
 				const dots = points.map((point, index) =>
 					obstacle(
 						`candidate:${index}`,
@@ -874,11 +923,17 @@ function routeInOrder(
 				)
 					continue;
 				if (
-					dots.some((dot) =>
-						[...wireIndex.query(dot)].some(
-							(line) => line.wire.key !== wire.key && hitsBox(line, dot),
-						),
-					)
+					dots.some((dot) => {
+						const reserved = {
+							left: dot.left - REROUTE_CLEARANCE,
+							right: dot.right + REROUTE_CLEARANCE,
+							top: dot.top - REROUTE_CLEARANCE,
+							bottom: dot.bottom + REROUTE_CLEARANCE,
+						};
+						return [...wireIndex.query(reserved)].some(
+							(line) => line.wire.key !== wire.key && hitsBox(line, reserved),
+						);
+					})
 				)
 					continue;
 				const segments = routeSegments(wire, points, input.edgePathType);
@@ -900,19 +955,14 @@ function routeInOrder(
 					continue;
 				const crossed = crossings(wire, segments, wireIndex);
 				const locality = branchCost(wire, segments);
-				if (
-					!originalHits &&
-					crossed >= originalCrossings &&
-					locality >= originalBranchCost
-				)
-					continue;
 				const cost =
-					crossed * 2000 +
+					crossed * CROSSING_COST +
 					locality +
-					(order === "corridor" && pass === 0
+					detourCost(wire, segments) +
+					(order === "corridor" && pass === 0 && points.length > 0
 						? corridorLaneCost(wire, points)
 						: 0) +
-					points.length * 80 +
+					points.length * WAYPOINT_COST +
 					segments.reduce((sum, line) => sum + distance(line.a, line.b), 0);
 				if (cost >= bestCost) continue;
 				bestCost = cost;
@@ -931,11 +981,11 @@ function routeInOrder(
 			addWire(wire);
 			const newBoxes: Obstacle[] = [];
 			for (const [index, point] of route.waypoints.entries()) {
-				const box = obstacle(`${wire.key}:${index}`, {
-					...point,
-					width: REROUTE_WIDTH,
-					height: REROUTE_HEIGHT,
-				});
+				const box = obstacle(
+					`${wire.key}:${index}`,
+					{ ...point, width: REROUTE_WIDTH, height: REROUTE_HEIGHT },
+					REROUTE_CLEARANCE,
+				);
 				boxes.push(box);
 				boxIndex.add(box);
 				newBoxes.push(box);
@@ -948,13 +998,18 @@ function routeInOrder(
 	let crossingCount = 0;
 	let length = 0;
 	let locality = 0;
+	let detours = 0;
 	for (const wire of eligible) {
 		const dots = routeBoxes.get(wire.key) ?? [];
 		for (const dot of dots) boxIndex.remove(dot);
-		hits += collisions(wire, wire.segments, boxIndex);
+		const remainingHits = collisions(wire, wire.segments, boxIndex);
+		hits += remainingHits;
+		const route = results.get(wire.key);
+		if (route) route.unresolved = remainingHits > 0 || undefined;
 		for (const dot of dots) boxIndex.add(dot);
 		crossingCount += crossings(wire, wire.segments, wireIndex);
 		locality += branchCost(wire, wire.segments);
+		detours += detourCost(wire, wire.segments);
 		length += wire.segments.reduce(
 			(sum, line) => sum + distance(line.a, line.b),
 			0,
@@ -977,11 +1032,259 @@ function routeInOrder(
 		),
 		score:
 			hits * 1_000_000_000 +
-			crossingCount * 2000 +
-			dots * 80 +
+			crossingCount * CROSSING_COST +
+			dots * WAYPOINT_COST +
 			length +
+			detours +
 			locality,
 	};
+}
+
+/** Replace compatible data fan-out with one trunk and ordered consumer taps. */
+function shareDataTrunks(
+	input: AutoLayoutInput,
+	positions: ReadonlyMap<string, [number, number]>,
+	routes: WireRoute[],
+): WireRoute[] {
+	const { wires, boxes } = makeWires(input, positions);
+	const planned = new Map(
+		routes.map((route) => [`${route.fromPin}->${route.toPin}`, route]),
+	);
+	const sources = new Map<string, Wire[]>();
+	for (const wire of wires) {
+		const route = planned.get(wire.key);
+		// Clear local links stay direct; only existing detours are trunk candidates.
+		if (
+			wire.edge.kind !== "data" ||
+			!route ||
+			(!route.waypoints.length && !route.unresolved) ||
+			wire.target.x - wire.source.x < 160
+		)
+			continue;
+		const siblings = sources.get(wire.edge.fromPin.id) ?? [];
+		siblings.push(wire);
+		sources.set(wire.edge.fromPin.id, siblings);
+	}
+	const groups: Wire[][] = [];
+	for (const siblings of sources.values()) {
+		siblings.sort(
+			(a, b) =>
+				a.target.y - b.target.y ||
+				a.target.x - b.target.x ||
+				a.key.localeCompare(b.key),
+		);
+		let group: Wire[] = [];
+		for (const wire of siblings) {
+			// Keep distant branches separate and bound the cost of high fan-out.
+			if (
+				group.length &&
+				(group.length >= MAX_TRUNK_FANOUT ||
+					wire.target.y - group[0].target.y > 160)
+			) {
+				if (group.length > 1) groups.push(group);
+				group = [];
+			}
+			group.push(wire);
+		}
+		if (group.length > 1) groups.push(group);
+	}
+	groups.sort((a, b) => a[0].key.localeCompare(b[0].key));
+	for (const group of groups) {
+		group.sort((a, b) => a.target.x - b.target.x || a.key.localeCompare(b.key));
+		const members = new Set(group.map((wire) => wire.key));
+		const boxIndex = new SpatialIndex<Obstacle>();
+		for (const box of boxes) boxIndex.add(box);
+		const wireIndex = new SpatialIndex<WireSegment>();
+		const indexedDots = new Set<string>();
+		for (const other of wires) {
+			if (members.has(other.key)) continue;
+			const route = planned.get(other.key);
+			for (const line of routeSegments(
+				other,
+				route?.waypoints ?? [],
+				input.edgePathType,
+			)) {
+				wireIndex.add({ ...line, wire: other });
+			}
+			for (const [index, point] of (route?.waypoints ?? []).entries()) {
+				const id = point.shared
+					? `${other.edge.fromPin.id}:${point.shared}`
+					: `${other.key}:${index}`;
+				if (indexedDots.has(id)) continue;
+				indexedDots.add(id);
+				boxIndex.add(
+					obstacle(
+						id,
+						{ ...point, width: REROUTE_WIDTH, height: REROUTE_HEIGHT },
+						REROUTE_CLEARANCE,
+					),
+				);
+			}
+		}
+		const evaluate = (choices: WireRoute[], validate: boolean) => {
+			const dots = new Map<string, Obstacle>();
+			for (const [index, route] of choices.entries()) {
+				for (const [pointIndex, point] of route.waypoints.entries()) {
+					const id = point.shared ?? `${group[index].key}:${pointIndex}`;
+					dots.set(
+						id,
+						obstacle(
+							id,
+							{ ...point, width: REROUTE_WIDTH, height: REROUTE_HEIGHT },
+							0,
+						),
+					);
+				}
+			}
+			if (validate) {
+				const seen: Obstacle[] = [];
+				for (const dot of dots.values()) {
+					if (
+						boxIndex.query(dot).size ||
+						seen.some((other) => overlaps(dot, other))
+					)
+						return undefined;
+					seen.push(dot);
+					const reserved = {
+						left: dot.left - REROUTE_CLEARANCE,
+						right: dot.right + REROUTE_CLEARANCE,
+						top: dot.top - REROUTE_CLEARANCE,
+						bottom: dot.bottom + REROUTE_CLEARANCE,
+					};
+					if (
+						[...wireIndex.query(reserved)].some((line) =>
+							hitsBox(line, reserved),
+						)
+					)
+						return undefined;
+				}
+			}
+			let hits = 0;
+			let crossed = 0;
+			let locality = 0;
+			let detours = 0;
+			const physical = new Map<string, Segment>();
+			for (const [index, route] of choices.entries()) {
+				const wire = group[index];
+				const segments = routeSegments(
+					wire,
+					route.waypoints,
+					input.edgePathType,
+				);
+				hits += collisions(wire, segments, boxIndex);
+				if (validate && hits) return undefined;
+				locality += branchCost(wire, segments);
+				detours += detourCost(wire, segments);
+				const unique: Segment[] = [];
+				for (const line of segments) {
+					const key = `${line.a.x},${line.a.y}:${line.b.x},${line.b.y}`;
+					if (!physical.has(key)) unique.push(line);
+					physical.set(key, line);
+				}
+				crossed += crossings(wire, unique, wireIndex);
+				if (validate) {
+					const own = new Set(route.waypoints.map((point) => point.shared));
+					for (const [id, dot] of dots) {
+						if (!own.has(id) && segments.some((line) => hitsBox(line, dot)))
+							return undefined;
+					}
+				}
+			}
+			const length = [...physical.values()].reduce(
+				(sum, line) => sum + distance(line.a, line.b),
+				0,
+			);
+			return {
+				hits,
+				crossed,
+				locality,
+				score:
+					hits * 1_000_000_000 +
+					crossed * CROSSING_COST +
+					locality +
+					detours +
+					dots.size * WAYPOINT_COST +
+					length,
+			};
+		};
+		const original = group.map((wire) => planned.get(wire.key) as WireRoute);
+		const baseline = evaluate(original, false);
+		if (!baseline) continue;
+		let best = baseline.score;
+		let chosen: WireRoute[] | undefined;
+		const farthest = group[group.length - 1];
+		const laneValues = new Set<number>();
+		for (const wire of group) {
+			for (const point of planned.get(wire.key)?.waypoints ?? [])
+				laneValues.add(point.y);
+		}
+		for (const points of candidates(farthest, boxes, input.edgePathType)) {
+			if (points.length) laneValues.add(points[points.length > 2 ? 1 : 0].y);
+		}
+		const lanes = [...laneValues]
+			.sort((a, b) => {
+				const cost = (y: number) =>
+					group.reduce(
+						(sum, wire) =>
+							sum + Math.abs(wire.source.y - y) + Math.abs(wire.target.y - y),
+						0,
+					);
+				return cost(a) - cost(b) || a - b;
+			})
+			.slice(0, 32);
+		const insets =
+			input.edgePathType === "step" || input.edgePathType === "smoothstep"
+				? [40, 48, 56]
+				: [24, 32, 40];
+		for (const y of lanes) {
+			for (const inset of insets) {
+				const trunk: RouteWaypoint[] = [
+					{
+						x: Math.round(farthest.source.x + inset),
+						y,
+						shared: `${group[0].key}:entry`,
+					},
+				];
+				const choices: WireRoute[] = [];
+				let lastX = Number.NEGATIVE_INFINITY;
+				for (const wire of group) {
+					const x = Math.round(wire.target.x - inset - REROUTE_WIDTH);
+					if (x !== lastX) {
+						trunk.push({
+							x,
+							y,
+							shared: `${group[0].key}:tap:${wire.edge.toPin.id}`,
+						});
+						lastX = x;
+					}
+					choices.push({
+						from: wire.edge.from,
+						to: wire.edge.to,
+						fromPin: wire.edge.fromPin.id,
+						toPin: wire.edge.toPin.id,
+						waypoints: [...trunk],
+					});
+				}
+				const value = evaluate(choices, true);
+				if (
+					!value ||
+					value.score >= best ||
+					value.locality > baseline.locality ||
+					(!baseline.hits && value.crossed > baseline.crossed)
+				)
+					continue;
+				best = value.score;
+				chosen = choices;
+			}
+		}
+		if (chosen) {
+			for (const [index, route] of chosen.entries())
+				planned.set(group[index].key, route);
+		}
+	}
+	return routes.map(
+		(route) => planned.get(`${route.fromPin}->${route.toPin}`) ?? route,
+	);
 }
 
 /** Keeps node placement fixed and searches bounded, deterministic wire corridors. */
@@ -990,8 +1293,12 @@ export function planWireRoutes(
 	positions: ReadonlyMap<string, [number, number]>,
 ): WireRoute[] {
 	let best = routeInOrder(input, positions, "longest");
-	// Early lane choices constrain later wires. Try other orders on tangled boards.
-	if ((best.crossingCount > 0 || best.locality > 0) && best.routes.length > 1) {
+	// Early lane choices constrain later wires. The reverse pass also tries
+	// pin-height lanes first to escape a poor choice of obstacle boundaries.
+	if (
+		(best.hits > 0 || best.crossingCount > 0 || best.locality > 0) &&
+		best.routes.length > 1
+	) {
 		for (const order of ["shortest", "reverse"] as const) {
 			const candidate = routeInOrder(input, positions, order);
 			if (candidate.score < best.score) best = candidate;
@@ -1006,5 +1313,5 @@ export function planWireRoutes(
 		const candidate = routeInOrder(input, positions, "corridor");
 		if (candidate.score < best.score) best = candidate;
 	}
-	return best.routes;
+	return shareDataTrunks(input, positions, best.routes);
 }

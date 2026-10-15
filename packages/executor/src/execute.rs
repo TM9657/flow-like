@@ -869,6 +869,8 @@ async fn execute_inner(
                         refresh_token: v.refresh_token.clone(),
                         expires_at: v.expires_at.map(|e| e as u64),
                         token_type: v.token_type.clone(),
+                        hub_origin: None,
+                        hub_subject: None,
                     };
                     (k.clone(), token)
                 })

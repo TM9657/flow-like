@@ -47,12 +47,14 @@ import type {
 	IStorageItemActionResult,
 } from "@flow-like/flow-like-ui/state/backend-state/types";
 import type { IWidgetState } from "@flow-like/flow-like-ui/state/backend-state/widget-state";
+import type { AuthContextProps } from "react-oidc-context";
 import {
 	type HostedTarget,
 	hostedApiPath,
 	hostedSessionId,
 } from "./hosted-route";
 import { consumeHostedStream } from "./hosted-stream";
+import { fetchWithSession } from "./session-request";
 
 /** The interface a route serves: `u` a custom page, `c` a chat, `f` a form. */
 export type HostedKind = "c" | "f" | "u";
@@ -85,6 +87,7 @@ export class HostedHttpError extends Error {
 export function createHostedRequest(
 	target: HostedTarget,
 	accessToken?: string,
+	auth?: AuthContextProps,
 ) {
 	const endpoint = `${getApiOrigin()}/${hostedApiPath(target)}`;
 	return async (suffix = "", init: RequestInit = {}): Promise<Response> => {
@@ -95,12 +98,16 @@ export function createHostedRequest(
 		const url = new URL(`${endpoint}${suffix}`);
 		url.searchParams.set("route", target.route);
 		if (target.variant) url.searchParams.set("__variant", target.variant);
-		const response = await fetch(url, {
-			...init,
-			headers,
-			cache: "no-store",
-			credentials: "omit",
-		});
+		const response = await fetchWithSession(
+			url.href,
+			{
+				...init,
+				headers,
+				cache: "no-store",
+				credentials: "omit",
+			},
+			auth,
+		);
 		if (!response.ok)
 			throw new HostedHttpError(
 				response.status,
@@ -154,7 +161,10 @@ export type HostedAccessToken = () => string | undefined;
 const anonymous: HostedAccessToken = () => undefined;
 
 /** A sign-in interface sends its viewer's token, so project members reach the private packages the project pins. */
-function publicWidgetRegistry(accessToken: HostedAccessToken): IRegistryState {
+function publicWidgetRegistry(
+	accessToken: HostedAccessToken,
+	auth?: () => AuthContextProps,
+): IRegistryState {
 	// A request that never settles would hold the frame, and every later check of its token, for good.
 	const send = (
 		path: string,
@@ -167,13 +177,17 @@ function publicWidgetRegistry(accessToken: HostedAccessToken): IRegistryState {
 				const headers = new Headers({ "Content-Type": "application/json" });
 				const token = accessToken();
 				if (token) headers.set("Authorization", `Bearer ${token}`);
-				const response = await fetch(getApiUrl(undefined, path), {
-					method: "POST",
-					credentials: "omit",
-					headers,
-					body: JSON.stringify(body),
-					signal,
-				});
+				const response = await fetchWithSession(
+					getApiUrl(undefined, path),
+					{
+						method: "POST",
+						credentials: "omit",
+						headers,
+						body: JSON.stringify(body),
+						signal,
+					},
+					auth?.(),
+				);
 				if (!response.ok)
 					throw new HostedHttpError(
 						response.status,
@@ -421,6 +435,7 @@ export function createHostedBackend(
 	data: HostedBootstrap,
 	request: HostedRequest,
 	accessToken: HostedAccessToken = anonymous,
+	auth?: () => AuthContextProps,
 ): IBackendState {
 	return {
 		appState: new EmptyAppState(),
@@ -458,6 +473,7 @@ export function createHostedBackend(
 		}),
 		registryState: publicWidgetRegistry(
 			data.auth_proxy ? accessToken : anonymous,
+			data.auth_proxy ? auth : undefined,
 		),
 		capabilities: () => ({
 			needsSignIn: false,

@@ -1,6 +1,7 @@
 "use client";
 import { useTranslation } from "@flow-like/locales";
-import { useStore } from "@xyflow/react";
+import { useStore } from "./board-runtime";
+
 import { LocateFixedIcon } from "lucide-react";
 import {
 	memo,

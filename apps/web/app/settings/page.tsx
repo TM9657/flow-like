@@ -8,6 +8,7 @@ import {
 	DeveloperModeCard,
 	useDeveloperMode,
 } from "@flow-like/flow-like-ui";
+import { BoardRendererCard } from "@flow-like/flow-like-ui/components/settings/board-renderer-card";
 import { useTranslation } from "@flow-like/locales";
 import {
 	BarChart3,
@@ -218,6 +219,7 @@ export default function SettingsPage() {
 						</div>
 					</div>
 				))}
+				<BoardRendererCard />
 				<div className="flex flex-col gap-3">
 					<h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
 						{t("developer", "Developer")}

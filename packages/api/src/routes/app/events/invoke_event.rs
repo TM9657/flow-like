@@ -299,9 +299,11 @@ pub async fn invoke_event(
     Path((app_id, event_id)): Path<(String, String)>,
     Query(mut query): Query<InvokeEventQuery>,
     headers: HeaderMap,
-    Json(params): Json<InvokeEventRequest>,
+    Json(mut params): Json<InvokeEventRequest>,
 ) -> Result<Response, ApiError> {
     query.variant = variant::pin_from_request(&headers, query.variant.take());
+    crate::routes::oauth::authorize_incoming_oauth_tokens(&state, &user, &mut params.oauth_tokens)
+        .await?;
     invoke_event_impl(
         state, user, app_id, event_id, query, params, None, false, None,
     )
@@ -392,8 +394,8 @@ pub(crate) async fn invoke_hosted_event(
             .and_then(|tokens| serde_json::from_str(&tokens).ok());
         if let Some(tokens) = tokens {
             params.oauth_tokens = Some(
-                crate::routes::sink::trigger::maybe_refresh_oauth_tokens(&state, &sink.id, tokens)
-                    .await,
+                crate::routes::sink::trigger::maybe_refresh_oauth_tokens(&state, &sink, tokens)
+                    .await?,
             );
         }
     }

@@ -1,7 +1,8 @@
 "use client";
+import { useInternalNode } from "../board-runtime";
 
 import { useTranslation } from "@flow-like/locales";
-import { useInternalNode } from "@xyflow/react";
+
 import { isEqual } from "lodash-es";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInvalidateInvoke, useInvoke } from "../../../hooks";

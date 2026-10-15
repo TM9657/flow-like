@@ -2341,5 +2341,9 @@
 	"confirmComp": "Confirm free access",
 	"grantComp": "Grant complimentary access",
 	"zoomIn": "Zoom in",
-	"zoomOut": "Zoom out"
+	"zoomOut": "Zoom out",
+	"workflowEditor": "Workflow editor",
+	"boardRendererDefaultDescription": "WASM is the default board renderer. Turn it off to use React Flow.",
+	"useWasmBoardPreview": "Use WASM board (preview)",
+	"boardRendererLocalPreference": "Your choice is saved automatically for this browser or desktop installation."
 }

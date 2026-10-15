@@ -40,6 +40,8 @@ async function click(label) {
 	assert.ok(handle.asElement(), `Missing button: ${label}`);
 	await handle.asElement().click();
 	await handle.dispose();
+	if (label === "Routed" || label === "Compact")
+		await page.waitForSelector('[role="dialog"]', { hidden: true });
 }
 
 async function waitForGraph() {
@@ -251,13 +253,83 @@ function parallelMetrics(snapshot, measurements, routed, original) {
 	return { gaps, horizontal, chains };
 }
 
+function sharedMetrics(snapshot, original) {
+	const pins = new Map(
+		snapshot.board.flatMap((node) =>
+			Object.values(node.pins).map((pin) => [pin.id, { node, pin }]),
+		),
+	);
+	const source = original.board
+		.flatMap((node) => Object.values(node.pins))
+		.find(
+			(pin) =>
+				pin.pin_type === "Output" &&
+				pin.data_type !== "Execution" &&
+				pin.connected_to.length === 4,
+		);
+	assert.ok(source, "The trunk fixture has four consumers of one data output");
+	const chains = source.connected_to.map((target) => {
+		let current = pins.get(target).pin;
+		const chain = [];
+		const seen = new Set();
+		while (!current.depends_on.includes(source.id)) {
+			assert.equal(
+				current.depends_on.length,
+				1,
+				"Each data input keeps one source",
+			);
+			const previous = pins.get(current.depends_on[0]);
+			assert.ok(
+				previous?.node.auto_reroute,
+				"Every consumer still reaches the original source",
+			);
+			assert.ok(
+				!seen.has(previous.node.id),
+				"Shared data paths have no cycles",
+			);
+			seen.add(previous.node.id);
+			chain.unshift(previous.node.id);
+			current = Object.values(previous.node.pins).find(
+				(pin) => pin.name === "route_in",
+			);
+		}
+		return chain;
+	});
+	const dots = snapshot.board.filter((node) => node.auto_reroute);
+	assert.equal(
+		pins.get(source.id).pin.connected_to.length,
+		1,
+		"The source connects to one shared trunk",
+	);
+	assert.equal(
+		new Set(chains.map((chain) => chain[0])).size,
+		1,
+		"Every consumer reuses the same first reroute",
+	);
+	assert.ok(
+		dots.some((node) =>
+			Object.values(node.pins).some((pin) => pin.connected_to.length > 1),
+		),
+		"Physical reroutes branch to consumers",
+	);
+	assert.ok(
+		dots.length < source.connected_to.length * 2,
+		"Shared routing uses fewer dots than separate two-dot bypasses",
+	);
+	return {
+		consumers: source.connected_to.length,
+		physicalReroutes: dots.length,
+		chains,
+	};
+}
+
 try {
 	for (const pathType of (
 		process.env.FLOW_LAYOUT_QA_PATHS || "default,straight,step,smoothstep"
 	).split(",")) {
 		for (const scenario of (
 			process.env.FLOW_LAYOUT_QA_SCENARIOS ||
-			"screenshot,dense,crossing,parallel,parallel-swap"
+			"screenshot,dense,crossing,parallel,parallel-swap,shared-trunk"
 		).split(",")) {
 			await page.goto(`${origin}/?scenario=${scenario}&path=${pathType}`, {
 				waitUntil: "domcontentloaded",
@@ -301,6 +373,10 @@ try {
 			const routed = await page.evaluate(() => window.layoutQa.snapshot());
 			const after = await measure();
 			currentCase = { scenario, pathType, before, after };
+			const shared =
+				scenario === "shared-trunk"
+					? sharedMetrics(routed, initial)
+					: undefined;
 			let parallelAfter;
 			if (scenario.startsWith("parallel")) {
 				parallelAfter = parallelMetrics(
@@ -377,10 +453,45 @@ try {
 				routed.board,
 				`${scenario}: repeated layout preserves positions, node ids, and connections`,
 			);
+			if (scenario === "shared-trunk") {
+				await click("Auto Layout");
+				await page.waitForSelector('[role="dialog"]');
+				await click("Compact");
+				await page.waitForFunction(
+					() => window.layoutQa.snapshot().revision === 3,
+				);
+				await waitForGraph();
+				const compact = await page.evaluate(() => window.layoutQa.snapshot());
+				assert.equal(
+					compact.board.filter((node) => node.auto_reroute).length,
+					0,
+					"Compact removes the shared trunk",
+				);
+				assert.deepEqual(
+					compact.board.map(({ coordinates, ...node }) => node),
+					initial.board.map(({ coordinates, ...node }) => node),
+					"Compact preserves every original connection",
+				);
+				await page.screenshot({
+					path: `${output}/${scenario}-${pathType}-cleaned.png`,
+				});
+				await click("Undo");
+				await page.waitForFunction(
+					() => window.layoutQa.snapshot().revision === 4,
+				);
+				await waitForGraph();
+				assert.deepEqual(
+					(await page.evaluate(() => window.layoutQa.snapshot())).board,
+					routed.board,
+					"Undo restores shared nodes, branches, and positions",
+				);
+			}
 			await click("Undo");
 			await click("Undo");
 			await page.waitForFunction(
-				() => window.layoutQa.snapshot().revision === 4,
+				(expected) => window.layoutQa.snapshot().revision === expected,
+				{},
+				scenario === "shared-trunk" ? 6 : 4,
 			);
 			await waitForGraph();
 			const undone = await page.evaluate(() => window.layoutQa.snapshot());
@@ -409,6 +520,7 @@ try {
 				pathType,
 				before,
 				after,
+				...(shared ? { shared } : {}),
 				...(parallelBefore ? { parallelBefore, parallelAfter } : {}),
 			});
 			console.log(

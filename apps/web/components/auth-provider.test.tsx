@@ -1,5 +1,12 @@
 // @vitest-environment happy-dom
 import { ApiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
+import { createSmartQueryPersister } from "@flow-like/flow-like-ui/lib/query-persister";
+import {
+	QueryClient,
+	QueryClientProvider,
+	QueryObserver,
+	useQuery,
+} from "@tanstack/react-query";
 import { act, useEffect } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import type { AuthContextProps } from "react-oidc-context";
@@ -14,7 +21,23 @@ const harness = vi.hoisted(() => {
 		pushProfile = vi.fn();
 		userState = {
 			getInfo: vi.fn(async () => ({ id: "user-1" })),
-			getProfile: vi.fn(async () => ({ name: "Saved profile", bits: [] })),
+			getProfile: vi.fn(async () => ({
+				name: "Saved profile",
+				bits: [],
+				apps: [{ app_id: "saved-app" }],
+			})),
+			getSettingsProfile: vi.fn(async () => ({
+				hub_profile: await this.userState.getProfile(),
+				execution_settings: { gpu_mode: false, max_context_size: 8192 },
+			})),
+		};
+		appState = {
+			getApps: vi.fn(
+				async (): Promise<[{ id: string }, { name: string }][]> => [
+					[{ id: "saved-app" }, { name: "Saved app" }],
+				],
+			),
+			getMyGroups: vi.fn(async () => []),
 		};
 	}
 	return {
@@ -22,6 +45,7 @@ const harness = vi.hoisted(() => {
 		backend: new WebBackend(),
 		path: "/apps/app-1",
 		childMounts: 0,
+		showLibrary: false,
 		auth: {
 			get: () => state,
 			set(next: Partial<AuthContextProps>) {
@@ -49,7 +73,20 @@ vi.mock("@flow-like/flow-like-ui/components/account/account-session", () => ({
 vi.mock("aws-amplify", () => ({ Amplify: { configure: vi.fn() } }));
 vi.mock("aws-amplify/auth", () => ({ decodeJWT: vi.fn() }));
 vi.mock("next/navigation", () => ({ usePathname: () => harness.path }));
-vi.mock("oidc-client-ts", () => ({ UserManager: class {} }));
+vi.mock("oidc-client-ts", () => ({
+	UserManager: class {
+		stopSilentRenew() {}
+	},
+}));
+vi.mock(
+	"@flow-like/flow-like-ui/lib/auth/oidc-renewal",
+	async (importOriginal) => ({
+		...(await importOriginal<
+			typeof import("@flow-like/flow-like-ui/lib/auth/oidc-renewal")
+		>()),
+		coordinateOidcRenewal: vi.fn(),
+	}),
+);
 vi.mock("react-oidc-context", async () => {
 	const { useSyncExternalStore } = await import("react");
 	return {
@@ -82,7 +119,33 @@ function ProtectedContent() {
 	useEffect(() => {
 		harness.childMounts += 1;
 	}, []);
-	return <div data-testid="protected-content">App content</div>;
+	return (
+		<div data-testid="protected-content">
+			{harness.showLibrary ? <LibraryProbe /> : "App content"}
+		</div>
+	);
+}
+
+function LibraryProbe() {
+	const profile = useQuery({
+		queryKey: ["getSettingsProfile"],
+		queryFn: () => harness.backend.userState.getSettingsProfile(),
+	});
+	const apps = useQuery({
+		queryKey: ["getApps"],
+		queryFn: () => harness.backend.appState.getApps(),
+	});
+	const appIds = new Set(
+		profile.data?.hub_profile.apps.map((app) => app.app_id),
+	);
+	return (
+		<output>
+			{apps.data
+				?.filter(([app]) => appIds.has(app.id))
+				.map(([, meta]) => meta.name)
+				.join(", ") || "No apps yet"}
+		</output>
+	);
 }
 
 function user(accessToken = "token-1") {
@@ -96,13 +159,16 @@ function user(accessToken = "token-1") {
 
 let root: Root;
 let container: HTMLDivElement;
+let queryClient: QueryClient;
 
 async function renderProvider() {
 	await act(async () =>
 		root.render(
-			<WebAuthProvider>
-				<ProtectedContent />
-			</WebAuthProvider>,
+			<QueryClientProvider client={queryClient}>
+				<WebAuthProvider>
+					<ProtectedContent />
+				</WebAuthProvider>
+			</QueryClientProvider>,
 		),
 	);
 }
@@ -112,8 +178,17 @@ beforeEach(() => {
 		globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 	).IS_REACT_ACT_ENVIRONMENT = true;
 	harness.backend = new harness.WebBackend();
+	for (const state of [harness.backend.userState, harness.backend.appState]) {
+		for (const [name, fn] of Object.entries(state)) {
+			Object.defineProperty(fn, "name", { value: name });
+		}
+	}
+	queryClient = new QueryClient({
+		defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+	});
 	harness.path = "/apps/app-1";
 	harness.childMounts = 0;
+	harness.showLibrary = false;
 	window.history.replaceState(null, "", harness.path);
 	localStorage.clear();
 	sessionStorage.clear();
@@ -140,10 +215,95 @@ beforeEach(() => {
 afterEach(async () => {
 	await act(async () => root.unmount());
 	container.remove();
+	queryClient.clear();
 	vi.useRealTimers();
 });
 
 describe("WebAuthProvider", () => {
+	it("replaces fresh empty library caches after login without switching profiles", async () => {
+		harness.showLibrary = true;
+		queryClient.setQueryData(["getApps"], []);
+		queryClient.setQueryData(["getSettingsProfile"], {
+			hub_profile: { name: "Saved profile", bits: [], apps: [] },
+		});
+		await renderProvider();
+		await vi.waitFor(() => expect(container.textContent).toBe("Saved app"));
+		expect(harness.backend.appState.getApps).toHaveBeenCalledTimes(1);
+		expect(harness.backend.userState.getProfile).toHaveBeenCalledTimes(1);
+	});
+
+	it("bypasses persisted empty lists even when the first signed-in request retries after mount", async () => {
+		harness.showLibrary = true;
+		const get = vi.fn(async (storageKey: string) => {
+			const queryKey = JSON.parse(storageKey.slice("fl-q-".length));
+			return JSON.stringify({
+				buster: "fl-qp-v1",
+				queryKey,
+				queryHash: JSON.stringify(queryKey),
+				state: {
+					data:
+						queryKey[0] === "getSettingsProfile"
+							? { hub_profile: { name: "Old profile", bits: [], apps: [] } }
+							: [],
+					dataUpdatedAt: Date.now(),
+				},
+			});
+		});
+		const persister = createSmartQueryPersister({
+			backend: {
+				get,
+				set: async () => {},
+				del: async () => {},
+				entries: async () => [],
+			},
+		});
+		queryClient.setDefaultOptions({
+			queries: {
+				staleTime: 30_000,
+				retry: 1,
+				retryDelay: 0,
+				persister: persister.persisterFn,
+			},
+		});
+		let rejectFirst!: (reason: Error) => void;
+		harness.backend.appState.getApps.mockImplementationOnce(
+			() =>
+				new Promise((_, reject) => {
+					rejectFirst = reject;
+				}),
+		);
+		await renderProvider();
+		expect(harness.childMounts).toBe(1);
+		await act(async () => rejectFirst(new Error("Temporary network failure")));
+		await vi.waitFor(() => expect(container.textContent).toBe("Saved app"));
+		expect(harness.backend.appState.getApps).toHaveBeenCalledTimes(2);
+		expect(get).not.toHaveBeenCalled();
+	});
+
+	it("discards a pending pre-login app response after loading the signed-in library", async () => {
+		harness.showLibrary = true;
+		let finishSignedOut!: (apps: []) => void;
+		const observer = new QueryObserver(queryClient, {
+			queryKey: ["getApps"],
+			queryFn: () =>
+				new Promise<[]>((resolve) => {
+					finishSignedOut = resolve;
+				}),
+		});
+		const unsubscribe = observer.subscribe(() => {});
+		try {
+			await renderProvider();
+			await vi.waitFor(() => expect(container.textContent).toBe("Saved app"));
+			await act(async () => finishSignedOut([]));
+			expect(container.textContent).toBe("Saved app");
+			expect(queryClient.getQueryData(["getApps"])).toEqual([
+				[{ id: "saved-app" }, { name: "Saved app" }],
+			]);
+		} finally {
+			unsubscribe();
+		}
+	});
+
 	it("stops user initialization on 401 without retrying or loading protected content", async () => {
 		vi.useFakeTimers();
 		harness.backend.userState.getInfo.mockRejectedValue(

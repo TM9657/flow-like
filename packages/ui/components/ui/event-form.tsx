@@ -48,7 +48,11 @@ import {
 	mergeEventTriggerConfig,
 } from "../../lib/event-source";
 import { formatEventTypeLabel } from "../../lib/event-type-label";
-import { checkOAuthTokens } from "../../lib/oauth/helpers";
+import {
+	checkOAuthTokens,
+	hasRequiredScopes,
+	storedTokenToBackendFormat,
+} from "../../lib/oauth/helpers";
 import type {
 	IOAuthTokenStoreWithPending,
 	IStoredOAuthToken,
@@ -631,7 +635,11 @@ export function EventForm({
 		try {
 			if (rememberConsent && consentStore) {
 				for (const provider of missingProviders) {
-					await consentStore.setConsent(appId, provider.id, provider.scopes);
+					await consentStore.setConsent(
+						appId,
+						provider.id,
+						provider.merged_scopes ?? provider.scopes,
+					);
 				}
 			}
 
@@ -643,16 +651,15 @@ export function EventForm({
 			const allTokens = { ...pendingOAuthTokens };
 			for (const providerId of authorizedProviders) {
 				if (tokenStore) {
-					const token = await tokenStore.getToken(providerId);
-					if (token && !tokenStore.isExpired(token)) {
-						allTokens[providerId] = {
-							access_token: token.access_token,
-							refresh_token: token.refresh_token,
-							expires_at: token.expires_at
-								? Math.floor(token.expires_at / 1000)
-								: undefined,
-							token_type: token.token_type ?? "Bearer",
-						};
+					const provider = missingProviders.find((p) => p.id === providerId);
+					if (!provider) continue;
+					const token = await tokenStore.getToken(providerId, provider);
+					if (
+						token &&
+						!tokenStore.isExpired(token) &&
+						hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
+					) {
+						allTokens[providerId] = storedTokenToBackendFormat(token);
 					}
 				}
 			}
@@ -695,17 +702,14 @@ export function EventForm({
 					continue;
 				}
 
-				const token = await tokenStore.getToken(provider.id);
-				if (token && !tokenStore.isExpired(token)) {
+				const token = await tokenStore.getToken(provider.id, provider);
+				if (
+					token &&
+					!tokenStore.isExpired(token) &&
+					hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
+				) {
 					newlyAuthorized.add(provider.id);
-					newTokens[provider.id] = {
-						access_token: token.access_token,
-						refresh_token: token.refresh_token,
-						expires_at: token.expires_at
-							? Math.floor(token.expires_at / 1000)
-							: undefined,
-						token_type: token.token_type ?? "Bearer",
-					};
+					newTokens[provider.id] = storedTokenToBackendFormat(token);
 				}
 			}
 

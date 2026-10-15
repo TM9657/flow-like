@@ -2828,7 +2828,7 @@ async fn dispatch_event_stream(
         .and_then(|json| serde_json::from_str(&json).ok());
     let oauth_tokens = match (sink.as_ref(), oauth_tokens) {
         (Some(sink), Some(tokens)) => {
-            Some(maybe_refresh_oauth_tokens(state, &sink.id, tokens).await)
+            Some(maybe_refresh_oauth_tokens(state, &sink, tokens).await?)
         }
         _ => None,
     };

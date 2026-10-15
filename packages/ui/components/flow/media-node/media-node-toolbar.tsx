@@ -29,6 +29,7 @@ const ToolbarButton = memo(
 			<TooltipTrigger asChild>
 				<button
 					type="button"
+					aria-label={tooltip}
 					className="h-5 w-5 flex items-center justify-center rounded transition-colors hover:bg-white/10"
 					onClick={(e) => {
 						e.stopPropagation();

@@ -1,12 +1,10 @@
 "use client";
+import { ViewportPortal } from "./board-runtime-primitives";
+
+import { useInternalNode } from "./board-runtime";
 
 import { useTranslation } from "@flow-like/locales";
-import {
-	Position,
-	ViewportPortal,
-	getBezierPath,
-	useInternalNode,
-} from "@xyflow/react";
+import { Position, getBezierPath } from "@xyflow/react";
 import {
 	ChevronLeftIcon,
 	ChevronRightIcon,

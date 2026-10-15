@@ -958,7 +958,22 @@ impl EventSinkManager {
         };
         let final_pat = personal_access_token.or(stored_pat);
         let mut final_oauth_tokens = stored_oauth_tokens;
-        if let Some(new_tokens) = oauth_tokens {
+        if let Some(mut new_tokens) = oauth_tokens {
+            for token in new_tokens.values_mut() {
+                if token.hub_origin.is_some()
+                    || token
+                        .refresh_token
+                        .as_deref()
+                        .is_some_and(|value| value.starts_with("fl_oauth_"))
+                {
+                    token.ensure_hub(&profile.hub_profile.hub, profile.hub_profile.secure)?;
+                } else {
+                    token.hub_origin = flow_like::hub::hub_origin(
+                        &profile.hub_profile.hub,
+                        profile.hub_profile.secure,
+                    );
+                }
+            }
             final_oauth_tokens.extend(new_tokens);
         }
 

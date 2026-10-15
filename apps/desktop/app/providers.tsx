@@ -7,7 +7,6 @@ import {
 	ExecutionServiceProvider,
 	QueryClient,
 	QueryClientProvider,
-	ReactFlowProvider,
 } from "@flow-like/flow-like-ui";
 import { ThemeProvider } from "@flow-like/flow-like-ui/components/theme-provider";
 import { NetworkStatusIndicator } from "@flow-like/flow-like-ui/components/ui/network-status-indicator";
@@ -143,67 +142,65 @@ export function Providers({
 	return (
 		<UseNavigationProvider routeMode="query">
 			<IdbMigrationGate>
-				<ReactFlowProvider>
-					<QueryClientProvider client={queryClient}>
-						<NetworkAwareProvider>
-							<IOSWebviewHardening />
-							<NetworkStatusIndicator />
-							<UpdateProvider />
-							<TrayProvider />
-							<GlobalAnchorHandler />
-							<I18nProvider>
-								<ThemeProvider
-									attribute="class"
-									defaultTheme="system"
-									enableSystem
-									storageKey="theme"
-									disableTransitionOnChange
-								>
-									<TooltipProvider>
-										<ToastProvider />
-										<TauriProvider>
-											<DownloadNotificationProvider />
-											<OfflineWritesNotifier />
-											<RpaPermissionProvider />
-											<LocalSinkConsentProvider />
-											<DeeplinkNavigationHandler>
-												<OAuthCallbackHandler>
-													<OAuthExecutionProvider>
-														<DesktopAuthProvider>
-															<Toaster />
-															<PendingInviteRedeemer />
-															<DeviceModelUnlockProvider />
-															<NotificationProvider />
-															<RuntimeVariablesProviderComponent>
-																<ExecutionServiceProvider>
-																	<ExecutionEngineProviderComponent>
-																		<SpotlightWrapper>
-																			<TelemetryProvider>
-																				<ThemeLoader />
-																				<Suspense fallback={null}>
-																					<NativeIntegrationProvider />
-																				</Suspense>
-																				<AppSidebar>{children}</AppSidebar>
-																				<GlobalToolBridge />
-																				<GlobalChatOverlay />
-																				<FlowPilotBubbleButton />
-																				<GlobalUpgradeDialog />
-																			</TelemetryProvider>
-																		</SpotlightWrapper>
-																	</ExecutionEngineProviderComponent>
-																</ExecutionServiceProvider>
-															</RuntimeVariablesProviderComponent>
-														</DesktopAuthProvider>
-													</OAuthExecutionProvider>
-												</OAuthCallbackHandler>
-											</DeeplinkNavigationHandler>
-										</TauriProvider>
-									</TooltipProvider>
-								</ThemeProvider>
-							</I18nProvider>
-						</NetworkAwareProvider>
-					</QueryClientProvider>
-				</ReactFlowProvider>
+				<QueryClientProvider client={queryClient}>
+					<NetworkAwareProvider>
+						<IOSWebviewHardening />
+						<NetworkStatusIndicator />
+						<UpdateProvider />
+						<TrayProvider />
+						<GlobalAnchorHandler />
+						<I18nProvider>
+							<ThemeProvider
+								attribute="class"
+								defaultTheme="system"
+								enableSystem
+								storageKey="theme"
+								disableTransitionOnChange
+							>
+								<TooltipProvider>
+									<ToastProvider />
+									<TauriProvider>
+										<DownloadNotificationProvider />
+										<OfflineWritesNotifier />
+										<RpaPermissionProvider />
+										<LocalSinkConsentProvider />
+										<DeeplinkNavigationHandler>
+											<OAuthCallbackHandler>
+												<OAuthExecutionProvider>
+													<DesktopAuthProvider>
+														<Toaster />
+														<PendingInviteRedeemer />
+														<DeviceModelUnlockProvider />
+														<NotificationProvider />
+														<RuntimeVariablesProviderComponent>
+															<ExecutionServiceProvider>
+																<ExecutionEngineProviderComponent>
+																	<SpotlightWrapper>
+																		<TelemetryProvider>
+																			<ThemeLoader />
+																			<Suspense fallback={null}>
+																				<NativeIntegrationProvider />
+																			</Suspense>
+																			<AppSidebar>{children}</AppSidebar>
+																			<GlobalToolBridge />
+																			<GlobalChatOverlay />
+																			<FlowPilotBubbleButton />
+																			<GlobalUpgradeDialog />
+																		</TelemetryProvider>
+																	</SpotlightWrapper>
+																</ExecutionEngineProviderComponent>
+															</ExecutionServiceProvider>
+														</RuntimeVariablesProviderComponent>
+													</DesktopAuthProvider>
+												</OAuthExecutionProvider>
+											</OAuthCallbackHandler>
+										</DeeplinkNavigationHandler>
+									</TauriProvider>
+								</TooltipProvider>
+							</ThemeProvider>
+						</I18nProvider>
+					</NetworkAwareProvider>
+				</QueryClientProvider>
 			</IdbMigrationGate>
 		</UseNavigationProvider>
 	);

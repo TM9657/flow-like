@@ -6,7 +6,6 @@ import {
 	ExecutionEngineProviderComponent,
 	PersistQueryClientProvider,
 	QueryClient,
-	ReactFlowProvider,
 	ThemeProvider,
 	Toaster,
 	TooltipProvider,
@@ -49,39 +48,37 @@ export default function RootLayout({
 		<html lang="en" suppressHydrationWarning suppressContentEditableWarning>
 			{/* <ReactScan /> */}
 			{/* <PHProvider> */}
-			<ReactFlowProvider>
-				<PersistQueryClientProvider
-					client={queryClient}
-					persistOptions={{
-						persister,
-						maxAge: 24 * 60 * 60 * 1000,
-					}}
-				>
-					<TooltipProvider>
-						<Toaster />
-						<body className={inter.className}>
-							<Suspense
-								fallback={
-									<div className="flex flex-1 justify-center items-center">
-										{"Loading..."}
-									</div>
-								}
+			<PersistQueryClientProvider
+				client={queryClient}
+				persistOptions={{
+					persister,
+					maxAge: 24 * 60 * 60 * 1000,
+				}}
+			>
+				<TooltipProvider>
+					<Toaster />
+					<body className={inter.className}>
+						<Suspense
+							fallback={
+								<div className="flex flex-1 justify-center items-center">
+									{"Loading..."}
+								</div>
+							}
+						>
+							<ThemeProvider
+								attribute="class"
+								defaultTheme="system"
+								enableSystem
+								disableTransitionOnChange
 							>
-								<ThemeProvider
-									attribute="class"
-									defaultTheme="system"
-									enableSystem
-									disableTransitionOnChange
-								>
-									<ExecutionEngineProviderComponent>
-										{children}
-									</ExecutionEngineProviderComponent>
-								</ThemeProvider>
-							</Suspense>
-						</body>
-					</TooltipProvider>
-				</PersistQueryClientProvider>
-			</ReactFlowProvider>
+								<ExecutionEngineProviderComponent>
+									{children}
+								</ExecutionEngineProviderComponent>
+							</ThemeProvider>
+						</Suspense>
+					</body>
+				</TooltipProvider>
+			</PersistQueryClientProvider>
 			{/* </PHProvider> */}
 		</html>
 	);

@@ -26,24 +26,26 @@ export function addNodeCommand(command: IAddNode): {
 	command: IGenericCommand;
 	node: INode;
 } {
-	command.node.id = createId();
+	const node = structuredClone(command.node);
+	node.id = createId();
 
-	const pin_ids = Object.keys(command.node.pins);
+	const pin_ids = Object.keys(node.pins);
 	for (const pin of pin_ids) {
 		const newId = createId();
-		command.node.pins[newId] = command.node.pins[pin];
-		command.node.pins[newId].id = newId;
-		delete command.node.pins[pin];
+		node.pins[newId] = node.pins[pin];
+		node.pins[newId].id = newId;
+		delete node.pins[pin];
 	}
 
 	const generic_command = {
 		...command,
+		node,
 		command_type: ICommandType.AddNode,
 	};
 
 	return {
 		command: generic_command as any,
-		node: command.node,
+		node,
 	};
 }
 

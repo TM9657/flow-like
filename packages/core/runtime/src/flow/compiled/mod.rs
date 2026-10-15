@@ -115,6 +115,7 @@ fn draft_artifact_stem(e_tag: &str) -> String {
     // Version the namespace when the trust contract of a draft artifact
     // changes. Version 2 guarantees writers verified the loaded Board still
     // matched this ETag before placing bytes at the content-addressed path.
+    // Version 3 rebuilds prerun manifests with complete OAuth scopes.
     //
     // Unlike version manifests, the draft manifest path carries no
     // `.v{MANIFEST_FORMAT_VERSION}` segment — this byte is its only format
@@ -123,7 +124,7 @@ fn draft_artifact_stem(e_tag: &str) -> String {
     // writers would race on one draft manifest path.
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"flow-like/draft-artifact");
-    hasher.update(&[2]);
+    hasher.update(&[3]);
     hasher.update(e_tag.as_bytes());
     hasher.finalize().to_hex().as_str()[..32].to_string()
 }

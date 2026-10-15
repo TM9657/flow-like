@@ -21,6 +21,7 @@ fn cache_policy(method: &Method, route: Option<&str>) -> CachePolicy {
         | "/api/v1/auth/revoke"
         | "/api/v1/oauth/token/{provider_id}"
         | "/api/v1/oauth/refresh/{provider_id}"
+        | "/api/v1/oauth/connection/{provider_id}"
         | "/api/v1/oauth/device/start/{provider_id}"
         | "/api/v1/oauth/device/poll/{provider_id}"
         | "/api/v1/oauth/userinfo/{provider_id}"
@@ -145,11 +146,14 @@ mod tests {
         let router = api(Router::new()
             .nest(
                 "/oauth",
-                Router::new().route("/token/{provider_id}", post(cached_json)),
+                Router::new()
+                    .route("/token/{provider_id}", post(cached_json))
+                    .route("/connection/{provider_id}", post(cached_json)),
             )
             .nest("/auth", Router::new().route("/token", post(cached_json))));
         for path in [
             "/api/v1/oauth/token/provider?code=ignored",
+            "/api/v1/oauth/connection/provider",
             "/api/v1/auth/token",
         ] {
             let response = router

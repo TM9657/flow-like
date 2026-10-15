@@ -563,110 +563,46 @@ async fn parse_http_request_payload(
     })
 }
 
-/// Refresh any expired OAuth tokens in the provided map.
-///
-/// For each provider whose access_token has expired but has a refresh_token,
-/// calls the provider's token endpoint. On success, updates the map entry with
-/// the new token data and persists the updated encrypted blob back to the
-/// EventSink row.
+/// Resolve each connection through its canonical grant before dispatch.
+/// Stored snapshots can lag behind refreshes by another browser or event sink.
 pub(crate) async fn maybe_refresh_oauth_tokens(
     state: &AppState,
-    sink_id: &str,
+    sink: &event_sink::Model,
     mut tokens: std::collections::HashMap<String, serde_json::Value>,
-) -> std::collections::HashMap<String, serde_json::Value> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    let mut any_refreshed = false;
-
-    let provider_ids: Vec<String> = tokens.keys().cloned().collect();
-    for provider_id in provider_ids {
-        let value = match tokens.get(&provider_id) {
-            Some(v) => v,
-            None => continue,
-        };
-
-        // Check if the token is expired (same 60-second buffer as OAuthToken::is_expired)
-        let expires_at = value
-            .get("expires_at")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        if expires_at == 0 || expires_at > now + 60 {
-            continue;
-        }
-
-        let refresh_token = match value.get("refresh_token").and_then(|v| v.as_str()) {
-            Some(rt) if !rt.is_empty() => rt.to_string(),
-            _ => {
-                tracing::warn!(
-                    provider = %provider_id,
-                    sink = %sink_id,
-                    "OAuth token expired but no refresh_token available"
-                );
-                continue;
-            }
-        };
-
-        match crate::routes::oauth::refresh_oauth_token_for_provider(
-            state,
-            &provider_id,
-            &refresh_token,
-        )
-        .await
-        {
-            Ok(response) => {
-                let new_expires_at = response.expires_in.map(|ei| now + ei as u64);
-
-                let new_value = serde_json::json!({
-                    "access_token": response.access_token,
-                    "refresh_token": response.refresh_token.as_deref()
-                        .unwrap_or(&refresh_token),
-                    "expires_at": new_expires_at,
-                    "token_type": response.token_type.as_deref().unwrap_or("Bearer"),
-                });
-
-                tokens.insert(provider_id.clone(), new_value);
-                any_refreshed = true;
-
-                tracing::info!(
-                    provider = %provider_id,
-                    sink = %sink_id,
-                    "Refreshed expired OAuth token for scheduled execution"
-                );
-            }
-            Err(_) => {
-                tracing::warn!(
-                    provider = %provider_id,
-                    sink = %sink_id,
-                    "Failed to refresh OAuth token, proceeding with expired token"
-                );
-            }
-        }
+) -> Result<std::collections::HashMap<String, serde_json::Value>, ApiError> {
+    let mut changed = false;
+    for (provider_id, value) in &mut tokens {
+        let current =
+            crate::routes::oauth::resolve_sink_oauth_token(state, provider_id, value).await?;
+        changed |= current != *value;
+        *value = current;
     }
-
-    if any_refreshed && let Ok(json_str) = serde_json::to_string(&tokens) {
+    if changed {
         use crate::routes::app::events::db::encrypt_token;
-        let encrypted = encrypt_token(&json_str, &state.encryption_key);
-
-        let update = event_sink::ActiveModel {
-            id: Set(sink_id.to_string()),
-            oauth_tokens_encrypted: Set(Some(encrypted)),
-            updated_at: Set(chrono::Utc::now().fixed_offset()),
-            ..Default::default()
-        };
-
-        if let Err(err) = update.update(&state.db).await {
-            tracing::error!(
-                sink = %sink_id,
-                error = %err,
-                "Failed to persist refreshed OAuth tokens to EventSink"
-            );
+        let json = serde_json::to_string(&tokens)?;
+        let encrypted = encrypt_token(&json, &state.encryption_key);
+        let updated = event_sink::Entity::update_many()
+            .col_expr(
+                event_sink::Column::OauthTokensEncrypted,
+                Expr::value(Some(encrypted)),
+            )
+            .col_expr(
+                event_sink::Column::UpdatedAt,
+                Expr::value(chrono::Utc::now().fixed_offset()),
+            )
+            .filter(event_sink::Column::Id.eq(&sink.id))
+            .filter(
+                event_sink::Column::OauthTokensEncrypted.eq(sink.oauth_tokens_encrypted.clone()),
+            )
+            .exec(&state.db)
+            .await?;
+        if updated.rows_affected != 1 {
+            return Err(ApiError::service_unavailable(
+                "OAuth credentials changed during refresh; retry the workflow",
+            ));
         }
     }
-
-    tokens
+    Ok(tokens)
 }
 
 /// Input for programmatic event triggering
@@ -858,7 +794,7 @@ async fn trigger_event_dispatch(
 
     // Refresh any expired OAuth tokens before dispatch (writes back to DB on success)
     let oauth_tokens = match oauth_tokens {
-        Some(tokens) => Some(maybe_refresh_oauth_tokens(state, &sink.id, tokens).await),
+        Some(tokens) => Some(maybe_refresh_oauth_tokens(state, &sink, tokens).await?),
         None => None,
     };
 
@@ -1218,7 +1154,7 @@ pub async fn trigger_http(
 
     // Refresh any expired OAuth tokens before dispatch (writes back to DB on success)
     let oauth_tokens = match oauth_tokens {
-        Some(tokens) => Some(maybe_refresh_oauth_tokens(&state, &sink.id, tokens).await),
+        Some(tokens) => Some(maybe_refresh_oauth_tokens(&state, &sink, tokens).await?),
         None => None,
     };
 
@@ -1657,7 +1593,7 @@ pub async fn trigger_telegram(
 
     // Refresh any expired OAuth tokens before dispatch (writes back to DB on success)
     let oauth_tokens = match oauth_tokens {
-        Some(tokens) => Some(maybe_refresh_oauth_tokens(&state, &sink.id, tokens).await),
+        Some(tokens) => Some(maybe_refresh_oauth_tokens(&state, &sink, tokens).await?),
         None => None,
     };
 
@@ -2029,7 +1965,7 @@ pub async fn trigger_discord(
 
     // Refresh any expired OAuth tokens before dispatch (writes back to DB on success)
     let oauth_tokens = match oauth_tokens {
-        Some(tokens) => Some(maybe_refresh_oauth_tokens(&state, &sink.id, tokens).await),
+        Some(tokens) => Some(maybe_refresh_oauth_tokens(&state, &sink, tokens).await?),
         None => None,
     };
 

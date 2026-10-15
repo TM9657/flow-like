@@ -1,4 +1,5 @@
 "use client";
+import { LegacyBoardRuntimeScope } from "../board-runtime";
 
 import { useTranslation } from "@flow-like/locales";
 import {
@@ -462,9 +463,11 @@ function Canvas({
 
 export function BoardDiffCanvas(props: Readonly<BoardDiffCanvasProps>) {
 	return (
-		<ReactFlowProvider>
-			<Canvas {...props} />
-		</ReactFlowProvider>
+		<LegacyBoardRuntimeScope>
+			<ReactFlowProvider>
+				<Canvas {...props} />
+			</ReactFlowProvider>
+		</LegacyBoardRuntimeScope>
 	);
 }
 

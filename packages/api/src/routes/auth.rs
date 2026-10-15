@@ -160,11 +160,49 @@ async fn proxy_request(
     }
     .ok_or(anyhow!("Invalid endpoint"))?;
 
-    *req.uri_mut() = Uri::try_from(&url).unwrap();
+    *req.uri_mut() = upstream_uri(&url, req.uri())?;
+    req.headers_mut().remove(hyper::header::HOST);
 
     Ok(client
         .request(req)
         .await
         .map_err(|_| anyhow!("Bad Request"))?
         .into_response())
+}
+
+fn upstream_uri(upstream: &str, incoming: &Uri) -> Result<Uri, InternalError> {
+    let upstream = Uri::try_from(upstream).map_err(|_| anyhow!("Invalid OpenID proxy URL"))?;
+    let Some(query) = incoming.query().filter(|query| !query.is_empty()) else {
+        return Ok(upstream);
+    };
+    let path = upstream.path();
+    let path_and_query = match upstream.query() {
+        Some(configured) if !configured.is_empty() => format!("{path}?{configured}&{query}"),
+        _ => format!("{path}?{query}"),
+    };
+    let mut parts = upstream.into_parts();
+    parts.path_and_query = Some(
+        path_and_query
+            .parse()
+            .map_err(|_| anyhow!("Invalid OpenID proxy query"))?,
+    );
+    Uri::from_parts(parts).map_err(|_| InternalError::from(anyhow!("Invalid OpenID proxy URL")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authorize_proxy_keeps_state_pkce_and_encoded_redirect() {
+        let incoming: Uri = "/auth/authorize?client_id=client&state=s%2Bt&code_challenge=challenge&redirect_uri=https%3A%2F%2Fapp.test%2Fcallback&scope=openid+offline_access".parse().unwrap();
+        let uri = upstream_uri("https://issuer.test/authorize?tenant=one", &incoming).unwrap();
+        assert_eq!(uri.authority().unwrap().as_str(), "issuer.test");
+        assert_eq!(uri.path(), "/authorize");
+        assert_eq!(
+            uri.query().unwrap(),
+            format!("tenant=one&{}", incoming.query().unwrap())
+        );
+        assert!(upstream_uri("not a URL [", &incoming).is_err());
+    }
 }

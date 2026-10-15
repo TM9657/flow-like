@@ -222,24 +222,13 @@ export class WebAppState implements IAppState {
 	}
 
 	async getMyGroups(): Promise<IGroup[]> {
-		try {
-			return await apiGet<IGroup[]>("user/groups", this.backend.auth);
-		} catch {
-			return [];
-		}
+		return apiGet<IGroup[]>("user/groups", this.backend.auth);
 	}
 
 	async getApps(): Promise<[IApp, IMetadata | undefined][]> {
-		try {
-			return stabilizeMetadataEntries(
-				await apiGet<[IApp, IMetadata | undefined][]>(
-					"apps",
-					this.backend.auth,
-				),
-			);
-		} catch {
-			return [];
-		}
+		return stabilizeMetadataEntries(
+			await apiGet<[IApp, IMetadata | undefined][]>("apps", this.backend.auth),
+		);
 	}
 
 	async getApp(appId: string): Promise<IApp> {

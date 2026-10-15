@@ -12,16 +12,12 @@ import {
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { type EventSourceMessage, createEventSource } from "eventsource-client";
 import type { AuthContextProps } from "react-oidc-context";
+import { ensureProtectedAppRouteAuth, fetcher } from "../../lib/api";
 import {
-	ensureProtectedAppRouteAuth,
-	requestFailure,
-	requestSilentRenew,
-} from "../../lib/api";
-import {
-	ApiResponseError,
 	apiResponseError,
 	upstreamFailureInSuccess,
 } from "../../lib/api-error";
+import { authForHub, hubAuthHeaders, withHubAuth } from "../../lib/hub-auth";
 import {
 	DEFAULT_CONNECT_TIMEOUT_MS,
 	STREAM_HEADER_TIMEOUT_MS,
@@ -167,11 +163,12 @@ export class TauriApiState implements IApiState {
 		this.auth = auth;
 	}
 
-	private getAuthHeader(): Record<string, string> {
+	private getAuthHeader(profile: IProfile): Record<string, string> {
+		const auth = authForHub(profile, this.auth);
 		return {
 			[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
-			...(this.auth?.user?.access_token
-				? { Authorization: `Bearer ${this.auth.user.access_token}` }
+			...(auth?.user?.access_token
+				? { Authorization: `Bearer ${auth.user.access_token}` }
 				: {}),
 		};
 	}
@@ -181,56 +178,15 @@ export class TauriApiState implements IApiState {
 		path: string,
 		options?: RequestInit,
 	): Promise<T> {
-		ensureProtectedAppRouteAuth(
+		return fetcher<T>(
+			profile,
 			path,
-			this.auth,
-			(options?.method ?? "GET").toUpperCase(),
+			{
+				...options,
+				headers: { ...traceHeaders(), ...options?.headers },
+			},
+			this.auth ?? undefined,
 		);
-		const url = constructUrl(profile, path);
-		const authHeader = this.getAuthHeader();
-
-		if (typeof navigator !== "undefined" && !navigator.onLine) {
-			throw new Error(`Network unavailable: ${path}`);
-		}
-
-		try {
-			// The deadline spans the body read as well: `fetch_read_body` stalls on a
-			// half-open socket exactly like `fetch_send` does.
-			return await withRequestDeadline<T>(
-				path,
-				async ({ signal }) => {
-					const response = await tauriFetch(url, {
-						...options,
-						headers: {
-							"Content-Type": "application/json",
-							...traceHeaders(),
-							...options?.headers,
-							...authHeader,
-						},
-						keepalive: true,
-						priority: "high",
-						connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
-						signal,
-					});
-
-					if (!response.ok) {
-						if (response.status === 401 && this.auth) {
-							requestSilentRenew(this.auth, "after 401");
-						}
-						const errorText = await response.text();
-						throw apiResponseError(response, errorText, path);
-					}
-
-					if (response.status === 204) return undefined as T;
-
-					return await readApiJson<T>(response, path);
-				},
-				{ signal: options?.signal },
-			);
-		} catch (error) {
-			if (error instanceof ApiResponseError) throw error;
-			throw requestFailure(error, path);
-		}
 	}
 
 	async get<T>(profile: IProfile, path: string): Promise<T> {
@@ -272,18 +228,36 @@ export class TauriApiState implements IApiState {
 		onMessage?: (data: T) => void,
 	): Promise<void> {
 		const url = constructUrl(profile, path);
-		const authHeader = this.getAuthHeader();
+		const auth = authForHub(profile, this.auth);
+		ensureProtectedAppRouteAuth(path, auth, options?.method ?? "GET");
+		const authHeader = this.getAuthHeader(profile);
 		const method = options?.method ?? "GET";
 
 		if (method === "POST" || method === "PUT") {
-			await this.streamRaw<T>(url, options, authHeader, onMessage);
+			await this.streamRaw<T>(
+				profile,
+				auth,
+				url,
+				options,
+				authHeader,
+				onMessage,
+			);
 			return;
 		}
 
-		await this.streamEventSource<T>(url, options, authHeader, onMessage);
+		await this.streamEventSource<T>(
+			profile,
+			auth,
+			url,
+			options,
+			authHeader,
+			onMessage,
+		);
 	}
 
 	private async streamRaw<T>(
+		profile: IProfile,
+		auth: AuthContextProps | undefined,
 		url: string,
 		options: RequestInit | undefined,
 		authHeader: Record<string, string>,
@@ -296,18 +270,23 @@ export class TauriApiState implements IApiState {
 		const response = await withRequestDeadline(
 			url,
 			async ({ signal, release }) => {
-				const res = await tauriFetch(url, {
-					method: options?.method ?? "POST",
-					headers: {
-						Accept: "text/event-stream",
-						"Content-Type": "application/json",
-						...((options?.headers as Record<string, string>) ?? {}),
-						...authHeader,
-					},
-					body: options?.body,
-					connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
-					signal,
-				});
+				const res = await withHubAuth(profile, auth, (token) =>
+					tauriFetch(url, {
+						method: options?.method ?? "POST",
+						headers: hubAuthHeaders(
+							{
+								Accept: "text/event-stream",
+								"Content-Type": "application/json",
+								...((options?.headers as Record<string, string>) ?? {}),
+								...authHeader,
+							},
+							token,
+						),
+						body: options?.body,
+						connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
+						signal,
+					}),
+				);
 				release();
 				return res;
 			},
@@ -319,9 +298,6 @@ export class TauriApiState implements IApiState {
 		);
 
 		if (!response.ok) {
-			if (response.status === 401 && this.auth) {
-				requestSilentRenew(this.auth, "after 401");
-			}
 			const errorText = await response.text();
 			throw apiResponseError(response, errorText, url);
 		}
@@ -390,6 +366,8 @@ export class TauriApiState implements IApiState {
 	}
 
 	private async streamEventSource<T>(
+		profile: IProfile,
+		auth: AuthContextProps | undefined,
 		url: string,
 		options: RequestInit | undefined,
 		authHeader: Record<string, string>,
@@ -422,7 +400,13 @@ export class TauriApiState implements IApiState {
 
 			esRef = createEventSource({
 				url: url,
-				fetch: tauriFetch,
+				fetch: (input, init) =>
+					withHubAuth(profile, auth, (token) =>
+						tauriFetch(input, {
+							...init,
+							headers: hubAuthHeaders(init?.headers, token),
+						}),
+					),
 				// @ts-ignore
 				headers: {
 					Accept: "text/event-stream",

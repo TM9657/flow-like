@@ -1,5 +1,7 @@
+import { oauthCredentialKey, oauthProviderKey } from "./scope";
 import type {
 	IDeviceAuthResponse,
+	IOAuthBinding,
 	IOAuthProvider,
 	IOAuthRuntime,
 	IOAuthTokenStoreWithPending,
@@ -70,11 +72,31 @@ interface IRefreshTokenResponse {
 	refresh_token?: string;
 	expires_in?: number;
 	token_type?: string;
+	scope?: string;
 }
 
-/** Only a refusal ends a refresh token; a 5xx, timeout or rate limit says nothing about it. */
-function refreshRefused(status: number): boolean {
-	return status >= 400 && status < 500 && status !== 408 && status !== 429;
+export class OAuthRefreshError extends Error {
+	constructor(
+		message: string,
+		readonly reauthorizationRequired: boolean,
+	) {
+		super(message);
+	}
+}
+
+const refreshes = new WeakMap<
+	object,
+	Map<string, Promise<IStoredOAuthToken>>
+>();
+function grantedScopes(scope: unknown, fallback: string[]): string[] {
+	return typeof scope === "string"
+		? scope.split(/[ ,]+/).filter(Boolean)
+		: fallback;
+}
+function expiresAt(expiresIn: number | undefined): number | undefined {
+	return typeof expiresIn === "number" && Number.isFinite(expiresIn)
+		? Date.now() + Math.max(0, expiresIn) * 1000
+		: undefined;
 }
 
 /** A 2xx without an access token (an upstream error body) must not replace the stored token. */
@@ -126,7 +148,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 		overrideApiBaseUrl?: string,
 	): Promise<string> {
 		const rawApiBaseUrl =
-			overrideApiBaseUrl ?? (getApiBaseUrl ? await getApiBaseUrl() : null);
+			overrideApiBaseUrl ??
+			(await tokenStore.getBinding?.(provider))?.apiBaseUrl ??
+			(getApiBaseUrl ? await getApiBaseUrl() : null);
 		if (!rawApiBaseUrl) {
 			throw new Error(
 				`Provider ${provider.id} requires OAuth proxying but no API base URL is available`,
@@ -136,6 +160,73 @@ export function createOAuthService(config: OAuthServiceConfig) {
 		return rawApiBaseUrl.endsWith("/")
 			? rawApiBaseUrl.slice(0, -1)
 			: rawApiBaseUrl;
+	}
+
+	const deviceBindings = new Map<string, IOAuthBinding>();
+	async function checkBinding(binding?: IOAuthBinding) {
+		if (
+			binding &&
+			tokenStore.isCurrentBinding &&
+			!(await tokenStore.isCurrentBinding(binding))
+		)
+			throw new Error(
+				"The OAuth account or provider changed. Authorize again.",
+			);
+	}
+	async function adoptTokens<T extends IRefreshTokenResponse>(
+		provider: IOAuthProvider,
+		data: T,
+		binding?: IOAuthBinding,
+		overrideApiBaseUrl?: string,
+	): Promise<T> {
+		await checkBinding(binding);
+		if (!data.refresh_token || data.refresh_token.startsWith("fl_oauth_"))
+			return data;
+		const apiBaseUrl = await resolveApiBaseUrl(
+			provider,
+			binding?.apiBaseUrl ?? overrideApiBaseUrl,
+		);
+		const response = await runtime.httpPost(
+			`${apiBaseUrl}/api/v1/oauth/connection/${provider.id}`,
+			JSON.stringify({
+				client_id: provider.client_id,
+				access_token: data.access_token,
+				refresh_token: data.refresh_token,
+				expires_at:
+					data.expires_in === undefined
+						? undefined
+						: Math.floor(Date.now() / 1000) + data.expires_in,
+				token_type: data.token_type,
+				scope: data.scope,
+			}),
+			{ "Content-Type": "application/json", Accept: "application/json" },
+			binding,
+		);
+		if (!response.ok)
+			throw new Error(`Could not save OAuth connection: ${response.status}`);
+		const adopted = readRefreshResponse(await response.json(), provider.id);
+		if (!adopted.refresh_token?.startsWith("fl_oauth_"))
+			throw new Error("The Hub did not return an OAuth connection handle");
+		await checkBinding(binding);
+		return { ...data, ...adopted };
+	}
+	async function replaceToken(
+		expected: IStoredOAuthToken,
+		next?: IStoredOAuthToken,
+	): Promise<boolean> {
+		await checkBinding(expected.binding);
+		if (tokenStore.replaceToken) return tokenStore.replaceToken(expected, next);
+		const current = await tokenStore.getToken(expected.providerId);
+		if (
+			!current ||
+			current.access_token !== expected.access_token ||
+			current.refresh_token !== expected.refresh_token ||
+			current.storedAt !== expected.storedAt
+		)
+			return false;
+		if (next) await tokenStore.setToken(next);
+		else await tokenStore.deleteToken(expected.providerId);
+		return true;
 	}
 
 	return {
@@ -155,6 +246,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				);
 			}
 
+			const binding = await tokenStore.getBinding?.(provider);
 			await tokenStore.cleanupPendingAuth();
 
 			const randomState = generateRandomString(32);
@@ -175,6 +267,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 			await tokenStore.setPendingAuth({
 				state,
+				binding,
 				providerId: provider.id,
 				codeVerifier,
 				redirectUri,
@@ -183,9 +276,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				appId: options?.appId,
 				boardId: options?.boardId,
 				provider, // Store full provider for callback handling
-				apiBaseUrl: getApiBaseUrl
-					? ((await getApiBaseUrl()) ?? undefined)
-					: undefined,
+				apiBaseUrl:
+					binding?.apiBaseUrl ??
+					(getApiBaseUrl ? ((await getApiBaseUrl()) ?? undefined) : undefined),
 			});
 
 			// Use implicit flow (response_type=token) if configured, otherwise authorization code flow
@@ -205,6 +298,8 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				scope: scopes.join(" "),
 				state,
 			});
+
+			if (provider.audience) params.set("audience", provider.audience);
 
 			// Add PKCE parameters for providers that require it (not used in implicit flow)
 			if (provider.pkce_required && !provider.use_implicit_flow) {
@@ -246,6 +341,19 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			provider: IOAuthProvider,
 		): Promise<IStoredOAuthToken> {
 			const url = new URL(callbackUrl);
+			const redirect = new URL(redirectUri);
+			const nativeCallback =
+				url.protocol === "flow-like:" &&
+				url.host === "thirdparty" &&
+				url.pathname === "/callback";
+			const websiteCallback =
+				url.origin === redirect.origin && url.pathname === redirect.pathname;
+			const webCallback =
+				typeof window !== "undefined" &&
+				url.origin === window.location.origin &&
+				url.pathname === "/thirdparty/callback";
+			if (!nativeCallback && !websiteCallback && !webCallback)
+				throw new Error("Invalid OAuth callback destination");
 			const code = url.searchParams.get("code");
 			const state = url.searchParams.get("state");
 			const error = url.searchParams.get("error");
@@ -284,15 +392,30 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				hasCodeVerifier: !!pendingAuth.codeVerifier,
 			});
 
+			await checkBinding(pendingAuth.binding);
+			if (pendingAuth.initiatedAt < Date.now() - 600000)
+				throw new Error("Expired OAuth state");
+			if (
+				pendingAuth.provider &&
+				oauthProviderKey(pendingAuth.provider) !== oauthProviderKey(provider)
+			)
+				throw new Error("OAuth client configuration changed");
 			if (pendingAuth.providerId !== provider.id) {
 				throw new Error("Provider mismatch in OAuth callback");
 			}
 
-			const tokenResponse = await this.exchangeCodeForTokens(
+			const exchanged = await this.exchangeCodeForTokens(
 				provider,
 				code,
 				pendingAuth.codeVerifier,
 				pendingAuth.redirectUri,
+				pendingAuth.apiBaseUrl,
+				pendingAuth.binding,
+			);
+			const tokenResponse = await adoptTokens(
+				provider,
+				exchanged,
+				pendingAuth.binding,
 				pendingAuth.apiBaseUrl,
 			);
 
@@ -311,13 +434,12 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 			const token: IStoredOAuthToken = {
 				providerId: provider.id,
+				binding: pendingAuth.binding,
 				access_token: tokenResponse.access_token,
 				refresh_token: tokenResponse.refresh_token,
-				expires_at: tokenResponse.expires_in
-					? Date.now() + tokenResponse.expires_in * 1000
-					: undefined,
+				expires_at: expiresAt(tokenResponse.expires_in),
 				token_type: tokenResponse.token_type ?? "Bearer",
-				scopes: pendingAuth.scopes,
+				scopes: grantedScopes(tokenResponse.scope, pendingAuth.scopes),
 				storedAt: Date.now(),
 				userInfo,
 			};
@@ -331,6 +453,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				providerId: string;
 				scopes: string[];
 				state: string;
+				binding?: IOAuthBinding;
 				apiBaseUrl?: string;
 			},
 			provider: IOAuthProvider,
@@ -342,7 +465,20 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				scope?: string;
 			},
 		): Promise<IStoredOAuthToken> {
-			await tokenStore.consumePendingAuth(pendingAuth.state);
+			const consumed = await tokenStore.consumePendingAuth(pendingAuth.state);
+			if (
+				!consumed ||
+				!provider.use_implicit_flow ||
+				consumed.providerId !== provider.id
+			)
+				throw new Error("Invalid OAuth state or flow");
+			await checkBinding(consumed.binding);
+			if (
+				consumed.initiatedAt < Date.now() - 600000 ||
+				(consumed.provider &&
+					oauthProviderKey(consumed.provider) !== oauthProviderKey(provider))
+			)
+				throw new Error("Expired or changed OAuth state");
 
 			let userInfo: IStoredOAuthToken["userInfo"];
 			if (provider.userinfo_url && tokenData.access_token) {
@@ -357,17 +493,14 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				}
 			}
 
-			const scopes = tokenData.scope
-				? tokenData.scope.split(" ")
-				: pendingAuth.scopes;
+			const scopes = grantedScopes(tokenData.scope, consumed.scopes);
 
 			const token: IStoredOAuthToken = {
 				providerId: provider.id,
+				binding: consumed.binding,
 				access_token: tokenData.access_token,
 				refresh_token: undefined,
-				expires_at: tokenData.expires_in
-					? Date.now() + tokenData.expires_in * 1000
-					: undefined,
+				expires_at: expiresAt(tokenData.expires_in),
 				token_type: tokenData.token_type ?? "Bearer",
 				scopes,
 				storedAt: Date.now(),
@@ -384,8 +517,10 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			codeVerifier: string,
 			callbackRedirectUri: string,
 			overrideApiBaseUrl?: string,
+			binding?: IOAuthBinding,
 		): Promise<{
 			access_token: string;
+			scope?: string;
 			refresh_token?: string;
 			expires_in?: number;
 			token_type?: string;
@@ -407,7 +542,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			});
 
 			// Web clients and providers with secrets must proxy token exchange through the API.
-			if (shouldProxyProviderRequests(provider)) {
+			if (binding || shouldProxyProviderRequests(provider)) {
 				const apiBaseUrl = await resolveApiBaseUrl(
 					provider,
 					overrideApiBaseUrl,
@@ -415,6 +550,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 				const proxyUrl = `${apiBaseUrl}/api/v1/oauth/token/${provider.id}`;
 				const proxyBody = JSON.stringify({
+					client_id: provider.client_id,
 					code,
 					redirect_uri: callbackRedirectUri,
 					code_verifier: provider.pkce_required ? codeVerifier : undefined,
@@ -422,10 +558,16 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 				console.log("[OAuth] Using API proxy for token exchange:", proxyUrl);
 
-				const response = await runtime.httpPost(proxyUrl, proxyBody, {
-					"Content-Type": "application/json",
-					Accept: "application/json",
-				});
+				await checkBinding(binding);
+				const response = await runtime.httpPost(
+					proxyUrl,
+					proxyBody,
+					{
+						"Content-Type": "application/json",
+						Accept: "application/json",
+					},
+					binding,
+				);
 
 				if (!response.ok) {
 					await response.text();
@@ -438,6 +580,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 				const tokenData = (await response.json()) as {
 					access_token: string;
+					scope?: string;
 					refresh_token?: string;
 					expires_in?: number;
 					token_type?: string;
@@ -525,6 +668,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			// Try to parse as JSON, fall back to form-urlencoded parsing
 			let tokenData: {
 				access_token: string;
+				scope?: string;
 				refresh_token?: string;
 				expires_in?: number;
 				token_type?: string;
@@ -546,6 +690,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				const formData = new URLSearchParams(responseText);
 				tokenData = {
 					access_token: formData.get("access_token") ?? "",
+					scope: formData.get("scope") ?? undefined,
 					refresh_token: formData.get("refresh_token") ?? undefined,
 					expires_in: formData.get("expires_in")
 						? Number(formData.get("expires_in"))
@@ -580,107 +725,107 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			provider: IOAuthProvider,
 			token: IStoredOAuthToken,
 		): Promise<IStoredOAuthToken> {
-			if (!token.refresh_token) {
-				throw new Error("No refresh token available");
+			const key = token.binding
+				? oauthCredentialKey(token.binding)
+				: oauthProviderKey(provider);
+			let pending = refreshes.get(tokenStore);
+			if (!pending) {
+				pending = new Map();
+				refreshes.set(tokenStore, pending);
 			}
-
-			// Web clients and providers with secrets must proxy refresh requests through the API.
-			if (shouldProxyProviderRequests(provider)) {
-				const apiBaseUrl = await resolveApiBaseUrl(provider);
-
-				const proxyUrl = `${apiBaseUrl}/api/v1/oauth/refresh/${provider.id}`;
-				const proxyBody = JSON.stringify({
-					refresh_token: token.refresh_token,
-				});
-
-				console.log("[OAuth] Using API proxy for token refresh:", proxyUrl);
-
-				const response = await runtime.httpPost(proxyUrl, proxyBody, {
-					"Content-Type": "application/json",
+			const existing = pending.get(key);
+			if (existing) return existing;
+			const refresh = async () => {
+				await tokenStore.getBinding?.(provider);
+				await checkBinding(token.binding);
+				const current = await tokenStore.getToken(provider.id, provider);
+				if (!current)
+					throw new OAuthRefreshError(
+						"OAuth connection is no longer available",
+						true,
+					);
+				if (!tokenStore.isExpired(current)) return current;
+				if (!current.refresh_token)
+					throw new OAuthRefreshError("No refresh token available", true);
+				await checkBinding(current.binding);
+				const handle = current.refresh_token.startsWith("fl_oauth_");
+				const proxy =
+					!!current.binding || handle || shouldProxyProviderRequests(provider);
+				const url = proxy
+					? `${await resolveApiBaseUrl(provider, current.binding?.apiBaseUrl)}/api/v1/oauth/refresh/${provider.id}`
+					: provider.token_url;
+				const headers: Record<string, string> = {
+					"Content-Type": proxy
+						? "application/json"
+						: "application/x-www-form-urlencoded",
 					Accept: "application/json",
+				};
+				const params = new URLSearchParams({
+					grant_type: "refresh_token",
+					refresh_token: current.refresh_token,
+					client_id: provider.client_id,
 				});
-
+				if (!proxy && provider.client_secret)
+					headers.Authorization = `Basic ${btoa(`${provider.client_id}:${provider.client_secret}`)}`;
+				const response = await runtime.httpPost(
+					url,
+					proxy
+						? JSON.stringify({
+								refresh_token: current.refresh_token,
+								client_id: provider.client_id,
+							})
+						: params.toString(),
+					headers,
+					current.binding,
+				);
 				if (!response.ok) {
-					await response.text();
-					if (refreshRefused(response.status)) {
-						await tokenStore.deleteToken(provider.id);
+					let body: { error?: string } = {};
+					try {
+						body = (await response.json()) as typeof body;
+					} catch {}
+					const refused = [
+						"invalid_grant",
+						"invalid_token",
+						"oauth_reauthorization_required",
+					].includes(body.error ?? "");
+					if (refused && !(await replaceToken(current))) {
+						const latest = await tokenStore.getToken(provider.id, provider);
+						if (latest) return latest;
 					}
-					throw new Error(`Token refresh failed: ${response.status}`);
+					throw new OAuthRefreshError(
+						`Token refresh failed: ${response.status}`,
+						refused,
+					);
 				}
-
 				const tokenResponse = readRefreshResponse(
 					await response.json(),
 					provider.id,
 				);
-
-				const updatedToken: IStoredOAuthToken = {
-					...token,
+				const updated: IStoredOAuthToken = {
+					...current,
 					access_token: tokenResponse.access_token,
-					refresh_token: tokenResponse.refresh_token ?? token.refresh_token,
-					expires_at: tokenResponse.expires_in
-						? Date.now() + tokenResponse.expires_in * 1000
-						: undefined,
-					token_type: tokenResponse.token_type ?? token.token_type,
+					refresh_token: tokenResponse.refresh_token ?? current.refresh_token,
+					expires_at: expiresAt(tokenResponse.expires_in),
+					token_type: tokenResponse.token_type ?? current.token_type,
+					scopes: grantedScopes(tokenResponse.scope, current.scopes),
 					storedAt: Date.now(),
 				};
-
-				await tokenStore.setToken(updatedToken);
-				return updatedToken;
-			}
-
-			// Standard refresh flow (non-proxy)
-			const params = new URLSearchParams({
-				refresh_token: token.refresh_token,
-				grant_type: "refresh_token",
-			});
-
-			// For providers with client_secret (like Notion), use Basic Auth
-			const headers: Record<string, string> = {
-				"Content-Type": "application/x-www-form-urlencoded",
-				Accept: "application/json",
+				if (await replaceToken(current, updated)) return updated;
+				const latest = await tokenStore.getToken(provider.id, provider);
+				if (latest) return latest;
+				throw new Error("OAuth connection changed while refreshing");
 			};
-
-			if (provider.client_secret) {
-				const credentials = btoa(
-					`${provider.client_id}:${provider.client_secret}`,
-				);
-				headers["Authorization"] = `Basic ${credentials}`;
-			} else {
-				params.set("client_id", provider.client_id);
-			}
-
-			const response = await runtime.httpPost(
-				provider.token_url,
-				params.toString(),
-				headers,
+			const operation = Promise.resolve().then(() =>
+				tokenStore.withRefreshLock
+					? tokenStore.withRefreshLock(token, refresh)
+					: refresh(),
 			);
-
-			if (!response.ok) {
-				await response.text();
-				if (refreshRefused(response.status)) {
-					await tokenStore.deleteToken(provider.id);
-				}
-				throw new Error(`Token refresh failed: ${response.status}`);
+			pending.set(key, operation);
+			try {
+				return await operation;
+			} finally {
+				if (pending.get(key) === operation) pending.delete(key);
 			}
-
-			const tokenResponse = readRefreshResponse(
-				await response.json(),
-				provider.id,
-			);
-
-			const updatedToken: IStoredOAuthToken = {
-				...token,
-				access_token: tokenResponse.access_token,
-				refresh_token: tokenResponse.refresh_token ?? token.refresh_token,
-				expires_at: tokenResponse.expires_in
-					? Date.now() + tokenResponse.expires_in * 1000
-					: undefined,
-				token_type: tokenResponse.token_type ?? token.token_type,
-				storedAt: Date.now(),
-			};
-
-			await tokenStore.setToken(updatedToken);
-			return updatedToken;
 		},
 
 		async fetchUserInfo(
@@ -727,37 +872,36 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			provider: IOAuthProvider,
 			token: IStoredOAuthToken,
 		): Promise<void> {
-			if (!provider.revoke_url) {
-				await tokenStore.deleteToken(provider.id);
-				return;
+			await tokenStore.getBinding?.(provider);
+			await checkBinding(token.binding);
+			const handle = token.refresh_token?.startsWith("fl_oauth_");
+			if (handle || provider.revoke_url) {
+				const proxy = handle || shouldProxyProviderRequests(provider);
+				const url = proxy
+					? `${await resolveApiBaseUrl(provider, token.binding?.apiBaseUrl)}/api/v1/oauth/revoke/${provider.id}`
+					: provider.revoke_url!;
+				const response = await runtime.httpPost(
+					url,
+					proxy
+						? JSON.stringify({
+								token: token.refresh_token ?? token.access_token,
+							})
+						: new URLSearchParams({
+								token: token.refresh_token ?? token.access_token,
+								client_id: provider.client_id,
+							}).toString(),
+					{
+						"Content-Type": proxy
+							? "application/json"
+							: "application/x-www-form-urlencoded",
+						Accept: "application/json",
+					},
+					token.binding,
+				);
+				if (!response.ok)
+					throw new Error(`Token revocation failed: ${response.status}`);
 			}
-
-			try {
-				if (shouldProxyProviderRequests(provider)) {
-					const proxyUrl = `${await resolveApiBaseUrl(provider)}/api/v1/oauth/revoke/${provider.id}`;
-					await runtime.httpPost(
-						proxyUrl,
-						JSON.stringify({ token: token.access_token }),
-						{
-							"Content-Type": "application/json",
-							Accept: "application/json",
-						},
-					);
-				} else {
-					const params = new URLSearchParams({
-						token: token.access_token,
-						client_id: provider.client_id,
-					});
-
-					await runtime.httpPost(provider.revoke_url, params.toString(), {
-						"Content-Type": "application/x-www-form-urlencoded",
-					});
-				}
-			} catch {
-				console.warn("Token revocation failed");
-			}
-
-			await tokenStore.deleteToken(provider.id);
+			await replaceToken(token);
 		},
 
 		async getValidTokensForProviders(providers: IOAuthProvider[]): Promise<{
@@ -776,9 +920,14 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			>();
 
 			for (const provider of providers) {
-				const token = await tokenStore.getToken(provider.id);
+				const token = await tokenStore.getToken(provider.id, provider);
 
-				if (!token) {
+				if (
+					!token ||
+					!(provider.merged_scopes ?? provider.scopes).every((scope) =>
+						token.scopes.includes(scope),
+					)
+				) {
 					missing.push(provider);
 				} else if (tokenStore.isExpired(token)) {
 					if (token.refresh_token) {
@@ -804,8 +953,19 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			for (const [providerId, { token, provider }] of needsRefresh) {
 				try {
 					const refreshed = await this.refreshToken(provider, token);
-					valid.set(providerId, refreshed);
-				} catch {
+					if (
+						(provider.merged_scopes ?? provider.scopes).every((scope) =>
+							refreshed.scopes.includes(scope),
+						)
+					)
+						valid.set(providerId, refreshed);
+					else missing.push(provider);
+				} catch (error) {
+					if (
+						!(error instanceof OAuthRefreshError) ||
+						!error.reauthorizationRequired
+					)
+						throw error;
 					console.warn(`Failed to refresh token for ${providerId}`);
 					missing.push(provider);
 				}
@@ -861,24 +1021,34 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				}
 			}
 
+			const binding = await tokenStore.getBinding?.(provider);
 			const params = new URLSearchParams({
 				client_id: provider.client_id,
 				scope: scopes.join(" "),
 			});
 
-			const response = shouldProxyProviderRequests(provider)
-				? await runtime.httpPost(
-						`${await resolveApiBaseUrl(provider)}/api/v1/oauth/device/start/${provider.id}`,
-						JSON.stringify({ scope: scopes.join(" ") }),
-						{
-							"Content-Type": "application/json",
-							Accept: "application/json",
-						},
-					)
-				: await runtime.httpPost(provider.device_auth_url, params.toString(), {
-						"Content-Type": "application/x-www-form-urlencoded",
-						Accept: "application/json",
-					});
+			const response =
+				binding || shouldProxyProviderRequests(provider)
+					? await runtime.httpPost(
+							`${await resolveApiBaseUrl(provider, binding?.apiBaseUrl)}/api/v1/oauth/device/start/${provider.id}`,
+							JSON.stringify({
+								client_id: provider.client_id,
+								scope: scopes.join(" "),
+							}),
+							{
+								"Content-Type": "application/json",
+								Accept: "application/json",
+							},
+							binding,
+						)
+					: await runtime.httpPost(
+							provider.device_auth_url,
+							params.toString(),
+							{
+								"Content-Type": "application/x-www-form-urlencoded",
+								Accept: "application/json",
+							},
+						);
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -887,7 +1057,10 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				);
 			}
 
-			return response.json() as Promise<IDeviceAuthResponse>;
+			const result = (await response.json()) as IDeviceAuthResponse;
+			await checkBinding(binding);
+			if (binding) deviceBindings.set(result.device_code, binding);
+			return result;
 		},
 
 		/**
@@ -900,30 +1073,40 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			deviceCode: string,
 			scopes: string[],
 		): Promise<IStoredOAuthToken | null> {
+			const binding = deviceBindings.get(deviceCode);
+			if (tokenStore.getBinding && !binding)
+				throw new Error("Device authorization session is no longer available");
+			await checkBinding(binding);
+			if (binding && binding.providerKey !== oauthProviderKey(provider))
+				throw new Error("OAuth client configuration changed");
 			const params = new URLSearchParams({
 				client_id: provider.client_id,
 				device_code: deviceCode,
 				grant_type: "urn:ietf:params:oauth:grant-type:device_code",
 			});
 
-			const response = shouldProxyProviderRequests(provider)
-				? await runtime.httpPost(
-						`${await resolveApiBaseUrl(provider)}/api/v1/oauth/device/poll/${provider.id}`,
-						JSON.stringify({
-							device_code: deviceCode,
-						}),
-						{
-							"Content-Type": "application/json",
+			const response =
+				binding || shouldProxyProviderRequests(provider)
+					? await runtime.httpPost(
+							`${await resolveApiBaseUrl(provider, binding?.apiBaseUrl)}/api/v1/oauth/device/poll/${provider.id}`,
+							JSON.stringify({
+								client_id: provider.client_id,
+								device_code: deviceCode,
+							}),
+							{
+								"Content-Type": "application/json",
+								Accept: "application/json",
+							},
+							binding,
+						)
+					: await runtime.httpPost(provider.token_url, params.toString(), {
+							"Content-Type": "application/x-www-form-urlencoded",
 							Accept: "application/json",
-						},
-					)
-				: await runtime.httpPost(provider.token_url, params.toString(), {
-						"Content-Type": "application/x-www-form-urlencoded",
-						Accept: "application/json",
-					});
+						});
 
 			const data = (await response.json()) as {
 				access_token?: string;
+				scope?: string;
 				refresh_token?: string;
 				expires_in?: number;
 				token_type?: string;
@@ -937,7 +1120,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			}
 
 			if (data.error === "slow_down") {
-				return null; // Need to slow down polling
+				throw new Error("slow_down");
 			}
 
 			if (data.error) {
@@ -946,15 +1129,22 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				);
 			}
 
-			if (!data.access_token) {
-				throw new Error("No access token in device authorization response");
+			if (!response.ok || !data.access_token) {
+				throw new Error(
+					"No successful access token in device authorization response",
+				);
 			}
 
+			const adopted = await adoptTokens(
+				provider,
+				{ ...data, access_token: data.access_token },
+				binding,
+			);
 			// Success! Store the token
 			let userInfo: IStoredOAuthToken["userInfo"];
 			if (provider.userinfo_url && data.access_token) {
 				try {
-					userInfo = await this.fetchUserInfo(provider, data.access_token);
+					userInfo = await this.fetchUserInfo(provider, adopted.access_token);
 				} catch {
 					console.warn("Failed to fetch OAuth user info");
 				}
@@ -962,18 +1152,18 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 			const token: IStoredOAuthToken = {
 				providerId: provider.id,
-				access_token: data.access_token,
-				refresh_token: data.refresh_token,
-				expires_at: data.expires_in
-					? Date.now() + data.expires_in * 1000
-					: undefined,
-				token_type: data.token_type ?? "Bearer",
-				scopes,
+				binding,
+				access_token: adopted.access_token,
+				refresh_token: adopted.refresh_token,
+				expires_at: expiresAt(adopted.expires_in),
+				token_type: adopted.token_type ?? "Bearer",
+				scopes: grantedScopes(adopted.scope, scopes),
 				storedAt: Date.now(),
 				userInfo,
 			};
 
 			await tokenStore.setToken(token);
+			deviceBindings.delete(deviceCode);
 			return token;
 		},
 
@@ -1023,7 +1213,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 			const timeoutMs = options?.timeoutMs ?? deviceAuth.expires_in * 1000;
 			const startTime = Date.now();
-			let interval = deviceAuth.interval * 1000;
+			let interval = (deviceAuth.interval || 5) * 1000;
 
 			while (Date.now() - startTime < timeoutMs) {
 				await new Promise((resolve) => setTimeout(resolve, interval));

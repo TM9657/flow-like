@@ -1059,7 +1059,7 @@ pub async fn invoke_ontology_action(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path((app_id, ontology_id, action_id)): Path<(String, String, String)>,
-    Json(request): Json<InvokeOntologyActionRequest>,
+    Json(mut request): Json<InvokeOntologyActionRequest>,
 ) -> Result<Response, ApiError> {
     let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ExecuteEvents);
     if !permission.has_permission(RolePermissions::ReadFiles)
@@ -1069,6 +1069,9 @@ pub async fn invoke_ontology_action(
             "Ontology action execution requires access to the governed object data",
         ));
     }
+
+    crate::routes::oauth::authorize_incoming_oauth_tokens(&state, &user, &mut request.oauth_tokens)
+        .await?;
 
     let credentials = state.master_credentials().await?;
     let connection = credentials.to_db(&app_id).await?.execute().await?;

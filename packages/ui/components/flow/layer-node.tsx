@@ -1,7 +1,7 @@
 "use client";
 import { useTranslation } from "@flow-like/locales";
 import { useDebounce } from "@uidotdev/usehooks";
-import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
+import { type Node, type NodeProps } from "@xyflow/react";
 import {
 	BanIcon,
 	CheckIcon,
@@ -44,6 +44,7 @@ import { useBackendStore } from "../../state/backend-state";
 import { useLogAggregation } from "../../state/log-aggregation-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import { AutoResizeText } from "./auto-resize-text";
+import { useReactFlow } from "./board-runtime";
 import { CommentDialog } from "./comment-dialog";
 import { useUndoRedo } from "./flow-history";
 import type { RemoteSelectionParticipant } from "./flow-node";
@@ -90,6 +91,13 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 	const [name, setName] = useState<string | undefined>();
 	const [editing, setEditing] = useState(false);
 	const [isHovered, setIsHovered] = useState(false);
+	const readOnly = props.data.version !== undefined;
+	useEffect(() => {
+		if (!readOnly) return;
+		setComment(undefined);
+		setName(undefined);
+		setEditing(false);
+	}, [readOnly]);
 	const { resolvedTheme } = useTheme();
 	const invalidate = useInvalidateInvoke();
 	const { pushCommands } = useUndoRedo(props.data.appId, props.data.boardId);
@@ -210,23 +218,25 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 			divRef.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
 			divRef.current.style.minHeight = `calc(15px + 1.25rem + 0.5rem)`;
 		}
-	}, [props.data.hash]);
+	}, [props.data.hash, props.data.layer.pins]);
 
 	const saveComment = useCallback(async () => {
+		if (readOnly) return;
 		const node = getNodes().find((n) => n.id === props.id);
 		if (!node) return;
 		const layer = node.data.layer as ILayer;
 		props.data.onLayerUpdate({ ...layer, comment: comment ?? "" });
 		setComment(undefined);
-	}, [props.id, comment]);
+	}, [props.id, props.data.onLayerUpdate, getNodes, comment, readOnly]);
 
 	const saveName = useCallback(async () => {
+		if (readOnly) return;
 		const node = getNodes().find((n) => n.id === props.id);
 		if (!node) return;
 		const layer = node.data.layer as ILayer;
 		props.data.onLayerUpdate({ ...layer, name: name ?? "Collapsed" });
 		setName(undefined);
-	}, [props.id, name]);
+	}, [props.id, props.data.onLayerUpdate, getNodes, name, readOnly]);
 
 	const convertToFunction = useCallback(async () => {
 		if (typeof props.data.version !== "undefined") return;
@@ -307,7 +317,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 
 	return (
 		<>
-			{typeof comment === "string" && (
+			{!readOnly && typeof comment === "string" && (
 				<CommentDialog
 					onOpenChange={(open) => {
 						if (!open) {
@@ -319,7 +329,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 					onUpsert={(comment) => setComment(comment)}
 				/>
 			)}
-			{typeof name === "string" && (
+			{!readOnly && typeof name === "string" && (
 				<NameDialog
 					onOpenChange={(open) => {
 						if (!open) {
@@ -336,7 +346,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 				onMouseEnter={() => setIsHovered(true)}
 				onMouseLeave={() => setIsHovered(false)}
 			>
-				{(props.selected || isHovered) && (
+				{!readOnly && (props.selected || isHovered) && (
 					<LayerNodeToolbar
 						onRename={() => setName(props.data.layer.name ?? "")}
 						onComment={() => setComment(props.data.layer.comment ?? "")}
@@ -450,6 +460,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 								boardId={props.data.boardId}
 								boardRef={props.data.boardRef}
 								boardDataVersion={props.data.boardDataVersion}
+								version={props.data.version}
 								pin={pin}
 								key={pin.id}
 								skipOffset={true}
@@ -469,6 +480,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 								boardId={props.data.boardId}
 								boardRef={props.data.boardRef}
 								boardDataVersion={props.data.boardDataVersion}
+								version={props.data.version}
 								pin={pin}
 								key={pin.id}
 								skipOffset={true}
@@ -481,27 +493,30 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 				</div>
 			</div>
 
-			<LayerEditMenu
-				appId={props.data.appId}
-				open={editing}
-				layer={props.data.layer}
-				onOpenChange={setEditing}
-				boardRef={props.data.boardRef}
-				onApply={async (updated) => {
-					const newLayer = {
-						...props.data.layer,
-						pins: updated.pins,
-						cache: (updated as ILayer).cache,
-					};
-					try {
-						await props.data.onLayerUpdate(newLayer);
-					} catch (error) {
-						console.error(error);
-						toast.error("Failed to update layer");
-					}
-					setEditing(false);
-				}}
-			/>
+			{!readOnly && (
+				<LayerEditMenu
+					appId={props.data.appId}
+					open={editing}
+					layer={props.data.layer}
+					onOpenChange={setEditing}
+					boardRef={props.data.boardRef}
+					onApply={async (updated) => {
+						if (readOnly) return;
+						const newLayer = {
+							...props.data.layer,
+							pins: updated.pins,
+							cache: (updated as ILayer).cache,
+						};
+						try {
+							await props.data.onLayerUpdate(newLayer);
+						} catch (error) {
+							console.error(error);
+							toast.error("Failed to update layer");
+						}
+						setEditing(false);
+					}}
+				/>
+			)}
 		</>
 	);
 }

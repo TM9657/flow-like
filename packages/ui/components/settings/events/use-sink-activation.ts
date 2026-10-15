@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { IOAuthConsentStore } from "../../../db/oauth-db";
 import {
 	checkOAuthTokens,
+	hasRequiredScopes,
+	storedTokenToBackendFormat,
 	checkOAuthTokensFromPrerun,
 } from "../../../lib/oauth/helpers";
 import type {
@@ -230,23 +232,26 @@ export function useSinkActivation({
 			if (!target) return;
 			if (remember && consentStore) {
 				for (const provider of missingProviders) {
-					await consentStore.setConsent(appId, provider.id, provider.scopes);
+					await consentStore.setConsent(
+						appId,
+						provider.id,
+						provider.merged_scopes ?? provider.scopes,
+					);
 				}
 			}
 			setShowConsentDialog(false);
 
 			const tokens = { ...pendingTokens };
 			for (const providerId of authorizedProviders) {
-				const token = await tokenStore?.getToken(providerId);
-				if (token && !tokenStore?.isExpired(token)) {
-					tokens[providerId] = {
-						access_token: token.access_token,
-						refresh_token: token.refresh_token,
-						expires_at: token.expires_at
-							? Math.floor(token.expires_at / 1000)
-							: undefined,
-						token_type: token.token_type ?? "Bearer",
-					};
+				const provider = missingProviders.find((p) => p.id === providerId);
+				if (!provider) continue;
+				const token = await tokenStore?.getToken(providerId, provider);
+				if (
+					token &&
+					!tokenStore?.isExpired(token) &&
+					hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
+				) {
+					tokens[providerId] = storedTokenToBackendFormat(token);
 				}
 			}
 
@@ -294,17 +299,14 @@ export function useSinkActivation({
 				) {
 					continue;
 				}
-				const token = await tokenStore.getToken(provider.id);
-				if (token && !tokenStore.isExpired(token)) {
+				const token = await tokenStore.getToken(provider.id, provider);
+				if (
+					token &&
+					!tokenStore.isExpired(token) &&
+					hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
+				) {
 					authorized.add(provider.id);
-					tokens[provider.id] = {
-						access_token: token.access_token,
-						refresh_token: token.refresh_token,
-						expires_at: token.expires_at
-							? Math.floor(token.expires_at / 1000)
-							: undefined,
-						token_type: token.token_type ?? "Bearer",
-					};
+					tokens[provider.id] = storedTokenToBackendFormat(token);
 				}
 			}
 

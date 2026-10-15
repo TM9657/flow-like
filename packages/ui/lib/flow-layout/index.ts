@@ -162,18 +162,27 @@ export function computeFlowLayoutDetailed(
 	input: AutoLayoutInput,
 	style: LayoutStyle = "compact",
 ): LayoutResult {
-	if (style === "routed") {
-		const normalized = normalizeAutoReroutes(input);
-		const result = computeNodeLayout(normalized.input, getStyleConfig(style));
-		return {
-			...result,
-			routing: {
-				routes: planWireRoutes(normalized.input, result.positions),
-				chains: normalized.chains,
-			},
-		};
-	}
-	return computeNodeLayout(input, getStyleConfig(style));
+	if (input.preserveAutoReroutes)
+		return computeNodeLayout(input, getStyleConfig(style));
+	const normalized = normalizeAutoReroutes(input);
+	const result = computeNodeLayout(normalized.input, getStyleConfig(style));
+	if (style !== "routed" && !normalized.chains.length) return result;
+	return {
+		...result,
+		routing: {
+			routes:
+				style === "routed"
+					? planWireRoutes(normalized.input, result.positions)
+					: normalized.chains.map(({ from, to, fromPin, toPin }) => ({
+							from,
+							to,
+							fromPin,
+							toPin,
+							waypoints: [],
+						})),
+			chains: normalized.chains,
+		},
+	};
 }
 
 function computeNodeLayout(
@@ -275,5 +284,9 @@ export function computeFlowLayout(
 	input: AutoLayoutInput,
 	style: LayoutStyle = "compact",
 ): Map<string, [number, number]> {
-	return computeFlowLayoutDetailed(input, style).positions;
+	// Position-only consumers cannot reconnect wires or remove generated nodes.
+	return computeFlowLayoutDetailed(
+		{ ...input, preserveAutoReroutes: true },
+		style,
+	).positions;
 }

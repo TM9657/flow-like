@@ -8,6 +8,7 @@ import {
 	type ReactFlowInstance,
 	ReactFlowProvider,
 } from "@xyflow/react";
+import { LegacyBoardRuntimeScope } from "./board-runtime";
 import "@xyflow/react/dist/style.css";
 import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef } from "react";
@@ -221,15 +222,17 @@ export function FlowPreview({
 
 	return (
 		<main className="w-full h-full min-h-56 rounded-md flow-preview not-content">
-			<ReactFlowProvider>
-				<FlowPreviewInner
-					nodes={nodes}
-					comments={comments}
-					layers={layers}
-					variables={variables}
-					colorMode={colorMode}
-				/>
-			</ReactFlowProvider>
+			<LegacyBoardRuntimeScope>
+				<ReactFlowProvider>
+					<FlowPreviewInner
+						nodes={nodes}
+						comments={comments}
+						layers={layers}
+						variables={variables}
+						colorMode={colorMode}
+					/>
+				</ReactFlowProvider>
+			</LegacyBoardRuntimeScope>
 		</main>
 	);
 }

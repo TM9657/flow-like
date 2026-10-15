@@ -1,0 +1,139 @@
+.benchmark-react-renderer {
+	width: 100%;
+	height: 100%;
+	background: var(--background);
+	color: var(--foreground);
+	font-family: inherit;
+}
+
+.benchmark-react-renderer .react-flow__pane {
+	background: var(--background);
+}
+
+.benchmark-fixture-node {
+	position: relative;
+	box-sizing: border-box;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--card);
+	color: var(--foreground);
+	font-family: inherit;
+}
+
+.benchmark-fixture-node.is-selected {
+	outline: 2px solid var(--primary);
+}
+
+.benchmark-fixture-header {
+	position: absolute;
+	inset: 0 0 auto;
+	height: 15px;
+	border-bottom: 1px solid var(--border);
+	border-radius: 5px 5px 0 0;
+	background: var(--card);
+}
+
+.benchmark-fixture-header.kind-event {
+	background: linear-gradient(to right, var(--card), var(--primary));
+}
+
+.benchmark-fixture-header.kind-function {
+	background: linear-gradient(to right, var(--card), #8b5cf6);
+}
+
+.benchmark-fixture-header.kind-pure {
+	background: linear-gradient(to right, var(--card), var(--tertiary));
+}
+
+.benchmark-fixture-icon {
+	position: absolute;
+	left: 5px;
+	top: 3px;
+	width: 8px;
+	height: 8px;
+	stroke-width: 1.5px;
+}
+
+.benchmark-fixture-title {
+	position: absolute;
+	left: 17px;
+	top: 0;
+	right: 16px;
+	font-size: 10px;
+	font-weight: 500;
+	line-height: 15px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: clip;
+}
+
+.benchmark-fixture-running {
+	position: absolute;
+	right: 7px;
+	top: 5px;
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: #22c55e;
+}
+
+.benchmark-react-renderer .benchmark-fixture-handle {
+	position: absolute;
+	width: 12px;
+	height: 12px;
+	min-width: 0;
+	min-height: 0;
+	border: 0;
+	background: transparent;
+	border-radius: 0;
+	padding: 0;
+}
+
+.benchmark-react-renderer .benchmark-fixture-handle.input {
+	left: -1px;
+	transform: translate(-50%, -50%);
+}
+
+.benchmark-react-renderer .benchmark-fixture-handle.output {
+	right: -1px;
+	transform: translate(50%, -50%);
+}
+
+.benchmark-fixture-pin {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	pointer-events: none;
+	transform: translate(-50%, -50%);
+}
+
+.benchmark-fixture-pin.data {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+}
+
+.benchmark-fixture-pin.execution {
+	width: 8px;
+	height: 8px;
+	border-radius: 1.5px;
+	transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.benchmark-fixture-label {
+	position: absolute;
+	top: 0;
+	font-size: 8px;
+	font-weight: 400;
+	line-height: 12px;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+.benchmark-fixture-handle.input .benchmark-fixture-label {
+	left: 16px;
+}
+
+.benchmark-fixture-handle.output .benchmark-fixture-label {
+	right: 16px;
+}

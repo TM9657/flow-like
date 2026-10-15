@@ -1,0 +1,392 @@
+// Paste into a new board's FlowScript editor and apply it.
+// Fill the four required inputs below, then run runGoogleVerification.
+// Each run sends one email, creates a Drive folder and calendar event,
+// writes demo content, updates the test form, and adds one playlist item.
+// Use disposable resources owned by the Google account you connect.
+
+@category("Verification / Required")
+@description("Your own email address. The workflow sends one verification email here.")
+let demoEmail = ""
+@category("Verification / Required")
+@description("ID from /forms/d/ID/edit of a disposable form with a question and one submitted test response. Do not use its public /d/e/ responder ID.")
+let demoFormId = ""
+@category("Verification / Required")
+@description("ID of an existing private YouTube playlist owned by the connected account.")
+let demoPlaylistId = ""
+@category("Verification / Required")
+@description("ID of a real YouTube video to add to the private playlist.")
+let demoVideoId = ""
+
+@category("Verification / Existing files")
+@description("Optional disposable Google Doc ID. Leave empty to create a document. Existing files demonstrate access beyond app-created files.")
+let demoDocumentId = ""
+@category("Verification / Existing files")
+@description("Optional disposable spreadsheet ID. The workflow overwrites A1:B3. Leave empty to create a spreadsheet.")
+let demoSpreadsheetId = ""
+@category("Verification / Existing files")
+@description("Optional disposable presentation ID. The workflow adds a slide. Leave empty to create a presentation.")
+let demoPresentationId = ""
+
+@category("Verification / Options")
+let demoName = "Flow-Like OAuth Verification"
+@category("Verification / Options")
+let calendarId = "primary"
+@category("Verification / Options")
+let timeZone = "Europe/Berlin"
+@category("Verification / Options")
+@description("Enable only if the selected calendar supports Google Meet conferences.")
+let includeMeetLink = false
+
+function reportFailure(stage: string, message: string) {
+    log::error({ message: `${stage}: ${message}`, toast: true })
+}
+
+// Scope: drive.file. The folder is created and then read through the app.
+function verifyDrive(provider: Struct, label: string): (passed: bool) {
+    let passed = false
+    const folder = google::drive::createFolder({ provider: provider, name: label })
+    folder {
+        execOut: {
+            log::info({ message: `Drive folder: https://drive.google.com/drive/folders/${folder.folderId}`, toast: false })
+            const metadata = google::drive::getMetadata({ provider: provider, fileId: folder.folderId })
+            metadata {
+                execOut: {
+                    log::info({ message: metadata.file, toast: false })
+                    passed = true
+                }
+                error: {
+                    reportFailure("Drive / read folder", metadata.errorMessage)
+                }
+            }
+        }
+        error: {
+            reportFailure("Drive / create folder", folder.errorMessage)
+        }
+    }
+    return passed
+}
+
+// Scopes: gmail.labels and gmail.send. No draft or inbox-reading scope.
+function verifyGmail(provider: Struct, label: string): (passed: bool) {
+    let passed = false
+    const labels = google::gmail::listLabels({ provider: provider })
+    labels {
+        execOut: {
+            const count = array::length({ array: labels.labels })
+            log::info({ message: `Gmail returned ${count} labels.`, toast: false })
+            const email = google::gmail::send({
+                provider: provider,
+                to: demoEmail,
+                subject: label,
+                body: "This test email was sent by the Flow-Like Google OAuth verification workflow. Open it in Gmail to show the result in the recording.",
+            })
+            email {
+                execOut: {
+                    log::info({ message: `Gmail sent the verification email. Message ID: ${email.messageId}`, toast: false })
+                    passed = true
+                }
+                error: {
+                    reportFailure("Gmail / send email", email.errorMessage)
+                }
+            }
+        }
+        error: {
+            reportFailure("Gmail / list labels", labels.errorMessage)
+        }
+    }
+    return passed
+}
+
+// Scopes: calendar.readonly and calendar.events. No guests are invited.
+function verifyCalendar(provider: Struct, label: string): (passed: bool) {
+    let passed = false
+    const calendars = google::calendar::list({ provider: provider })
+    calendars {
+        execOut: {
+            const count = array::length({ array: calendars.calendars })
+            log::info({ message: `Calendar returned ${count} calendars.`, toast: false })
+            const start = datetime::add({ date: datetime::now(), days: 1 })
+            const end = datetime::add({ date: start, minutes: 30 })
+            const created = google::calendar::createEvent({
+                provider: provider,
+                calendarId: calendarId,
+                summary: label,
+                description: "Created by the Flow-Like OAuth verification workflow. This is a disposable demonstration event.",
+                startTime: start,
+                endTime: end,
+                timeZone: timeZone,
+                attendees: "",
+                addMeet: includeMeetLink,
+            })
+            created {
+                execOut: {
+                    log::info({ message: `Calendar created event ${created.eventId}. Meet link, if enabled: ${created.meetLink}`, toast: false })
+                    const readBack = google::calendar::getEvent({ provider: provider, calendarId: calendarId, eventId: created.eventId })
+                    readBack {
+                        execOut: {
+                            log::info({ message: readBack.event, toast: false })
+                            passed = true
+                        }
+                        error: {
+                            reportFailure("Calendar / read event", readBack.errorMessage)
+                        }
+                    }
+                }
+                error: {
+                    reportFailure("Calendar / create event", created.errorMessage)
+                }
+            }
+        }
+        error: {
+            reportFailure("Calendar / list calendars", calendars.errorMessage)
+        }
+    }
+    return passed
+}
+
+// Scopes: documents and documents.readonly.
+function verifyDocs(provider: Struct, label: string): (passed: bool) {
+    let passed = false
+    let documentId = demoDocumentId
+    if (documentId == "") {
+        const created = google::docs::create({ provider: provider, title: label })
+        created {
+            execOut: {
+                documentId = created.documentId
+            }
+            error: {
+                reportFailure("Docs / create document", created.errorMessage)
+            }
+        }
+    }
+    if (documentId != "") {
+        log::info({ message: `Document: https://docs.google.com/document/d/${documentId}/edit`, toast: false })
+        const written = google::docs::insertText({ provider: provider, documentId: documentId, text: `${label}\nThis text was inserted by Flow-Like and read back with the Google Docs node.\n`, index: 1 })
+        written {
+            execOut: {
+                const readBack = google::docs::getText({ provider: provider, documentId: documentId })
+                readBack {
+                    execOut: {
+                        log::info({ message: readBack.text, toast: false })
+                        passed = true
+                    }
+                    error: {
+                        reportFailure("Docs / read text", readBack.errorMessage)
+                    }
+                }
+            }
+            error: {
+                reportFailure("Docs / insert text", written.errorMessage)
+            }
+        }
+    }
+    return passed
+}
+
+// Scopes: spreadsheets and spreadsheets.readonly.
+function verifySheets(provider: Struct, label: string): (passed: bool) {
+    let passed = false
+    let spreadsheetId = demoSpreadsheetId
+    if (spreadsheetId == "") {
+        const created = google::sheets::create({ provider: provider, title: label })
+        created {
+            execOut: {
+                spreadsheetId = created.spreadsheetId
+            }
+            error: {
+                reportFailure("Sheets / create spreadsheet", created.errorMessage)
+            }
+        }
+    }
+    if (spreadsheetId != "") {
+        log::info({ message: `Spreadsheet: https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`, toast: false })
+        const written = google::sheets::writeRange({
+            provider: provider,
+            spreadsheetId: spreadsheetId,
+            range: "A1:B3",
+            values: [["Application", "Action"], ["Flow-Like", "Write cells"], ["Flow-Like", "Read cells"]],
+            valueInput: "RAW",
+        })
+        written {
+            execOut: {
+                log::info({ message: `Sheets updated ${written.updatedCells} cells.`, toast: false })
+                const readBack = google::sheets::readRange({ provider: provider, spreadsheetId: spreadsheetId, range: "A1:B3", valueRender: "FORMATTED_VALUE" })
+                readBack {
+                    execOut: {
+                        log::info({ message: readBack.values, toast: false })
+                        passed = true
+                    }
+                    error: {
+                        reportFailure("Sheets / read cells", readBack.errorMessage)
+                    }
+                }
+            }
+            error: {
+                reportFailure("Sheets / write cells", written.errorMessage)
+            }
+        }
+    }
+    return passed
+}
+
+// Scopes: presentations and presentations.readonly.
+function verifySlides(provider: Struct, label: string): (passed: bool) {
+    let passed = false
+    let presentationId = demoPresentationId
+    if (presentationId == "") {
+        const created = google::slides::create({ provider: provider, title: label })
+        created {
+            execOut: {
+                presentationId = created.presentationId
+            }
+            error: {
+                reportFailure("Slides / create presentation", created.errorMessage)
+            }
+        }
+    }
+    if (presentationId != "") {
+        log::info({ message: `Presentation: https://docs.google.com/presentation/d/${presentationId}/edit`, toast: false })
+        const slide = google::slides::addSlide({ provider: provider, presentationId: presentationId, layout: "BLANK", insertIndex: -1 })
+        slide {
+            execOut: {
+                const text = google::slides::addText({ provider: provider, presentationId: presentationId, slideId: slide.slideId, text: `${label}\nCreated by Flow-Like`, x: 50.0, y: 50.0, width: 600.0, height: 200.0 })
+                text {
+                    execOut: {
+                        const readBack = google::slides::get({ provider: provider, presentationId: presentationId })
+                        readBack {
+                            execOut: {
+                                log::info({ message: `Slides returned ${readBack.slideCount} slides. The added slide ID is ${slide.slideId}.`, toast: false })
+                                log::info({ message: readBack.slides, toast: false })
+                                passed = true
+                            }
+                            error: {
+                                reportFailure("Slides / read presentation", readBack.errorMessage)
+                            }
+                        }
+                    }
+                    error: {
+                        reportFailure("Slides / add text", text.errorMessage)
+                    }
+                }
+            }
+            error: {
+                reportFailure("Slides / add slide", slide.errorMessage)
+            }
+        }
+    }
+    return passed
+}
+
+// Scopes: forms.body, forms.body.readonly, forms.responses.readonly.
+// Prepare a disposable form with one question and submit a sample answer first.
+// Current Forms nodes do not add questions, publish forms or submit answers.
+function verifyForms(provider: Struct, label: string): (passed: bool) {
+    let passed = false
+    const updated = google::forms::updateInfo({ provider: provider, formId: demoFormId, description: `Updated by ${label}. This is a disposable verification form.` })
+    updated {
+        execOut: {
+            log::info({ message: `Form: https://docs.google.com/forms/d/${demoFormId}/edit`, toast: false })
+            const readBack = google::forms::get({ provider: provider, formId: demoFormId })
+            readBack {
+                execOut: {
+                    log::info({ message: readBack.form, toast: false })
+                    log::info({ message: readBack.questions, toast: false })
+                    const responses = google::forms::listResponses({ provider: provider, formId: demoFormId, pageToken: "" })
+                    responses {
+                        execOut: {
+                            const count = array::length({ array: responses.responses })
+                            log::info({ message: responses.responses, toast: false })
+                            if (count > 0) {
+                                passed = true
+                                log::info({ message: `Forms returned ${count} submitted responses.`, toast: false })
+                            } else {
+                                log::warn({ message: "Forms returned no responses. Submit a sample answer, then run readFormResponses to complete the demonstration.", toast: true })
+                            }
+                        }
+                        error: {
+                            reportFailure("Forms / list responses", responses.errorMessage)
+                        }
+                    }
+                }
+                error: {
+                    reportFailure("Forms / read form", readBack.errorMessage)
+                }
+            }
+        }
+        error: {
+            reportFailure("Forms / update form", updated.errorMessage)
+        }
+    }
+    return passed
+}
+
+// Scopes: youtube and youtube.readonly. The playlist must already exist.
+function verifyYouTube(provider: Struct): (passed: bool) {
+    let passed = false
+    const added = google::youtube::addToPlaylist({ provider: provider, playlistId: demoPlaylistId, videoId: demoVideoId, position: 0 })
+    added {
+        execOut: {
+            log::info({ message: `YouTube added item ${added.itemId}. Playlist: https://www.youtube.com/playlist?list=${demoPlaylistId}`, toast: false })
+            const readBack = google::youtube::getPlaylistItems({ provider: provider, playlistId: demoPlaylistId, maxResults: 10 })
+            readBack {
+                execOut: {
+                    log::info({ message: readBack.items, toast: false })
+                    passed = true
+                }
+                error: {
+                    reportFailure("YouTube / read playlist", readBack.errorMessage)
+                }
+            }
+        }
+        error: {
+            reportFailure("YouTube / add video", added.errorMessage)
+        }
+    }
+    return passed
+}
+
+eventsSimple runGoogleVerification() {
+    if (demoEmail == "" || demoFormId == "" || demoPlaylistId == "" || demoVideoId == "") {
+        log::error({ message: "Set demoEmail, demoFormId, demoPlaylistId and demoVideoId in Variables before running this workflow. Use a form with a submitted test response and a private YouTube playlist.", toast: true })
+    } else {
+        // The Hub adds openid, email and profile. Never log the provider object.
+        const provider = google::provider()
+        const stamp = datetime::format({ date: datetime::now(), format: "%Y-%m-%d %H:%M:%S UTC" })
+        const label = `${demoName} ${stamp}`
+        log::info({ message: `Starting ${label}. Each section reports its real API result.`, toast: false })
+        const drivePassed = verifyDrive(provider, label)
+        const gmailPassed = verifyGmail(provider, label)
+        const calendarPassed = verifyCalendar(provider, label)
+        const docsPassed = verifyDocs(provider, label)
+        const sheetsPassed = verifySheets(provider, label)
+        const slidesPassed = verifySlides(provider, label)
+        const formsPassed = verifyForms(provider, label)
+        const youtubePassed = verifyYouTube(provider)
+        log::info({ message: `Results: Drive=${drivePassed}, Gmail=${gmailPassed}, Calendar=${calendarPassed}, Docs=${docsPassed}, Sheets=${sheetsPassed}, Slides=${slidesPassed}, Forms=${formsPassed}, YouTube=${youtubePassed}`, toast: false })
+        if (drivePassed && gmailPassed && calendarPassed && docsPassed && sheetsPassed && slidesPassed && formsPassed && youtubePassed) {
+            log::info({ message: "All Google verification sections completed. Open the logged resource links to show the results in Google.", toast: true })
+        } else {
+            log::warn({ message: "Some verification sections are incomplete. Review their error logs before recording or submitting the video.", toast: true })
+        }
+    }
+}
+
+// Reread a newly submitted answer without repeating email or file writes.
+eventsSimple readFormResponses() {
+    if (demoFormId == "") {
+        log::error({ message: "Set demoFormId first.", toast: true })
+    } else {
+        const provider = google::provider()
+        const responses = google::forms::listResponses({ provider: provider, formId: demoFormId, pageToken: "" })
+        responses {
+            execOut: {
+                const count = array::length({ array: responses.responses })
+                log::info({ message: responses.responses, toast: false })
+                log::info({ message: `Forms returned ${count} submitted responses.`, toast: true })
+            }
+            error: {
+                reportFailure("Forms / reread responses", responses.errorMessage)
+            }
+        }
+    }
+}

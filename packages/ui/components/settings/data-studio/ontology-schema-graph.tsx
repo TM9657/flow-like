@@ -1,4 +1,5 @@
 "use client";
+import { LegacyBoardRuntimeScope } from "../../flow/board-runtime";
 
 import { useTranslation } from "@flow-like/locales";
 import {
@@ -845,16 +846,18 @@ export function OntologySchemaGraph(props: Readonly<OntologySchemaGraphProps>) {
 					className,
 				)}
 			>
-				<ReactFlowProvider>
-					<SchemaGraphCanvas
-						{...graph}
-						onSelectObject={onSelectObject}
-						onSelectRelationship={onSelectRelationship}
-						onConnect={onConnect}
-						expanded={false}
-						onExpand={() => setExpanded(true)}
-					/>
-				</ReactFlowProvider>
+				<LegacyBoardRuntimeScope>
+					<ReactFlowProvider>
+						<SchemaGraphCanvas
+							{...graph}
+							onSelectObject={onSelectObject}
+							onSelectRelationship={onSelectRelationship}
+							onConnect={onConnect}
+							expanded={false}
+							onExpand={() => setExpanded(true)}
+						/>
+					</ReactFlowProvider>
+				</LegacyBoardRuntimeScope>
 			</div>
 			<Dialog open={expanded} onOpenChange={setExpanded}>
 				<DialogContent className="flex h-[88vh] flex-col gap-3 sm:max-w-[min(96vw,1600px)]">
@@ -871,9 +874,15 @@ export function OntologySchemaGraph(props: Readonly<OntologySchemaGraphProps>) {
 					</DialogHeader>
 					<div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border bg-muted/20">
 						{expanded && (
-							<ReactFlowProvider>
-								<SchemaGraphCanvas {...graph} {...expandedHandlers} expanded />
-							</ReactFlowProvider>
+							<LegacyBoardRuntimeScope>
+								<ReactFlowProvider>
+									<SchemaGraphCanvas
+										{...graph}
+										{...expandedHandlers}
+										expanded
+									/>
+								</ReactFlowProvider>
+							</LegacyBoardRuntimeScope>
 						)}
 					</div>
 				</DialogContent>

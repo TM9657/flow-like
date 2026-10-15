@@ -44,11 +44,19 @@ export const NodeLogBadge = memo(function NodeLogBadge({
 
 	if (!counts || counts.total === 0) {
 		if (!executed) return null;
+		const label = t("logViewShowExecutedNodeLogs", "Show logs from {{name}}", {
+			name: nodeName,
+		});
 		return (
-			<ScrollTextIcon
+			<button
+				type="button"
+				aria-label={label}
+				title={label}
 				onClick={onClick}
-				className="nodrag h-2 w-2 cursor-pointer hover:text-primary"
-			/>
+				className="nodrag nopan inline-flex size-3 items-center justify-center cursor-pointer hover:text-primary"
+			>
+				<ScrollTextIcon aria-hidden className="size-2" />
+			</button>
 		);
 	}
 
@@ -83,7 +91,9 @@ export const NodeLogBadge = memo(function NodeLogBadge({
 					) : null}
 				</button>
 			</TooltipTrigger>
-			<TooltipContent side="top">{label}</TooltipContent>
+			<TooltipContent side="top" className="pointer-events-none">
+				{label}
+			</TooltipContent>
 		</Tooltip>
 	);
 });

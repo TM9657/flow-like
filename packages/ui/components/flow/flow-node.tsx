@@ -1,15 +1,10 @@
 "use client";
+import { Handle } from "./board-runtime-primitives";
+
 import { i18n as i18next } from "@flow-like/locales";
 import { createId } from "@paralleldrive/cuid2";
 import { useDebounce } from "@uidotdev/usehooks";
-import {
-	Handle,
-	type Node,
-	type NodeProps,
-	Position,
-	useReactFlow,
-	useStoreApi,
-} from "@xyflow/react";
+import { type Node, type NodeProps, Position } from "@xyflow/react";
 import {
 	BanIcon,
 	BoxIcon,
@@ -59,6 +54,7 @@ import {
 	upsertPinCommand,
 } from "../../lib";
 import type { INode } from "../../lib";
+import { buildDynamicPinRemovalCommands } from "../../lib/board-canvas/dynamic-pins";
 import { logLevelFromNumber } from "../../lib/log-level";
 import { toastError } from "../../lib/messages";
 import { isWebkitLite } from "../../lib/platform";
@@ -83,8 +79,11 @@ import {
 } from "../ui";
 import { DynamicImage } from "../ui";
 import { AutoResizeText } from "./auto-resize-text";
+import { useReactFlow, useStoreApi } from "./board-runtime";
 import { useUndoRedo } from "./flow-history";
+import { EguiPinControls } from "./flow-node/egui-pin-controls";
 import { EventPayloadForm } from "./flow-node/event-payload-form";
+import { nodeExecutionState } from "./flow-node/execution-state";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import {
 	FlowNodeEditMenu,
@@ -96,10 +95,10 @@ import {
 	FlowNodePinLatch,
 	PIN_LATCH_HEIGHT,
 } from "./flow-node/flow-node-pin-latch";
-import { isPinAction, layoutCollapsiblePins } from "./flow-node/pin-collapse";
 import { FlowNodeQualityBadge } from "./flow-node/flow-node-quality-badge";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
 import { FlowNodeToolbar } from "./flow-node/flow-node-toolbar";
+import { isPinAction, layoutCollapsiblePins } from "./flow-node/pin-collapse";
 import { FlowPin } from "./flow-pin";
 import { planPinLabelCaps } from "./flow-pin/pin-label-caps";
 import { deriveRunCapabilities } from "./flow-run-capabilities";
@@ -130,6 +129,7 @@ export type FlowNode = Node<
 	{
 		hash: string;
 		node: INode;
+		__flowNativeDom?: boolean;
 		boardId: string;
 		appId: string;
 		transparent?: boolean;
@@ -223,10 +223,16 @@ function sameFunctionCache(a?: ILayerCache, b?: ILayerCache) {
 const FlowNodeInner = memo(
 	({
 		props,
+		hovered,
 	}: {
 		props: NodeProps<FlowNode>;
+		hovered: boolean;
 	}) => {
-		const { pushCommand } = useUndoRedo(props.data.appId, props.data.boardId);
+		const { pushCommand, pushCommands, withHistoryLock } = useUndoRedo(
+			props.data.appId,
+			props.data.boardId,
+		);
+		const nativePinControls = props.data.__flowNativeDom === true;
 		const { resolvedTheme } = useTheme();
 		const invalidate = useInvalidateInvoke();
 		// Field selectors: subscribing to the whole log store re-renders every
@@ -243,22 +249,13 @@ const FlowNodeInner = memo(
 		const [executing, setExecuting] = useState(false);
 
 		// Use separate selectors returning primitives to avoid infinite re-renders
-		const executionStatus = useRunExecutionStore((state) => {
-			for (const [, run] of state.runs) {
-				if (run.nodes.has(props.id)) return "running" as const;
-				if (run.already_executed.has(props.id)) return "done" as const;
-			}
-			return "none" as const;
-		});
+		const executionStatus = useRunExecutionStore(
+			(state) => nodeExecutionState(state.runs, props.id).status,
+		);
 
-		const activeRunId = useRunExecutionStore((state) => {
-			for (const [runId, run] of state.runs) {
-				if (run.nodes.has(props.id) || run.already_executed.has(props.id)) {
-					return runId;
-				}
-			}
-			return undefined;
-		});
+		const activeRunId = useRunExecutionStore(
+			(state) => nodeExecutionState(state.runs, props.id).runId,
+		);
 
 		const debouncedExecutionState = useDebounce(executionStatus, 100);
 		const runActivity = useRunActivity(activeRunId);
@@ -354,8 +351,17 @@ const FlowNodeInner = memo(
 					.find((node) => node.id === props.id);
 				if (!nodeGuard) return;
 
-				node = nodeGuard.data.node as INode;
-				if (!node.pins) return;
+				const currentNode = nodeGuard.data.node as INode;
+				if (!currentNode.pins) return;
+				node = {
+					...currentNode,
+					pins: Object.fromEntries(
+						Object.entries(currentNode.pins).map(([id, value]) => [
+							id,
+							{ ...value },
+						]),
+					),
+				};
 
 				const newPin: IPin = {
 					...pin,
@@ -459,11 +465,10 @@ const FlowNodeInner = memo(
 				[...inputPins, ...outputPins].forEach((p) => {
 					updatedPins[p.id] = p;
 				});
-				node.pins = updatedPins;
-
 				const command = updateNodeCommand({
 					node: {
 						...node,
+						pins: updatedPins,
 						coordinates: [nodeGuard.position.x, nodeGuard.position.y, 0],
 					},
 				});
@@ -490,6 +495,83 @@ const FlowNodeInner = memo(
 				props.data.version,
 				props.data.appId,
 				props.data.boardId,
+			],
+		);
+
+		const addNativePin = useCallback(
+			(pin: IPin) =>
+				withHistoryLock(async () => {
+					if (props.data.version !== undefined) return;
+					const current = getNode(props.id)?.data.node as INode | undefined;
+					const family = Object.values(current?.pins ?? {}).filter(
+						(value) =>
+							value.name === pin.name && value.pin_type === pin.pin_type,
+					);
+					const template = family.find((value) => value.id === pin.id);
+					if (!current || family.length < 2 || !template)
+						throw new Error(
+							i18next.t("dynamicPinGroupChanged", {
+								ns: "flow",
+								defaultValue: "This pin group changed. Please try again.",
+							}),
+						);
+					await addPin(
+						current,
+						template,
+						Math.max(...family.map((value) => value.index)) + 1,
+					);
+				}),
+			[withHistoryLock, props.data.version, props.id, getNode, addPin],
+		);
+		const removeNativePin = useCallback(
+			(pin: IPin) =>
+				withHistoryLock(async () => {
+					if (props.data.version !== undefined) return;
+					const backend = useBackendStore.getState().backend;
+					const board = props.data.boardRef.current;
+					const current = getNode(props.id);
+					const node = current?.data.node as INode | undefined;
+					if (!backend || !board || !current || !node)
+						throw new Error(
+							i18next.t("dynamicPinBoardUnavailable", {
+								ns: "flow",
+								defaultValue: "The board is not available. Please try again.",
+							}),
+						);
+					const commands = buildDynamicPinRemovalCommands({
+						node,
+						pinId: pin.id,
+						board,
+						position: current.position,
+					});
+					if (!commands?.length)
+						throw new Error(
+							i18next.t("dynamicPinCannotRemove", {
+								ns: "flow",
+								defaultValue: "This pin can no longer be removed.",
+							}),
+						);
+					const receipts = await backend.boardState.executeCommands(
+						props.data.appId,
+						props.data.boardId,
+						commands,
+					);
+					await pushCommands(receipts);
+					await invalidate(backend.boardState.getBoard, [
+						props.data.appId,
+						props.data.boardId,
+					]);
+				}),
+			[
+				withHistoryLock,
+				props.data.version,
+				props.data.boardRef,
+				props.id,
+				getNode,
+				props.data.appId,
+				props.data.boardId,
+				pushCommands,
+				invalidate,
 			],
 		);
 
@@ -696,12 +778,15 @@ const FlowNodeInner = memo(
 					.filter((pin) => isPinAction(pin) || pin.pin_type === "Input")
 					.map((pin, arrayIndex) => {
 						return isPinAction(pin) ? (
-							<FlowPinAction
-								key={`${pin.pin.id}__action`}
-								action={pin}
-								index={arrayIndex}
-								input
-							/>
+							nativePinControls ||
+							typeof props.data.version !== "undefined" ? null : (
+								<FlowPinAction
+									key={`${pin.pin.id}__action`}
+									action={pin}
+									index={arrayIndex}
+									input
+								/>
+							)
 						) : (
 							<FlowPin
 								appId={props.data.appId}
@@ -713,7 +798,12 @@ const FlowNodeInner = memo(
 								pin={pin}
 								slot={pinLayout.slots[pin.id]}
 								labelMaxWidth={pinLabelCaps[pin.id]}
-								onPinRemove={pinRemoveCallback}
+								onPinRemove={
+									!nativePinControls &&
+									typeof props.data.version === "undefined"
+										? pinRemoveCallback
+										: undefined
+								}
 								skipOffset={isReroute}
 								version={props.data.version}
 								currentLayerId={props.data.currentLayerId}
@@ -723,6 +813,7 @@ const FlowNodeInner = memo(
 						);
 					}),
 			[
+				nativePinControls,
 				pinLayout,
 				pinLabelCaps,
 				props.data.node,
@@ -740,12 +831,15 @@ const FlowNodeInner = memo(
 			() =>
 				pinLayout.outputs.map((pin, arrayIndex) => {
 					return isPinAction(pin) ? (
-						<FlowPinAction
-							action={pin}
-							index={arrayIndex}
-							input={false}
-							key={`${pin.pin.id}__action`}
-						/>
+						nativePinControls ||
+						typeof props.data.version !== "undefined" ? null : (
+							<FlowPinAction
+								action={pin}
+								index={arrayIndex}
+								input={false}
+								key={`${pin.pin.id}__action`}
+							/>
+						)
 					) : (
 						<FlowPin
 							appId={props.data.appId}
@@ -757,7 +851,11 @@ const FlowNodeInner = memo(
 							key={pin.id}
 							slot={pinLayout.slots[pin.id]}
 							labelMaxWidth={pinLabelCaps[pin.id]}
-							onPinRemove={pinRemoveCallback}
+							onPinRemove={
+								!nativePinControls && typeof props.data.version === "undefined"
+									? pinRemoveCallback
+									: undefined
+							}
 							skipOffset={isReroute}
 							version={props.data.version}
 							currentLayerId={props.data.currentLayerId}
@@ -767,6 +865,7 @@ const FlowNodeInner = memo(
 					);
 				}),
 			[
+				nativePinControls,
 				pinLayout,
 				pinLabelCaps,
 				props.data.node,
@@ -895,9 +994,16 @@ const FlowNodeInner = memo(
 				onlyOffline: props.data.node.only_offline,
 			});
 
-			if (executionStatus === "done" || executing)
+			if (
+				executionStatus === "running" ||
+				executionStatus === "done" ||
+				executing
+			)
 				return (
 					<button
+						type="button"
+						aria-label={i18next.t("stopExecution", "Stop execution")}
+						title={i18next.t("stopExecution", "Stop execution")}
 						className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)] opacity-200!"
 						onClick={async (e) => {
 							const backend = useBackendStore.getState().backend;
@@ -913,15 +1019,21 @@ const FlowNodeInner = memo(
 			const handleLocalExecute = async (payloadObj?: object) => {
 				if (executing) return;
 				setExecuting(true);
-				await props.data.onExecute(props.data.node, payloadObj);
-				setExecuting(false);
+				try {
+					await props.data.onExecute(props.data.node, payloadObj);
+				} finally {
+					setExecuting(false);
+				}
 			};
 
 			const handleRemoteExecute = async (payloadObj?: object) => {
 				if (executing || !props.data.onRemoteExecute) return;
 				setExecuting(true);
-				await props.data.onRemoteExecute(props.data.node, payloadObj);
-				setExecuting(false);
+				try {
+					await props.data.onRemoteExecute(props.data.node, payloadObj);
+				} finally {
+					setExecuting(false);
+				}
 			};
 
 			if (Object.keys(props.data.node.pins).length <= 1)
@@ -1043,7 +1155,10 @@ const FlowNodeInner = memo(
 				)}
 				{playNode}
 				{props.data.node.long_running && (
-					<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full">
+					<div
+						title={i18next.t("longRunningNode", "Long-running node")}
+						className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full"
+					>
 						<ClockIcon className="w-2 h-2 text-foreground" />
 					</div>
 				)}
@@ -1162,6 +1277,15 @@ const FlowNodeInner = memo(
 					</div>
 				)}
 				{renderInputPins}
+				{nativePinControls && !readOnly && (
+					<EguiPinControls
+						nodeId={props.id}
+						node={props.data.node}
+						visible={hovered || props.selected}
+						onAdd={addNativePin}
+						onRemove={removeNativePin}
+					/>
+				)}
 				{renderFnRefInputs}
 				{renderFnRefOutputs}
 				{!isReroute && (
@@ -1215,6 +1339,11 @@ const FlowNodeInner = memo(
 							)}
 							{debouncedExecutionState === "running" && (
 								<span
+									title={i18next.t(
+										"lastRunActivity",
+										"Last activity: {{time}}",
+										{ time: runActivity.formattedTime },
+									)}
 									className={`text-[8px] ${getActivityColorClasses(runActivity.status).text}`}
 								>
 									{runActivity.formattedTime}
@@ -1238,7 +1367,11 @@ const FlowNodeInner = memo(
 		);
 	},
 	(prev, next) =>
+		prev.hovered === next.hovered &&
+		prev.props.data.__flowNativeDom === next.props.data.__flowNativeDom &&
 		prev.props.data.hash === next.props.data.hash &&
+		prev.props.data.node === next.props.data.node &&
+		prev.props.data.version?.join(".") === next.props.data.version?.join(".") &&
 		prev.props.selected === next.props.selected &&
 		prev.props.data.fnRefsHash === next.props.data.fnRefsHash &&
 		sameFunctionCache(
@@ -1247,6 +1380,10 @@ const FlowNodeInner = memo(
 		) &&
 		prev.props.data.boardContentVersion ===
 			next.props.data.boardContentVersion &&
+		prev.props.data.executionMode === next.props.data.executionMode &&
+		prev.props.data.isOffline === next.props.data.isOffline &&
+		prev.props.data.onExecute === next.props.data.onExecute &&
+		prev.props.data.onRemoteExecute === next.props.data.onRemoteExecute &&
 		prev.props.data.isUnavailable === next.props.data.isUnavailable &&
 		prev.props.data.remoteExecuting === next.props.data.remoteExecuting &&
 		prev.props.data.remoteSelections === next.props.data.remoteSelections &&
@@ -1295,15 +1432,15 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					pin.name !== "auto_handle_error" &&
 					pin.name !== "auto_handle_error_string",
 			);
-			innerNode.pins = {};
-			filteredPins
-				.toSorted((a, b) => a.index - b.index)
-				.forEach(
-					(pin, index) => (innerNode.pins[pin.id] = { ...pin, index: index }),
-				);
+			const pins = Object.fromEntries(
+				filteredPins
+					.toSorted((a, b) => a.index - b.index)
+					.map((pin, index) => [pin.id, { ...pin, index }]),
+			);
 			let updateNode = updateNodeCommand({
 				node: {
 					...innerNode,
+					pins,
 				},
 			});
 
@@ -1417,7 +1554,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					comments: {},
 					nodes: {},
 					pins: {},
-					parent_id: (selectedNodes[0].data.node as INode).layer,
+					parent_id: props.data.node.layer,
 					coordinates: [minX, minY, 0],
 					in_coordinates: undefined,
 					name: i18next.t("collapsed", "Collapsed", { ns: "flow" }),
@@ -1425,7 +1562,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					variables: {},
 				},
 				node_ids: nodeIds,
-				current_layer: (selectedNodes[0].data.node as INode).layer,
+				current_layer: props.data.node.layer,
 			});
 
 			const backend = useBackendStore.getState().backend;
@@ -1581,6 +1718,13 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	);
 
 	const isReadOnly = typeof props.data.version !== "undefined";
+	useEffect(() => {
+		if (!isReadOnly) return;
+		setCommentMenu(false);
+		setRenameMenu(false);
+		setEditingMenu(false);
+		setEditTarget(undefined);
+	}, [isReadOnly]);
 
 	const handleOpenInfo = useCallback(() => {
 		props.data.onOpenInfo?.(props.data.node);
@@ -1598,11 +1742,16 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	// Stable callbacks for the toolbar so the memoized ToolbarButtons (and their
 	// Radix Tooltip/Popper subtrees, which measure the DOM on render) don't
 	// re-render every time this node re-renders (e.g. after a drag/drop).
-	const handleOpenComment = useCallback(() => setCommentMenu(true), []);
-	const handleOpenRename = useCallback(() => setRenameMenu(true), []);
+	const handleOpenComment = useCallback(() => {
+		if (!isReadOnly) setCommentMenu(true);
+	}, [isReadOnly]);
+	const handleOpenRename = useCallback(() => {
+		if (!isReadOnly) setRenameMenu(true);
+	}, [isReadOnly]);
 	// Resolved on open rather than on render: the comparator below does not react
 	// to board data, so anything memoized here would go stale after a rename.
 	const handleOpenEdit = useCallback(() => {
+		if (isReadOnly) return;
 		if (props.data.node.name === "events_generic") {
 			setEditTarget(undefined);
 			setEditingMenu(true);
@@ -1625,7 +1774,12 @@ function FlowNode(props: NodeProps<FlowNode>) {
 		}
 		setEditTarget(target);
 		setEditingMenu(true);
-	}, [props.data.node, props.data.boardRef, props.data.currentLayerId]);
+	}, [
+		props.data.node,
+		props.data.boardRef,
+		props.data.currentLayerId,
+		isReadOnly,
+	]);
 
 	const handleEditOpenChange = useCallback((open: boolean) => {
 		setEditingMenu(open);
@@ -1634,7 +1788,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 
 	return (
 		<>
-			{commentMenu && (
+			{!isReadOnly && commentMenu && (
 				<FlowNodeCommentMenu
 					appId={props.data.appId}
 					boardId={props.data.boardId}
@@ -1643,7 +1797,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					onOpenChange={(open) => setCommentMenu(open)}
 				/>
 			)}
-			{renameMenu && (
+			{!isReadOnly && renameMenu && (
 				<FlowNodeRenameMenu
 					appId={props.data.appId}
 					boardId={props.data.boardId}
@@ -1652,7 +1806,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					onOpenChange={(open) => setRenameMenu(open)}
 				/>
 			)}
-			{editingMenu && editTarget && (
+			{!isReadOnly && editingMenu && editTarget && (
 				<FlowNodeEditMenu
 					target={editTarget}
 					appId={props.data.appId}
@@ -1663,48 +1817,51 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					onOpenLayer={props.data.pushLayer}
 				/>
 			)}
-			{editingMenu && props.data.node.name === "events_generic" && (
-				<LayerEditMenu
-					appId={props.data.appId}
-					open={editingMenu}
-					onOpenChange={setEditingMenu}
-					node={props.data.node}
-					boardRef={props.data.boardRef}
-					onApply={async (updated) => {
-						const backend = useBackendStore.getState().backend;
-						if (!backend) return;
+			{!isReadOnly &&
+				editingMenu &&
+				props.data.node.name === "events_generic" && (
+					<LayerEditMenu
+						appId={props.data.appId}
+						open={editingMenu}
+						onOpenChange={setEditingMenu}
+						node={props.data.node}
+						boardRef={props.data.boardRef}
+						onApply={async (updated) => {
+							if (isReadOnly) return;
+							const backend = useBackendStore.getState().backend;
+							if (!backend) return;
 
-						const currentNode = flow.getNode(props.id);
-						if (!currentNode) return;
+							const currentNode = flow.getNode(props.id);
+							if (!currentNode) return;
 
-						const updatedNode = updated as INode;
-						const command = updateNodeCommand({
-							node: {
-								...updatedNode,
-								coordinates: [
-									currentNode.position.x,
-									currentNode.position.y,
-									0,
-								],
-							},
-						});
+							const updatedNode = updated as INode;
+							const command = updateNodeCommand({
+								node: {
+									...updatedNode,
+									coordinates: [
+										currentNode.position.x,
+										currentNode.position.y,
+										0,
+									],
+								},
+							});
 
-						const result = await backend.boardState.executeCommand(
-							props.data.appId,
-							props.data.boardId,
-							command,
-						);
+							const result = await backend.boardState.executeCommand(
+								props.data.appId,
+								props.data.boardId,
+								command,
+							);
 
-						await pushCommand(result);
-						await invalidate(backend.boardState.getBoard, [
-							props.data.appId,
-							props.data.boardId,
-						]);
-						setEditingMenu(false);
-					}}
-					mode="node"
-				/>
-			)}
+							await pushCommand(result);
+							await invalidate(backend.boardState.getBoard, [
+								props.data.appId,
+								props.data.boardId,
+							]);
+							setEditingMenu(false);
+						}}
+						mode="node"
+					/>
+				)}
 			<div
 				className="relative"
 				onMouseEnter={() => setIsHovered(true)}
@@ -1728,7 +1885,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 						onExplain={handleExplain}
 					/>
 				)}
-				<FlowNodeInner props={props} />
+				<FlowNodeInner props={props} hovered={isHovered} />
 			</div>
 		</>
 	);
@@ -1739,10 +1896,17 @@ function flowNodeAreEqual(
 	next: NodeProps<FlowNode>,
 ) {
 	return (
+		prev.data.__flowNativeDom === next.data.__flowNativeDom &&
 		prev.data.hash === next.data.hash &&
+		prev.data.node === next.data.node &&
+		prev.data.version?.join(".") === next.data.version?.join(".") &&
 		prev.selected === next.selected &&
 		prev.data.fnRefsHash === next.data.fnRefsHash &&
 		prev.data.boardContentVersion === next.data.boardContentVersion &&
+		prev.data.executionMode === next.data.executionMode &&
+		prev.data.isOffline === next.data.isOffline &&
+		prev.data.onExecute === next.data.onExecute &&
+		prev.data.onRemoteExecute === next.data.onRemoteExecute &&
 		sameFunctionCache(prev.data.functionCache, next.data.functionCache) &&
 		prev.data.isUnavailable === next.data.isUnavailable &&
 		prev.data.remoteSelections === next.data.remoteSelections &&
