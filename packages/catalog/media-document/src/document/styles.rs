@@ -36,10 +36,32 @@ pub fn hex_to_ooxml(hex: &str) -> String {
 /// Parse hex color to RGB float tuple for PDF.
 pub fn hex_to_rgb(hex: &str) -> (f32, f32, f32) {
     let hex = hex.trim_start_matches('#');
-    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0) as f32 / 255.0;
-    let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0) as f32 / 255.0;
-    let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0) as f32 / 255.0;
+    let channel = |range| {
+        hex.get(range)
+            .and_then(|value| u8::from_str_radix(value, 16).ok())
+            .unwrap_or(0) as f32
+            / 255.0
+    };
+    let r = channel(0..2);
+    let g = channel(2..4);
+    let b = channel(4..6);
     (r, g, b)
+}
+
+#[cfg(test)]
+mod color_tests {
+    use super::hex_to_rgb;
+
+    #[test]
+    fn malformed_colors_do_not_panic() {
+        for color in ["", "#", "#F", "é💙", "#💙F00", "invalid"] {
+            let (r, g, b) = hex_to_rgb(color);
+            assert!([r, g, b].iter().all(|value| (0.0..=1.0).contains(value)));
+        }
+        assert_eq!(hex_to_rgb("#FF8000"), (1.0, 128.0 / 255.0, 0.0));
+        assert_eq!(hex_to_rgb("00ffFF"), (0.0, 1.0, 1.0));
+        assert_eq!(hex_to_rgb("FFxx00"), (1.0, 0.0, 0.0));
+    }
 }
 
 /// Convert cm to EMU (English Metric Units) for PPTX.

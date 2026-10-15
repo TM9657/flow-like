@@ -1,7 +1,10 @@
+// Part 1 of 2: Google Workspace OAuth verification.
 // Paste into a new board's FlowScript editor and apply it.
-// Fill the four required inputs below, then run runGoogleVerification.
+// Import google-youtube-oauth-verification.flow into a separate board.
+// OAuth scope collection scans the whole board, including other events and functions.
+// Fill demoEmail and demoFormId below, then run runGoogleVerification.
 // Each run sends one email, creates a Drive folder and calendar event,
-// writes demo content, updates the test form, and adds one playlist item.
+// writes demo content, and updates the test form.
 // Use disposable resources owned by the Google account you connect.
 
 @category("Verification / Required")
@@ -10,12 +13,6 @@ let demoEmail = ""
 @category("Verification / Required")
 @description("ID from /forms/d/ID/edit of a disposable form with a question and one submitted test response. Do not use its public /d/e/ responder ID.")
 let demoFormId = ""
-@category("Verification / Required")
-@description("ID of an existing private YouTube playlist owned by the connected account.")
-let demoPlaylistId = ""
-@category("Verification / Required")
-@description("ID of a real YouTube video to add to the private playlist.")
-let demoVideoId = ""
 
 @category("Verification / Existing files")
 @description("Optional disposable Google Doc ID. Leave empty to create a document. Existing files demonstrate access beyond app-created files.")
@@ -249,7 +246,7 @@ function verifySlides(provider: Struct, label: string): (passed: bool) {
         const slide = google::slides::addSlide({ provider: provider, presentationId: presentationId, layout: "BLANK", insertIndex: -1 })
         slide {
             execOut: {
-                const text = google::slides::addText({ provider: provider, presentationId: presentationId, slideId: slide.slideId, text: `${label}\nCreated by Flow-Like`, x: 50.0, y: 50.0, width: 600.0, height: 200.0 })
+                const text = google::slides::addText({ provider: provider, presentationId: presentationId, slideId: slide.slideId, text: `${label}\nCreated by Flow-Like` })
                 text {
                     execOut: {
                         const readBack = google::slides::get({ provider: provider, presentationId: presentationId })
@@ -320,34 +317,9 @@ function verifyForms(provider: Struct, label: string): (passed: bool) {
     return passed
 }
 
-// Scopes: youtube and youtube.readonly. The playlist must already exist.
-function verifyYouTube(provider: Struct): (passed: bool) {
-    let passed = false
-    const added = google::youtube::addToPlaylist({ provider: provider, playlistId: demoPlaylistId, videoId: demoVideoId, position: 0 })
-    added {
-        execOut: {
-            log::info({ message: `YouTube added item ${added.itemId}. Playlist: https://www.youtube.com/playlist?list=${demoPlaylistId}`, toast: false })
-            const readBack = google::youtube::getPlaylistItems({ provider: provider, playlistId: demoPlaylistId, maxResults: 10 })
-            readBack {
-                execOut: {
-                    log::info({ message: readBack.items, toast: false })
-                    passed = true
-                }
-                error: {
-                    reportFailure("YouTube / read playlist", readBack.errorMessage)
-                }
-            }
-        }
-        error: {
-            reportFailure("YouTube / add video", added.errorMessage)
-        }
-    }
-    return passed
-}
-
 eventsSimple runGoogleVerification() {
-    if (demoEmail == "" || demoFormId == "" || demoPlaylistId == "" || demoVideoId == "") {
-        log::error({ message: "Set demoEmail, demoFormId, demoPlaylistId and demoVideoId in Variables before running this workflow. Use a form with a submitted test response and a private YouTube playlist.", toast: true })
+    if (demoEmail == "" || demoFormId == "") {
+        log::error({ message: "Set demoEmail and demoFormId in Variables before running this workflow. Use a disposable form with a submitted test response.", toast: true })
     } else {
         // The Hub adds openid, email and profile. Never log the provider object.
         const provider = google::provider()
@@ -361,10 +333,9 @@ eventsSimple runGoogleVerification() {
         const sheetsPassed = verifySheets(provider, label)
         const slidesPassed = verifySlides(provider, label)
         const formsPassed = verifyForms(provider, label)
-        const youtubePassed = verifyYouTube(provider)
-        log::info({ message: `Results: Drive=${drivePassed}, Gmail=${gmailPassed}, Calendar=${calendarPassed}, Docs=${docsPassed}, Sheets=${sheetsPassed}, Slides=${slidesPassed}, Forms=${formsPassed}, YouTube=${youtubePassed}`, toast: false })
-        if (drivePassed && gmailPassed && calendarPassed && docsPassed && sheetsPassed && slidesPassed && formsPassed && youtubePassed) {
-            log::info({ message: "All Google verification sections completed. Open the logged resource links to show the results in Google.", toast: true })
+        log::info({ message: `Results: Drive=${drivePassed}, Gmail=${gmailPassed}, Calendar=${calendarPassed}, Docs=${docsPassed}, Sheets=${sheetsPassed}, Slides=${slidesPassed}, Forms=${formsPassed}`, toast: false })
+        if (drivePassed && gmailPassed && calendarPassed && docsPassed && sheetsPassed && slidesPassed && formsPassed) {
+            log::info({ message: "All Google Workspace verification sections completed. Open the logged resource links to show the results in Google.", toast: true })
         } else {
             log::warn({ message: "Some verification sections are incomplete. Review their error logs before recording or submitting the video.", toast: true })
         }

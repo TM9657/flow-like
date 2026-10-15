@@ -15,6 +15,18 @@ const item = (id: string, name: string, category?: string | null) => ({
 });
 
 describe("buildCategoryTree", () => {
+	test("keeps prototype-named categories as ordinary folders", () => {
+		const tree = buildCategoryTree([
+			item("1", "a", "__proto__/constructor"),
+			item("2", "b", "toString"),
+		]);
+
+		expect(tree.children.__proto__.children.constructor.items[0].id).toBe("1");
+		expect(tree.children.toString.items[0].id).toBe("2");
+		expect(collectFolderPaths(tree)).toContain("__proto__/constructor");
+		expect(Object.getPrototypeOf(tree.children)).toBeNull();
+	});
+
 	test("files uncategorized items at the root", () => {
 		const tree = buildCategoryTree([
 			item("1", "a"),

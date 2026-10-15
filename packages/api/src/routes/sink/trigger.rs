@@ -2266,6 +2266,79 @@ const TRIGGER_IN_FLIGHT_TTL: std::time::Duration = std::time::Duration::from_sec
 const TRIGGER_DUPLICATE_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
 const TRIGGER_DUPLICATE_POLL: std::time::Duration = std::time::Duration::from_millis(150);
 
+fn scoped_trigger_idempotency_key(
+    token: &str,
+    app_id: &str,
+    request: &ServiceTriggerRequest,
+    key: &str,
+) -> String {
+    let scope = serde_json::json!([
+        token,
+        app_id,
+        request.event_id,
+        request.sink_type,
+        request.payload,
+        key,
+    ]);
+    format!("v2:{}", blake3::hash(scope.to_string().as_bytes()).to_hex())
+}
+
+#[cfg(test)]
+mod idempotency_scope_tests {
+    use super::*;
+
+    #[test]
+    fn retries_share_responses_only_with_the_same_authorized_operation() {
+        let mut request = ServiceTriggerRequest {
+            event_id: "event-a".into(),
+            sink_type: "cron".into(),
+            payload: Some(serde_json::json!({"value": 1})),
+        };
+        let key = scoped_trigger_idempotency_key("credential-a", "app-a", &request, "retry");
+        let cache = moka::sync::Cache::new(10);
+        cache.insert(key.clone(), "run-a");
+        assert_eq!(
+            cache.get(&scoped_trigger_idempotency_key(
+                "credential-a",
+                "app-a",
+                &request,
+                "retry"
+            )),
+            Some("run-a")
+        );
+        for (token, app, header) in [
+            ("credential-b", "app-a", "retry"),
+            ("credential-a", "app-b", "retry"),
+            ("credential-a", "app-a", "other-retry"),
+        ] {
+            assert!(
+                cache
+                    .get(&scoped_trigger_idempotency_key(
+                        token, app, &request, header
+                    ))
+                    .is_none()
+            );
+        }
+        request.event_id = "event-b".into();
+        assert_ne!(
+            key,
+            scoped_trigger_idempotency_key("credential-a", "app-a", &request, "retry")
+        );
+        request.event_id = "event-a".into();
+        request.sink_type = "discord".into();
+        assert_ne!(
+            key,
+            scoped_trigger_idempotency_key("credential-a", "app-a", &request, "retry")
+        );
+        request.sink_type = "cron".into();
+        request.payload = Some(serde_json::json!({"value": 2}));
+        assert_ne!(
+            key,
+            scoped_trigger_idempotency_key("credential-a", "app-a", &request, "retry")
+        );
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
 enum TriggerIdempotencyRecord {
@@ -2549,25 +2622,6 @@ pub async fn trigger_service(
         return Err(ApiError::unauthorized("Token has been revoked"));
     }
 
-    // Same-replica repeats are answered from the in-process cache; the cross-replica
-    // reservation happens after validation, right before dispatch.
-    let idempotency_key = headers
-        .get("idempotency-key")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string())
-        .filter(|s| !s.is_empty());
-
-    if let Some(ref key) = idempotency_key
-        && let Some(cached) = state.trigger_idempotency.get(key)
-    {
-        tracing::info!(
-            idempotency_key = %key,
-            event_id = %request.event_id,
-            "Returning cached idempotent trigger response"
-        );
-        return Ok(Json(cached));
-    }
-
     // Check if this JWT is allowed to trigger this sink type
     if !claims.sink_types.contains(&request.sink_type) {
         tracing::warn!(
@@ -2640,6 +2694,19 @@ pub async fn trigger_service(
             "Token not authorized for app: {}",
             sink.app_id
         )));
+    }
+
+    // Both cache layers share a credential- and operation-bound key. Check
+    // current authorization before replaying a previous dispatch response.
+    let idempotency_key = headers
+        .get("idempotency-key")
+        .and_then(|header| header.to_str().ok())
+        .filter(|key| !key.is_empty())
+        .map(|key| scoped_trigger_idempotency_key(token, &sink.app_id, &request, key));
+    if let Some(ref key) = idempotency_key
+        && let Some(cached) = state.trigger_idempotency.get(key)
+    {
+        return Ok(Json(cached));
     }
 
     // A schedule or bot a device runs is skipped with a success: schedulers keep ticking, so

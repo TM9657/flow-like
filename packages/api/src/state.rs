@@ -90,6 +90,35 @@ const BOARD_CACHE_MAX_ENTRIES: u64 = 64;
 /// Total nodes retained across all indexed segment bases (see `State::board_segment_bases`).
 const BOARD_SEGMENT_BASE_MAX_NODES: u64 = 200_000;
 
+/// Account for JSON allocations and keys, including empty search responses.
+fn response_cache_weight(key: &String, value: &Value) -> u32 {
+    fn heap_bytes(value: &Value) -> usize {
+        match value {
+            Value::String(text) => text.capacity(),
+            Value::Array(items) => items.iter().fold(
+                items
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<Value>()),
+                |bytes, item| bytes.saturating_add(heap_bytes(item)),
+            ),
+            Value::Object(fields) => fields.iter().fold(0usize, |bytes, (key, value)| {
+                bytes
+                    .saturating_add(std::mem::size_of::<(String, Value)>())
+                    .saturating_add(3 * std::mem::size_of::<usize>())
+                    .saturating_add(key.capacity())
+                    .saturating_add(heap_bytes(value))
+            }),
+            _ => 0,
+        }
+    }
+    let bytes = key
+        .capacity()
+        .saturating_add(std::mem::size_of::<(String, Value)>())
+        .saturating_add(128) // Cache bookkeeping and allocation overhead.
+        .saturating_add(heap_bytes(value));
+    u32::try_from(bytes).unwrap_or(u32::MAX)
+}
+
 /// Key of a segment in `State::board_segment_bases`.
 pub(crate) fn segment_base_key(app_id: &str, board_id: &str, token: &str) -> String {
     format!("{}\u{1f}{}\u{1f}{token}", app_id.trim(), board_id.trim())
@@ -999,8 +1028,9 @@ impl State {
             .build();
 
         let response_cache = moka::sync::Cache::builder()
-            .max_capacity(64 * 1024 * 1024) // 32 MB
-            .time_to_live(Duration::from_secs(60)) // 30 minutes
+            .weigher(response_cache_weight)
+            .max_capacity(64 * 1024 * 1024)
+            .time_to_live(Duration::from_secs(60))
             .build();
 
         let mail_client = if let Some(mail_config) = &platform_config.mail {
@@ -2218,6 +2248,31 @@ mod tests {
         jwk::{Jwk, JwkSet},
     };
     use std::collections::{BTreeSet, HashMap};
+
+    #[test]
+    fn response_cache_accounts_for_large_keys_and_nested_values() {
+        let small_key = "search".to_string();
+        let large_key = "x".repeat(4096);
+        let empty = serde_json::json!([]);
+        let nested = serde_json::json!({"results": [{"name": "x".repeat(4096)}]});
+        assert!(super::response_cache_weight(&large_key, &empty) >= 4096);
+        assert!(super::response_cache_weight(&small_key, &nested) >= 4096);
+        assert!(super::response_cache_weight(&small_key, &empty) > 0);
+
+        let cache = moka::sync::Cache::builder()
+            .max_capacity(2048)
+            .weigher(super::response_cache_weight)
+            .build();
+        cache.insert(small_key.clone(), empty.clone());
+        cache.run_pending_tasks();
+        assert_eq!(cache.get(&small_key), Some(empty.clone()));
+        cache.insert(large_key.clone(), empty);
+        cache.run_pending_tasks();
+        assert!(cache.get(&large_key).is_none());
+        cache.insert("nested".to_string(), nested);
+        cache.run_pending_tasks();
+        assert!(cache.get("nested").is_none());
+    }
 
     #[test]
     fn runtime_document_controls_openid_clients_and_clock_skew() {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useClientRouter } from "@flow-like/flow-like-ui/lib/client-navigation";
+import { isScriptNavigationUrl } from "@flow-like/flow-like-ui/lib/navigation-url";
 import { clearPageSurfaceCache } from "@flow-like/flow-like-ui/lib/page-surface-cache";
 
 import {
@@ -438,7 +439,9 @@ export function SpotlightWrapper({ children }: SpotlightWrapperProps) {
 					group: "shortcuts",
 					keywords: ["shortcut", "bookmark", shortcut.label.toLowerCase()],
 					priority: 200,
-					action: () => router.push(shortcut.path),
+					action: () => {
+						if (!isScriptNavigationUrl(shortcut.path)) router.push(shortcut.path);
+					},
 				});
 			}
 		}

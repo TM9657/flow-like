@@ -812,6 +812,7 @@ mod tests {
                     name: "value".to_string(),
                     type_name: "String".to_string(),
                     default_value: None,
+                    default_redacted: false,
                 }],
                 outputs: vec![],
                 position: (1, 1),

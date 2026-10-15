@@ -484,7 +484,7 @@ impl Writer<'_> {
                 // the bracket form the READ side already emits (`render_member`) — dot-joining it
                 // produced text like `row.dataset-id = …`, which lexes as `dataset` `-` `id` and
                 // no longer parses, breaking the render -> re-apply round trip.
-                if path.starts_with('[') {
+                if path.starts_with('[') && is_plain_field_path(&format!("root{path}")) {
                     self.out.push_str(path);
                 } else if is_plain_field_path(path) {
                     self.out.push('.');

@@ -276,6 +276,16 @@ fn sanitize_command_wasm_metadata(
         GenericCommand::UpdateNode(command) => {
             sanitize_node_wasm_metadata(&mut command.node, lookup)?
         }
+        GenericCommand::UpsertLayer(command) => {
+            for node in command.layer.nodes.values_mut() {
+                sanitize_node_wasm_metadata(node, lookup)?;
+            }
+            if let Some(layer) = &mut command.old_layer {
+                for node in layer.nodes.values_mut() {
+                    sanitize_node_wasm_metadata(node, lookup)?;
+                }
+            }
+        }
         GenericCommand::CopyPaste(command) => {
             for node in &mut command.original_nodes {
                 sanitize_node_wasm_metadata(node, lookup)?;
@@ -471,5 +481,36 @@ mod tests {
 
         assert_eq!(definition_to_package_entry(&definition).version, None);
         assert_eq!(build_node_from_definition(&definition).version, None);
+    }
+
+    #[test]
+    fn layer_commands_restore_catalog_wasm_metadata() {
+        use flow_like::flow::board::{
+            Layer, LayerType, commands::layer::upsert_layer::UpsertLayerCommand,
+        };
+        let catalog_node = package_node_to_node(
+            &definition_to_package_entry(&definition()),
+            "com.flow-like.youtube",
+        );
+        let mut node = catalog_node.clone();
+        node.wasm = None;
+        let mut layer = Layer::new("function".into(), "Function".into(), LayerType::Function);
+        layer.nodes.insert(node.id.clone(), node);
+        let mut upsert = UpsertLayerCommand::new(layer.clone());
+        upsert.old_layer = Some(layer);
+        let mut command = GenericCommand::UpsertLayer(upsert);
+        let nodes = [catalog_node.clone()];
+        sanitize_command_wasm_metadata(&mut command, &WasmCatalogLookup::new(&nodes, &[])).unwrap();
+        let GenericCommand::UpsertLayer(upsert) = command else {
+            unreachable!()
+        };
+        for layer in [&upsert.layer, upsert.old_layer.as_ref().unwrap()] {
+            let wasm = layer.nodes.values().next().unwrap().wasm.as_ref().unwrap();
+            assert_eq!(wasm.package_id, "com.flow-like.youtube");
+            assert_eq!(
+                wasm.permissions,
+                catalog_node.wasm.as_ref().unwrap().permissions
+            );
+        }
     }
 }

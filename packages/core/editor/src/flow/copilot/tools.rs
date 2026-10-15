@@ -1210,11 +1210,15 @@ pub fn build_node_details_output(node_id: &str, graph_context: &GraphContext) ->
         "position": { "x": node_ctx.position.0, "y": node_ctx.position.1 },
         "size": { "width": node_ctx.estimated_size.0, "height": node_ctx.estimated_size.1 },
         "inputs": node_ctx.inputs.iter().map(|p| {
-            json!({
+            let mut input = json!({
                 "name": p.name,
                 "type": p.type_name,
                 "default_value": p.default_value
-            })
+            });
+            if p.default_redacted {
+                input["default_redacted"] = json!(true);
+            }
+            input
         }).collect::<Vec<_>>(),
         "outputs": node_ctx.outputs.iter().map(|p| {
             json!({
@@ -3726,7 +3730,7 @@ pub fn build_unconfigured_nodes_output(graph_context: &GraphContext) -> String {
             .filter(|input| input.type_name != "Execution")
             .filter(|input| {
                 !connected_pins.contains(&(node.id.clone(), input.name.clone()))
-                    && input.default_value.is_none()
+                    && !input.has_default_value()
             })
             .map(|input| {
                 json!({

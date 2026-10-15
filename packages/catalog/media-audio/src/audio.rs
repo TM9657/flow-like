@@ -17,6 +17,7 @@ use flow_like::{
     },
 };
 use flow_like_catalog_core::FlowPath;
+use flow_like_catalog_media_support::validate_vertex_endpoint;
 use flow_like_model_provider::{
     history::{History, HistoryMessage, Role},
     provider::{ImageGenerationModelProvider, ModelProvider},
@@ -1610,14 +1611,15 @@ async fn stt_google_ai_studio(
     })
 }
 
-fn vertex_endpoint(provider: &ModelProvider, location: &str) -> String {
-    get_param(provider, "endpoint").unwrap_or_else(|| {
+fn vertex_endpoint(provider: &ModelProvider, location: &str) -> flow_like_types::Result<String> {
+    let endpoint = get_param(provider, "endpoint").unwrap_or_else(|| {
         if location == "global" {
             "https://aiplatform.googleapis.com/v1beta1".to_string()
         } else {
             format!("https://{location}-aiplatform.googleapis.com/v1beta1")
         }
-    })
+    });
+    validate_vertex_endpoint(&endpoint)
 }
 
 async fn tts_vertex(
@@ -1630,7 +1632,7 @@ async fn tts_vertex(
     let location = get_param(provider, "location")
         .or_else(|| get_param(provider, "region"))
         .unwrap_or_else(|| "global".to_string());
-    let endpoint = vertex_endpoint(provider, &location);
+    let endpoint = vertex_endpoint(provider, &location)?;
     let authorization = google_authorization_header(provider).await?;
     let mut model_id = get_provider_model(provider, "gemini-2.5-flash-tts");
     if !looks_like_tts_model(&model_id) {
@@ -1700,7 +1702,7 @@ async fn stt_vertex(
     let location = get_param(provider, "location")
         .or_else(|| get_param(provider, "region"))
         .unwrap_or_else(|| "global".to_string());
-    let endpoint = vertex_endpoint(provider, &location);
+    let endpoint = vertex_endpoint(provider, &location)?;
     let authorization = google_authorization_header(provider).await?;
     let model_id = get_provider_model(provider, "gemini-2.5-flash");
     let prompt = req
@@ -1748,7 +1750,11 @@ async fn generate_speech_with_provider(
     provider: &ModelProvider,
     req: &TextToSpeechRequest,
 ) -> flow_like_types::Result<GeneratedAudio> {
-    let client = &GuardedHttpClient::new(environment)?;
+    let client = &if provider.provider_name == PROVIDER_VERTEX {
+        GuardedHttpClient::without_redirects(environment)?
+    } else {
+        GuardedHttpClient::new(environment)?
+    };
     match provider.provider_name.as_str() {
         PROVIDER_OPENAI => {
             tts_openai_like(
@@ -1790,7 +1796,11 @@ async fn transcribe_with_provider(
     provider: &ModelProvider,
     req: &SpeechToTextRequest,
 ) -> flow_like_types::Result<TranscriptionResult> {
-    let client = &GuardedHttpClient::new(environment)?;
+    let client = &if provider.provider_name == PROVIDER_VERTEX {
+        GuardedHttpClient::without_redirects(environment)?
+    } else {
+        GuardedHttpClient::new(environment)?
+    };
     match provider.provider_name.as_str() {
         PROVIDER_OPENAI => {
             stt_openai_like(
@@ -3138,6 +3148,72 @@ impl NodeLogic for LocalSpeechToTextNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flow_like_types::tokio;
+
+    fn vertex_provider(parameter: &str, value: &str) -> ModelProvider {
+        ModelProvider {
+            provider_name: PROVIDER_VERTEX.to_string(),
+            model_id: None,
+            version: None,
+            api_surface: None,
+            params: Some(HashMap::from([
+                ("project_id".to_string(), json!("test-project")),
+                ("service_account_json".to_string(), json!("invalid json")),
+                (parameter.to_string(), json!(value)),
+            ])),
+        }
+    }
+
+    #[tokio::test]
+    async fn vertex_audio_rejects_untrusted_endpoints_before_resolving_credentials() {
+        let tts_request = TextToSpeechRequest {
+            text: "Test speech".to_string(),
+            voice: None,
+            instructions: None,
+            language: None,
+            output_format: "wav".to_string(),
+            speed: None,
+            sample_rate: None,
+            bit_rate: None,
+            provider_options: HashMap::new(),
+        };
+        let stt_request = SpeechToTextRequest {
+            audio_bytes: Vec::new(),
+            file_name: "test.wav".to_string(),
+            mime_type: "audio/wav".to_string(),
+            language: None,
+            prompt: None,
+            response_format: "json".to_string(),
+            translate: false,
+            provider_options: HashMap::new(),
+        };
+
+        for (parameter, value) in [
+            ("endpoint", "https://attacker.example/v1"),
+            ("location", "attacker.example/"),
+            ("region", "attacker.example/"),
+        ] {
+            let provider = vertex_provider(parameter, value);
+            let location = if parameter == "endpoint" {
+                "global"
+            } else {
+                value
+            };
+            let expected = vertex_endpoint(&provider, location)
+                .unwrap_err()
+                .to_string();
+            for environment in [ExecutionEnvironment::Local, ExecutionEnvironment::Server] {
+                let tts_error = generate_speech_with_provider(environment, &provider, &tts_request)
+                    .await
+                    .unwrap_err();
+                assert_eq!(tts_error.to_string(), expected, "TTS {parameter}");
+                let stt_error = transcribe_with_provider(environment, &provider, &stt_request)
+                    .await
+                    .unwrap_err();
+                assert_eq!(stt_error.to_string(), expected, "STT {parameter}");
+            }
+        }
+    }
 
     #[test]
     fn request_file_name_is_the_decoded_file_name_for_raw_and_listed_paths() {

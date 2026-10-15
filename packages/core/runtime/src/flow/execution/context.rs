@@ -509,7 +509,7 @@ impl ExecutionContext {
             run_id,
             elements,
             resources,
-            execution_environment: ExecutionEnvironment::Local,
+            execution_environment: state.execution_environment,
             execution_mode: ExecutionMode::Sync,
             started_by: None,
             run: run.clone(),

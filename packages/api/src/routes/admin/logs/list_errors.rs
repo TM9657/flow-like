@@ -89,12 +89,36 @@ impl From<error_report::Model> for ErrorReportRecord {
     }
 }
 
-fn cutoff(hours: Option<i64>) -> Option<DateTime<FixedOffset>> {
+fn cutoff(hours: Option<i64>) -> Result<Option<DateTime<FixedOffset>>, ApiError> {
     let h = hours.unwrap_or(24).max(0);
     if h == 0 {
-        None
+        Ok(None)
     } else {
-        Some((Utc::now() - Duration::hours(h)).fixed_offset())
+        let duration = Duration::try_hours(h)
+            .ok_or_else(|| ApiError::bad_request("hours is outside the supported time range"))?;
+        let cutoff = Utc::now()
+            .checked_sub_signed(duration)
+            .ok_or_else(|| ApiError::bad_request("hours is outside the supported time range"))?;
+        Ok(Some(cutoff.fixed_offset()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn cutoff_rejects_overflow_without_changing_normal_windows() {
+        assert!(super::cutoff(Some(i64::MAX)).is_err());
+        assert!(super::cutoff(Some(10_000_000_000)).is_err());
+        assert_eq!(super::cutoff(Some(0)).unwrap(), None);
+        assert_eq!(super::cutoff(Some(-1)).unwrap(), None);
+        let cutoff = super::cutoff(Some(24)).unwrap().unwrap();
+        assert!(
+            (chrono::Utc::now().fixed_offset() - cutoff)
+                .num_seconds()
+                .abs_diff(86_400)
+                < 2
+        );
+        assert!(super::cutoff(None).unwrap().is_some());
     }
 }
 
@@ -124,7 +148,7 @@ pub async fn list_errors(
 
     let mut select = error_report::Entity::find();
 
-    if let Some(cutoff) = cutoff(q.hours) {
+    if let Some(cutoff) = cutoff(q.hours)? {
         select = select.filter(error_report::Column::CreatedAt.gte(cutoff));
     }
 

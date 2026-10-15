@@ -11,7 +11,6 @@ import {
 } from ".";
 import { buildConnectionCommands } from "./board-canvas/connection-commands";
 import { doPinsMatch, isOpenObjectSchema } from "./flow-board-utils";
-import { isWebkitLite } from "./platform";
 import type { IGenericCommand } from "./schema/flow/board/commands/generic-command";
 import { ILayerType } from "./schema/flow/board/commands/upsert-layer";
 import type { INode } from "./schema/flow/node";
@@ -814,29 +813,17 @@ export function handleEdgesChange({
 	if (!changes || changes.length === 0)
 		return applyEdgeChanges(changes, currentEdges);
 
-	let edges = currentEdges;
-
 	const selectChanges = changes.filter(
 		(change: any) => change.type === "select",
 	);
 	for (const change of selectChanges) {
 		const selectedId = change.id;
-		const selectedEdge: any = edges.find((edge) => edge.id === selectedId);
-
 		if (change.selected) selected.current.add(selectedId);
 		if (!change.selected) selected.current.delete(selectedId);
-
-		if (selectedEdge?.data_type !== "Execution") {
-			edges = edges.map((edge) =>
-				edge.id === selectedId
-					? { ...edge, animated: !isWebkitLite() && !change.selected }
-					: edge,
-			);
-		}
 	}
 
 	if (typeof version !== "undefined") {
-		return applyEdgeChanges(changes, edges);
+		return applyEdgeChanges(changes, currentEdges);
 	}
 
 	const removeChanges = changes.filter(
@@ -849,7 +836,7 @@ export function handleEdgesChange({
 				.map((change: any) => {
 					const selectedId = change.id;
 					const selectedEdge: FunctionReferenceEdgeLike | undefined =
-						edges.find((edge) => edge.id === selectedId);
+						currentEdges.find((edge) => edge.id === selectedId);
 					const [fallbackFromPinId, fallbackToPinId] = selectedId.split("-");
 					const fromPinId = selectedEdge?.sourceHandle ?? fallbackFromPinId;
 					const toPinId = selectedEdge?.targetHandle ?? fallbackToPinId;
@@ -901,5 +888,5 @@ export function handleEdgesChange({
 	const nonRemoveChanges = changes.filter(
 		(change: any) => change.type !== "remove",
 	);
-	return applyEdgeChanges(nonRemoveChanges, edges);
+	return applyEdgeChanges(nonRemoveChanges, currentEdges);
 }

@@ -342,8 +342,9 @@ impl FlowNodeRegistryInner {
     }
 
     /// Identity of this registry for compiled-board artifacts: hash of every
-    /// registered node type, its schema version, and the semantic hash of its
-    /// catalog default node (name, display strings, full pin set). A compiled
+    /// registered node type, its schema version, execution restriction, and
+    /// the semantic hash of its catalog default node (name, display strings,
+    /// full pin set). A compiled
     /// artifact built against a different fingerprint is recompiled instead of
     /// trusted, since its baked `on_update` output may not match the running
     /// catalog. The semantic hash also covers WASM nodes, whose `version` is
@@ -352,7 +353,7 @@ impl FlowNodeRegistryInner {
     /// an identical `get_node` still require a node version bump.
     pub fn fingerprint(&self) -> [u8; 32] {
         *self.fingerprint_cell.get_or_init(|| {
-            let mut entries: Vec<(&str, u32, u64)> = self
+            let mut entries: Vec<(&str, u32, u64, bool)> = self
                 .registry
                 .iter()
                 .map(|(name, (node, _))| {
@@ -360,17 +361,19 @@ impl FlowNodeRegistryInner {
                         name.as_str(),
                         node.version.unwrap_or(u32::MAX),
                         node.semantic_hash(),
+                        node.only_offline,
                     )
                 })
                 .collect();
             entries.sort_unstable();
 
             let mut hasher = blake3::Hasher::new();
-            for (name, version, semantic) in entries {
+            for (name, version, semantic, only_offline) in entries {
                 hasher.update(name.as_bytes());
                 hasher.update(&[0]);
                 hasher.update(&version.to_le_bytes());
                 hasher.update(&semantic.to_le_bytes());
+                hasher.update(&[only_offline as u8]);
             }
             *hasher.finalize().as_bytes()
         })

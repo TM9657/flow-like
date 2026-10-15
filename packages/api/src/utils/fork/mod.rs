@@ -2637,7 +2637,7 @@ pub async fn sync_uploaded_metadata_media_to_db(
                 }
             };
 
-        update_meta_media_fields(state, app_id, target, uploaded, now).await?;
+        update_meta_media_fields(&state.db, app_id, target, uploaded, now).await?;
     }
 
     Ok(())
@@ -2953,8 +2953,8 @@ fn lang_from_meta_file(file_name: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
-async fn update_meta_media_fields(
-    state: &AppState,
+async fn update_meta_media_fields<C: sea_orm::ConnectionTrait>(
+    db: &C,
     app_id: &str,
     target: UploadedMetadataTarget,
     uploaded: proto::Metadata,
@@ -2965,21 +2965,25 @@ async fn update_meta_media_fields(
             meta::Entity::find()
                 .filter(meta::Column::AppId.eq(app_id))
                 .filter(meta::Column::Lang.eq(lang))
-                .one(&state.db)
+                .one(db)
                 .await?
         }
         UploadedMetadataTarget::Widget { id, lang } => {
             meta::Entity::find()
+                .inner_join(widget::Entity)
                 .filter(meta::Column::WidgetId.eq(id))
+                .filter(widget::Column::AppId.eq(app_id))
                 .filter(meta::Column::Lang.eq(lang))
-                .one(&state.db)
+                .one(db)
                 .await?
         }
         UploadedMetadataTarget::Template { id, lang } => {
             meta::Entity::find()
+                .inner_join(template::Entity)
                 .filter(meta::Column::TemplateId.eq(id))
+                .filter(template::Column::AppId.eq(app_id))
                 .filter(meta::Column::Lang.eq(lang))
-                .one(&state.db)
+                .one(db)
                 .await?
         }
     };
@@ -3003,7 +3007,7 @@ async fn update_meta_media_fields(
     active.thumbnail = Set(uploaded.thumbnail);
     active.preview_media = Set(preview_media.map(Into::into));
     active.updated_at = Set(now);
-    active.update(&state.db).await?;
+    active.update(db).await?;
     Ok(())
 }
 
@@ -4408,6 +4412,90 @@ mod tests {
                 lang: "fr".to_string(),
             })
         );
+    }
+
+    #[tokio::test]
+    async fn uploaded_metadata_cannot_change_another_apps_media() {
+        use sea_orm::{ConnectOptions, ConnectionTrait, Database, Schema, sea_query::Table};
+        let mut options = ConnectOptions::new("sqlite::memory:");
+        options.max_connections(1);
+        let db = Database::connect(options).await.unwrap();
+        db.execute_unprepared("ATTACH DATABASE ':memory:' AS public")
+            .await
+            .unwrap();
+        let source = Schema::new(db.get_database_backend()).create_table_from_entity(meta::Entity);
+        let mut table = Table::create();
+        table.table(source.get_table_name().unwrap().clone());
+        for column in source.get_columns() {
+            table.col(column.clone());
+        }
+        db.execute(&table).await.unwrap();
+        let now = chrono::Utc::now().fixed_offset();
+        for (table, is_widget) in [("Widget", true), ("Template", false)] {
+            db.execute_unprepared(&format!(
+                "CREATE TABLE public.\"{table}\" (id TEXT PRIMARY KEY, \"appId\" TEXT NOT NULL)"
+            ))
+            .await
+            .unwrap();
+            for (suffix, app) in [("owned", "destination"), ("foreign", "other-app")] {
+                let id = format!("{table}-{suffix}");
+                db.execute_unprepared(&format!(
+                    "INSERT INTO public.\"{table}\" VALUES ('{id}', '{app}')"
+                ))
+                .await
+                .unwrap();
+                meta::ActiveModel {
+                    id: Set(id.clone()),
+                    name: Set(id.clone()),
+                    lang: Set("en".into()),
+                    icon: Set(Some("original".into())),
+                    widget_id: Set(is_widget.then(|| id.clone())),
+                    template_id: Set((!is_widget).then(|| id.clone())),
+                    created_at: Set(now),
+                    updated_at: Set(now),
+                    ..Default::default()
+                }
+                .insert(&db)
+                .await
+                .unwrap();
+                let target = if is_widget {
+                    UploadedMetadataTarget::Widget {
+                        id: id.clone(),
+                        lang: "en".into(),
+                    }
+                } else {
+                    UploadedMetadataTarget::Template {
+                        id: id.clone(),
+                        lang: "en".into(),
+                    }
+                };
+                update_meta_media_fields(
+                    &db,
+                    "destination",
+                    target,
+                    proto::Metadata {
+                        icon: Some("replacement".into()),
+                        ..Default::default()
+                    },
+                    now,
+                )
+                .await
+                .unwrap();
+                let row = meta::Entity::find_by_id(&id)
+                    .one(&db)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    row.icon.as_deref(),
+                    Some(if suffix == "owned" {
+                        "replacement"
+                    } else {
+                        "original"
+                    })
+                );
+            }
+        }
     }
 
     #[test]

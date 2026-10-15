@@ -208,9 +208,9 @@ fn sanitize_sheet_name(input: &str) -> String {
             collapsed.push(ch);
         }
     }
-    // Max 31 chars
+    // Preserve the existing byte limit without splitting a character.
     if collapsed.len() > 31 {
-        collapsed.truncate(31);
+        collapsed.truncate(collapsed.floor_char_boundary(31));
     }
     collapsed
 }
@@ -236,6 +236,13 @@ mod tests {
     use super::sanitize_sheet_name;
     #[test]
     fn test_sanitize() {
+        assert_eq!(sanitize_sheet_name(&"é".repeat(40)), "é".repeat(15));
+        let safe_boundary = format!("a{}", "文".repeat(10));
+        assert_eq!(sanitize_sheet_name(&safe_boundary), safe_boundary);
+        assert_eq!(
+            sanitize_sheet_name(&format!("{safe_boundary}tail")),
+            safe_boundary
+        );
         assert_eq!(sanitize_sheet_name("A:B/C\\D?E*F[G]"), "A B C D E F G");
         assert_eq!(sanitize_sheet_name("   Hello   World   "), "Hello World");
         assert_eq!(

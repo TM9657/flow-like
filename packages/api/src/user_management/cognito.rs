@@ -1,6 +1,4 @@
-use flow_like_types::anyhow;
-
-use crate::state::AppState;
+use flow_like::hub::CognitoConfig;
 
 pub struct CognitoUserManagement {
     client: aws_sdk_cognitoidentityprovider::Client,
@@ -8,23 +6,12 @@ pub struct CognitoUserManagement {
 }
 
 impl CognitoUserManagement {
-    pub async fn new(state: &AppState) -> flow_like_types::Result<Self> {
-        let config = state.aws_client.clone();
-        let client = aws_sdk_cognitoidentityprovider::Client::new(&config);
-        let pool_id = state
-            .platform_config
-            .authentication
-            .as_ref()
-            .ok_or(anyhow!("Missing authentication config"))?
-            .openid
-            .as_ref()
-            .ok_or(anyhow!("Missing OpenID config"))?
-            .cognito
-            .as_ref()
-            .ok_or(anyhow!("Missing Cognito config"))?
-            .user_pool_id
-            .clone();
-        Ok(CognitoUserManagement { client, pool_id })
+    pub fn new(sdk: &aws_config::SdkConfig, config: &CognitoConfig) -> Self {
+        let client = aws_sdk_cognitoidentityprovider::Client::new(sdk);
+        Self {
+            client,
+            pool_id: config.user_pool_id.clone(),
+        }
     }
 
     pub async fn get_attribute(

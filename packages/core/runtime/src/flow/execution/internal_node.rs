@@ -10,6 +10,9 @@ use std::sync::{Arc, Weak, atomic::AtomicU64};
 
 use super::{LogLevel, context::ExecutionContext, internal_pin::InternalPin, log::LogMessage};
 
+#[cfg(test)]
+mod offline_tests;
+
 #[derive(Debug)]
 pub enum InternalNodeError {
     DependencyFailed(String),
@@ -324,6 +327,8 @@ async fn run_node_logic_only(
         return Err(InternalNodeError::ExecutionFailed("Cancelled".to_string()));
     }
 
+    ensure_node_execution(ctx).await?;
+
     ctx.set_state(NodeState::Running).await;
     let node = ctx.node.clone();
 
@@ -377,6 +382,21 @@ async fn run_node_logic_only(
     ctx.set_state(NodeState::Success).await;
     finish_debug_log(ctx, &mut log_message);
     ctx.end_trace();
+    Ok(())
+}
+
+async fn ensure_node_execution(
+    context: &mut ExecutionContext,
+) -> flow_like_types::Result<(), InternalNodeError> {
+    if let Err(error) = context
+        .execution_environment()
+        .ensure_node_execution(context.node.node_name(), context.node.only_offline)
+    {
+        let message = error.to_string();
+        context.log_message(&message, LogLevel::Error);
+        context.set_state(NodeState::Error).await;
+        return Err(InternalNodeError::ExecutionFailed(message));
+    }
     Ok(())
 }
 
@@ -507,6 +527,7 @@ pub struct InternalNode {
     /// Local pin order matches the lookup offsets (sorted by pin index, then id).
     pub pins: Box<[Arc<InternalPin>]>,
     pub logic: Arc<dyn NodeLogic>,
+    only_offline: bool,
     pub exec_calls: AtomicU64,
     lookup: Arc<NodePinLookup>,
 }
@@ -519,6 +540,7 @@ impl InternalNode {
         _name_cache: AHashMap<String, Vec<Arc<InternalPin>>>,
     ) -> Self {
         let meta = NodeMeta::from_node(&node);
+        let only_offline = logic.get_node().only_offline;
         let mut local: Vec<Arc<InternalPin>> = pins.into_values().collect();
         local.sort_by(|a, b| a.index.cmp(&b.index).then_with(|| a.id.cmp(&b.id)));
         let lookup = Arc::new(NodePinLookup::from_pins(&local));
@@ -528,6 +550,7 @@ impl InternalNode {
             meta,
             pins: local.into_boxed_slice(),
             logic,
+            only_offline,
             lookup,
             exec_calls: AtomicU64::new(0),
         }
@@ -542,11 +565,25 @@ impl InternalNode {
         lookup: Arc<NodePinLookup>,
         logic: Arc<dyn NodeLogic>,
     ) -> Self {
+        let only_offline = logic.get_node().only_offline;
+        Self::from_trusted_parts(node, meta, pins, lookup, logic, only_offline)
+    }
+
+    /// Reuse the catalog restriction already resolved by a compiled template.
+    pub(crate) fn from_trusted_parts(
+        node: Arc<Mutex<Node>>,
+        meta: NodeMeta,
+        pins: Box<[Arc<InternalPin>]>,
+        lookup: Arc<NodePinLookup>,
+        logic: Arc<dyn NodeLogic>,
+        only_offline: bool,
+    ) -> Self {
         InternalNode {
             node,
             meta,
             pins,
             logic,
+            only_offline,
             lookup,
             exec_calls: AtomicU64::new(0),
         }
@@ -1341,6 +1378,7 @@ impl InternalNode {
         with_successors: bool,
         dependencies: &AHashMap<String, Vec<Arc<InternalNode>>>,
     ) -> flow_like_types::Result<(), InternalNodeError> {
+        ensure_node_execution(context).await?;
         context.set_state(NodeState::Running).await;
 
         let node = context.node.clone();

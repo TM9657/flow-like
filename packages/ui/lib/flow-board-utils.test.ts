@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { type FlowSceneEdge, edgeNeedsDom } from "./board-canvas/scene";
 import { doPinsMatch, isValidConnection, parseBoard } from "./flow-board-utils";
 import { GEOMETRY_KINDS, geometryMarker } from "./geometry";
 import type {
@@ -637,6 +638,69 @@ const structPin = (name: string, overrides: Partial<IPin> = {}): IPin =>
 		index: 0,
 		...overrides,
 	}) as IPin;
+
+describe("stationary connection dashes", () => {
+	function connectedBoard() {
+		const from = getNode("from", "v1");
+		const to = getNode("to", "v1");
+		from.pins = {};
+		to.pins = {};
+		for (const dataType of [IVariableType.Struct, IVariableType.Execution]) {
+			const output = structPin(`${dataType}_out`, {
+				data_type: dataType,
+			});
+			const input = structPin(`${dataType}_in`, {
+				data_type: dataType,
+				pin_type: IPinType.Input,
+				depends_on: [output.id],
+			});
+			output.connected_to = [input.id];
+			from.pins[output.id] = output;
+			to.pins[input.id] = input;
+		}
+		from.fn_refs = {
+			can_reference_fns: true,
+			can_be_referenced_by_fns: false,
+			fn_refs: [to.id],
+		};
+		to.fn_refs = {
+			can_reference_fns: false,
+			can_be_referenced_by_fns: true,
+			fn_refs: [],
+		};
+		return board({ nodes: { from, to }, layers: {} });
+	}
+
+	test("generated connections do not enable moving dashes", () => {
+		const parsed = parse(connectedBoard());
+		expect(parsed.edges).toHaveLength(3);
+		for (const edge of parsed.edges as FlowSceneEdge[]) {
+			expect(edge).toMatchObject({ animated: false });
+			if (edge.type === "data" || edge.type === "veil") {
+				expect(edgeNeedsDom(edge)).toBe(false);
+			}
+		}
+	});
+
+	test("cached animated edges are rebuilt once and then reused", () => {
+		const source = connectedBoard();
+		const initial = parse(source);
+		const animated = initial.edges.map((edge) => ({
+			...(edge as object),
+			animated: true,
+		}));
+		const updated = parse(source, initial.nodes, animated);
+		expect(updated.edges).toHaveLength(3);
+		for (const [index, edge] of updated.edges.entries()) {
+			expect(edge).not.toBe(animated[index]);
+			expect(edge).toMatchObject({ animated: false });
+		}
+		const unchanged = parse(source, updated.nodes, updated.edges);
+		for (const [index, edge] of unchanged.edges.entries()) {
+			expect(edge).toBe(updated.edges[index]);
+		}
+	});
+});
 
 describe("boundary pin validation", () => {
 	const boundaryCases = [

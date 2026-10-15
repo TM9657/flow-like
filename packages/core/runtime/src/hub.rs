@@ -572,6 +572,7 @@ pub struct Lookup {
     pub email: bool,
     pub name: bool,
     pub username: bool,
+    #[serde(default)]
     pub preferred_username: bool,
     pub avatar: bool,
     pub additional_information: bool,
@@ -590,6 +591,34 @@ impl Default for Lookup {
             additional_information: true,
             description: true,
             created_at: true,
+        }
+    }
+}
+
+#[cfg(test)]
+mod lookup_compatibility_tests {
+    use super::Lookup;
+
+    #[test]
+    fn legacy_lookup_keeps_existing_fields_without_enabling_new_disclosure() {
+        let mut legacy = serde_json::to_value(Lookup::default()).unwrap();
+        legacy.as_object_mut().unwrap().remove("preferred_username");
+        let parsed: Lookup = serde_json::from_value(legacy.clone()).unwrap();
+        assert!(!parsed.preferred_username);
+        let mut roundtrip = serde_json::to_value(parsed).unwrap();
+        roundtrip
+            .as_object_mut()
+            .unwrap()
+            .remove("preferred_username");
+        assert_eq!(roundtrip, legacy);
+        for enabled in [false, true] {
+            legacy["preferred_username"] = serde_json::json!(enabled);
+            assert_eq!(
+                serde_json::from_value::<Lookup>(legacy.clone())
+                    .unwrap()
+                    .preferred_username,
+                enabled
+            );
         }
     }
 }

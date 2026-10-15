@@ -247,6 +247,21 @@ impl ExecutionEnvironment {
         !matches!(self, Self::Server)
     }
 
+    /// Enforces the registered node's execution restriction. The flag must
+    /// come from the host's catalog, since a board can alter its own metadata.
+    pub fn ensure_node_execution(
+        self,
+        node_name: &str,
+        only_offline: bool,
+    ) -> flow_like_types::Result<()> {
+        if self == Self::Server && only_offline {
+            return Err(flow_like_types::anyhow!(
+                "Node '{node_name}' requires local execution and cannot run in server-side execution"
+            ));
+        }
+        Ok(())
+    }
+
     /// The environment a server-side entry point should run under: the
     /// operator override if one is set, otherwise [`Self::Server`].
     pub fn server_default() -> Self {
@@ -1211,6 +1226,7 @@ impl InternalRun {
         run_id: Option<String>,
         channel: Option<Arc<dyn Channel>>,
     ) -> flow_like_types::Result<Self> {
+        template.ensure_execution_environment(handler.execution_environment)?;
         let board = template.board.clone();
         let oauth_tokens: AHashMap<String, OAuthToken> = oauth_tokens.into_iter().collect();
 
@@ -1399,12 +1415,13 @@ impl InternalRun {
                 can_seed_run: tn.can_seed_run,
                 function_layer_id: tn.function_layer_id.clone(),
             };
-            let internal_node = Arc::new(InternalNode::from_parts(
+            let internal_node = Arc::new(InternalNode::from_trusted_parts(
                 tn.node.clone(),
                 meta,
                 node_pins,
                 tn.lookup.clone(),
                 tn.logic.clone(),
+                tn.only_offline,
             ));
 
             for internal_pin in internal_node.pins.iter() {
@@ -2561,6 +2578,266 @@ mod tests {
             Some(false),
         )
         .into_callback()
+    }
+
+    mod offline_node_execution {
+        use super::*;
+        use crate::flow::compiled::compile_board_with_catalog;
+        use std::sync::atomic::AtomicU64;
+
+        struct ProbeLogic {
+            calls: Arc<AtomicU64>,
+            only_offline: bool,
+            pure: bool,
+        }
+
+        #[async_trait]
+        impl NodeLogic for ProbeLogic {
+            fn get_node(&self) -> Node {
+                let mut node = Node::new("offline_probe", "Probe", "", "Tests");
+                node.set_only_offline(self.only_offline);
+                node.add_output_pin("value", "Value", "", VariableType::String);
+                if !self.pure {
+                    node.add_output_pin("exec", "Out", "", VariableType::Execution);
+                }
+                node
+            }
+
+            async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+                self.calls.fetch_add(1, Ordering::Relaxed);
+                context
+                    .set_pin_value("value", flow_like_types::json::json!("probe"))
+                    .await
+            }
+        }
+
+        async fn template(
+            only_offline: bool,
+            pure: bool,
+            in_layer: bool,
+        ) -> (Arc<FlowLikeState>, Arc<CompiledRunTemplate>, Arc<AtomicU64>) {
+            let calls = Arc::new(AtomicU64::new(0));
+            let logic = Arc::new(ProbeLogic {
+                calls: calls.clone(),
+                only_offline,
+                pure,
+            });
+            let state = state_with_node_logics(vec![logic.clone(), Arc::new(NoopLogic)]).await;
+            let mut board = Board::new_detached(Some("offline-policy".into()), Path::default());
+            let mut node = logic.get_node();
+            node.id = "probe".into();
+            node.set_start(true);
+            // A workflow author can forge both the source and compiled flag.
+            node.only_offline = !only_offline;
+            if in_layer {
+                let mut layer =
+                    Layer::new("function".into(), "Function".into(), LayerType::Function);
+                layer.nodes.insert(node.id.clone(), node);
+                board.layers.insert(layer.id.clone(), layer);
+            } else {
+                board.nodes.insert(node.id.clone(), node);
+            }
+            let registry = state.node_registry.read().await.node_registry.clone();
+            let mut compiled = compile_board_with_catalog(&board, &registry).unwrap();
+            compiled
+                .nodes
+                .iter_mut()
+                .for_each(|node| node.only_offline = !only_offline);
+            let template =
+                CompiledRunTemplate::from_compiled(&compiled, &registry, Path::default())
+                    .expect("template accepts source metadata before host policy is applied");
+            (state, Arc::new(template), calls)
+        }
+
+        fn server_state() -> Arc<FlowLikeState> {
+            let mut state =
+                FlowLikeState::new(FlowLikeConfig::new(), HTTPClient::new_without_refetch());
+            state.execution_environment = ExecutionEnvironment::Server;
+            Arc::new(state)
+        }
+
+        async fn run(
+            state: &Arc<FlowLikeState>,
+            template: Arc<CompiledRunTemplate>,
+            entry: &str,
+        ) -> flow_like_types::Result<InternalRun> {
+            InternalRun::from_template(
+                "test-app",
+                template,
+                None,
+                state,
+                &Profile::default(),
+                &RunPayload {
+                    id: entry.into(),
+                    payload: None,
+                    runtime_variables: None,
+                    filter_secrets: None,
+                },
+                false,
+                test_intercom_callback(),
+                None,
+                None,
+                std::collections::HashMap::new(),
+                None,
+                None,
+            )
+            .await
+        }
+
+        async fn context(
+            state: &Arc<FlowLikeState>,
+            run: &InternalRun,
+            id: &str,
+        ) -> ExecutionContext {
+            ExecutionContext::with_meta(
+                run.nodes.clone(),
+                &Arc::downgrade(&run.run),
+                &run.meta,
+                state,
+                &run.nodes[id],
+                &run.variables,
+                &run.cache,
+                LogLevel::Debug,
+                run.board.stage.clone(),
+                run.profile.clone(),
+                run.callback.clone(),
+                run.completion_callbacks.clone(),
+                None,
+                None,
+                run.oauth_tokens.clone(),
+                Some(run.channel.clone()),
+            )
+            .await
+        }
+
+        #[tokio::test]
+        async fn forged_flags_and_cached_templates_cannot_enable_offline_nodes_on_servers() {
+            for pure in [false, true] {
+                for in_layer in [false, true] {
+                    let (local, template, calls) = template(true, pure, in_layer).await;
+                    let mut local_run = run(&local, template.clone(), "probe").await.unwrap();
+                    local_run.execute(local).await;
+                    assert!(matches!(local_run.get_status().await, RunStatus::Success));
+                    assert_eq!(calls.load(Ordering::Relaxed), 1);
+
+                    // Reuse the same immutable template after a successful local run.
+                    let error = run(&server_state(), template, "probe").await.err().unwrap();
+                    assert!(error.to_string().contains("requires local execution"));
+                    assert_eq!(calls.load(Ordering::Relaxed), 1);
+                }
+            }
+        }
+
+        #[test]
+        fn catalog_restriction_changes_invalidate_cached_templates() {
+            let logic = Arc::new(ProbeLogic {
+                calls: Arc::new(AtomicU64::new(0)),
+                only_offline: false,
+                pure: false,
+            });
+            let mut registry = FlowNodeRegistryInner::new(1);
+            let mut node = logic.get_node();
+            registry.insert(node.clone(), logic.clone());
+            let fingerprint = registry.fingerprint();
+            node.only_offline = true;
+            registry.insert(node, logic);
+            assert_ne!(registry.fingerprint(), fingerprint);
+        }
+
+        #[tokio::test]
+        async fn catalog_allows_server_safe_nodes_despite_forged_source_flags() {
+            let (_, template, calls) = template(false, false, false).await;
+            let state = server_state();
+            let mut run = run(&state, template, "probe").await.unwrap();
+            run.execute(state).await;
+            assert!(matches!(run.get_status().await, RunStatus::Success));
+            assert_eq!(calls.load(Ordering::Relaxed), 1);
+        }
+
+        #[tokio::test]
+        async fn environment_changes_are_checked_by_both_node_dispatch_paths() {
+            for mapped in [false, true] {
+                let (state, template, calls) = template(true, false, false).await;
+                let mut run = run(&state, template, "probe").await.unwrap();
+                run.set_execution_environment(ExecutionEnvironment::Server);
+                let mut context = context(&state, &run, "probe").await;
+                let result = if mapped {
+                    InternalNode::trigger_with_dependencies(
+                        &mut context,
+                        &mut None,
+                        false,
+                        &AHashMap::new(),
+                    )
+                    .await
+                } else {
+                    InternalNode::trigger(&mut context, &mut None, false).await
+                };
+                assert!(result.is_err());
+                assert_eq!(calls.load(Ordering::Relaxed), 0);
+                assert!(matches!(context.get_state(), NodeState::Error));
+            }
+        }
+
+        #[tokio::test]
+        async fn pure_dependencies_inherit_the_server_restriction() {
+            let (state, source_template, calls) = template(true, true, false).await;
+            let mut board = (*source_template.board).clone();
+            let mut consumer = NoopLogic.get_node();
+            consumer.id = "consumer".into();
+            let input = consumer
+                .add_input_pin("value", "Value", "", VariableType::String)
+                .id
+                .clone();
+            let output = board.nodes["probe"]
+                .get_pin_by_name("value")
+                .unwrap()
+                .id
+                .clone();
+            board.nodes.insert(consumer.id.clone(), consumer);
+            connect_pins(&mut board, "probe", &output, "consumer", &input).unwrap();
+            let registry = state.node_registry.read().await.node_registry.clone();
+            let template =
+                Arc::new(CompiledRunTemplate::from_board(Arc::new(board), &registry).unwrap());
+            let mut run = run(&state, template, "consumer").await.unwrap();
+            run.set_execution_environment(ExecutionEnvironment::Server);
+            run.execute(state).await;
+            assert!(matches!(run.get_status().await, RunStatus::Failed));
+            assert_eq!(calls.load(Ordering::Relaxed), 0);
+        }
+
+        #[tokio::test]
+        async fn standalone_contexts_inherit_the_host_environment() {
+            let (local, template, calls) = template(true, false, false).await;
+            let run = run(&local, template, "probe").await.unwrap();
+            let mut context = ExecutionContext::new(
+                run.nodes.clone(),
+                &Arc::downgrade(&run.run),
+                &server_state(),
+                &run.nodes["probe"],
+                &run.variables,
+                &run.cache,
+                LogLevel::Debug,
+                run.board.stage.clone(),
+                run.profile.clone(),
+                run.callback.clone(),
+                run.completion_callbacks.clone(),
+                None,
+                None,
+                run.oauth_tokens.clone(),
+                Some(run.channel.clone()),
+            )
+            .await;
+            assert_eq!(
+                context.execution_environment(),
+                ExecutionEnvironment::Server
+            );
+            assert!(
+                InternalNode::trigger(&mut context, &mut None, false)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(calls.load(Ordering::Relaxed), 0);
+        }
     }
 
     mod geometry_defaults {

@@ -33,6 +33,15 @@ pub struct PinContext {
     /// Only included if pin has a non-empty default value
     #[serde(rename = "v", skip_serializing_if = "Option::is_none")] // "value" abbreviated
     pub default_value: Option<String>,
+    /// The input is configured, but its sensitive value is omitted from model context.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub default_redacted: bool,
+}
+
+impl PinContext {
+    pub fn has_default_value(&self) -> bool {
+        self.default_value.is_some() || self.default_redacted
+    }
 }
 
 /// Compact edge representation
@@ -181,6 +190,7 @@ fn build_layer_contexts(board: &Board) -> Vec<LayerContext> {
                     name: p.name.clone(),
                     type_name: format!("{:?}", p.data_type),
                     default_value: None,
+                    default_redacted: false,
                 })
                 .collect();
 
@@ -192,6 +202,7 @@ fn build_layer_contexts(board: &Board) -> Vec<LayerContext> {
                     name: p.name.clone(),
                     type_name: format!("{:?}", p.data_type),
                     default_value: None,
+                    default_redacted: false,
                 })
                 .collect();
 
@@ -275,10 +286,12 @@ pub fn prepare_context(board: &Board, selected_node_ids: &[String]) -> Result<Gr
                         .as_ref()
                         .map(|v| String::from_utf8_lossy(v).to_string())
                         .filter(|s| !s.is_empty() && s != "null");
+                    let default_redacted = p.is_sensitive() && default_val.is_some();
                     PinContext {
                         name: p.name.clone(),
                         type_name: format!("{:?}", p.data_type),
-                        default_value: default_val,
+                        default_value: default_val.filter(|_| !default_redacted),
+                        default_redacted,
                     }
                 })
                 .collect();
@@ -291,6 +304,7 @@ pub fn prepare_context(board: &Board, selected_node_ids: &[String]) -> Result<Gr
                     name: p.name.clone(),
                     type_name: format!("{:?}", p.data_type),
                     default_value: None, // Outputs don't have default values
+                    default_redacted: false,
                 })
                 .collect();
 
@@ -323,6 +337,7 @@ pub fn prepare_context(board: &Board, selected_node_ids: &[String]) -> Result<Gr
             let default_val = var
                 .default_value
                 .as_ref()
+                .filter(|_| !var.secret)
                 .map(|v| String::from_utf8_lossy(v).to_string())
                 .filter(|s| !s.is_empty() && s != "null");
             VariableContext {
@@ -407,6 +422,92 @@ mod tests {
     use crate::state::{FlowLikeConfig, FlowLikeState};
     use crate::utils::http::HTTPClient;
     use flow_like_storage::Path;
+
+    #[test]
+    fn graph_context_omits_secrets_and_preserves_public_defaults() {
+        use crate::flow::{pin::PinOptions, variable::Variable};
+
+        let mut board = Board::new_detached(Some("secret-context".into()), Path::default());
+        let mut node = Node::new("http_fetch", "Fetch", "", "web");
+        for (name, sensitive) in [("token", true), ("url", false)] {
+            let pin = node.add_input_pin(name, name, "", VariableType::String);
+            pin.default_value = Some(format!("\"{name}-value\"").into_bytes());
+            pin.options = Some(PinOptions::new().set_sensitive(sensitive).build());
+        }
+        board.nodes.insert(node.id.clone(), node);
+        for (name, secret) in [("password", true), ("label", false)] {
+            let mut variable = Variable::new(name, VariableType::String, ValueType::Normal);
+            variable.secret = secret;
+            variable.default_value = Some(format!("\"{name}-value\"").into_bytes());
+            board.variables.insert(variable.id.clone(), variable);
+        }
+
+        let context = prepare_context(&board, &[]).unwrap();
+        for pin in &context.nodes[0].inputs {
+            assert_eq!(pin.default_value.is_some(), pin.name == "url");
+            assert_eq!(pin.default_redacted, pin.name == "token");
+            assert!(pin.has_default_value());
+        }
+        for variable in &context.variables {
+            assert_eq!(variable.default_value.is_some(), variable.name == "label");
+        }
+        let serialized = serde_json::to_string(&context).unwrap();
+        assert!(!serialized.contains("token-value"));
+        assert!(!serialized.contains("password-value"));
+        assert!(serialized.contains("url-value"));
+        assert!(serialized.contains("label-value"));
+        assert_eq!(
+            build_unconfigured_nodes_output(&context),
+            "All nodes are configured - no missing non-execution inputs found."
+        );
+        let details: serde_json::Value =
+            serde_json::from_str(&build_node_details_output(&context.nodes[0].id, &context))
+                .unwrap();
+        for pin in details["inputs"].as_array().unwrap() {
+            if pin["name"] == "token" {
+                assert_eq!(pin["default_redacted"], true);
+                assert!(pin["default_value"].is_null());
+            } else {
+                assert!(pin.get("default_redacted").is_none());
+                assert_eq!(pin["default_value"], "\"url-value\"");
+            }
+        }
+    }
+
+    #[test]
+    fn absent_sensitive_defaults_stay_unconfigured() {
+        use crate::flow::pin::PinOptions;
+
+        for value in [None, Some(Vec::new()), Some(b"null".to_vec())] {
+            let mut board = Board::new_detached(Some("empty-secret".into()), Path::default());
+            let mut node = Node::new("http_fetch", "Fetch", "", "web");
+            let pin = node.add_input_pin("token", "Token", "", VariableType::String);
+            pin.default_value = value;
+            pin.options = Some(PinOptions::new().set_sensitive(true).build());
+            board.nodes.insert(node.id.clone(), node);
+
+            let context = prepare_context(&board, &[]).unwrap();
+            let pin = &context.nodes[0].inputs[0];
+            assert!(!pin.default_redacted);
+            assert!(!pin.has_default_value());
+            let missing: serde_json::Value =
+                serde_json::from_str(&build_unconfigured_nodes_output(&context)).unwrap();
+            assert_eq!(missing[0]["missing_inputs"][0]["pin"], "token");
+        }
+    }
+
+    #[test]
+    fn legacy_pin_contexts_keep_their_serialized_shape() {
+        for legacy in [
+            serde_json::json!({ "n": "token", "t": "String" }),
+            serde_json::json!({ "n": "url", "t": "String", "v": "\"public-value\"" }),
+        ] {
+            let pin: PinContext = serde_json::from_value(legacy.clone()).unwrap();
+            assert!(!pin.default_redacted);
+            assert_eq!(pin.has_default_value(), legacy.get("v").is_some());
+            assert_eq!(serde_json::to_value(pin).unwrap(), legacy);
+        }
+    }
 
     fn layout_fixture_board() -> (Board, String, String, String) {
         let mut board = Board::new_detached(Some("layout-context".to_string()), Path::default());

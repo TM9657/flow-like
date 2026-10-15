@@ -1079,6 +1079,7 @@ export function parseBoard(
 
 			if (
 				oldEdge &&
+				!oldEdge.animated &&
 				visible === connectedVisible &&
 				oldEdge.source === sourceNodeId &&
 				oldEdge.target === targetNodeId &&
@@ -1103,7 +1104,7 @@ export function parseBoard(
 						data_type: pin.data_type,
 						reduceMotion: reduceEdgeMotion,
 					},
-					animated: !reduceEdgeMotion && pin.data_type !== "Execution",
+					animated: false,
 					reconnectable: true,
 					target: targetNodeId,
 					targetHandle: conntectedPin.id,
@@ -1140,6 +1141,7 @@ export function parseBoard(
 
 				if (
 					existingEdge &&
+					!existingEdge.animated &&
 					existingEdge.selected === selected.has(edgeId) &&
 					existingEdge.data?.pathType === connectionMode &&
 					existingEdge.data?.reduceMotion === reduceEdgeMotion
@@ -1160,7 +1162,7 @@ export function parseBoard(
 							pathType: connectionMode,
 							reduceMotion: reduceEdgeMotion,
 						},
-						animated: !reduceEdgeMotion,
+						animated: false,
 						reconnectable: true,
 						style: {
 							stroke: "var(--pin-fn-ref)",
