@@ -1,5 +1,6 @@
 "use client";
-import { useStore } from "@xyflow/react";
+import { useStore } from "./board-runtime";
+
 import { ArrowRight } from "lucide-react";
 import { memo, useMemo, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";

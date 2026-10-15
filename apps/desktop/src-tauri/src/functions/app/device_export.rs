@@ -471,6 +471,69 @@ fn check_pack(pack: &BitPack) -> Result<()> {
     Ok(())
 }
 
+/// Hub inventories may repeat the root or cached dependencies. A deployment carries each
+/// identity once, with local dependency IDs checked against the selected source hubs.
+fn deployment_pack(root: &Bit, pack: BitPack) -> Result<BitPack> {
+    check_pack(&pack)?;
+    let mut selected =
+        BTreeMap::from([(root.id.clone(), (root.clone(), public_bit_metadata(root)?))]);
+    for item in pack.bits {
+        identifier(&item.id)?;
+        if let Some((previous, metadata)) = selected.get(&item.id) {
+            ensure!(
+                previous.hub == item.hub,
+                "Model ID {} appears on multiple hubs in its resolved inventory",
+                item.id
+            );
+            // The selected root has authoritative metadata; the dependency endpoint can
+            // return an older copy with fewer fields before Bit::pack appends the root.
+            if item.id != root.id {
+                ensure!(
+                    *metadata == public_bit_metadata(&item)?,
+                    "Resolved dependencies disagree about Bit {}",
+                    item.id
+                );
+            }
+            continue;
+        }
+        let metadata = public_bit_metadata(&item)?;
+        selected.insert(item.id.clone(), (item, metadata));
+    }
+    let hubs: HashMap<_, _> = selected
+        .iter()
+        .map(|(id, (bit, _))| (id.clone(), bit.hub.clone()))
+        .collect();
+    let root = selected
+        .remove(&root.id)
+        .context("Selected root is missing")?;
+    let mut bits = Vec::with_capacity(selected.len() + 1);
+    for (mut item, _) in std::iter::once(root).chain(selected.into_values()) {
+        let mut seen = HashSet::new();
+        let mut dependencies = Vec::new();
+        for reference in &item.dependencies {
+            let (hub, id) = reference
+                .rsplit_once(':')
+                .map_or((None, reference.as_str()), |(hub, id)| (Some(hub), id));
+            ensure!(
+                hubs.get(id)
+                    .is_some_and(|actual| hub.is_none_or(|expected| actual == expected)),
+                "Model {}:{} is missing dependency {} from its resolved inventory",
+                item.hub,
+                item.id,
+                reference
+            );
+            if seen.insert(id.to_owned()) {
+                dependencies.push(id.to_owned());
+            }
+        }
+        item.dependencies = dependencies;
+        bits.push(item);
+    }
+    let pack = BitPack { bits };
+    check_pack(&pack)?;
+    Ok(pack)
+}
+
 /// The pack members whose files travel in the artifact: all but the model-store assets.
 fn carried_pack(pack: &BitPack, stored: &[PackagedBitAsset]) -> BitPack {
     let stored_ids = stored
@@ -570,7 +633,8 @@ async fn bit_pin(
     snapshot: &mut DeviceProjectSnapshot,
     files: &mut BTreeMap<String, (u64, String)>,
 ) -> Result<BitPin> {
-    let pack = bit.pack(sources.state.clone()).await?;
+    let pack = deployment_pack(bit, bit.pack(sources.state.clone()).await?)?;
+    let bit = &pack.bits[0];
     let (public_bit, public_dependencies) = public_pack_metadata(bit, &pack)?;
     let stored = stored_assets(sources, bit, &pack).await?;
     let carried = carried_pack(&pack, &stored);
@@ -910,6 +974,132 @@ pub async fn release_device_project_export(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn dependency(id: &str, hub: &str, dependencies: &[&str]) -> Bit {
+        Bit {
+            id: id.into(),
+            hub: hub.into(),
+            dependencies: dependencies.iter().map(|id| (*id).to_owned()).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn deployment_inventory_deduplicates_cached_members_and_resolves_qualified_edges() {
+        let mut root = dependency(
+            "model",
+            "models.test",
+            &["models.test:tokenizer", "tokenizer"],
+        );
+        root.parameters = serde_json::json!({"model":"selected"});
+        let stale_root = dependency("model", "models.test", &["models.test:tokenizer"]);
+        let mut tokenizer = dependency("tokenizer", "models.test", &["assets.test:config"]);
+        tokenizer.download_link = Some("https://models.test/tokenizer?token=first".into());
+        let mut repeated = tokenizer.clone();
+        repeated.download_link = Some("https://models.test/tokenizer?token=second".into());
+        let config = dependency("config", "assets.test", &[]);
+        let pack = deployment_pack(
+            &root,
+            BitPack {
+                bits: vec![
+                    stale_root,
+                    tokenizer.clone(),
+                    config,
+                    repeated,
+                    root.clone(),
+                ],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(pack.bits.len(), 3);
+        assert_eq!(pack.bits[0].id, root.id);
+        let (public_root, dependencies) = public_pack_metadata(&pack.bits[0], &pack).unwrap();
+        assert_eq!(public_root["parameters"], root.parameters);
+        assert_eq!(
+            public_root["dependencies"],
+            serde_json::json!(["tokenizer"])
+        );
+        assert_eq!(dependencies.len(), 2);
+        assert_eq!(dependencies[0]["id"], "config");
+        assert_eq!(
+            dependencies[1]["dependencies"],
+            serde_json::json!(["config"])
+        );
+        assert_eq!(tokenizer.dependencies, vec!["assets.test:config"]);
+        assert_eq!(
+            root.dependencies,
+            vec!["models.test:tokenizer", "tokenizer"]
+        );
+    }
+
+    #[test]
+    fn deployment_inventory_checks_raw_bounds_before_deduplication() {
+        let root = dependency("model", "models.test", &[]);
+        let error = deployment_pack(
+            &root,
+            BitPack {
+                bits: vec![root.clone(); 2050],
+            },
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Too many model dependency files")
+        );
+    }
+
+    #[test]
+    fn deployment_inventory_rejects_conflicting_dependency_metadata() {
+        let root = dependency("model", "models.test", &["tokenizer"]);
+        let tokenizer = dependency("tokenizer", "models.test", &[]);
+        let mut conflicting = tokenizer.clone();
+        conflicting.hash = "different-content".into();
+        let error = deployment_pack(
+            &root,
+            BitPack {
+                bits: vec![tokenizer, conflicting],
+            },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("disagree about Bit tokenizer"));
+    }
+
+    #[test]
+    fn deployment_inventory_rejects_cross_hub_id_collisions() {
+        let root = dependency("model", "models.test", &["tokenizer"]);
+        for id in ["model", "tokenizer"] {
+            let error = deployment_pack(
+                &root,
+                BitPack {
+                    bits: vec![
+                        dependency("tokenizer", "models.test", &[]),
+                        dependency(id, "other.test", &[]),
+                    ],
+                },
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("appears on multiple hubs"));
+        }
+    }
+
+    #[test]
+    fn deployment_inventory_rejects_missing_or_wrong_hub_dependencies() {
+        for reference in ["missing", "assets.test:missing", "other.test:tokenizer"] {
+            let root = dependency("model", "models.test", &[reference]);
+            let error = deployment_pack(
+                &root,
+                BitPack {
+                    bits: vec![dependency("tokenizer", "assets.test", &[])],
+                },
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains(reference));
+            assert!(error.to_string().contains("is missing dependency"));
+        }
+    }
+
     fn inline_model(provider: &str) -> flow_like::bit::Bit {
         flow_like::bit::Bit {
             id: "inline-model".into(),

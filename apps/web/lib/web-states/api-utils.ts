@@ -16,6 +16,7 @@ import {
 } from "@flow-like/flow-like-ui/lib/request-deadline";
 import type { AuthContextProps } from "react-oidc-context";
 import { reportUnauthorized } from "../auth-session";
+import { fetchWithSession } from "../session-request";
 
 const PROTECTED_APP_ROUTE_SEGMENTS = new Set([
 	"payments",
@@ -142,9 +143,6 @@ export async function apiFetch<T>(
 	new Headers(options?.headers).forEach((value, key) =>
 		headers.set(key, value),
 	);
-	const usesAccountToken =
-		headers.get("Authorization") ===
-		(accessToken ? `Bearer ${accessToken}` : null);
 
 	const url = constructApiUrl(path);
 	const safePath = redactApiPathSecrets(path) ?? path;
@@ -155,16 +153,17 @@ export async function apiFetch<T>(
 	return withRequestDeadline<T>(
 		safePath,
 		async (deadline) => {
-			const response = await fetch(url, {
-				...init,
-				headers,
-				signal: deadline.signal,
-			});
+			const response = await fetchWithSession(
+				url,
+				{
+					...init,
+					headers,
+					signal: deadline.signal,
+				},
+				auth,
+			);
 
 			if (!response.ok) {
-				if (response.status === 401 && usesAccountToken) {
-					reportUnauthorized(auth, accessToken);
-				}
 				const errorText = await response.text();
 				const error = apiResponseError(response, errorText, path);
 				console.error(

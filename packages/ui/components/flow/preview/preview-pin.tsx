@@ -1,5 +1,5 @@
 import { useTranslation } from "@flow-like/locales";
-import { Handle, Position } from "@xyflow/react";
+import { Position } from "@xyflow/react";
 import { EllipsisVerticalIcon, GripIcon, ListIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -12,6 +12,7 @@ import {
 import type { INode } from "../../../lib/schema/flow/node";
 import { type IPin, IValueType } from "../../../lib/schema/flow/pin";
 import { DynamicImage } from "../../ui/dynamic-image";
+import { Handle } from "../board-runtime-primitives";
 import { PIN_LABEL_CAP_SHARED } from "../flow-pin/pin-label-caps";
 import { typeToColor } from "../utils";
 import { PinPreviewEdit } from "./preview-pin-edit";

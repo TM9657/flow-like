@@ -9,6 +9,7 @@ import type {
 } from "@flow-like/flow-like-ui";
 import { NotificationIcon } from "@flow-like/flow-like-ui/components/notifications/notification-icon";
 import { remoteNotificationIcon } from "@flow-like/flow-like-ui/lib/notification-icon";
+import { isScriptNavigationUrl } from "@flow-like/flow-like-ui/lib/navigation-url";
 import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
@@ -291,6 +292,7 @@ export default function NotificationProvider({
 			notification.data,
 		);
 		if (link && typeof window !== "undefined") {
+			if (isScriptNavigationUrl(link)) return;
 			const appPath = appPathFromNotificationLink(link);
 			if (appPath) {
 				router.push(appPath);

@@ -43,7 +43,11 @@ let renderedNodes: {
 	position: { x: number; y: number };
 	width: number;
 	height: number;
+	selected?: boolean;
 }[] = [];
+let renderedEdges: { selected?: boolean }[] = [];
+const getNodes = () => renderedNodes;
+const getEdges = () => renderedEdges;
 const getInternalNode = () => undefined;
 const fitView = mock(
 	async (_options: { nodes: { id: string }[]; maxZoom?: number }) => true,
@@ -51,7 +55,7 @@ const fitView = mock(
 mock.module("@xyflow/react", () => ({
 	...flow,
 	useNodes: () => renderedNodes,
-	useReactFlow: () => ({ getInternalNode, fitView }),
+	useReactFlow: () => ({ getInternalNode, getNodes, getEdges, fitView }),
 	useViewport: () => ({ x: 0, y: 0, zoom: 1 }),
 	Panel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 	ViewportPortal: ({ children }: { children: ReactNode }) => (
@@ -78,6 +82,7 @@ afterEach(async () => {
 	});
 	window.document.body.innerHTML = "";
 	renderedNodes = [];
+	renderedEdges = [];
 	fitView.mockClear();
 });
 afterAll(() => {
@@ -645,6 +650,52 @@ describe("GroupSuggestionsOverlay", () => {
 		expect(actions).toEqual([]);
 		press(strip, "Escape");
 		expect(actions).toEqual(["close"]);
+	});
+
+	test("native graph selection keeps review shortcuts out of canvas focus", async () => {
+		const actions: string[] = [];
+		const record = (name: string) => () => actions.push(name);
+		const { container } = await render(
+			<GroupSuggestionsOverlay
+				{...callbacks}
+				suggestions={[suggestion("a")]}
+				preview={false}
+				busy={false}
+				onNext={record("next")}
+				onPreview={record("preview")}
+				onSkip={record("skip")}
+				onCollapse={record("collapse")}
+				onClose={record("close")}
+			/>,
+		);
+		const canvasInput = window.document.createElement("div");
+		canvasInput.dataset.boardCanvasInput = "true";
+		container.append(canvasInput);
+		renderedNodes = [
+			{
+				id: "native-node",
+				position: { x: 0, y: 0 },
+				width: 150,
+				height: 58,
+				selected: true,
+			},
+		];
+		for (const key of ["ArrowRight", "p", "s", "Enter"]) {
+			expect(press(canvasInput, key).defaultPrevented).toBe(false);
+		}
+		renderedNodes = [];
+		renderedEdges = [{ selected: true }];
+		for (const key of ["ArrowRight", "p", "s", "Enter"]) {
+			expect(press(canvasInput, key).defaultPrevented).toBe(false);
+		}
+		expect(actions).toEqual([]);
+		expect(press(canvasInput, "Escape").defaultPrevented).toBe(true);
+		expect(actions).toEqual(["close"]);
+		renderedEdges = [];
+		for (const key of ["ArrowRight", "p", "s", "Enter"]) {
+			expect(press(canvasInput, key).defaultPrevented).toBe(true);
+		}
+		expect(actions).toEqual(["close", "next", "preview", "skip", "collapse"]);
 	});
 
 	test("finished review summarises decisions and offers another search until exhausted", async () => {

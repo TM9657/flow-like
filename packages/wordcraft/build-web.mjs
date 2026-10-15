@@ -262,6 +262,18 @@ if (!cached()) {
 		"File tab",
 	);
 	writeFileSync(join(source, ribbonPath), ribbon);
+	const canvasPath = "crates/ui-egui/src/canvas.rs";
+	writeFileSync(
+		join(source, canvasPath),
+		replaceOnce(
+			original(canvasPath),
+			"                let px = img.to_straight();\n                let ci = egui::ColorImage::from_rgba_unmultiplied([img.width as usize, img.height as usize], &px);",
+			// The rasterizer already returns premultiplied RGBA. Reuse those pixels
+			// without copying and converting the entire page through straight alpha.
+			"                let ci = egui::ColorImage::from_rgba_premultiplied([img.width as usize, img.height as usize], &img.pixels);",
+			"page texture upload",
+		),
+	);
 	const manifestPath = "apps/wordcraft-web/Cargo.toml";
 	writeFileSync(
 		join(source, manifestPath),

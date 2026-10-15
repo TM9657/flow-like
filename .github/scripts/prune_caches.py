@@ -44,7 +44,7 @@ def plan_deletions(entries, now, keep=1, in_flight=IN_FLIGHT):
 
     doomed = []
     for (_, _), members in sorted(groups.items()):
-        members.sort(key=lambda item: (parse_time(item["last_accessed_at"]) or parse_time(item["created_at"])),
+        members.sort(key=lambda item: (parse_time(item["created_at"]) or parse_time(item["last_accessed_at"])),
                      reverse=True)
         for entry in members[keep:]:
             touched = parse_time(entry["last_accessed_at"]) or parse_time(entry["created_at"])

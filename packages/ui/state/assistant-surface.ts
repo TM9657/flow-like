@@ -53,6 +53,10 @@ export interface AssistantBoardSurface {
 	focusNode: (nodeId: string) => void;
 	/** Replaces the canvas selection with the given node ids. */
 	selectNodes: (nodeIds: string[]) => void;
+	/** Highlights a code target without changing selection or the viewport; undefined clears it. */
+	highlightNode?: (nodeId?: string) => void;
+	/** Highlights a shared scope independently of the code target; undefined clears it. */
+	highlightNodes?: (nodeIds?: string[]) => void;
 	/** Clears the run context attached to the board. */
 	clearRunContext: () => void;
 }

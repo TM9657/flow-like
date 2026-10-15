@@ -275,23 +275,7 @@ async fn fetch_image_bytes(
                 response.status()
             ));
         }
-        if let Some(length) = response.content_length()
-            && length as usize > MAX_IMAGE_BYTES
-        {
-            return Err(flow_like_types::anyhow!(
-                "image exceeds the {MAX_IMAGE_BYTES} byte limit"
-            ));
-        }
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(flow_like_types::reqwest::Error::without_url)?;
-        if bytes.len() > MAX_IMAGE_BYTES {
-            return Err(flow_like_types::anyhow!(
-                "image exceeds the {MAX_IMAGE_BYTES} byte limit"
-            ));
-        }
-        return Ok(bytes.to_vec());
+        return collect_image_response(response, MAX_IMAGE_BYTES).await;
     }
 
     let relative = url.strip_prefix("storage://").unwrap_or(url);
@@ -303,4 +287,71 @@ async fn fetch_image_bytes(
     let mut path = FlowPath::from_storage_dir(context, false).await?;
     path.path = format!("{}/{}", path.path.trim_end_matches('/'), relative);
     path.get(context, false).await
+}
+
+#[cfg(feature = "execute")]
+async fn collect_image_response(
+    mut response: flow_like_types::reqwest::Response,
+    limit: usize,
+) -> flow_like_types::Result<Vec<u8>> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
+        return Err(flow_like_types::anyhow!(
+            "image exceeds the {limit} byte limit"
+        ));
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(flow_like_types::reqwest::Error::without_url)?
+    {
+        if chunk.len() > limit.saturating_sub(bytes.len()) {
+            return Err(flow_like_types::anyhow!(
+                "image exceeds the {limit} byte limit"
+            ));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+#[cfg(all(test, feature = "execute"))]
+mod tests {
+    use super::collect_image_response;
+    use flow_like_types::{reqwest, tokio};
+
+    #[tokio::test]
+    async fn image_download_limit_applies_without_content_length() {
+        let response = || http::Response::new(reqwest::Body::from("12345678")).into();
+        assert!(collect_image_response(response(), 7).await.is_err());
+        assert_eq!(
+            collect_image_response(response(), 8).await.unwrap(),
+            b"12345678"
+        );
+    }
+
+    #[tokio::test]
+    async fn image_download_stops_reading_after_crossing_limit() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let chunks_read = Arc::new(AtomicUsize::new(0));
+        let stream_reads = Arc::clone(&chunks_read);
+        let stream = flow_like_types::async_stream::stream! {
+            for chunk in ["1234", "5678", "unread tail"] {
+                stream_reads.fetch_add(1, Ordering::SeqCst);
+                yield Ok::<_, std::io::Error>(bytes::Bytes::from_static(chunk.as_bytes()));
+            }
+        };
+        let response = http::Response::new(reqwest::Body::wrap_stream(stream)).into();
+        let error = collect_image_response(response, 7).await.unwrap_err();
+
+        assert!(error.to_string().contains("image exceeds the 7 byte limit"));
+        assert_eq!(chunks_read.load(Ordering::SeqCst), 2);
+    }
 }

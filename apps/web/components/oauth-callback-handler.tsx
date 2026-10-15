@@ -8,7 +8,7 @@ import type {
 	OAuthService,
 } from "@flow-like/flow-like-ui";
 import { i18n as i18next } from "@flow-like/locales";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
 	type IStoredOAuthCallbackCompletion,
@@ -20,6 +20,7 @@ import {
 } from "../lib/oauth-callback-storage";
 import { oauthTokenStore } from "../lib/oauth-db";
 import { getOAuthService } from "../lib/oauth-service";
+import { useOAuthCallbackReady } from "./auth-provider";
 
 type OAuthCallbackListener = (
 	pending: IOAuthPendingAuth,
@@ -186,18 +187,31 @@ export function OAuthCallbackHandler({
 }: {
 	children: React.ReactNode;
 }) {
+	const callbackReady = useOAuthCallbackReady();
+	const seenCompletionKeys = useRef(new Set<string>());
+	const processingCallbackStates = useRef(new Set<string>());
+	const queuedCallbacks = useRef(new Map<string, IOAuthCallbackData>());
+
 	useEffect(() => {
-		const seenCompletionKeys = new Set<string>();
-		const processingCallbackStates = new Set<string>();
 		let channel: BroadcastChannel | null = null;
 
 		const processCallbackOnce = (payload: IOAuthCallbackData) => {
+			const key = payload.state ?? payload.url;
+			if (!callbackReady) {
+				queuedCallbacks.current.set(key, payload);
+				return;
+			}
+			queuedCallbacks.current.delete(key);
+
 			const callbackState = payload.state;
-			if (callbackState && processingCallbackStates.has(callbackState)) {
+			if (
+				callbackState &&
+				processingCallbackStates.current.has(callbackState)
+			) {
 				return;
 			}
 			if (callbackState) {
-				processingCallbackStates.add(callbackState);
+				processingCallbackStates.current.add(callbackState);
 			}
 
 			void processCallback(payload).then((processed) => {
@@ -207,7 +221,7 @@ export function OAuthCallbackHandler({
 				}
 
 				if (callbackState) {
-					processingCallbackStates.delete(callbackState);
+					processingCallbackStates.current.delete(callbackState);
 				}
 			});
 		};
@@ -223,10 +237,10 @@ export function OAuthCallbackHandler({
 			}
 
 			const completionKey = getCompletionKey(completion);
-			if (seenCompletionKeys.has(completionKey)) {
+			if (seenCompletionKeys.current.has(completionKey)) {
 				return;
 			}
-			seenCompletionKeys.add(completionKey);
+			seenCompletionKeys.current.add(completionKey);
 
 			console.log(
 				"[Web OAuth] Received cross-tab OAuth completion for provider:",
@@ -282,7 +296,14 @@ export function OAuthCallbackHandler({
 			channel = null;
 		}
 
-		const timer = setTimeout(checkPendingCallback, 100);
+		// Callback pages mount before the Hub session and profile have loaded.
+		// Keep their payload until the authenticated session can validate its owner.
+		if (callbackReady) {
+			for (const payload of queuedCallbacks.current.values()) {
+				processCallbackOnce(payload);
+			}
+		}
+		checkPendingCallback();
 
 		return () => {
 			window.removeEventListener("thirdparty-oauth-callback", handleOAuthEvent);
@@ -290,9 +311,8 @@ export function OAuthCallbackHandler({
 				channel.removeEventListener("message", handleChannelMessage);
 				channel.close();
 			}
-			clearTimeout(timer);
 		};
-	}, []);
+	}, [callbackReady]);
 
 	return <>{children}</>;
 }

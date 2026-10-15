@@ -1,16 +1,17 @@
 "use client";
+import { NodeResizer } from "./board-runtime-primitives";
+
+import { useReactFlow } from "./board-runtime";
 
 import { useTranslation } from "@flow-like/locales";
 import {
 	type Node,
 	type NodeProps,
-	NodeResizer,
 	type ResizeDragEvent,
 	type ResizeParams,
-	useReactFlow,
 } from "@xyflow/react";
 import { LockIcon, UnlockIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { prepareCommentSave } from "../../lib/flow-comment-edit";
 import type { IComment } from "../../lib/schema/flow/board";
@@ -19,9 +20,9 @@ import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
+	DialogFooter,
 	DialogHeader,
 	DialogTitle,
-	DialogFooter,
 } from "../ui/dialog";
 import { CommentColorPicker } from "./comment-node/comment-color-picker";
 import { CommentNodeToolbar } from "./comment-node/comment-node-toolbar";
@@ -42,16 +43,20 @@ export type CommentNode = Node<
 
 export function CommentNode(props: NodeProps<CommentNode>) {
 	const { t } = useTranslation("flow");
-	const { getNodes, setNodes } = useReactFlow();
+	const { getNodes } = useReactFlow();
 	const [edit, setEdit] = useState({
 		open: false,
 		content: props.data.comment.content,
 		baseContent: props.data.comment.content,
 	});
 	const [saving, setSaving] = useState(false);
+	const savingRef = useRef(false);
 	const [saveError, setSaveError] = useState<string>();
 	const readOnly = props.data.readOnly ?? false;
 	const [isHovered, setIsHovered] = useState(false);
+	useEffect(() => {
+		if (readOnly) setEdit((old) => ({ ...old, open: false }));
+	}, [readOnly]);
 	const [currentColor, setCurrentColor] = useState<string | undefined>(
 		props.data.comment.color ?? undefined,
 	);
@@ -73,14 +78,16 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 		setEdit({ open: true, content, baseContent: content });
 	};
 	const save = async () => {
-		if (saving || readOnly) return;
+		if (savingRef.current || readOnly) return;
 		const current = getNodes().find((node) => node.id === props.id)?.data
 			.comment as IComment | undefined;
 		if (!current) {
 			setSaveError("This comment no longer exists.");
 			return;
 		}
+		savingRef.current = true;
 		setSaving(true);
+		setSaveError(undefined);
 		try {
 			const next = prepareCommentSave(current, edit.baseContent, edit.content);
 			if (next) await props.data.onUpsert(next);
@@ -93,11 +100,13 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 					: "Could not save the comment. Your draft is still open.",
 			);
 		} finally {
+			savingRef.current = false;
 			setSaving(false);
 		}
 	};
 
 	const toggleLock = useCallback(async () => {
+		if (readOnly) return;
 		const next = !isLocked;
 		// Try to persist on the comment if supported
 		const node = getNodes().find((n) => n.id === props.id);
@@ -112,10 +121,11 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 				// noop
 			}
 		}
-	}, [getNodes, isLocked, props.data.onUpsert, props.id, setNodes]);
+	}, [getNodes, isLocked, readOnly, props.data.onUpsert, props.id]);
 
 	const onResizeEnd = useCallback(
 		async (event: ResizeDragEvent, params: ResizeParams) => {
+			if (readOnly || isLocked) return;
 			const node = getNodes().find((n) => n.id === props.id);
 			if (!node) return;
 			const comment = node.data.comment as IComment;
@@ -126,10 +136,18 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 				height: params.height,
 			});
 		},
-		[props.data.comment, props.data.onUpsert, props.width, props.height],
+		[
+			props.data.comment,
+			props.data.onUpsert,
+			getNodes,
+			props.id,
+			readOnly,
+			isLocked,
+		],
 	);
 
 	const onColorChosen = useCallback(async () => {
+		if (readOnly) return;
 		const node = getNodes().find((n) => n.id === props.id);
 		if (!node) return;
 		const comment = node.data.comment as IComment;
@@ -143,10 +161,14 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 		props.width,
 		props.height,
 		currentColor,
+		readOnly,
+		getNodes,
+		props.id,
 	]);
 
 	const onMoveLayer = useCallback(
 		async (by: number) => {
+			if (readOnly) return;
 			const node = getNodes().find((n) => n.id === props.id);
 			if (!node) return;
 			const comment = node.data.comment as IComment;
@@ -161,6 +183,9 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 			props.width,
 			props.height,
 			currentColor,
+			readOnly,
+			getNodes,
+			props.id,
 		],
 	);
 
@@ -229,9 +254,9 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 						/>
 					)}
 					<Dialog
-						open={edit.open}
+						open={!readOnly && edit.open}
 						onOpenChange={(open) => {
-							if (!saving) setEdit((old) => ({ ...old, open }));
+							if (!open) void save();
 						}}
 					>
 						<DialogContent className="max-w-(--breakpoint-xl) min-w-[95dvw] w-full min-h-[90vh] max-h-[90vh] overflow-hidden flex flex-col">
@@ -244,12 +269,16 @@ export function CommentNode(props: NodeProps<CommentNode>) {
 									)}
 								</DialogDescription>
 							</DialogHeader>
-							<div className="flex flex-col grow max-h-full overflow-auto relative">
+							<div
+								className="flex flex-col grow max-h-full overflow-auto relative"
+								inert={saving}
+							>
 								<TextEditor
 									appId={props.data.appId}
 									initialContent={edit.baseContent}
 									editorProps={{ "aria-label": "Comment text" }}
 									onChange={(content) => {
+										if (savingRef.current) return;
 										setEdit((old) => ({ ...old, content }));
 									}}
 									isMarkdown={true}

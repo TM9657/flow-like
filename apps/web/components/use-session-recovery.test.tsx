@@ -98,6 +98,9 @@ beforeEach(() => {
 		isAuthenticated: true,
 		user: user(),
 		events,
+		signinSilent: vi.fn(async () => {
+			throw Object.assign(new Error("Sign in required"), { error: "invalid_grant" });
+		}),
 		signinRedirect: vi.fn(async () => undefined),
 		removeUser: vi.fn(async () => {
 			authStore.set({ isAuthenticated: false, user: undefined });
@@ -115,6 +118,43 @@ afterEach(async () => {
 });
 
 describe("useSessionRecovery", () => {
+	it("renews an expired session without clearing it or navigating away", async () => {
+		vi.mocked(auth.signinSilent).mockImplementation(async () => {
+			tokenExpired = false;
+			const renewed = user("renewed");
+			authStore.set({ user: renewed });
+			return renewed ?? null;
+		});
+		await act(async () => root.render(<ProtectedView />));
+		await act(async () => {
+			tokenExpired = true;
+			events.emitExpired();
+		});
+		expect(auth.signinSilent).toHaveBeenCalledTimes(1);
+		expect(auth.removeUser).not.toHaveBeenCalled();
+		expect(auth.signinRedirect).not.toHaveBeenCalled();
+		expect(container.textContent).toBe("App content");
+	});
+
+	it("keeps refresh credentials after a network failure and retries when online", async () => {
+		vi.mocked(auth.signinSilent).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+		await act(async () => root.render(<ProtectedView />));
+		await act(async () => { tokenExpired = true; events.emitExpired(); });
+		expect(container.textContent).toBe("retry-required");
+		expect(auth.user?.access_token).toBe("token-1");
+		expect(auth.removeUser).not.toHaveBeenCalled();
+		expect(auth.signinRedirect).not.toHaveBeenCalled();
+		vi.mocked(auth.signinSilent).mockImplementation(async () => {
+			tokenExpired = false;
+			const renewed = user("reconnected");
+			authStore.set({ user: renewed });
+			return renewed ?? null;
+		});
+		await act(async () => window.dispatchEvent(new Event("online")));
+		expect(container.textContent).toBe("App content");
+		expect(auth.signinSilent).toHaveBeenCalledTimes(2);
+	});
+
 	it("hides protected content immediately and redirects once for concurrent 401s across auth updates", async () => {
 		const removal = deferred();
 		const requestAuth = auth;
@@ -127,7 +167,7 @@ describe("useSessionRecovery", () => {
 			container.querySelector('[data-testid="protected-content"]'),
 		).not.toBeNull();
 
-		act(() => reportUnauthorized(requestAuth, "token-1"));
+		await act(async () => reportUnauthorized(requestAuth, "token-1"));
 		expect(
 			container.querySelector('[data-testid="protected-content"]'),
 		).toBeNull();

@@ -1,15 +1,10 @@
 "use client";
+import { Panel, ViewportPortal } from "./board-runtime-primitives";
+
+import { useNodes, useReactFlow, useViewport } from "./board-runtime";
 
 import { useTranslation } from "@flow-like/locales";
-import {
-	Panel,
-	Position,
-	ViewportPortal,
-	getBezierPath,
-	useNodes,
-	useReactFlow,
-	useViewport,
-} from "@xyflow/react";
+import { Position, getBezierPath } from "@xyflow/react";
 import ChevronLeftIcon from "lucide-react/dist/esm/icons/chevron-left.js";
 import ChevronRightIcon from "lucide-react/dist/esm/icons/chevron-right.js";
 import CircleCheckIcon from "lucide-react/dist/esm/icons/circle-check.js";
@@ -454,7 +449,7 @@ export const GroupSuggestionsOverlay = memo(function GroupSuggestionsOverlay({
 	const { t } = useTranslation("flow");
 	const stripRef = useRef<HTMLElement>(null);
 	const nodes = useNodes();
-	const { getInternalNode, fitView } = useReactFlow();
+	const { getInternalNode, getNodes, getEdges, fitView } = useReactFlow();
 	const viewport = useViewport();
 	const labelRefs = useRef(new Map<string, HTMLButtonElement>());
 	const [bottomLabels, setBottomLabels] = useState<ReadonlySet<string>>(
@@ -653,7 +648,13 @@ export const GroupSuggestionsOverlay = memo(function GroupSuggestionsOverlay({
 			else if (
 				handlers.ready &&
 				!event.repeat &&
-				!(target instanceof Element && target.closest(IGNORED_KEY_TARGETS))
+				!(target instanceof Element && target.closest(IGNORED_KEY_TARGETS)) &&
+				!(
+					target instanceof Element &&
+					target.closest("[data-board-canvas-input]") &&
+					(getNodes().some((node) => node.selected) ||
+						getEdges().some((edge) => edge.selected))
+				)
 			) {
 				const onButton =
 					target instanceof Element && target.closest("button, a") !== null;
@@ -682,7 +683,7 @@ export const GroupSuggestionsOverlay = memo(function GroupSuggestionsOverlay({
 		};
 		document.addEventListener("keydown", onKeyDown, true);
 		return () => document.removeEventListener("keydown", onKeyDown, true);
-	}, []);
+	}, [getNodes, getEdges]);
 
 	// Keyed by membership, not topology id, so rewiring inside the group never re-jumps.
 	const focusKey = selected?.memberIds.join("\0");

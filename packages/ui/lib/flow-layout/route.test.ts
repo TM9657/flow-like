@@ -4,11 +4,25 @@ import { measureNodeBox, pinOffsetY } from "./measure";
 import { type WireRoute, planWireRoutes, sampleWireRoute } from "./route";
 import { GraphBuilder, allScenarios } from "./test-fixtures";
 import type { AutoLayoutInput, LayoutBox } from "./types";
+import { googleVerificationFixture } from "./verification-fixture";
 type Point = {
 	x: number;
 	y: number;
 };
 type Positions = Map<string, [number, number]>;
+function physicalWaypoints(routes: WireRoute[]): WireRoute["waypoints"] {
+	const points = new Map<string, WireRoute["waypoints"][number]>();
+	for (const route of routes) {
+		for (const [index, point] of route.waypoints.entries()) {
+			const key = point.shared
+				? `${route.fromPin}:${point.shared}`
+				: `${route.fromPin}->${route.toPin}:${index}`;
+			if (points.has(key)) expect(points.get(key)).toEqual(point);
+			points.set(key, point);
+		}
+	}
+	return [...points.values()];
+}
 function inside(point: Point, box: LayoutBox): boolean {
 	return (
 		point.x > box.x + 0.01 &&
@@ -567,10 +581,12 @@ describe("wire route planning", () => {
 				positions,
 			),
 		).toEqual(routes);
-		const dots = routes.flatMap((route) => route.waypoints);
+		const dots = physicalWaypoints(routes);
 		expect(dots.length).toBeGreaterThan(0);
 		for (const route of routes) {
-			expect(route.waypoints.length).toBeLessThanOrEqual(4);
+			expect(
+				route.waypoints.filter((point) => !point.shared).length,
+			).toBeLessThanOrEqual(4);
 			if (route.waypoints.length) expectClear(input, positions, route);
 		}
 		for (let i = 0; i < dots.length; i++) {
@@ -654,9 +670,11 @@ describe("wire route planning", () => {
 				),
 			).toEqual(routes);
 			for (const route of routes) expectClear(input, positions, route);
-			const dots = routes.flatMap((route) =>
-				route.waypoints.map((point) => ({ ...point, width: 16, height: 12 })),
-			);
+			const dots = physicalWaypoints(routes).map((point) => ({
+				...point,
+				width: 16,
+				height: 12,
+			}));
 			for (const route of routes) {
 				for (const [a, b] of sampleWireRoute(input, positions, route)) {
 					for (let index = 0; index <= 12; index++) {
@@ -670,6 +688,75 @@ describe("wire route planning", () => {
 			}
 		});
 	}
+	test("keeps Google verification fan-out compact, clear, and repeatable", () => {
+		const input = googleVerificationFixture();
+		const result = computeFlowLayoutDetailed(input, "routed");
+		const routes = required(result.routing).routes;
+		expect(routes).toHaveLength(57);
+		expect(routes.filter((route) => route.unresolved)).toEqual([]);
+		const dots = physicalWaypoints(routes).map((point) => ({
+			...point,
+			width: 16,
+			height: 12,
+		}));
+		let totalLength = 0;
+		const physicalSegments = new Set<string>();
+		for (const route of routes) {
+			expectClear(input, result.positions, route);
+			for (const [a, b] of sampleWireRoute(input, result.positions, route)) {
+				const key = `${route.fromPin}:${a.x},${a.y}->${b.x},${b.y}`;
+				if (!physicalSegments.has(key)) {
+					totalLength += Math.hypot(b.x - a.x, b.y - a.y);
+					physicalSegments.add(key);
+				}
+				for (let index = 0; index <= 12; index++) {
+					const point = {
+						x: a.x + ((b.x - a.x) * index) / 12,
+						y: a.y + ((b.y - a.y) * index) / 12,
+					};
+					expect(dots.some((box) => inside(point, box))).toBe(false);
+				}
+			}
+		}
+		for (let index = 0; index < dots.length; index++) {
+			for (const other of dots.slice(0, index)) {
+				expect(
+					Math.abs(dots[index].x - other.x) < 16 &&
+						Math.abs(dots[index].y - other.y) < 12,
+				).toBe(false);
+			}
+		}
+		const boxes = input.layerNodes.map((node) => {
+			const [x, y] = required(result.positions.get(node.id));
+			return { x, y, ...measureNodeBox(node) };
+		});
+		const top = Math.min(...[...boxes, ...dots].map((box) => box.y));
+		const bottom = Math.max(
+			...[...boxes, ...dots].map((box) => box.y + box.height),
+		);
+		expect(dots.length).toBeLessThan(45);
+		expect(bottom - top).toBeLessThan(1100);
+		expect(totalLength).toBeLessThan(26000);
+
+		const reversed = computeFlowLayoutDetailed(
+			{ ...input, layerNodes: [...input.layerNodes].reverse() },
+			"routed",
+		);
+		expect(reversed.positions).toEqual(result.positions);
+		expect(reversed.routing).toEqual(result.routing);
+		const repeated = computeFlowLayoutDetailed(
+			{
+				...input,
+				layerNodes: input.layerNodes.map((node) => ({
+					...node,
+					coordinates: [...required(result.positions.get(node.id)), 0],
+				})),
+			},
+			"routed",
+		);
+		expect(repeated.positions).toEqual(result.positions);
+		expect(repeated.routing).toEqual(result.routing);
+	});
 	test("routes a 300-node board within a bounded planning budget", () => {
 		const scenario = required(
 			allScenarios().find((item) => item.name.startsWith("large-300")),
@@ -679,7 +766,11 @@ describe("wire route planning", () => {
 		const routes = planWireRoutes(scenario.input, positions);
 		expect(performance.now() - started).toBeLessThan(1000);
 		expect(routes.length).toBeGreaterThan(100);
-		expect(routes.every((route) => route.waypoints.length <= 4)).toBe(true);
+		expect(
+			routes.every(
+				(route) => route.waypoints.filter((point) => !point.shared).length <= 4,
+			),
+		).toBe(true);
 	});
 	test("bounds work on 100 obstructed skip edges", () => {
 		const graph = new GraphBuilder();

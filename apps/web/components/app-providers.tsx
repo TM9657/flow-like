@@ -4,7 +4,6 @@ import {
 	ExecutionServiceProvider,
 	QueryClient,
 	QueryClientProvider,
-	ReactFlowProvider,
 } from "@flow-like/flow-like-ui";
 import { ThemeProvider } from "@flow-like/flow-like-ui/components/theme-provider";
 import { NetworkStatusIndicator } from "@flow-like/flow-like-ui/components/ui/network-status-indicator";
@@ -102,49 +101,47 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	return (
-		<ReactFlowProvider>
-			<QueryClientProvider client={queryClient}>
-				<NetworkAwareProvider>
-					<NetworkStatusIndicator />
-					<I18nProvider>
-						<ThemeProvider
-							attribute="class"
-							defaultTheme="system"
-							enableSystem
-							storageKey="theme"
-							disableTransitionOnChange
-						>
-							<TooltipProvider>
-								<Toaster />
-								<WebProvider>
-									<WebAuthProvider>
-										<ThemeLoader />
-										<OAuthCallbackHandler>
-											<OAuthExecutionProvider>
-												<RuntimeVariablesProviderComponent>
-													<ExecutionServiceProvider>
-														<ExecutionEngineProviderComponent>
-															<SpotlightWrapper>
-																<TelemetryProvider>
-																	<AppSidebar>{children}</AppSidebar>
-																	<GlobalToolBridge />
-																	<GlobalChatOverlay />
-																	<FlowPilotBubbleButton />
-																	<GlobalUpgradeDialog />
-																</TelemetryProvider>
-															</SpotlightWrapper>
-														</ExecutionEngineProviderComponent>
-													</ExecutionServiceProvider>
-												</RuntimeVariablesProviderComponent>
-											</OAuthExecutionProvider>
-										</OAuthCallbackHandler>
-									</WebAuthProvider>
-								</WebProvider>
-							</TooltipProvider>
-						</ThemeProvider>
-					</I18nProvider>
-				</NetworkAwareProvider>
-			</QueryClientProvider>
-		</ReactFlowProvider>
+		<QueryClientProvider client={queryClient}>
+			<NetworkAwareProvider>
+				<NetworkStatusIndicator />
+				<I18nProvider>
+					<ThemeProvider
+						attribute="class"
+						defaultTheme="system"
+						enableSystem
+						storageKey="theme"
+						disableTransitionOnChange
+					>
+						<TooltipProvider>
+							<Toaster />
+							<WebProvider>
+								<WebAuthProvider>
+									<ThemeLoader />
+									<OAuthCallbackHandler>
+										<OAuthExecutionProvider>
+											<RuntimeVariablesProviderComponent>
+												<ExecutionServiceProvider>
+													<ExecutionEngineProviderComponent>
+														<SpotlightWrapper>
+															<TelemetryProvider>
+																<AppSidebar>{children}</AppSidebar>
+																<GlobalToolBridge />
+																<GlobalChatOverlay />
+																<FlowPilotBubbleButton />
+																<GlobalUpgradeDialog />
+															</TelemetryProvider>
+														</SpotlightWrapper>
+													</ExecutionEngineProviderComponent>
+												</ExecutionServiceProvider>
+											</RuntimeVariablesProviderComponent>
+										</OAuthExecutionProvider>
+									</OAuthCallbackHandler>
+								</WebAuthProvider>
+							</WebProvider>
+						</TooltipProvider>
+					</ThemeProvider>
+				</I18nProvider>
+			</NetworkAwareProvider>
+		</QueryClientProvider>
 	);
 }

@@ -8,10 +8,9 @@
 //!
 //! Two rules, deliberately dumb so they hold on input that does not parse (the common case here):
 //!
-//! 1. **Declared values are dropped.** A declaration that carries a type annotation
-//!    (`const goal: string = "…"`, `let label: string = ""`) is a variable, and its initializer is
-//!    removed. A declaration without one (`const call = httpFetch({ … })`) binds a node result and
-//!    is the program itself, so it is kept.
+//! 1. **Declared values are dropped.** Typed declarations and untyped scalar defaults lose
+//!    their initializer. Node-result bindings such as `const call = httpFetch({ … })` keep
+//!    their calls so the failed program remains diagnosable.
 //! 2. **Long literals are generalized.** A string literal over [`MAX_LITERAL_CHARS`] becomes
 //!    `"<str:N>"`, a template literal `` `<tpl:N>` ``. Short ones — enum values, pin names, format
 //!    keys, element refs — are kept verbatim, because they are what makes the source readable. A
@@ -142,7 +141,7 @@ enum Continuation<'a> {
 
 /// Whether `ch` opens a string or template literal whose contents are not code.
 fn is_quote(ch: char) -> bool {
-    ch == '"' || ch == '`'
+    matches!(ch, '"' | '\'' | '`')
 }
 
 /// Byte offset of the unescaped backtick that closes a template literal continued from an
@@ -210,7 +209,7 @@ fn comment_start(line: &str) -> usize {
             } else if ch == quote {
                 in_string = None;
             }
-        } else if ch == b'"' || ch == b'`' {
+        } else if matches!(ch, b'"' | b'\'' | b'`') {
             in_string = Some(ch);
         } else if ch == b'/' && bytes.get(i + 1) == Some(&b'/') {
             return i;
@@ -220,10 +219,10 @@ fn comment_start(line: &str) -> usize {
     line.len()
 }
 
-/// Byte offset of the `=` that opens a *typed* declaration's initializer, if this line is one.
+/// Byte offset of the `=` that opens a declaration value to redact, if this line has one.
 ///
-/// Typed is the whole discrimination: `const x: T = …` declares a variable and carries a value,
-/// `const x = call(…)` binds a node result and carries the program.
+/// Typed declarations and scalar initializers carry variable values. Untyped calls bind
+/// node results and must remain visible for diagnosis.
 fn declaration_value_span(code: &str) -> Option<usize> {
     let bytes = code.as_bytes();
     let mut i = skip_whitespace(bytes, 0);
@@ -241,11 +240,19 @@ fn declaration_value_span(code: &str) -> Option<usize> {
     }
 
     i = skip_whitespace(bytes, name_end);
-    if bytes.get(i) != Some(&b':') {
-        return None;
+    match bytes.get(i) {
+        Some(b':') => assignment_offset(code, i + 1),
+        Some(b'=') => {
+            let value = skip_whitespace(bytes, i + 1);
+            let scalar = matches!(bytes.get(value), Some(b'"' | b'\'' | b'0'..=b'9' | b'-'))
+                || matches!(
+                    &code[value..read_identifier(bytes, value)],
+                    "true" | "false" | "null"
+                );
+            scalar.then_some(i)
+        }
+        _ => None,
     }
-
-    assignment_offset(code, i + 1)
 }
 
 /// Offset of the first top-level `=` at or after `from`, stopping at a statement terminator.
@@ -270,7 +277,7 @@ fn assignment_offset(code: &str, from: usize) -> Option<usize> {
             continue;
         }
         match ch {
-            b'"' | b'`' => in_string = Some(ch),
+            b'"' | b'\'' | b'`' => in_string = Some(ch),
             b'(' | b'[' | b'{' => depth += 1,
             b')' | b']' | b'}' => depth = depth.saturating_sub(1),
             b';' if depth == 0 => return None,
@@ -306,7 +313,7 @@ fn trailing_depth(text: &str) -> usize {
 /// template literal opened on this line without closing, so the caller drops the lines it
 /// continues on.
 fn redact_literals(code: &str, redacted: &mut usize) -> (String, bool) {
-    if !code.contains('"') && !code.contains('`') {
+    if !code.chars().any(is_quote) {
         return (code.to_string(), false);
     }
 
@@ -402,6 +409,47 @@ mod tests {
         let redacted = redact_flowscript(source);
         assert_eq!(redacted.text, source);
         assert_eq!(redacted.dropped_values, 0);
+    }
+
+    #[test]
+    fn inferred_scalar_defaults_are_redacted_without_losing_node_calls() {
+        for value in [
+            "\"short-token\"",
+            "'short-token'",
+            "'https://secret/{token}'",
+            "'it\\'s secret'",
+            "42",
+            "-1.5",
+            "true",
+            "false",
+            "null",
+        ] {
+            let source = format!(
+                "const setting = {value} //@v:setting\nconst result = httpFetch({{ method: \"GET\" }})"
+            );
+            let redacted = redact_flowscript(&source);
+            assert_eq!(
+                redacted.text,
+                "const setting //@v:setting\nconst result = httpFetch({ method: \"GET\" })"
+            );
+            assert_eq!(redacted.dropped_values, 1);
+            assert_eq!(redacted.text.lines().count(), source.lines().count());
+            assert_eq!(redact_flowscript(&redacted.text).text, redacted.text);
+        }
+        for source in ["const result = trueValue()", "const result = nullValue()"] {
+            assert_eq!(redact_flowscript(source).text, source);
+        }
+    }
+
+    #[test]
+    fn single_quoted_node_literals_follow_the_existing_redaction_policy() {
+        let short = "const result = httpFetch({ method: 'GET', url: 'https://example.com' })";
+        assert_eq!(redact_flowscript(short).text, short);
+        let long = "x".repeat(MAX_LITERAL_CHARS + 1);
+        let redacted = redact_flowscript(&format!("httpFetch({{ body: '{long}' }})"));
+        assert!(!redacted.text.contains(&long));
+        assert_eq!(redacted.redacted_literals, 1);
+        assert_eq!(redact_flowscript(&redacted.text).text, redacted.text);
     }
 
     #[test]

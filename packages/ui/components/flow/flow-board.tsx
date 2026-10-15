@@ -4,34 +4,32 @@ import { useTranslation } from "@flow-like/locales";
 import { createId } from "@paralleldrive/cuid2";
 import { type UseQueryResult, useQueryClient } from "@tanstack/react-query";
 import {
-	Background,
-	BackgroundVariant,
 	type Connection,
-	ControlButton,
-	Controls,
 	type Edge,
 	type FinalConnectionState,
 	type InternalNode,
 	type IsValidConnection,
-	MiniMap,
 	type Node,
 	type NodeChange,
 	type OnEdgesChange,
 	type OnNodesChange,
 	type OnSelectionChangeFunc,
-	ReactFlow,
+	type ReactFlow,
 	type ReactFlowInstance,
 	addEdge,
 	applyEdgeChanges,
 	applyNodeChanges,
 	getNodesBounds,
 	getViewportForBounds,
-	reconnectEdge,
 	useEdgesState,
 	useNodesState,
+} from "@xyflow/react";
+import {
+	BoardRuntimeProvider,
+	useBoardRuntime,
 	useReactFlow,
 	useStoreApi,
-} from "@xyflow/react";
+} from "./board-runtime";
 import "@xyflow/react/dist/style.css";
 import { useMediaQuery } from "@uidotdev/usehooks";
 import {
@@ -57,7 +55,6 @@ import {
 	ScrollIcon,
 	SearchCheckIcon,
 	SearchIcon,
-	ShareIcon,
 	SlidersHorizontalIcon,
 	SparklesIcon,
 	SquareChevronUpIcon,
@@ -187,12 +184,12 @@ import { VariablesMenu } from "../../components/flow/variables/variables-menu";
 import { useBoardQualityAnalysis } from "../../hooks/use-board-quality";
 import { useCommandExecution } from "../../hooks/use-command-execution";
 import { useCopilotCommands } from "../../hooks/use-copilot-commands";
-import { useGroupSuggestions } from "../../hooks/use-group-suggestions";
 import { useExecutionPresence } from "../../hooks/use-execution-presence";
 import {
 	type FollowedEditorAnchor,
 	useFollowMode,
 } from "../../hooks/use-follow-mode";
+import { useGroupSuggestions } from "../../hooks/use-group-suggestions";
 import { useInvoke } from "../../hooks/use-invoke";
 import { useKeyboardShortcuts } from "../../hooks/use-keyboard-shortcuts";
 import {
@@ -217,7 +214,6 @@ import {
 	type ILogMetadata,
 	IPinType,
 	IValueType,
-	connectPinsCommand,
 	disconnectPinsCommand,
 	discoverBoardTests,
 	moveNodeCommand,
@@ -225,10 +221,14 @@ import {
 	removeCommentCommand,
 	removeLayerCommand,
 	removeNodeCommand,
-	updateNodeCommand,
 	upsertCommentCommand,
 	upsertVariableCommand,
 } from "../../lib";
+import {
+	buildConnectionCommands,
+	buildDisconnectionCommands,
+} from "../../lib/board-canvas/connection-commands";
+import { snapGroupToGrid } from "../../lib/board-canvas/interaction";
 import { ownsWindowChrome } from "../../lib/chrome-route";
 import { buildEdgeRerouteCommands } from "../../lib/edge-reroute";
 import { getErrorMessage } from "../../lib/error-message";
@@ -247,6 +247,7 @@ import {
 	removeFunctionReferenceCommandForEdge,
 } from "../../lib/flow-board-helpers";
 import {
+	duplicateSelectionCommand,
 	handleCopy,
 	handlePaste,
 	hexToRgba,
@@ -322,17 +323,17 @@ import {
 } from "../../state/runtime-variables-context";
 import { AutoLayoutDialog, type LayoutStyle } from "./auto-layout-dialog";
 import { BoardEditRecovery } from "./board-edit-recovery";
-import { GroupSuggestionsOverlay } from "./group-suggestions";
 import { CallFunctionNode } from "./call-function-node";
+import { EguiFlowCanvas } from "./egui-flow-canvas";
 import { FlowChat } from "./flow-chat";
 import { FlowCopilot } from "./flow-copilot";
 import type { FlowScriptApplyOptions } from "./flow-copilot/types";
 import { FlowCursorsLayer } from "./flow-cursors";
 import { FlowDataEdge } from "./flow-data-edge";
 import { FlowDragGhostsLayer } from "./flow-drag-ghosts";
-import { FlowHelperLinesLayer, useHelperLines } from "./flow-helper-lines";
 import { FlowEditorTabs, boardTabLabel } from "./flow-editor-tabs";
 import { FlowExecutionEdge } from "./flow-execution-edge";
+import { FlowHelperLinesLayer, useHelperLines } from "./flow-helper-lines";
 import {
 	useHistoryNavigation,
 	useRetainBoardHistory,
@@ -354,6 +355,7 @@ import {
 import { FlowTemplateSelector } from "./flow-template-selector";
 import { FlowTests } from "./flow-tests";
 import { FlowVeilEdge } from "./flow-veil-edge";
+import { GroupSuggestionsOverlay } from "./group-suggestions";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
 import { NodeSuggestionGhost } from "./node-suggestion-ghost";
@@ -421,7 +423,7 @@ const sameIds = (previous: string[], next: string[]): boolean => {
 
 type ReactFlowProps = ComponentProps<typeof ReactFlow>;
 
-interface FlowCanvasProps {
+export interface FlowCanvasProps {
 	overlay?: ReactFlowProps["children"];
 	flowRef: ReactFlowProps["ref"];
 	nodes: ReactFlowProps["nodes"];
@@ -430,6 +432,8 @@ interface FlowCanvasProps {
 	edgeTypes: ReactFlowProps["edgeTypes"];
 	colorMode: ReactFlowProps["colorMode"];
 	nodesInteractive: boolean;
+	selectionMode?: "box" | "lasso";
+	snapGrid?: number;
 	onlyRenderVisible: boolean;
 	/** Inside a layer with a boundary. A module is a file, not a place, so it reads as root. */
 	insideLayer: boolean;
@@ -451,121 +455,35 @@ interface FlowCanvasProps {
 	onMoveEnd: ReactFlowProps["onMoveEnd"];
 	onReconnectEnd: ReactFlowProps["onReconnectEnd"];
 	onConnectEnd: ReactFlowProps["onConnectEnd"];
-	onScreenshot: () => void;
+	onNativeConnection: (connection: Connection, oldEdge?: Edge) => Promise<void>;
+	onNativeDisconnect: (edge: Edge) => Promise<void>;
+	onNativeCancelDrag?: (restore: boolean) => void;
+	scopeKey: string;
+	onScreenshot: () => void | Promise<void>;
 	miniMapNodeColor: (node: Node) => string;
 }
 
 // Memoized so unrelated FlowBoard re-renders (presence, dialogs, copilot toggles,
-// menus) skip reconciling the entire React Flow canvas. All props passed in are
+// menus) skip reconciling the entire board canvas. All props passed in are
 // referentially stable (state arrays + useCallback handlers), so the memo holds.
-const FlowCanvas = memo(function FlowCanvas({
-	overlay,
-	flowRef,
-	nodes,
-	edges,
-	nodeTypes,
-	edgeTypes,
-	colorMode,
-	nodesInteractive,
-	onlyRenderVisible,
-	insideLayer,
-	onContextMenu,
-	onInit,
-	onNodeDoubleClick,
-	onEdgeDoubleClick,
-	onNodesChange,
-	onEdgesChange,
-	onNodeDragStop,
-	onNodeDrag,
-	onNodeDragStart,
-	onPaneClick,
-	isValidConnection,
-	onConnect,
-	onSelectionChange,
-	onReconnect,
-	onReconnectStart,
-	onMoveEnd,
-	onReconnectEnd,
-	onConnectEnd,
-	onScreenshot,
-	miniMapNodeColor,
-}: FlowCanvasProps) {
-	const { t } = useTranslation("flow");
-	return (
-		<ReactFlow
-			suppressHydrationWarning
-			deleteKeyCode={null}
-			onContextMenu={onContextMenu}
-			nodesDraggable={nodesInteractive}
-			nodesConnectable={nodesInteractive}
-			onlyRenderVisibleElements={onlyRenderVisible}
-			onInit={onInit}
-			ref={flowRef}
-			colorMode={colorMode}
-			nodes={nodes}
-			nodeTypes={nodeTypes}
-			edges={edges}
-			edgeTypes={edgeTypes}
-			maxZoom={3}
-			minZoom={0.1}
-			onNodeDoubleClick={onNodeDoubleClick}
-			onEdgeDoubleClick={onEdgeDoubleClick}
-			onNodesChange={onNodesChange}
-			onEdgesChange={onEdgesChange}
-			onNodeDragStop={onNodeDragStop}
-			onNodeDrag={onNodeDrag}
-			onNodeDragStart={onNodeDragStart}
-			onPaneClick={onPaneClick}
-			isValidConnection={isValidConnection}
-			onConnect={onConnect}
-			onSelectionChange={onSelectionChange}
-			onReconnect={onReconnect}
-			onReconnectStart={onReconnectStart}
-			onMoveEnd={onMoveEnd}
-			onReconnectEnd={onReconnectEnd}
-			onConnectEnd={onConnectEnd}
-			fitView
-			proOptions={{ hideAttribution: true }}
-		>
-			{overlay}
-			<Controls>
-				<ControlButton onClick={onScreenshot}>
-					<ShareIcon className="size-4" />
-				</ControlButton>
-			</Controls>
-			<MiniMap
-				pannable
-				zoomable
-				bgColor={
-					isWebkitLite()
-						? "var(--background)"
-						: "color-mix(in oklch, var(--background) 80%, transparent)"
-				}
-				maskColor={
-					isWebkitLite()
-						? "rgb(127 127 127 / 0.15)"
-						: "color-mix(in oklch, var(--foreground) 10%, transparent)"
-				}
-				nodeColor={miniMapNodeColor}
-			/>
-			<Background
-				variant={insideLayer ? BackgroundVariant.Lines : BackgroundVariant.Dots}
-				color={
-					insideLayer
-						? `color-mix(in oklch, var(--foreground) 5%, transparent)`
-						: `color-mix(in oklch, var(--foreground) 20%, transparent)`
-				}
-				bgColor="color-mix(in oklch, var(--background) 80%, transparent)"
-				gap={12}
-				size={1}
-			/>
-		</ReactFlow>
-	);
+const FlowCanvas = memo(function FlowCanvas(props: FlowCanvasProps) {
+	return <EguiFlowCanvas {...props} />;
 });
 
 const PROFILE_BITS_STALE_TIME = 5 * 60 * 1000;
 
-export function FlowBoard({
+export function FlowBoard(props: ComponentProps<typeof FlowBoardContent>) {
+	const runtime = useBoardRuntime();
+	return runtime ? (
+		<FlowBoardContent {...props} />
+	) : (
+		<BoardRuntimeProvider>
+			<FlowBoardContent {...props} />
+		</BoardRuntimeProvider>
+	);
+}
+
+function FlowBoardContent({
 	appId,
 	boardId,
 	nodeId,
@@ -608,6 +526,7 @@ export function FlowBoard({
 	const selected = useRef(new Set<string>());
 	const hub = useHub();
 	const edgeReconnectSuccessful = useRef(true);
+	const reconnectingEdge = useRef(false);
 	const { isOver, setNodeRef, active } = useDroppable({ id: "flow" });
 	// Selector, not the whole store: `boardParents` is one global map, so
 	// registering a parent for any board in any app re-rendered the entire board.
@@ -2066,48 +1985,33 @@ export function FlowBoard({
 	const openFlowScriptAtNodeRef = useRef(openFlowScriptAtNode);
 	openFlowScriptAtNodeRef.current = openFlowScriptAtNode;
 
-	// Transient FlowScript-cursor highlight: a DOM class toggle on the rendered
-	// node, so it never touches selection, focus or the viewport. Nodes on other
-	// layers have no DOM element and simply stay unhighlighted; the explicit
-	// "Reveal on board" action goes through focusNode instead.
-	const flowScriptHighlightRef = useRef<string | undefined>(undefined);
+	// Presentation classes also promote native nodes when code or presence highlights them.
+	// The editor selection and viewport stay unchanged.
+	const [flowScriptHighlight, setFlowScriptHighlight] = useState<string>();
+	const [presenceHighlights, setPresenceHighlights] = useState<Set<string>>(
+		() => new Set(),
+	);
 	const highlightNodeOnCanvas = useCallback((nodeId?: string) => {
-		const previous = flowScriptHighlightRef.current;
-		if (previous === nodeId) return;
-		if (previous) {
-			document
-				.querySelector(`.react-flow__node[data-id="${previous}"]`)
-				?.classList.remove("flowscript-nav-highlight");
-		}
-		flowScriptHighlightRef.current = nodeId;
-		if (nodeId) {
-			document
-				.querySelector(`.react-flow__node[data-id="${nodeId}"]`)
-				?.classList.add("flowscript-nav-highlight");
-		}
+		setFlowScriptHighlight(nodeId);
 	}, []);
-
-	// Multi-node variant for the presence popover: hovering a collaborator lights
-	// up everything they have selected or are editing. Shares the class with the
-	// single highlight above and leaves that node alone when the sets overlap.
-	const presenceHighlightRef = useRef<string[]>([]);
 	const highlightNodesOnCanvas = useCallback((nodeIds?: string[]) => {
-		const next = (nodeIds ?? []).filter((id) =>
-			/^[A-Za-z0-9_-]{10,32}$/.test(id),
+		const next = new Set(nodeIds ?? []);
+		setPresenceHighlights((previous) =>
+			previous.size === next.size && [...next].every((id) => previous.has(id))
+				? previous
+				: next,
 		);
-		for (const id of presenceHighlightRef.current) {
-			if (next.includes(id) || id === flowScriptHighlightRef.current) continue;
-			document
-				.querySelector(`.react-flow__node[data-id="${id}"]`)
-				?.classList.remove("flowscript-nav-highlight");
-		}
-		presenceHighlightRef.current = next;
-		for (const id of next) {
-			document
-				.querySelector(`.react-flow__node[data-id="${id}"]`)
-				?.classList.add("flowscript-nav-highlight");
-		}
 	}, []);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: Highlights belong to the current board.
+	useEffect(() => {
+		setFlowScriptHighlight(undefined);
+		setPresenceHighlights(new Set());
+	}, [appId, boardId]);
+	const highlightedNodeIds = useMemo(() => {
+		const ids = new Set(presenceHighlights);
+		if (flowScriptHighlight) ids.add(flowScriptHighlight);
+		return ids;
+	}, [flowScriptHighlight, presenceHighlights]);
 
 	// Sections a full FlowScript render consists of: event entry nodes + function layers.
 	const totalFlowScriptSections = useMemo(() => {
@@ -2963,9 +2867,15 @@ export function FlowBoard({
 				x: mp.x,
 				y: mp.y,
 			});
-			handleCopy(nodes, board.data, currentCursorPosition, event, currentLayer);
+			return handleCopy(
+				getNodes(),
+				board.data,
+				currentCursorPosition,
+				event,
+				currentLayer,
+			);
 		},
-		[nodes, board.data, currentLayer],
+		[getNodes, board.data, currentLayer],
 	);
 
 	const openNodeInfo = useCallback((node: INode) => {
@@ -3017,7 +2927,7 @@ export function FlowBoard({
 				refs: board.data?.refs ?? {},
 				boardNodes: board.data?.nodes ?? {},
 				pinCache,
-				executeCommand,
+				executeCommands,
 			});
 		},
 		[
@@ -3028,7 +2938,7 @@ export function FlowBoard({
 			currentLayer,
 			screenToFlowPosition,
 			pinCache,
-			executeCommand,
+			executeCommands,
 		],
 	);
 
@@ -3076,138 +2986,145 @@ export function FlowBoard({
 		],
 	);
 
-	const deleteSelectedElements = useCallback(async () => {
-		if (
-			deleteSelectionInFlightRef.current ||
-			typeof version !== "undefined" ||
-			!board.data
-		) {
-			return;
-		}
-
-		const selectedNodeIds = new Set(
-			getNodes()
-				.filter((node) => node.selected)
-				.map((node) => node.id),
-		);
-		const selectedEdgeIds = new Set(
-			edges.filter((edge) => edge.selected).map((edge) => edge.id),
-		);
-
-		if (selectedNodeIds.size === 0 && selectedEdgeIds.size === 0) {
-			return;
-		}
-
-		const isHandleOwnedBySelectedNode = (handleId: string | undefined) => {
-			if (!handleId) {
-				return false;
+	const deleteSelectedElements = useCallback(
+		async (selection?: { nodeIds: Set<string>; edgeIds: Set<string> }) => {
+			if (
+				deleteSelectionInFlightRef.current ||
+				typeof version !== "undefined" ||
+				!board.data
+			) {
+				return;
 			}
 
-			if (handleId.startsWith("ref_in_")) {
-				return selectedNodeIds.has(handleId.replace("ref_in_", ""));
-			}
-
-			if (handleId.startsWith("ref_out_")) {
-				return selectedNodeIds.has(handleId.replace("ref_out_", ""));
-			}
-
-			const [, pinOwner] = pinCache.get(handleId) || [];
-			return pinOwner ? selectedNodeIds.has(pinOwner.id) : false;
-		};
-
-		const commands: IGenericCommand[] = [];
-
-		for (const node of getNodes().filter(
-			(currentNode) => currentNode.selected,
-		)) {
-			if (node.data?.node) {
-				commands.push(
-					removeNodeCommand({
-						node: node.data.node as INode,
-						connected_nodes: [],
-					}),
+			const selectedNodeIds =
+				selection?.nodeIds ??
+				new Set(
+					getNodes()
+						.filter((node) => node.selected)
+						.map((node) => node.id),
 				);
-				continue;
+			const selectedEdgeIds =
+				selection?.edgeIds ??
+				new Set(edges.filter((edge) => edge.selected).map((edge) => edge.id));
+
+			if (selectedNodeIds.size === 0 && selectedEdgeIds.size === 0) {
+				return;
 			}
 
-			if (node.data?.comment) {
-				commands.push(
-					removeCommentCommand({
-						comment: node.data.comment as IComment,
-					}),
-				);
-				continue;
+			const isHandleOwnedBySelectedNode = (handleId: string | undefined) => {
+				if (!handleId) {
+					return false;
+				}
+
+				if (handleId.startsWith("ref_in_")) {
+					return selectedNodeIds.has(handleId.replace("ref_in_", ""));
+				}
+
+				if (handleId.startsWith("ref_out_")) {
+					return selectedNodeIds.has(handleId.replace("ref_out_", ""));
+				}
+
+				const [, pinOwner] = pinCache.get(handleId) || [];
+				return pinOwner ? selectedNodeIds.has(pinOwner.id) : false;
+			};
+
+			const commands: IGenericCommand[] = [];
+
+			for (const node of getNodes().filter((currentNode) =>
+				selectedNodeIds.has(currentNode.id),
+			)) {
+				if (node.data?.node) {
+					commands.push(
+						removeNodeCommand({
+							node: node.data.node as INode,
+							connected_nodes: [],
+						}),
+					);
+					continue;
+				}
+
+				if (node.data?.comment) {
+					commands.push(
+						removeCommentCommand({
+							comment: node.data.comment as IComment,
+						}),
+					);
+					continue;
+				}
+
+				if (node.type === "layerNode" && node.data?.layer) {
+					commands.push(
+						removeLayerCommand({
+							child_layers: [],
+							layer: node.data.layer as ILayer,
+							layer_nodes: [],
+							layers: [],
+							nodes: [],
+							preserve_nodes: false,
+						}),
+					);
+				}
 			}
 
-			if (node.type === "layerNode" && node.data?.layer) {
-				commands.push(
-					removeLayerCommand({
-						child_layers: [],
-						layer: node.data.layer as ILayer,
-						layer_nodes: [],
-						layers: [],
-						nodes: [],
-						preserve_nodes: false,
-					}),
-				);
-			}
-		}
+			for (const edge of edges.filter((currentEdge) =>
+				selectedEdgeIds.has(currentEdge.id),
+			)) {
+				const functionReferenceNodeIds =
+					getFunctionReferenceNodeIdsFromEdge(edge);
+				if (functionReferenceNodeIds) {
+					if (
+						selectedNodeIds.has(functionReferenceNodeIds.refOutNodeId) ||
+						selectedNodeIds.has(functionReferenceNodeIds.refInNodeId)
+					) {
+						continue;
+					}
 
-		for (const edge of edges.filter((currentEdge) => currentEdge.selected)) {
-			const functionReferenceNodeIds =
-				getFunctionReferenceNodeIdsFromEdge(edge);
-			if (functionReferenceNodeIds) {
+					const command = removeFunctionReferenceCommandForEdge({
+						edge,
+						boardNodes: board.data.nodes,
+					});
+					if (command) commands.push(command);
+					continue;
+				}
+
 				if (
-					selectedNodeIds.has(functionReferenceNodeIds.refOutNodeId) ||
-					selectedNodeIds.has(functionReferenceNodeIds.refInNodeId)
+					isHandleOwnedBySelectedNode(edge.sourceHandle) ||
+					isHandleOwnedBySelectedNode(edge.targetHandle)
 				) {
 					continue;
 				}
 
-				const command = removeFunctionReferenceCommandForEdge({
-					edge,
-					boardNodes: board.data.nodes,
-				});
-				if (command) commands.push(command);
-				continue;
+				const [fromPin, fromNode] = pinCache.get(edge.sourceHandle ?? "") || [];
+				const [toPin, toNode] = pinCache.get(edge.targetHandle ?? "") || [];
+
+				if (!fromPin || !fromNode || !toPin || !toNode) {
+					continue;
+				}
+
+				commands.push(
+					disconnectPinsCommand({
+						from_node: fromNode.id,
+						from_pin: fromPin.id,
+						to_node: toNode.id,
+						to_pin: toPin.id,
+					}),
+				);
 			}
 
-			if (
-				isHandleOwnedBySelectedNode(edge.sourceHandle) ||
-				isHandleOwnedBySelectedNode(edge.targetHandle)
-			) {
-				continue;
+			if (commands.length === 0) {
+				return;
 			}
 
-			const [fromPin, fromNode] = pinCache.get(edge.sourceHandle ?? "") || [];
-			const [toPin, toNode] = pinCache.get(edge.targetHandle ?? "") || [];
-
-			if (!fromPin || !fromNode || !toPin || !toNode) {
-				continue;
+			deleteSelectionInFlightRef.current = true;
+			try {
+				selected.current.clear();
+				await executeCommands(commands);
+			} finally {
+				deleteSelectionInFlightRef.current = false;
 			}
-
-			commands.push(
-				disconnectPinsCommand({
-					from_node: fromNode.id,
-					from_pin: fromPin.id,
-					to_node: toNode.id,
-					to_pin: toPin.id,
-				}),
-			);
-		}
-
-		if (commands.length === 0) {
-			return;
-		}
-
-		deleteSelectionInFlightRef.current = true;
-		try {
-			selected.current.clear();
-			await executeCommands(commands);
-		} finally {
-			deleteSelectionInFlightRef.current = false;
-		}
-	}, [board.data, edges, executeCommands, getNodes, pinCache, version]);
+		},
+		[board.data, edges, executeCommands, getNodes, pinCache, version],
+	);
 
 	// Advisory collision toast (FlowScript collab rule 3): an undo/redo batch
 	// that touches statements a peer is editing in the code view still applies
@@ -3341,15 +3258,99 @@ export function FlowBoard({
 	handleCopyRef.current = handleCopyCB;
 	const handlePasteRef = useRef(handlePasteCB);
 	handlePasteRef.current = handlePasteCB;
-
+	const clipboardActionsRef = useRef({
+		deleteSelectedElements,
+		getNodes,
+		edges,
+		version,
+		board: board.data,
+		currentLayer,
+		executeCommand,
+	});
+	clipboardActionsRef.current = {
+		deleteSelectedElements,
+		getNodes,
+		edges,
+		version,
+		board: board.data,
+		currentLayer,
+		executeCommand,
+	};
 	useEffect(() => {
-		const onCopy = (e: Event) => handleCopyRef.current(e as ClipboardEvent);
-		const onPaste = (e: Event) => handlePasteRef.current(e as ClipboardEvent);
+		const report = (error: unknown) =>
+			toastError(
+				error instanceof Error
+					? error.message
+					: "Could not update the clipboard selection",
+				<XIcon />,
+			);
+		const onCopy = (event: Event) => {
+			void handleCopyRef.current(event as ClipboardEvent)?.catch(report);
+		};
+		const onPaste = (event: Event) => {
+			void handlePasteRef.current(event as ClipboardEvent).catch(report);
+		};
+		const onCut = async (event: ClipboardEvent) => {
+			const state = clipboardActionsRef.current;
+			if (state.version !== undefined || shouldIgnoreBoardClipboardEvent(event))
+				return;
+			const selection = {
+				nodeIds: new Set(
+					state
+						.getNodes()
+						.filter((node) => node.selected)
+						.map((node) => node.id),
+				),
+				edgeIds: new Set(
+					state.edges.filter((edge) => edge.selected).map((edge) => edge.id),
+				),
+			};
+			try {
+				if (await handleCopyRef.current(event)) {
+					const current = clipboardActionsRef.current;
+					if (
+						current.version !== undefined ||
+						current.board?.id !== state.board?.id ||
+						current.currentLayer !== state.currentLayer
+					)
+						return;
+					await current.deleteSelectedElements(selection);
+				}
+			} catch (error) {
+				report(error);
+			}
+		};
+		const onDuplicate = (event: KeyboardEvent) => {
+			const state = clipboardActionsRef.current;
+			if (
+				!(event.metaKey || event.ctrlKey) ||
+				event.key.toLowerCase() !== "d" ||
+				event.shiftKey ||
+				event.altKey ||
+				state.version !== undefined ||
+				!state.board ||
+				shouldIgnoreBoardClipboardEvent(event)
+			)
+				return;
+			const command = duplicateSelectionCommand(
+				state.getNodes(),
+				state.board,
+				state.currentLayer,
+			);
+			if (!command) return;
+			event.preventDefault();
+			event.stopPropagation();
+			void state.executeCommand(command).catch(report);
+		};
 		document.addEventListener("copy", onCopy);
 		document.addEventListener("paste", onPaste);
+		document.addEventListener("cut", onCut);
+		document.addEventListener("keydown", onDuplicate);
 		return () => {
 			document.removeEventListener("copy", onCopy);
 			document.removeEventListener("paste", onPaste);
+			document.removeEventListener("cut", onCut);
+			document.removeEventListener("keydown", onDuplicate);
 		};
 	}, []);
 
@@ -3663,6 +3664,49 @@ export function FlowBoard({
 		return tint("--primary", 60);
 	}, []);
 
+	const onNativeConnection = useCallback(
+		async (connection: Connection, oldEdge?: Edge) => {
+			if (version !== undefined || !board.data)
+				throw new Error("This board is read-only.");
+			const commands = buildConnectionCommands({
+				connection,
+				oldEdge,
+				boardNodes: board.data.nodes,
+				pinCache,
+				refs: board.data.refs ?? {},
+			});
+			if (!commands)
+				throw new Error(
+					"The connection is no longer valid. Try again with the current pins.",
+				);
+			if (!commands.length) return;
+			const result = await executeCommands(commands);
+			if (result === undefined)
+				throw new Error("The connection was not saved.");
+		},
+		[version, board.data, pinCache, executeCommands],
+	);
+	const onNativeDisconnect = useCallback(
+		async (edge: Edge) => {
+			if (version !== undefined || !board.data)
+				throw new Error("This board is read-only.");
+			const commands = buildDisconnectionCommands({
+				edge,
+				boardNodes: board.data.nodes,
+				pinCache,
+			});
+			if (!commands)
+				throw new Error(
+					"The connection changed. Try again with the current pins.",
+				);
+			if (!commands.length) return;
+			const result = await executeCommands(commands);
+			if (result === undefined)
+				throw new Error("The connection was not removed.");
+		},
+		[version, board.data, pinCache, executeCommands],
+	);
+
 	const onConnect = useCallback(
 		(params: any) =>
 			setEdges((eds) =>
@@ -3744,7 +3788,14 @@ export function FlowBoard({
 			event: MouseEvent | TouchEvent,
 			connectionState: FinalConnectionState<InternalNode>,
 		) => {
-			// when a connection is dropped on the pane it's not valid
+			if (
+				version !== undefined ||
+				reconnectingEdge.current ||
+				connectionState.toNode ||
+				connectionState.toHandle
+			)
+				return;
+			// A new connection dropped on empty canvas opens the node palette.
 			if (!connectionState.isValid) {
 				// we need to remove the wrapper bounds, in order to get the correct position
 
@@ -3794,7 +3845,7 @@ export function FlowBoard({
 				flowRef.current?.dispatchEvent(contextMenuEvent);
 			}
 		},
-		[pinCache],
+		[pinCache, version],
 	);
 
 	const helperLines = useHelperLines();
@@ -3836,192 +3887,31 @@ export function FlowBoard({
 	);
 
 	const onReconnectStart = useCallback(() => {
+		reconnectingEdge.current = true;
 		edgeReconnectSuccessful.current = false;
 	}, []);
 
 	const onReconnect = useCallback(
-		async (oldEdge: any, newConnection: Connection) => {
-			// Don't execute commands when viewing an old version
-			if (typeof version !== "undefined") {
-				return;
-			}
-
-			// Check if the edge is actually being moved
-			const new_id = `${newConnection.sourceHandle}-${newConnection.targetHandle}`;
-			if (oldEdge.id === new_id) {
-				return;
-			}
-
-			// Check if this is a veil edge (fn_ref) FIRST - handle it differently
-			const isOldRefConnection =
-				(oldEdge.sourceHandle?.startsWith("ref_out_") &&
-					oldEdge.targetHandle?.startsWith("ref_in_")) ||
-				(oldEdge.sourceHandle?.startsWith("ref_in_") &&
-					oldEdge.targetHandle?.startsWith("ref_out_"));
-			const isNewRefConnection =
-				(newConnection.sourceHandle?.startsWith("ref_out_") &&
-					newConnection.targetHandle?.startsWith("ref_in_")) ||
-				(newConnection.sourceHandle?.startsWith("ref_in_") &&
-					newConnection.targetHandle?.startsWith("ref_out_"));
-
-			if (isOldRefConnection && isNewRefConnection) {
-				const oldSource = oldEdge.sourceHandle;
-				const oldTarget = oldEdge.targetHandle;
-				const newSource = newConnection.sourceHandle;
-				const newTarget = newConnection.targetHandle;
-
-				// Determine which end was reconnected
-				const sourceChanged = oldSource !== newSource;
-				const targetChanged = oldTarget !== newTarget;
-
-				const commands: IGenericCommand[] = [];
-
-				if (sourceChanged) {
-					// Source (ref_out) was reconnected - update both old and new source nodes
-					const oldRefOutNodeId = oldSource?.replace("ref_out_", "") || "";
-					const newRefOutNodeId = newSource?.replace("ref_out_", "") || "";
-					const refInNodeId = oldTarget?.replace("ref_in_", "") || "";
-
-					const oldRefOutNode = board.data?.nodes[oldRefOutNodeId];
-					const newRefOutNode = board.data?.nodes[newRefOutNodeId];
-
-					// Remove ref from old source node
-					if (oldRefOutNode && refInNodeId) {
-						const currentRefs = oldRefOutNode.fn_refs?.fn_refs ?? [];
-						const updatedRefs = currentRefs.filter(
-							(ref: string) => ref !== refInNodeId,
-						);
-
-						const updatedOldNode = {
-							...oldRefOutNode,
-							fn_refs: {
-								...oldRefOutNode.fn_refs,
-								fn_refs: updatedRefs,
-								can_reference_fns:
-									oldRefOutNode.fn_refs?.can_reference_fns ?? false,
-								can_be_referenced_by_fns:
-									oldRefOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
-							},
-						};
-
-						commands.push(updateNodeCommand({ node: updatedOldNode }));
-					}
-
-					// Add ref to new source node
-					if (newRefOutNode && refInNodeId) {
-						const currentRefs = newRefOutNode.fn_refs?.fn_refs ?? [];
-						const updatedRefs = [...currentRefs];
-
-						if (!updatedRefs.includes(refInNodeId)) {
-							updatedRefs.push(refInNodeId);
-						}
-
-						const updatedNewNode = {
-							...newRefOutNode,
-							fn_refs: {
-								...newRefOutNode.fn_refs,
-								fn_refs: updatedRefs,
-								can_reference_fns:
-									newRefOutNode.fn_refs?.can_reference_fns ?? false,
-								can_be_referenced_by_fns:
-									newRefOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
-							},
-						};
-
-						commands.push(updateNodeCommand({ node: updatedNewNode }));
-					}
-				} else if (targetChanged) {
-					// Target (ref_in) was reconnected - update the source node's refs
-					const refOutNodeId = oldSource?.replace("ref_out_", "") || "";
-					const oldRefInNodeId = oldTarget?.replace("ref_in_", "") || "";
-					const newRefInNodeId = newTarget?.replace("ref_in_", "") || "";
-
-					const refOutNode = board.data?.nodes[refOutNodeId];
-
-					if (refOutNode && newRefInNodeId && oldRefInNodeId) {
-						const currentRefs = refOutNode.fn_refs?.fn_refs ?? [];
-
-						// Remove old ref, add new ref
-						const updatedRefs = currentRefs.filter(
-							(ref: string) => ref !== oldRefInNodeId,
-						);
-
-						if (!updatedRefs.includes(newRefInNodeId)) {
-							updatedRefs.push(newRefInNodeId);
-						}
-
-						const updatedNode = {
-							...refOutNode,
-							fn_refs: {
-								...refOutNode.fn_refs,
-								fn_refs: updatedRefs,
-								can_reference_fns:
-									refOutNode.fn_refs?.can_reference_fns ?? false,
-								can_be_referenced_by_fns:
-									refOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
-							},
-						};
-
-						commands.push(updateNodeCommand({ node: updatedNode }));
-					}
-				}
-
-				if (commands.length > 0) {
-					await executeCommands(commands);
-				}
-			} else {
-				// Regular pin connection reconnection - need to look up nodes
-				const oldEdgeToNode = pinToNode(oldEdge.targetHandle);
-				const oldEdgeFromNode = pinToNode(oldEdge.sourceHandle);
-
-				if (!oldEdgeToNode || !oldEdgeFromNode) {
-					return;
-				}
-
-				const commands = [];
-
-				const disconnectCommand = disconnectPinsCommand({
-					from_node: oldEdgeFromNode.id,
-					from_pin: oldEdge.sourceHandle,
-					to_node: oldEdgeToNode.id,
-					to_pin: oldEdge.targetHandle,
-				});
-
-				commands.push(disconnectCommand);
-
-				if (newConnection.targetHandle && newConnection.sourceHandle) {
-					const newConnectionSourceNode = pinToNode(newConnection.sourceHandle);
-					const newConnectionTargetNode = pinToNode(newConnection.targetHandle);
-
-					if (newConnectionSourceNode && newConnectionTargetNode)
-						commands.push(
-							connectPinsCommand({
-								from_node: newConnectionSourceNode.id,
-								from_pin: newConnection.sourceHandle,
-								to_node: newConnectionTargetNode.id,
-								to_pin: newConnection.targetHandle,
-							}),
-						);
-				}
-
-				await executeCommands(commands);
-			}
-
+		async (oldEdge: Edge, newConnection: Connection) => {
+			// React Flow fires reconnect-end without awaiting this transaction.
 			edgeReconnectSuccessful.current = true;
-			setEdges((els) => reconnectEdge(oldEdge, newConnection, els));
+			if (version !== undefined) return;
+			try {
+				await onNativeConnection(newConnection, oldEdge);
+			} catch (error) {
+				toastError(
+					error instanceof Error
+						? error.message
+						: "Could not reconnect the pins.",
+					<XIcon />,
+				);
+			}
 		},
-		[
-			setEdges,
-			pinToNode,
-			executeCommands,
-			executeCommand,
-			board.data?.nodes,
-			version,
-		],
+		[version, onNativeConnection],
 	);
 
 	const onScreenshot = useCallback(async () => {
-		const viewportEl = document.querySelector(
+		const viewportEl = flowRef.current?.querySelector(
 			".react-flow__viewport",
 		) as HTMLElement | null;
 		if (!viewportEl) return;
@@ -4097,42 +3987,36 @@ export function FlowBoard({
 		}
 	}, [getNodes]);
 
-	const onReconnectEnd = useCallback(
-		async (event: any, edge: any) => {
-			// Don't execute commands when viewing an old version
-			if (typeof version !== "undefined") {
-				return;
-			}
-
-			if (!edgeReconnectSuccessful.current) {
-				const { source, target, sourceHandle, targetHandle } = edge;
-				const functionReferenceCommand = removeFunctionReferenceCommandForEdge({
-					edge: { id: edge.id, source, sourceHandle, target, targetHandle },
-					boardNodes: board.data?.nodes,
-				});
-				if (functionReferenceCommand) {
-					await executeCommand(functionReferenceCommand);
-					setEdges((eds) => eds.filter((e) => e.id !== edge.id));
-					edgeReconnectSuccessful.current = true;
-					return;
-				}
-
-				const from_node = pinToNode(sourceHandle);
-				const to_node = pinToNode(targetHandle);
-				if (!from_node || !to_node) return;
-				const command = disconnectPinsCommand({
-					from_node: from_node?.id,
-					from_pin: sourceHandle,
-					to_node: to_node?.id,
-					to_pin: targetHandle,
-				});
-				await executeCommand(command);
-				setEdges((eds) => eds.filter((e) => e.id !== edge.id));
-			}
-
+	const onReconnectEnd = useCallback<
+		NonNullable<ReactFlowProps["onReconnectEnd"]>
+	>(
+		async (event, edge, _handleType, connectionState) => {
+			reconnectingEdge.current = false;
+			const handled = edgeReconnectSuccessful.current;
 			edgeReconnectSuccessful.current = true;
+			if (handled || version !== undefined) return;
+			// Invalid pins, node bodies and releases outside the pane preserve the wire.
+			if (connectionState.toHandle || connectionState.toNode) return;
+			if (
+				!(event.target instanceof Element) ||
+				!event.target.closest(".react-flow__pane")
+			)
+				return;
+			try {
+				await onNativeDisconnect(edge);
+				setEdges((edges) =>
+					edges.filter((candidate) => candidate.id !== edge.id),
+				);
+			} catch (error) {
+				toastError(
+					error instanceof Error
+						? error.message
+						: "Could not disconnect the pins.",
+					<XIcon />,
+				);
+			}
 		},
-		[setEdges, pinToNode, version, executeCommand, board.data?.nodes],
+		[version, onNativeDisconnect],
 	);
 
 	const onContextMenuCB = useCallback((event: any) => {
@@ -4145,6 +4029,23 @@ export function FlowBoard({
 	// drag, rate-limited per node so a jittery drag does not stack them.
 	const commentDragRef = useRef<CommentDragSession | undefined>(undefined);
 	const collisionToastAtRef = useRef<Map<string, number>>(new Map());
+	const onNativeCancelDrag = useCallback(
+		(restore: boolean) => {
+			endDrag();
+			helperLines.end();
+			const passengers = commentDragRef.current?.passengers;
+			commentDragRef.current = undefined;
+			if (restore && passengers?.size) {
+				setNodes((nodes) =>
+					nodes.map((node) => {
+						const position = passengers.get(node.id);
+						return position ? { ...node, position, dragging: false } : node;
+					}),
+				);
+			}
+		},
+		[endDrag, helperLines, setNodes],
+	);
 	const onNodeDragStart = useCallback(
 		(event: React.MouseEvent, node: Node, nodes: Node[]) => {
 			const draggedNodes = nodes.length > 0 ? nodes : [node];
@@ -4422,6 +4323,79 @@ export function FlowBoard({
 
 	const [autoLayoutDialogOpen, setAutoLayoutDialogOpen] = useState(false);
 	const flowStore = useStoreApi();
+	useEffect(() => {
+		const moveWithKeyboard = (event: KeyboardEvent) => {
+			if (!event.key.startsWith("Arrow") || typeof version !== "undefined")
+				return;
+			const target = event.target;
+			if (
+				!(target instanceof HTMLElement) ||
+				!flowRef.current?.contains(target) ||
+				target.closest(
+					"input, textarea, select, button, [data-board-dom-control], [contenteditable='true'], [role='dialog'], [role='slider'], [role='combobox'], [role='menuitem']",
+				) ||
+				!target.closest(
+					".react-flow__node, .react-flow__nodesselection-rect, [data-board-canvas-input]",
+				)
+			)
+				return;
+			const state = flowStore.getState();
+			if (!state.nodesDraggable) return;
+			const selectedNodes = getNodes().filter(
+				(node) => node.selected && !node.hidden && node.draggable !== false,
+			);
+			if (!selectedNodes.length || selectedNodes.some((node) => node.dragging))
+				return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			const horizontal =
+				event.key === "ArrowLeft" || event.key === "ArrowRight";
+			const direction =
+				event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+			const distance =
+				(state.snapToGrid ? state.snapGrid[horizontal ? 0 : 1] : 5) *
+				(event.shiftKey ? 4 : 1) *
+				direction;
+			let moved = selectedNodes.map((node) => ({
+				...node,
+				position: {
+					x: node.position.x + (horizontal ? distance : 0),
+					y: node.position.y + (horizontal ? 0 : distance),
+				},
+			}));
+			if (state.snapToGrid)
+				moved = snapGroupToGrid(moved, state.snapGrid, {
+					x: horizontal,
+					y: !horizontal,
+				});
+			const mouseEvent = event as unknown as React.MouseEvent;
+			onNodeDragStart(mouseEvent, selectedNodes[0], selectedNodes);
+			const positions = new Map(moved.map((node) => [node.id, node.position]));
+			setNodes((current) =>
+				current.map((node) => {
+					const position = positions.get(node.id);
+					return position ? { ...node, position } : node;
+				}),
+			);
+			onNodeDrag(mouseEvent, moved[0], moved);
+			// The shared drag transaction persists node/comment/layer moves and their undo.
+			void onNodeDragStop(mouseEvent, moved[0], moved).catch(
+				(error: unknown) => {
+					console.error("Could not save keyboard node movement", error);
+				},
+			);
+		};
+		window.addEventListener("keydown", moveWithKeyboard, true);
+		return () => window.removeEventListener("keydown", moveWithKeyboard, true);
+	}, [
+		flowStore,
+		getNodes,
+		onNodeDragStart,
+		onNodeDrag,
+		onNodeDragStop,
+		setNodes,
+		version,
+	]);
 	const getVisibleFlowBounds = useCallback(() => {
 		const {
 			width,
@@ -4455,17 +4429,23 @@ export function FlowBoard({
 			),
 	});
 	const { close: closeGrouping, offerAfterLayout } = grouping;
-	const previewNodes = useMemo(
-		() =>
-			grouping.previewMemberIds.size
-				? nodes.map((node) =>
-						grouping.previewMemberIds.has(node.id)
-							? { ...node, style: { ...node.style, opacity: 0.15 } }
-							: node,
-					)
-				: nodes,
-		[nodes, grouping.previewMemberIds],
-	);
+	const previewNodes = useMemo(() => {
+		if (!grouping.previewMemberIds.size && !highlightedNodeIds.size)
+			return nodes;
+		return nodes.map((node) => {
+			const preview = grouping.previewMemberIds.has(node.id);
+			const highlighted = highlightedNodeIds.has(node.id);
+			if (!preview && !highlighted) return node;
+			return {
+				...node,
+				...(preview && { style: { ...node.style, opacity: 0.15 } }),
+				...(highlighted && {
+					className: cn(node.className, "flowscript-nav-highlight"),
+				}),
+			};
+		});
+	}, [nodes, grouping.previewMemberIds, highlightedNodeIds]);
+
 	const previewEdges = useMemo(
 		() =>
 			grouping.previewMemberIds.size
@@ -4772,7 +4752,7 @@ export function FlowBoard({
 				);
 			}
 
-			if (routing && reroute) {
+			if (routing) {
 				commands.push(
 					...buildAutoRerouteCommands({
 						...routing,
@@ -4863,6 +4843,8 @@ export function FlowBoard({
 			executeCommands: handleExecuteCommands,
 			focusNode,
 			selectNodes,
+			highlightNode: highlightNodeOnCanvas,
+			highlightNodes: highlightNodesOnCanvas,
 			clearRunContext: handleClearRunContext,
 		};
 		useAssistantSurface.getState().setBoardSurface(surface);
@@ -4884,6 +4866,8 @@ export function FlowBoard({
 		handleExecuteCommands,
 		focusNode,
 		selectNodes,
+		highlightNodeOnCanvas,
+		highlightNodesOnCanvas,
 		handleClearRunContext,
 	]);
 
@@ -5930,8 +5914,10 @@ export function FlowBoard({
 										)}
 									>
 										{t("boardDiffStatusChanges", {
-											defaultValue_one: "{{count}} change since your last visit",
-											defaultValue_other: "{{count}} changes since your last visit",
+											defaultValue_one:
+												"{{count}} change since your last visit",
+											defaultValue_other:
+												"{{count}} changes since your last visit",
 											count: boardDiff.notice.diff.logicCount,
 										})}
 									</BoardStatusItem>
@@ -6107,6 +6093,10 @@ export function FlowBoard({
 										onNodeDragStart={onNodeDragStart}
 										onPaneClick={onPaneClick}
 										isValidConnection={isValidConnectionCB}
+										onNativeConnection={onNativeConnection}
+										onNativeDisconnect={onNativeDisconnect}
+										onNativeCancelDrag={onNativeCancelDrag}
+										scopeKey={`${appId}:${boardId}:${currentLayer ?? "root"}:${version?.join(".") ?? "latest"}`}
 										onConnect={onConnect}
 										onSelectionChange={onSelectionChange}
 										onReconnect={onReconnect}

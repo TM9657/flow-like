@@ -4,6 +4,10 @@ use super::invoke_llm;
 use super::prompts;
 use crate::llm::ModelLogic;
 
+fn extraction_sample(text: &str) -> &str {
+    &text[..text.floor_char_boundary(6000)]
+}
+
 /// Tracks important entities across summarization chunks to prevent information loss.
 #[derive(Debug, Clone, Default)]
 pub struct EntityTracker {
@@ -22,12 +26,7 @@ impl EntityTracker {
         model: &dyn ModelLogic,
         model_name: &str,
     ) -> anyhow::Result<()> {
-        let max_extract_len = 6000;
-        let sample = if text.len() > max_extract_len {
-            &text[..max_extract_len]
-        } else {
-            text
-        };
+        let sample = extraction_sample(text);
 
         let prompt = prompts::entity_extraction_prompt(sample);
         let response = invoke_llm(
@@ -77,5 +76,22 @@ impl EntityTracker {
 
     pub fn is_empty(&self) -> bool {
         self.entities.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extraction_sample;
+
+    #[test]
+    fn extraction_sample_preserves_utf8_and_the_byte_budget() {
+        for suffix in ["é", "漢", "🦀"] {
+            let text = format!("{}{}", "a".repeat(5999), suffix);
+            assert_eq!(extraction_sample(&text), "a".repeat(5999));
+        }
+        let short = "é漢🦀";
+        assert_eq!(extraction_sample(short), short);
+        let ascii = "a".repeat(6001);
+        assert_eq!(extraction_sample(&ascii), "a".repeat(6000));
     }
 }

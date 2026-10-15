@@ -1,4 +1,5 @@
 "use client";
+import { useTranslation } from "@flow-like/locales";
 import {
 	FoldHorizontalIcon,
 	MessageSquareIcon,
@@ -8,7 +9,8 @@ import {
 	SquarePenIcon,
 	Trash2Icon,
 } from "lucide-react";
-import { memo } from "react";
+import { memo, useState } from "react";
+import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 
 interface LayerNodeToolbarProps {
@@ -28,33 +30,51 @@ export const ToolbarButton = memo(
 		tooltip,
 		variant = "default",
 	}: {
-		onClick: (e?: React.MouseEvent<HTMLButtonElement>) => void;
+		onClick: (e?: React.MouseEvent<HTMLButtonElement>) => void | Promise<void>;
 		icon: React.ComponentType<{ className?: string }>;
 		tooltip: string;
 		variant?: "default" | "destructive";
-	}) => (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<button
-					type="button"
-					className={`h-5 w-5 flex items-center justify-center rounded transition-colors ${
-						variant === "destructive"
-							? "hover:bg-red-500/20 text-red-400 hover:text-red-300"
-							: "hover:bg-white/10"
-					}`}
-					onClick={(e) => {
-						e.stopPropagation();
-						onClick(e);
-					}}
-				>
-					<Icon className="h-3 w-3" />
-				</button>
-			</TooltipTrigger>
-			<TooltipContent side="top" className="text-[10px] px-1.5 py-0.5">
-				{tooltip}
-			</TooltipContent>
-		</Tooltip>
-	),
+	}) => {
+		const { t } = useTranslation("flow");
+		const [pending, setPending] = useState(false);
+		return (
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<button
+						type="button"
+						aria-label={tooltip}
+						disabled={pending}
+						className={`h-5 w-5 flex items-center justify-center rounded transition-colors ${
+							variant === "destructive"
+								? "hover:bg-red-500/20 text-red-400 hover:text-red-300"
+								: "hover:bg-white/10"
+						}`}
+						onClick={async (e) => {
+							e.stopPropagation();
+							if (pending) return;
+							setPending(true);
+							try {
+								await onClick(e);
+							} catch (cause) {
+								toast.error(
+									cause instanceof Error
+										? cause.message
+										: t("nodeActionFailed", "Could not complete this action."),
+								);
+							} finally {
+								setPending(false);
+							}
+						}}
+					>
+						<Icon className="h-3 w-3" />
+					</button>
+				</TooltipTrigger>
+				<TooltipContent side="top" className="text-[10px] px-1.5 py-0.5">
+					{tooltip}
+				</TooltipContent>
+			</Tooltip>
+		);
+	},
 );
 
 ToolbarButton.displayName = "ToolbarButton";
@@ -78,6 +98,7 @@ const LayerNodeToolbar = memo(
 				{/* Invisible bridge to maintain hover */}
 				<div className="absolute -top-3 left-0 right-0 h-3" />
 				<div
+					data-board-dom-control
 					className="absolute -top-9 left-1/2 -translate-x-1/2 z-50 flex items-center gap-0.5
 						bg-zinc-900 text-zinc-100
 						rounded-full shadow-lg shadow-black/25

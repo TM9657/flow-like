@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 	profile: { hub: "api.flow-like.com", secure: true },
 	configRequests: [] as ConfigRequest[],
 	invalidate: async () => undefined,
+	openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@flow-like/flow-like-ui", () => ({
@@ -33,7 +34,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("@tauri-apps/plugin-deep-link", () => ({
 	getCurrent: async () => null,
 }));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: mocks.openUrl }));
 vi.mock("aws-amplify", () => ({ Amplify: { configure: vi.fn() } }));
 vi.mock("aws-amplify/auth", () => ({ decodeJWT: vi.fn() }));
 vi.mock("../../lib/api", () => ({
@@ -104,6 +105,7 @@ beforeEach(() => {
 	).IS_REACT_ACT_ENVIRONMENT = true;
 	mocks.profile = { hub: "api.flow-like.com", secure: true };
 	mocks.configRequests = [];
+	mocks.openUrl.mockReset().mockResolvedValue(undefined);
 	probe.mounts = 0;
 	probe.unmounts = 0;
 	probe.mountedWith = [];
@@ -120,6 +122,83 @@ afterEach(async () => {
 });
 
 describe("DesktopAuthProvider", () => {
+	const browserConfig = () => ({
+		...oidcConfig("client-a"),
+		post_logout_redirect_uri: "https://app.flow-like.com/desktop/logout",
+		metadata: {
+			issuer: "https://auth.flow-like.test",
+			authorization_endpoint: "https://auth.flow-like.test/authorize",
+			end_session_endpoint: "https://auth.flow-like.test/logout",
+		},
+	});
+	const storedUser = () =>
+		new User({
+			access_token: "access-a",
+			id_token: "id-a",
+			token_type: "Bearer",
+			expires_at: Math.floor(Date.now() / 1000) + 3600,
+			profile: {
+				sub: "user-a",
+				iss: "https://auth.flow-like.test",
+				aud: "client-a",
+				exp: Math.floor(Date.now() / 1000) + 3600,
+				iat: Math.floor(Date.now() / 1000),
+			},
+		});
+
+	test("finishes native browser navigation without leaving sign-in or sign-out loading", async () => {
+		localStorage.setItem(
+			"oidc.user:https://auth.flow-like.test:client-a",
+			storedUser().toStorageString(),
+		);
+		await render();
+		await answer(0, browserConfig());
+		expect(probe.auth?.isAuthenticated).toBe(true);
+		await act(async () => probe.auth?.signoutRedirect());
+		await flush();
+		expect(probe.auth?.isAuthenticated).toBe(false);
+		expect(probe.auth?.isLoading).toBe(false);
+		expect(probe.auth?.activeNavigator).toBeUndefined();
+		await act(async () => probe.auth?.signinRedirect());
+		await flush();
+		expect(mocks.openUrl).toHaveBeenCalledTimes(2);
+		expect(probe.auth?.isLoading).toBe(false);
+		expect(probe.auth?.activeNavigator).toBeUndefined();
+		await act(async () => probe.auth?.events.load(storedUser()));
+		await flush();
+		expect(probe.auth?.isAuthenticated).toBe(true);
+		expect(probe.auth?.activeNavigator).toBeUndefined();
+	});
+
+	test("surfaces a system-browser failure and clears navigation state", async () => {
+		await render();
+		await answer(0, browserConfig());
+		mocks.openUrl.mockRejectedValueOnce(new Error("browser unavailable"));
+		await act(async () => probe.auth?.signinRedirect());
+		await flush();
+		expect(probe.auth?.error?.message).toBe("browser unavailable");
+		expect(probe.auth?.isLoading).toBe(false);
+		expect(probe.auth?.activeNavigator).toBeUndefined();
+	});
+
+	test("hides the previous hub's user while the new hub config is pending or unavailable", async () => {
+		localStorage.setItem(
+			"oidc.user:https://auth.flow-like.test:client-a",
+			storedUser().toStorageString(),
+		);
+		await render();
+		await answer(0, browserConfig());
+		expect(probe.auth?.user?.access_token).toBe("access-a");
+		mocks.profile = { hub: "second-hub.test", secure: true };
+		await render();
+		expect(probe.auth?.isAuthenticated).toBe(false);
+		expect(probe.auth?.user).toBeNull();
+		await act(async () =>
+			mocks.configRequests[1].reject(new Error("hub unavailable")),
+		);
+		await flush();
+		expect(probe.auth?.user).toBeNull();
+	});
 	test("keeps the app mounted when the sign-in configuration arrives", async () => {
 		await render();
 		expect(probe.mounts).toBe(1);

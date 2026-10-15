@@ -1,5 +1,6 @@
 "use client";
 
+import { requiresInteractiveSignIn } from "@flow-like/flow-like-ui/lib/auth/oidc-renewal";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AuthContextProps } from "react-oidc-context";
 import {
@@ -8,8 +9,13 @@ import {
 	subscribeSessionRejection,
 } from "../lib/auth-session";
 import { currentRelativeUrl, saveReturnUrl } from "../lib/return-url";
+import { renewWebSession } from "../lib/session-request";
 
-type RecoveryState = "ready" | "redirecting" | "sign-in-required";
+type RecoveryState =
+	| "ready"
+	| "redirecting"
+	| "sign-in-required"
+	| "retry-required";
 const serverSnapshot = () => false;
 
 export function useSessionRecovery(
@@ -42,6 +48,25 @@ export function useSessionRecovery(
 	useEffect(() => {
 		latestAuth.current = auth;
 	}, [auth]);
+
+	useEffect(() => {
+		if (recovery?.state !== "retry-required") return;
+		const retry = () => {
+			attempted.current = undefined;
+			setRecovery(undefined);
+		};
+		const visible = () => {
+			if (document.visibilityState === "visible") retry();
+		};
+		window.addEventListener("online", retry);
+		window.addEventListener("flow-like:retry-session", retry);
+		document.addEventListener("visibilitychange", visible);
+		return () => {
+			window.removeEventListener("online", retry);
+			window.removeEventListener("flow-like:retry-session", retry);
+			document.removeEventListener("visibilitychange", visible);
+		};
+	}, [recovery?.state]);
 
 	useEffect(() => {
 		if (
@@ -95,6 +120,23 @@ export function useSessionRecovery(
 		if (returnUrl) saveReturnUrl(returnUrl);
 
 		void (async () => {
+			try {
+				await renewWebSession(auth, accessToken);
+				setRecovery(undefined);
+				return;
+			} catch (error) {
+				const current = latestAuth.current;
+				if (
+					current.signinRedirect !== auth.signinRedirect ||
+					(current.user?.access_token &&
+						current.user.access_token !== accessToken)
+				)
+					return;
+				if (!requiresInteractiveSignIn(error)) {
+					setRecovery({ accessToken, state: "retry-required" });
+					return;
+				}
+			}
 			try {
 				await auth.removeUser();
 			} catch {

@@ -129,6 +129,7 @@ export function autoLayoutWorkflowBoard(
 				layerEntities,
 				boardLayers: board.layers,
 				currentLayer,
+				preserveAutoReroutes: true,
 				comments,
 			},
 			style,

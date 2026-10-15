@@ -20,7 +20,6 @@ import {
 	type IBoardSyncStatus,
 	type IBoardVariables,
 	type ICheckFlowScriptReconcileResponse,
-	ICommentType,
 	IConnectionMode,
 	type IExecutionMode,
 	type IExecutionStage,
@@ -74,6 +73,7 @@ import {
 	LEGACY_BOARD_FORMAT_VERSION,
 } from "@flow-like/flow-like-ui/lib/board-format";
 import {
+	BoardMediaProjector,
 	BoardSyncClient,
 	type IBoardSyncRequest,
 	type IBoardSyncResponse,
@@ -571,11 +571,7 @@ export class BoardState implements IBoardState {
 	 * from `remoteBoardSync` because the two sides hold different revisions of the same board.
 	 */
 	private readonly localBoardSync = new BoardSyncClient();
-	/** Preserve resolved media across retries without adding URLs to sync snapshots. */
-	private readonly mediaDisplayBoards = new WeakMap<
-		IBoard,
-		{ appId: string; boardId: string; isOffline: boolean; display: IBoard }
-	>();
+	private readonly mediaProjector = new BoardMediaProjector();
 	/**
 	 * `appId:boardId` -> the remote `updatedAt` nanos this session already pulled
 	 * through `getBoard`.
@@ -1673,29 +1669,17 @@ export class BoardState implements IBoardState {
 		board: IBoard,
 		isOffline: boolean,
 	): Promise<IBoard> {
-		const mediaComments = [
-			...Object.values(board.comments),
-			...Object.values(board.layers).flatMap((layer) =>
-				Object.values(layer.comments),
-			),
-		].filter(
-			(comment) =>
-				comment.comment_type === ICommentType.Image ||
-				comment.comment_type === ICommentType.Video,
+		const files = this.mediaProjector.files(board);
+		if (files.length === 0) return board;
+		const scope = JSON.stringify([appId, boardId, isOffline]);
+		const previousDisplay = this.mediaProjector.project(
+			board,
+			scope,
+			new Map(),
 		);
-		if (mediaComments.length === 0) return board;
-		const cached = this.mediaDisplayBoards.get(board);
-		const previousDisplay =
-			cached?.appId === appId &&
-			cached.boardId === boardId &&
-			cached.isOffline === isOffline
-				? cached.display
-				: board;
 
 		try {
-			const prefixes = mediaComments.map(
-				(comment) => `boards/${boardId}/${comment.content}`,
-			);
+			const prefixes = files.map((file) => `boards/${boardId}/${file}`);
 			let results: { prefix: string; url?: string }[];
 			if (isOffline) {
 				results = await invoke("storage_get", { appId, prefixes });
@@ -1716,44 +1700,12 @@ export class BoardState implements IBoardState {
 			const urlMap = new Map(
 				results.filter((r) => r.url).map((r) => [r.prefix, r.url as string]),
 			);
-			// The sync client and query cache may still hold this board. Copy changed
-			// comments so a URL arriving later triggers a render without editing either.
-			const withUrls = (comments: IBoard["comments"]) => {
-				let updated = comments;
-				for (const [id, comment] of Object.entries(comments)) {
-					if (
-						comment.comment_type !== ICommentType.Image &&
-						comment.comment_type !== ICommentType.Video
-					)
-						continue;
-					const url = urlMap.get(`boards/${boardId}/${comment.content}`);
-					if (!url || url === comment.presigned_url) continue;
-					if (updated === comments) updated = { ...comments };
-					updated[id] = { ...comment, presigned_url: url };
-				}
-				return updated;
-			};
-			const comments = withUrls(previousDisplay.comments);
-			let layers = previousDisplay.layers;
-			for (const [id, layer] of Object.entries(previousDisplay.layers)) {
-				const comments = withUrls(layer.comments);
-				if (comments === layer.comments) continue;
-				if (layers === previousDisplay.layers)
-					layers = { ...previousDisplay.layers };
-				layers[id] = { ...layer, comments };
+			const urls = new Map<string, string>();
+			for (const file of files) {
+				const url = urlMap.get(`boards/${boardId}/${file}`);
+				if (url) urls.set(file, url);
 			}
-			const displayBoard =
-				comments === previousDisplay.comments &&
-				layers === previousDisplay.layers
-					? previousDisplay
-					: { ...board, comments, layers };
-			this.mediaDisplayBoards.set(board, {
-				appId,
-				boardId,
-				isOffline,
-				display: displayBoard,
-			});
-			return displayBoard;
+			return this.mediaProjector.project(board, scope, urls);
 		} catch (error) {
 			console.warn("Failed to presign media comments:", error);
 			return previousDisplay;

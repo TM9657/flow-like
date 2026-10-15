@@ -15,6 +15,12 @@ import {
 	upstreamFailureInSuccess,
 } from "./api-error";
 import {
+	authForHub,
+	hubAuthHeaders,
+	renewHubAuth,
+	withHubAuth,
+} from "./hub-auth";
+import {
 	DEFAULT_CONNECT_TIMEOUT_MS,
 	DISPATCH_REQUEST_TIMEOUT_MS,
 	STREAM_HEADER_TIMEOUT_MS,
@@ -124,30 +130,21 @@ function isProtectedAppRoute(path: string, method: string): boolean {
 	return PROTECTED_APP_ROUTE_SEGMENTS.has(segment);
 }
 
-export function requestSilentRenew(
-	auth: AuthContextProps,
-	reason: string,
-): void {
-	try {
-		void Promise.resolve(auth.startSilentRenew()).catch(() => {
-			console.warn(`[Auth] Silent renew failed ${reason}`);
-		});
-	} catch {
+export function requestSilentRenew(auth: AuthContextProps, reason: string) {
+	return renewHubAuth(auth).catch((error) => {
 		console.warn(`[Auth] Silent renew failed ${reason}`);
-	}
+		throw error;
+	});
 }
 
 export function ensureProtectedAppRouteAuth(
 	path: string,
 	auth?: AuthContextProps | null,
 	method = "GET",
+	accessToken = auth?.user?.access_token,
 ): void {
 	if (!isProtectedAppRoute(path, method)) return;
-	if (auth?.user?.access_token) return;
-
-	if (auth?.isAuthenticated) {
-		requestSilentRenew(auth, "before API request");
-	}
+	if (accessToken) return;
 
 	throw new Error(
 		`Authentication token required for app request: ${redactApiPathSecrets(path)}`,
@@ -225,11 +222,12 @@ export async function streamFetcher<T>(
 	onMessage?: (data: T) => void,
 ): Promise<void> {
 	const method = methodOf(options);
-	ensureProtectedAppRouteAuth(path, auth, method);
+	const scopedAuth = authForHub(profile, auth);
+	ensureProtectedAppRouteAuth(path, scopedAuth, method);
 	const authHeader: Record<string, string> = {
 		[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
-		...(auth?.user?.access_token
-			? { Authorization: `Bearer ${auth.user.access_token}` }
+		...(scopedAuth?.user?.access_token
+			? { Authorization: `Bearer ${scopedAuth.user.access_token}` }
 			: {}),
 	};
 	const url = constructUrl(profile, path);
@@ -248,13 +246,22 @@ export async function streamFetcher<T>(
 			options,
 			authHeader,
 			streamHeaderTimeoutMs(path, method, bodyBytes),
+			profile,
+			scopedAuth,
 			onMessage,
 		);
 		return;
 	}
 
 	// For GET requests, use eventsource-client
-	await streamFetcherEventSource<T>(url, options, authHeader, onMessage);
+	await streamFetcherEventSource<T>(
+		url,
+		options,
+		authHeader,
+		profile,
+		scopedAuth,
+		onMessage,
+	);
 }
 
 /**
@@ -282,6 +289,8 @@ async function streamFetcherRaw<T>(
 	options: RequestInit | undefined,
 	authHeader: Record<string, string>,
 	headerTimeoutMs: number,
+	profile: IProfile,
+	auth: AuthContextProps | undefined,
 	onMessage?: (data: T) => void,
 ): Promise<void> {
 	const abortController = new AbortController();
@@ -298,18 +307,23 @@ async function streamFetcherRaw<T>(
 		const response = await withRequestDeadline(
 			url,
 			async ({ signal, release }) => {
-				const res = await tauriFetch(url, {
-					method: options?.method ?? "POST",
-					headers: {
-						Accept: "text/event-stream",
-						"Content-Type": "application/json",
-						...((options?.headers as Record<string, string>) ?? {}),
-						...authHeader,
-					},
-					body: options?.body,
-					connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
-					signal,
-				});
+				const send = (token?: string) =>
+					tauriFetch(url, {
+						method: options?.method ?? "POST",
+						headers: hubAuthHeaders(
+							{
+								Accept: "text/event-stream",
+								"Content-Type": "application/json",
+								...((options?.headers as Record<string, string>) ?? {}),
+								...authHeader,
+							},
+							token,
+						),
+						body: options?.body,
+						connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
+						signal,
+					});
+				const res = await withHubAuth(profile, auth, send);
 				release();
 				return res;
 			},
@@ -431,6 +445,8 @@ async function streamFetcherEventSource<T>(
 	url: string,
 	options: RequestInit | undefined,
 	authHeader: Record<string, string>,
+	profile: IProfile,
+	auth: AuthContextProps | undefined,
 	onMessage?: (data: T) => void,
 ): Promise<void> {
 	let finished = false;
@@ -460,7 +476,13 @@ async function streamFetcherEventSource<T>(
 
 		esRef = createEventSource({
 			url: url,
-			fetch: tauriFetch,
+			fetch: (input, init) =>
+				withHubAuth(profile, auth, (token) =>
+					tauriFetch(input, {
+						...init,
+						headers: hubAuthHeaders(init?.headers, token),
+					}),
+				),
 			// @ts-ignore
 			headers: {
 				Accept: "text/event-stream",
@@ -589,7 +611,8 @@ async function requestJson<T>(
 	auth?: AuthContextProps,
 	ifNoneMatch?: string,
 ): Promise<IConditionalResponse<T>> {
-	ensureProtectedAppRouteAuth(path, auth, methodOf(options));
+	const scopedAuth = authForHub(profile, auth);
+	ensureProtectedAppRouteAuth(path, scopedAuth, methodOf(options));
 	if (API_STATS_ENABLED) {
 		const statKey = normalizeApiPath(methodOf(options), path);
 		__apiCallStats.set(statKey, (__apiCallStats.get(statKey) ?? 0) + 1);
@@ -597,8 +620,8 @@ async function requestJson<T>(
 	const headers: HeadersInit = {
 		[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
 	};
-	if (auth?.user?.access_token) {
-		headers.Authorization = `Bearer ${auth?.user?.access_token}`;
+	if (scopedAuth?.user?.access_token) {
+		headers.Authorization = `Bearer ${scopedAuth?.user?.access_token}`;
 	}
 	if (ifNoneMatch) {
 		headers["If-None-Match"] = ifNoneMatch;
@@ -622,17 +645,29 @@ async function requestJson<T>(
 		return await withRequestDeadline<IConditionalResponse<T>>(
 			route,
 			async (deadline) => {
-				const response = await tauriFetch(url, {
-					...init,
-					headers: {
-						"Content-Type": "application/json",
-						...init.headers,
-						...headers,
-					},
-					keepalive: true,
-					priority: "high",
-					connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
-					signal: deadline.signal,
+				const response = await withHubAuth(profile, scopedAuth, (token) => {
+					ensureProtectedAppRouteAuth(
+						path,
+						undefined,
+						methodOf(options),
+						token,
+					);
+					const requestHeaders = hubAuthHeaders(
+						{
+							"Content-Type": "application/json",
+							...init.headers,
+							...headers,
+						},
+						token,
+					);
+					return tauriFetch(url, {
+						...init,
+						headers: requestHeaders,
+						keepalive: true,
+						priority: "high",
+						connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
+						signal: deadline.signal,
+					});
 				});
 
 				if (API_STATS_ENABLED) {
@@ -651,9 +686,6 @@ async function requestJson<T>(
 				}
 
 				if (!response.ok) {
-					if (response.status === 401 && auth) {
-						requestSilentRenew(auth, "after 401");
-					}
 					const errorText = await response.text();
 					const apiError = apiResponseError(response, errorText, path);
 					console.error(

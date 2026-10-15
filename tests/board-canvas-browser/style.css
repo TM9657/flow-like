@@ -1,0 +1,95 @@
+@font-face {
+	font-family: Inter;
+	src: url("/board-canvas/Inter-Regular.ttf") format("truetype");
+	font-weight: 400;
+	font-display: block;
+}
+@font-face {
+	font-family: Inter;
+	src: url("/board-canvas/Inter-Medium.ttf") format("truetype");
+	font-weight: 500 700;
+	font-display: block;
+}
+html,
+body,
+#root {
+	height: 100%;
+	width: 100%;
+	margin: 0;
+	overflow: hidden;
+}
+body {
+	font-family: Inter, sans-serif;
+	color: var(--foreground);
+	background: var(--background);
+}
+.harness {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+.harness-toolbar {
+	padding: 10px 16px;
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	border-bottom: 1px solid var(--border);
+	background: var(--card);
+	font-size: 12px;
+}
+.harness-toolbar strong {
+	margin-right: auto;
+}
+.harness-toolbar button {
+	border: 1px solid var(--border);
+	padding: 4px 10px;
+	border-radius: 4px;
+	cursor: pointer;
+}
+.harness-caption {
+	padding: 6px 16px;
+	font-size: 11px;
+	color: var(--muted-foreground);
+	border-bottom: 1px solid var(--border);
+}
+.harness-board {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+}
+.harness-node {
+	position: relative;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--card);
+	font-size: 10px;
+	overflow: visible;
+}
+.harness-node.selected {
+	border-color: var(--primary);
+}
+.harness-node-title {
+	height: 16px;
+	padding-left: 8px;
+	background: linear-gradient(90deg, var(--card), var(--primary));
+	border-radius: 5px 5px 0 0;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.harness-pin-label {
+	position: absolute;
+	font-size: 8px;
+	transform: translateY(-50%);
+	pointer-events: none;
+}
+.harness-node button {
+	position: absolute;
+	left: 6px;
+	bottom: 2px;
+	font-size: 8px;
+	line-height: 12px;
+	color: var(--muted-foreground);
+}
+.harness-error {
+	color: var(--destructive);
+}

@@ -50,6 +50,7 @@ import type {
 	ICommandSyncArchive,
 } from "@flow-like/flow-like-ui/lib";
 import { getApiOrigin } from "@flow-like/flow-like-ui/lib/api-url";
+import { requiresInteractiveSignIn } from "@flow-like/flow-like-ui/lib/auth/oidc-renewal";
 import { completeMediaUpload } from "@flow-like/flow-like-ui/lib/profile-media-upload";
 import { asArray, isRecord } from "@flow-like/flow-like-ui/lib/response-shape";
 import type { IAIState } from "@flow-like/flow-like-ui/state/backend-state/ai-state";
@@ -62,6 +63,15 @@ import type { AuthContextProps } from "react-oidc-context";
 import { appsDB } from "../lib/apps-db";
 import { installNativeDeviceAdapter } from "../lib/device-adapter";
 import { ExecutionAuthBridge } from "../lib/execution-auth";
+import {
+	authForHub,
+	bindHubAuth,
+	hubAuthHeaders,
+	hubAuthUser,
+	renewHubAuth,
+	setHubAuthActive,
+	withHubAuth,
+} from "../lib/hub-auth";
 import { scheduleIDBCleanup } from "../lib/idb-maintenance";
 import { isIOSDevice, isMobileDevice } from "../lib/platform";
 import {
@@ -165,7 +175,9 @@ export class TauriBackend implements IBackendState {
 	offlineWritesState: IOfflineWritesState;
 
 	private _apiState: TauriApiState;
+	private storedAuth?: AuthContextProps;
 	private executionAuthHub?: string;
+	private registryAuthUpdate: Promise<void> = Promise.resolve();
 	private packageProfileError: Error | null = null;
 	private readonly packageSessionWaiters = new Set<{
 		resolve: () => void;
@@ -179,12 +191,13 @@ export class TauriBackend implements IBackendState {
 	constructor(
 		public readonly backgroundTaskHandler: (task: Promise<any>) => void,
 		public queryClient?: QueryClient,
-		public auth?: AuthContextProps,
+		auth?: AuthContextProps,
 		public profile?: IProfile,
 		private readonly canHostMLX = false,
 		private readonly deviceModels = false,
 	) {
 		this._apiState = new TauriApiState();
+		this.auth = auth;
 		this.apiState = this._apiState;
 		this.apiKeyState = new ApiKeyState(this);
 		this.appState = new AppState(this);
@@ -212,6 +225,29 @@ export class TauriBackend implements IBackendState {
 		this.offlineWritesState = new OfflineWritesState(this);
 	}
 
+	get auth(): AuthContextProps | undefined {
+		if (
+			this.executionAuthHub !== getApiOrigin(this.profile) ||
+			!this.storedAuth ||
+			!authForHub(this.profile, this.storedAuth)
+		)
+			return undefined;
+		const user = hubAuthUser(this.storedAuth);
+		return user === this.storedAuth.user
+			? this.storedAuth
+			: {
+					...this.storedAuth,
+					user,
+					isAuthenticated: Boolean(user && !user.expired),
+				};
+	}
+
+	set auth(auth: AuthContextProps | undefined) {
+		this.storedAuth = auth;
+		this.executionAuthHub = getApiOrigin(this.profile);
+		if (auth) setHubAuthActive(auth, bindHubAuth(auth, this.executionAuthHub));
+	}
+
 	capabilities(): ICapabilities {
 		const isIos = isIOSDevice();
 
@@ -228,6 +264,9 @@ export class TauriBackend implements IBackendState {
 
 	pushProfile(profile: IProfile) {
 		this.profile = profile;
+		if (this.storedAuth && this.executionAuthHub !== getApiOrigin(profile))
+			setHubAuthActive(this.storedAuth, false);
+		this.syncHubAuthConsumers();
 		this.packageProfileError = null;
 		this.resolvePackageSessionWaiters();
 		this.syncExecutionAuth().catch(() =>
@@ -237,23 +276,30 @@ export class TauriBackend implements IBackendState {
 	}
 
 	pushAuthContext(auth: AuthContextProps, hub = getApiOrigin(this.profile)) {
-		this.auth = auth;
+		this.storedAuth = auth;
 		this.executionAuthHub = hub;
+		const bound = bindHubAuth(auth, hub);
+		setHubAuthActive(auth, bound && hub === getApiOrigin(this.profile));
 		this.resolvePackageSessionWaiters();
 		this.syncExecutionAuth().catch(() =>
 			console.warn("[ExecutionAuth] Failed to update native session"),
 		);
-		this._apiState.setAuth(auth);
+		this.syncHubAuthConsumers();
+		this.refreshRemoteCatalogQueries();
+	}
+
+	private syncHubAuthConsumers() {
+		const auth = this.auth;
+		this._apiState.setAuth(auth ?? null);
 		useAuthStatusStore
 			.getState()
-			.setSignedIn(Boolean(auth.isAuthenticated && auth.user?.access_token));
-		const token = auth.user?.access_token ?? null;
-		this.registryState
-			.setAuthToken?.(token)
-			?.catch((e) =>
+			.setSignedIn(Boolean(auth?.isAuthenticated && auth.user?.access_token));
+		const token = auth?.user?.access_token ?? null;
+		this.registryAuthUpdate = this.registryAuthUpdate
+			.then(() => this.registryState.setAuthToken?.(token))
+			.catch((e) =>
 				console.warn("[RegistryAuth] Failed to set auth token:", e),
 			);
-		this.refreshRemoteCatalogQueries();
 	}
 
 	/** Missing project bundles wait for bootstrap; installed widgets can be described immediately. */
@@ -335,6 +381,30 @@ export class TauriBackend implements IBackendState {
 	}
 
 	async prepareExecutionAuth(): Promise<string> {
+		const hub = getApiOrigin(this.profile);
+		const auth = this.auth;
+		const user = this.executionUser();
+		if (
+			auth &&
+			user &&
+			(typeof navigator === "undefined" || navigator.onLine) &&
+			(user.expired ||
+				(user.expires_at !== undefined &&
+					user.expires_at <= Date.now() / 1000 + 30))
+		) {
+			try {
+				await renewHubAuth(auth);
+				this.syncHubAuthConsumers();
+			} catch (error) {
+				// Native offline execution can still use the last confirmed identity during an outage.
+				if (requiresInteractiveSignIn(error)) throw error;
+			}
+		}
+		if (
+			hub !== getApiOrigin(this.profile) ||
+			user?.profile.sub !== this.executionUser()?.profile.sub
+		)
+			throw new Error("The Hub account changed before execution started.");
 		await this.syncExecutionAuth();
 		await this.executionAuth.ready();
 		if (!this.executionUser()?.access_token) {
@@ -1062,9 +1132,10 @@ export function TauriProvider({
  * half-open socket (network lost mid-request) would stall profile sync for the
  * session. The deadline spans the body read, which is buffered here.
  */
-async function fetchWithDeadline(
+async function fetchProfileResource(
 	url: string,
 	init: RequestInit,
+	session?: { profile: IProfile; auth: AuthContextProps },
 ): Promise<Response> {
 	const bodyBytes =
 		typeof init.body === "string"
@@ -1075,11 +1146,16 @@ async function fetchWithDeadline(
 	return withRequestDeadline(
 		url.split("?")[0],
 		async ({ signal }) => {
-			const response = await tauriFetch(url, {
-				...init,
-				connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
-				signal,
-			});
+			const send = (token?: string) =>
+				tauriFetch(url, {
+					...init,
+					...(session ? { headers: hubAuthHeaders(init.headers, token) } : {}),
+					connectTimeout: DEFAULT_CONNECT_TIMEOUT_MS,
+					signal,
+				});
+			const response = session
+				? await withHubAuth(session.profile, session.auth, send)
+				: await send();
 			const body = response.body === null ? null : await response.arrayBuffer();
 			const buffered = new Response(body, {
 				status: response.status,
@@ -1111,7 +1187,8 @@ async function readOnlineProfiles(
 
 export function ProfileSyncer({
 	auth,
-}: { auth: { isAuthenticated: boolean; accessToken?: string } }) {
+	hub,
+}: { auth: { isAuthenticated: boolean; accessToken?: string }; hub: string }) {
 	const { t } = useTranslation("common");
 	const backend = useBackend();
 	const profile = useInvoke(
@@ -1122,9 +1199,12 @@ export function ProfileSyncer({
 	);
 
 	const isAuthenticated =
-		backend instanceof TauriBackend && auth.isAuthenticated;
-	const accessToken = auth.accessToken;
-	const hubUrl = profile.data?.hub;
+		backend instanceof TauriBackend &&
+		Boolean(profile.data) &&
+		auth.isAuthenticated &&
+		hub === getApiOrigin(profile.data);
+	const accessToken = isAuthenticated ? auth.accessToken : undefined;
+	const hubUrl = getApiOrigin(profile.data);
 
 	const syncQueueRef = useRef(createProfileSyncQueue());
 
@@ -1141,7 +1221,7 @@ export function ProfileSyncer({
 			console.log("[ProfileSync] Skipping: not TauriBackend");
 			return;
 		}
-		if (!isAuthenticated || !accessToken) {
+		if (!isAuthenticated || !accessToken || !profile.data) {
 			console.log("[ProfileSync] Skipping: missing auth state", {
 				isAuthenticated,
 				hasAccessToken: !!accessToken,
@@ -1149,6 +1229,28 @@ export function ProfileSyncer({
 			return;
 		}
 		let disposed = false;
+		const syncProfile = profile.data;
+		const subject = backend.auth?.user?.profile.sub;
+		const fetchWithDeadline = (url: string, init: RequestInit) => {
+			if (!new Headers(init.headers).has("Authorization"))
+				return fetchProfileResource(url, init);
+			const currentAuth = backend.auth;
+			if (
+				disposed ||
+				!currentAuth ||
+				currentAuth.user?.profile.sub !== subject ||
+				getApiOrigin(backend.profile) !== hub ||
+				new URL(url).origin !== new URL(hub).origin
+			) {
+				throw new Error(
+					"The hub session changed during profile synchronization.",
+				);
+			}
+			return fetchProfileResource(url, init, {
+				profile: syncProfile,
+				auth: currentAuth,
+			});
+		};
 
 		const isHttpPath = (path?: string | null): boolean => {
 			if (!path) return false;
@@ -2198,7 +2300,7 @@ export function ProfileSyncer({
 			window.removeEventListener("online", requestSync);
 			window.removeEventListener("focus", syncOnFocus);
 		};
-	}, [backend, isAuthenticated, accessToken, hubUrl]);
+	}, [backend, isAuthenticated, accessToken, hubUrl, hub, profile.data, t]);
 
 	return null;
 }

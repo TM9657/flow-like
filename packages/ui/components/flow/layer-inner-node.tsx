@@ -1,7 +1,8 @@
 "use client";
+import { useReactFlow } from "./board-runtime";
 
 import { useTranslation } from "@flow-like/locales";
-import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
+import { type Node, type NodeProps } from "@xyflow/react";
 import { ZapIcon } from "lucide-react";
 import {
 	type RefObject,
@@ -37,6 +38,7 @@ export type ILayerInnerNode = Node<
 		appId: string;
 		boardRef?: RefObject<IBoard | undefined>;
 		boardDataVersion?: string;
+		version?: [number, number, number];
 		selectorDataRef?: FlowSelectorDataRef;
 		selectorDataVersion?: number;
 		pushLayer(layer: ILayer): Promise<void>;
@@ -53,6 +55,13 @@ export function LayerInnerNode(props: NodeProps<ILayerInnerNode>) {
 	const [comment, setComment] = useState<string | undefined>();
 	const [name, setName] = useState<string | undefined>();
 	const [editing, setEditing] = useState(false);
+	const readOnly = props.data.version !== undefined;
+	useEffect(() => {
+		if (!readOnly) return;
+		setComment(undefined);
+		setName(undefined);
+		setEditing(false);
+	}, [readOnly]);
 
 	useEffect(() => {
 		const height = Math.max(
@@ -68,27 +77,29 @@ export function LayerInnerNode(props: NodeProps<ILayerInnerNode>) {
 			divRef.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
 			divRef.current.style.minHeight = `calc(15px + 1.25rem + 0.5rem)`;
 		}
-	}, [props.data.hash]);
+	}, [props.data.hash, props.data.layer.pins]);
 
 	const saveComment = useCallback(async () => {
+		if (readOnly) return;
 		const node = getNodes().find((n) => n.id === props.id);
 		if (!node) return;
 		const layer = node.data.layer as ILayer;
 		props.data.onLayerUpdate({ ...layer, comment: comment ?? "" });
 		setComment(undefined);
-	}, [props.id, comment]);
+	}, [props.id, props.data.onLayerUpdate, getNodes, comment, readOnly]);
 
 	const saveName = useCallback(async () => {
+		if (readOnly) return;
 		const node = getNodes().find((n) => n.id === props.id);
 		if (!node) return;
 		const layer = node.data.layer as ILayer;
 		props.data.onLayerUpdate({ ...layer, name: name ?? "Collapsed" });
 		setName(undefined);
-	}, [props.id, name]);
+	}, [props.id, props.data.onLayerUpdate, getNodes, name, readOnly]);
 
 	return (
 		<>
-			{typeof comment === "string" && (
+			{!readOnly && typeof comment === "string" && (
 				<CommentDialog
 					onOpenChange={(open) => {
 						if (!open) {
@@ -100,7 +111,7 @@ export function LayerInnerNode(props: NodeProps<ILayerInnerNode>) {
 					onUpsert={(comment) => setComment(comment)}
 				/>
 			)}
-			{typeof name === "string" && (
+			{!readOnly && typeof name === "string" && (
 				<NameDialog
 					onOpenChange={(open) => {
 						if (!open) {
@@ -157,6 +168,7 @@ export function LayerInnerNode(props: NodeProps<ILayerInnerNode>) {
 							boardId={props.data.boardId}
 							boardRef={props.data.boardRef}
 							boardDataVersion={props.data.boardDataVersion}
+							version={props.data.version}
 							pin={pin}
 							key={pin.id}
 							skipOffset={true}
@@ -180,6 +192,7 @@ export function LayerInnerNode(props: NodeProps<ILayerInnerNode>) {
 							boardId={props.data.boardId}
 							boardRef={props.data.boardRef}
 							boardDataVersion={props.data.boardDataVersion}
+							version={props.data.version}
 							pin={pin}
 							key={pin.id}
 							skipOffset={true}
@@ -191,27 +204,30 @@ export function LayerInnerNode(props: NodeProps<ILayerInnerNode>) {
 					))}
 			</div>
 
-			<LayerEditMenu
-				appId={props.data.appId}
-				open={editing}
-				layer={props.data.layer}
-				boardRef={props.data.boardRef}
-				onOpenChange={setEditing}
-				onApply={async (updated) => {
-					const newLayer = {
-						...props.data.layer,
-						pins: updated.pins,
-						cache: (updated as ILayer).cache,
-					};
-					try {
-						await props.data.onLayerUpdate(newLayer);
-					} catch (error) {
-						console.error(error);
-						toast.error("Failed to update layer");
-					}
-					setEditing(false);
-				}}
-			/>
+			{!readOnly && (
+				<LayerEditMenu
+					appId={props.data.appId}
+					open={editing}
+					layer={props.data.layer}
+					boardRef={props.data.boardRef}
+					onOpenChange={setEditing}
+					onApply={async (updated) => {
+						if (readOnly) return;
+						const newLayer = {
+							...props.data.layer,
+							pins: updated.pins,
+							cache: (updated as ILayer).cache,
+						};
+						try {
+							await props.data.onLayerUpdate(newLayer);
+						} catch (error) {
+							console.error(error);
+							toast.error("Failed to update layer");
+						}
+						setEditing(false);
+					}}
+				/>
+			)}
 		</>
 	);
 }

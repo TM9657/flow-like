@@ -71,6 +71,8 @@ import {
 } from "@flow-like/flow-like-ui/lib/frontend-hosting";
 import {
 	checkOAuthTokens,
+	hasRequiredScopes,
+	storedTokenToBackendFormat,
 	checkOAuthTokensFromPrerun,
 } from "@flow-like/flow-like-ui/lib/oauth/helpers";
 import type {
@@ -991,17 +993,14 @@ function EventConfiguration({
 					continue;
 				}
 
-				const token = await tokenStore.getToken(provider.id);
-				if (token && !tokenStore.isExpired(token)) {
+				const token = await tokenStore.getToken(provider.id, provider);
+				if (
+					token &&
+					!tokenStore.isExpired(token) &&
+					hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
+				) {
 					newlyAuthorized.add(provider.id);
-					newTokens[provider.id] = {
-						access_token: token.access_token,
-						refresh_token: token.refresh_token,
-						expires_at: token.expires_at
-							? Math.floor(token.expires_at / 1000)
-							: undefined,
-						token_type: token.token_type ?? "Bearer",
-					};
+					newTokens[provider.id] = storedTokenToBackendFormat(token);
 				}
 			}
 
@@ -1273,7 +1272,11 @@ function EventConfiguration({
 	const handleOAuthConfirmAll = async (rememberConsent: boolean) => {
 		if (rememberConsent && consentStore) {
 			for (const provider of oauthMissingProviders) {
-				await consentStore.setConsent(appId, provider.id, provider.scopes);
+				await consentStore.setConsent(
+					appId,
+					provider.id,
+					provider.merged_scopes ?? provider.scopes,
+				);
 			}
 		}
 
@@ -1283,16 +1286,15 @@ function EventConfiguration({
 		const allTokens = { ...pendingOAuthTokens };
 		for (const providerId of oauthAuthorizedProviders) {
 			if (tokenStore) {
-				const token = await tokenStore.getToken(providerId);
-				if (token && !tokenStore.isExpired(token)) {
-					allTokens[providerId] = {
-						access_token: token.access_token,
-						refresh_token: token.refresh_token,
-						expires_at: token.expires_at
-							? Math.floor(token.expires_at / 1000)
-							: undefined,
-						token_type: token.token_type ?? "Bearer",
-					};
+				const provider = oauthMissingProviders.find((p) => p.id === providerId);
+				if (!provider) continue;
+				const token = await tokenStore.getToken(providerId, provider);
+				if (
+					token &&
+					!tokenStore.isExpired(token) &&
+					hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
+				) {
+					allTokens[providerId] = storedTokenToBackendFormat(token);
 				}
 			}
 		}

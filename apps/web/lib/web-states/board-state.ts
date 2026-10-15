@@ -12,7 +12,6 @@ import {
 	type IBoardSummary,
 	type IBoardSummaryInclude,
 	type IBoardVariables,
-	ICommentType,
 	IConnectionMode,
 	type IExecutionMode,
 	type IExecutionStage,
@@ -51,6 +50,7 @@ import {
 	CURRENT_BOARD_FORMAT_VERSION,
 } from "@flow-like/flow-like-ui/lib/board-format";
 import {
+	BoardMediaProjector,
 	BoardSyncClient,
 	type IBoardSyncRequest,
 	type IBoardSyncResponse,
@@ -219,6 +219,7 @@ export class WebBoardState implements IBoardState {
 	>();
 	private readonly appIdByBoardId = new Map<string, string>();
 	private readonly boardSync = new BoardSyncClient();
+	private readonly mediaProjector = new BoardMediaProjector();
 
 	constructor(private readonly backend: WebBackendRef) {}
 
@@ -353,10 +354,7 @@ export class WebBoardState implements IBoardState {
 		);
 		this.appIdByBoardId.set(boardId, appId);
 
-		// Presign media comments (Image/Video)
-		await this.presignMediaComments(appId, boardId, board);
-
-		return board;
+		return this.currentDisplayBoard(appId, boardId, version, board);
 	}
 
 	async getBoardAuthoritative(
@@ -382,83 +380,55 @@ export class WebBoardState implements IBoardState {
 		return apiGet<IBoard>(`apps/${appId}/board/${boardId}`, this.backend.auth);
 	}
 
+	private async currentDisplayBoard(
+		appId: string,
+		boardId: string,
+		version: [number, number, number] | undefined,
+		board: IBoard,
+	): Promise<IBoard> {
+		let current = this.boardSync.peek(appId, boardId, version) ?? board;
+		for (;;) {
+			const display = await this.presignMediaComments(appId, boardId, current);
+			const latest = this.boardSync.peek(appId, boardId, version);
+			if (!latest || latest === current) return display;
+			// A command can commit while media URLs load. Return its snapshot so
+			// the older read cannot replace the command's result in the query cache.
+			current = latest;
+		}
+	}
+
 	private async presignMediaComments(
 		appId: string,
 		boardId: string,
 		board: IBoard,
-	): Promise<void> {
-		const mediaComments = Object.values(board.comments).filter(
-			(comment) =>
-				comment.comment_type === ICommentType.Image ||
-				comment.comment_type === ICommentType.Video,
-		);
-
-		if (mediaComments.length === 0) return;
-
-		// Build full storage paths for media files (apps/{appId}/upload/boards/{boardId}/{filename})
-		const buildFullPath = (filename: string) =>
+	): Promise<IBoard> {
+		const files = this.mediaProjector.files(board);
+		if (files.length === 0) return board;
+		const scope = JSON.stringify([appId, boardId]);
+		const fullPath = (filename: string) =>
 			`apps/${appId}/upload/boards/${boardId}/${filename}`;
-
-		const prefixes = mediaComments.map((comment) =>
-			buildFullPath(comment.content),
-		);
-
 		try {
 			const results = await apiPost<
 				{ prefix: string; url?: string; error?: string }[]
-			>(`apps/${appId}/data/download`, { prefixes }, this.backend.auth);
-
-			// Map presigned URLs back to comments
-			const urlMap = new Map(
-				results.filter((r) => r.url).map((r) => [r.prefix, r.url as string]),
+			>(
+				`apps/${appId}/data/download`,
+				{ prefixes: files.map(fullPath) },
+				this.backend.auth,
 			);
-
-			for (const comment of mediaComments) {
-				const prefix = buildFullPath(comment.content);
-				const url = urlMap.get(prefix);
-				if (url) {
-					(comment as any).presigned_url = url;
-				}
+			const byPrefix = new Map(
+				results
+					.filter((result) => result.url)
+					.map((result) => [result.prefix, result.url!]),
+			);
+			const urls = new Map<string, string>();
+			for (const file of files) {
+				const url = byPrefix.get(fullPath(file));
+				if (url) urls.set(file, url);
 			}
-
-			// Also presign layer comments
-			for (const layer of Object.values(board.layers)) {
-				const layerMediaComments = Object.values(layer.comments).filter(
-					(comment) =>
-						comment.comment_type === ICommentType.Image ||
-						comment.comment_type === ICommentType.Video,
-				);
-
-				if (layerMediaComments.length === 0) continue;
-
-				const layerPrefixes = layerMediaComments.map((comment) =>
-					buildFullPath(comment.content),
-				);
-
-				const layerResults = await apiPost<
-					{ prefix: string; url?: string; error?: string }[]
-				>(
-					`apps/${appId}/data/download`,
-					{ prefixes: layerPrefixes },
-					this.backend.auth,
-				);
-
-				const layerUrlMap = new Map(
-					layerResults
-						.filter((r) => r.url)
-						.map((r) => [r.prefix, r.url as string]),
-				);
-
-				for (const comment of layerMediaComments) {
-					const prefix = buildFullPath(comment.content);
-					const url = layerUrlMap.get(prefix);
-					if (url) {
-						(comment as any).presigned_url = url;
-					}
-				}
-			}
+			return this.mediaProjector.project(board, scope, urls);
 		} catch (error) {
 			console.warn("Failed to presign media comments:", error);
+			return this.mediaProjector.project(board, scope, new Map());
 		}
 	}
 
@@ -1045,8 +1015,9 @@ export class WebBoardState implements IBoardState {
 				tail,
 			);
 			if (board) {
-				await this.presignMediaComments(appId, boardId, board);
-				options.onBoard(board);
+				options.onBoard(
+					await this.currentDisplayBoard(appId, boardId, undefined, board),
+				);
 			}
 		}
 		return results;

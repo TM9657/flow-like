@@ -202,6 +202,7 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         // OAuth routes
         crate::routes::oauth::token_exchange,
         crate::routes::oauth::token_refresh,
+        crate::routes::oauth::adopt_connection,
         // User routes
         crate::routes::user::info::user_info,
         crate::routes::user::upsert_info::upsert_info,
@@ -871,6 +872,7 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         // OAuth schemas
         crate::routes::oauth::TokenExchangeRequest,
         crate::routes::oauth::TokenRefreshRequest,
+        crate::routes::oauth::AdoptConnectionRequest,
         crate::routes::oauth::TokenResponse,
         crate::routes::oauth::ErrorResponse,
         // Database schemas

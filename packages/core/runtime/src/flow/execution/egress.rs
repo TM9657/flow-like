@@ -261,6 +261,20 @@ impl GuardedHttpClient {
         Self::configured(environment, |builder| builder)
     }
 
+    /// Keeps requests at their original destination while retaining the
+    /// server-side URL and DNS checks. Credential-bearing API clients can use
+    /// this after validating the initial destination.
+    pub fn without_redirects(environment: ExecutionEnvironment) -> Result<Self> {
+        let client = install_guard(reqwest::Client::builder(), environment)
+            .redirect(redirect::Policy::none())
+            .build()
+            .map_err(|e| anyhow!("Failed to build HTTP client: {e}"))?;
+        Ok(Self {
+            client,
+            environment,
+        })
+    }
+
     /// Like [`Self::new`], with extra builder configuration (timeouts, user
     /// agent, …). The guard is installed after `configure`, so a resolver or
     /// redirect policy set there cannot replace it server-side.
@@ -568,6 +582,65 @@ mod tests {
                 error.is_redirect(),
                 "the redirect to the metadata endpoint must be refused: {error}"
             );
+        });
+    }
+
+    #[test]
+    fn no_redirect_client_retains_the_server_url_guard() {
+        let client = GuardedHttpClient::without_redirects(ExecutionEnvironment::Server).unwrap();
+        assert_eq!(client.environment(), ExecutionEnvironment::Server);
+        for url in [
+            "http://169.254.169.254/",
+            "http://metadata.google.internal/",
+            "http://127.0.0.1/",
+            "http://[fd00:ec2::254]/",
+        ] {
+            assert!(client.get(url).is_err(), "{url} must be refused");
+        }
+        assert!(client.get("https://aiplatform.googleapis.com/v1").is_ok());
+    }
+
+    #[test]
+    fn no_redirect_client_returns_redirects_locally_and_server_side() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            for environment in [ExecutionEnvironment::Local, ExecutionEnvironment::Server] {
+                let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+                    .await
+                    .unwrap();
+                let url = format!("http://{}/", listener.local_addr().unwrap());
+                let server = tokio::spawn(async move {
+                    let (mut socket, _) = listener.accept().await.unwrap();
+                    let mut request = [0_u8; 1024];
+                    socket.read(&mut request).await.unwrap();
+                    socket
+                        .write_all(
+                            b"HTTP/1.1 307 Temporary Redirect\r\nlocation: /redirected\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
+                        )
+                        .await
+                        .unwrap();
+                });
+
+                let client = GuardedHttpClient::without_redirects(environment).unwrap();
+                // Bypass only the initial URL check for the loopback fixture.
+                let response = client
+                    .client
+                    .post(&url)
+                    .bearer_auth("test-token")
+                    .timeout(Duration::from_secs(5))
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), reqwest::StatusCode::TEMPORARY_REDIRECT);
+                assert_eq!(response.url().as_str(), url);
+                assert_eq!(response.headers().get("location").unwrap(), "/redirected");
+                server.await.unwrap();
+            }
         });
     }
 

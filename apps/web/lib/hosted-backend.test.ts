@@ -5,6 +5,7 @@ import {
 	RequestTimeoutError,
 	WRITE_REQUEST_TIMEOUT_MS,
 } from "@flow-like/flow-like-ui/lib/request-deadline";
+import type { AuthContextProps } from "react-oidc-context";
 import {
 	type HostedBootstrap,
 	HostedHttpError,
@@ -20,6 +21,31 @@ afterEach(() => {
 });
 
 describe("hosted API contract", () => {
+	it("renews a hosted viewer session before sending an expired bearer", async () => {
+		const auth = {
+			user: {
+				access_token: "expired",
+				expired: true,
+				profile: { sub: "viewer" },
+			},
+			signinSilent: async () => ({
+				access_token: "fresh",
+				expired: false,
+				profile: { sub: "viewer" },
+			}),
+		} as unknown as AuthContextProps;
+			const bearers: (string | null)[] = [];
+		globalThis.fetch = (async (_input, init) => {
+				bearers.push(new Headers(init?.headers).get("Authorization"));
+			return new Response("{}");
+		}) as typeof fetch;
+		await createHostedRequest(
+			{ app: "published-app", route: "/" },
+			"expired",
+			auth,
+		)();
+			expect(bearers).toEqual(["Bearer fresh"]);
+	});
 	it("uses the web container's public runtime configuration", async () => {
 		const previousFlag = process.env.NEXT_PUBLIC_FLOW_LIKE_RUNTIME_CONFIG;
 		const previousWindow = Object.getOwnPropertyDescriptor(

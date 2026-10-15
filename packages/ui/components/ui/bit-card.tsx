@@ -1,5 +1,6 @@
 "use client";
 import { useTranslation } from "@flow-like/locales";
+import { isScriptNavigationUrl } from "../../lib/navigation-url";
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
 	AudioLinesIcon,
@@ -288,7 +289,9 @@ export function BitCard({
 
 	const openRepository = useCallback(() => {
 		if (bit.repository) {
-			window.open(bit.repository, "_blank");
+			if (!isScriptNavigationUrl(bit.repository)) {
+				window.open(bit.repository, "_blank", "noopener,noreferrer");
+			}
 		}
 	}, [bit.repository]);
 

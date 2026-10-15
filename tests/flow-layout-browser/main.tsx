@@ -100,6 +100,27 @@ function fixture(name: string): INode[] {
 		graph.dataLink("step-2", "step-6", 1, 1);
 		graph.dataLink("step-1", "step-4", 1, 0);
 		graph.dataLink("step-2", "step-5", 0, 0);
+	} else if (name === "shared-trunk") {
+		const labels = [
+			"Load account",
+			"Check account",
+			"Validate request",
+			"Create order",
+			"Send receipt",
+			"Update account",
+			"Write audit log",
+		];
+		for (let index = 0; index < labels.length; index++) {
+			const node = graph.exec(`step-${index}`, {
+				start: index === 0,
+				execIn: index !== 0,
+				dataIns: index > 0 ? 1 : 0,
+				dataOuts: index === 0 ? 1 : 0,
+			});
+			node.friendly_name = labels[index];
+			if (index > 0) graph.execLink(`step-${index - 1}`, `step-${index}`);
+			if (index >= 3) graph.dataLink("step-0", `step-${index}`);
+		}
 	} else {
 		graph.exec("chat", { start: true, execIn: false, dataOuts: 7 });
 		graph.exec("system", { dataIns: 2, dataOuts: 1 });

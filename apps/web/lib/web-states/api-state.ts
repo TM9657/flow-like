@@ -10,7 +10,7 @@ import {
 	CURRENT_BOARD_FORMAT_VERSION,
 } from "@flow-like/flow-like-ui/lib/board-format";
 import type { IProfile } from "@flow-like/flow-like-ui/types";
-import { reportUnauthorized } from "../auth-session";
+import { fetchWithSession } from "../session-request";
 import { type WebBackendRef, ensureProtectedAppRouteAuth } from "./api-utils";
 
 /**
@@ -145,19 +145,17 @@ export class WebApiState implements IApiState {
 		new Headers(options?.headers).forEach((value, key) =>
 			headers.set(key, value),
 		);
-		const usesAccountToken =
-			headers.get("Authorization") ===
-			(accessToken ? `Bearer ${accessToken}` : null);
 		const url = this.constructUrl(profile, path);
-		const response = await fetch(url, {
-			...options,
-			headers,
-		});
+		const response = await fetchWithSession(
+			url,
+			{
+				...options,
+				headers,
+			},
+			auth,
+		);
 
 		if (!response.ok) {
-			if (response.status === 401 && usesAccountToken) {
-				reportUnauthorized(auth, accessToken);
-			}
 			const errorText = await response.text();
 			throw apiResponseError(response, errorText, path);
 		}
@@ -208,19 +206,17 @@ export class WebApiState implements IApiState {
 		const auth = this.backend.auth;
 		const accessToken = auth?.user?.access_token;
 		const headers = this.getHeaders(accessToken, options?.headers);
-		const usesAccountToken =
-			headers.get("Authorization") ===
-			(accessToken ? `Bearer ${accessToken}` : null);
 		const url = this.constructUrl(profile, path);
-		const response = await fetch(url, {
-			...options,
-			headers,
-		});
+		const response = await fetchWithSession(
+			url,
+			{
+				...options,
+				headers,
+			},
+			auth,
+		);
 
 		if (!response.ok) {
-			if (response.status === 401 && usesAccountToken) {
-				reportUnauthorized(auth, accessToken);
-			}
 			const errorText = await response.text();
 			throw apiResponseError(response, errorText, path);
 		}

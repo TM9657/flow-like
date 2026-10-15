@@ -4884,3 +4884,15 @@ model WasmPackagePurchase {
   @@index([stripeSessionId])
   @@index([paymentOrderId])
 }
+
+/// Canonical refresh-token owner shared by clients and event sinks.
+model OAuthConnection {
+  id                  String  @id
+  providerFingerprint String
+  clientId            String
+  ownerSub            String?
+  tokenEncrypted      String
+  state               String
+  generation          BigInt  @default(0)
+  updatedAt           BigInt
+}

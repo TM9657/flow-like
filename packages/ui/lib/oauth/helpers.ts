@@ -3,9 +3,9 @@ import type {
 	IBoard,
 	IExecutionMode,
 	IHub,
-	INode,
 	IOAuthProviderConfig,
 } from "../schema";
+import { OAuthRefreshError } from "./service";
 import type {
 	IOAuthProvider,
 	IOAuthToken,
@@ -90,8 +90,16 @@ export function extractOAuthRequirementsFromBoard(board: IBoard): {
 } {
 	const scopesMap = new Map<string, Set<string>>();
 	let requiresLocalExecution = false;
+	const nodes = [
+		...Object.values(board.nodes ?? {}),
+		...Object.values(board.layers ?? {}).flatMap((layer) =>
+			Object.values(layer?.nodes ?? {}),
+		),
+	];
 
-	const processNode = (node: INode) => {
+	// Providers and their service nodes can appear in either order, including
+	// across function layers. Register all providers before collecting scopes.
+	for (const node of nodes) {
 		if ((node as any).only_offline) {
 			requiresLocalExecution = true;
 		}
@@ -104,16 +112,16 @@ export function extractOAuthRequirementsFromBoard(board: IBoard): {
 				}
 			}
 		}
+	}
 
-		// Only add scopes for providers that are already registered via oauth_providers
-		// required_oauth_scopes is informational - it documents what scopes a node needs
-		// IF OAuth is used, but shouldn't trigger OAuth by itself
+	for (const node of nodes) {
+		// Service nodes may use other credentials, so scope metadata alone must
+		// not register an OAuth provider.
 		const requiredScopes = (node as any).required_oauth_scopes as
 			| Record<string, string[] | { values?: string[] }>
 			| undefined;
 		if (requiredScopes) {
 			for (const [providerId, scopes] of Object.entries(requiredScopes)) {
-				// Only add scopes if this provider was already registered by an OAuth provider node
 				if (!scopesMap.has(providerId)) {
 					continue;
 				}
@@ -125,15 +133,6 @@ export function extractOAuthRequirementsFromBoard(board: IBoard): {
 					scopeSet.add(scope);
 				}
 			}
-		}
-	};
-
-	for (const node of Object.values(board.nodes ?? {})) {
-		processNode(node);
-	}
-	for (const layer of Object.values(board.layers ?? {})) {
-		for (const node of Object.values(layer?.nodes ?? {})) {
-			processNode(node);
 		}
 	}
 
@@ -195,55 +194,11 @@ export function extractOAuthProvidersFromBoard(
 	hub?: IHub,
 ): IOAuthProvider[] {
 	const hubOAuthProviders = hub?.oauth_providers ?? {};
-	const scopesMap = new Map<string, Set<string>>();
-
-	const processNode = (node: INode) => {
-		// oauth_providers is now just string[] of provider IDs
-		const providerIds = (node as any).oauth_providers as string[] | undefined;
-		if (providerIds && providerIds.length > 0) {
-			for (const providerId of providerIds) {
-				if (!scopesMap.has(providerId)) {
-					scopesMap.set(providerId, new Set());
-				}
-			}
-		}
-
-		// Only add scopes for providers that are already registered via oauth_providers
-		// required_oauth_scopes is informational - it documents what scopes a node needs
-		// IF OAuth is used, but shouldn't trigger OAuth by itself
-		const requiredScopes = (node as any).required_oauth_scopes as
-			| Record<string, string[] | { values?: string[] }>
-			| undefined;
-		if (requiredScopes) {
-			for (const [providerId, scopes] of Object.entries(requiredScopes)) {
-				// Only add scopes if this provider was already registered by an OAuth provider node
-				if (!scopesMap.has(providerId)) {
-					continue;
-				}
-				const scopeSet = scopesMap.get(providerId)!;
-				// Handle both array format and protobuf { values: [] } format
-				const scopeArray = Array.isArray(scopes)
-					? scopes
-					: (scopes?.values ?? []);
-				for (const scope of scopeArray) {
-					scopeSet.add(scope);
-				}
-			}
-		}
-	};
-
-	for (const node of Object.values(board.nodes ?? {})) {
-		processNode(node);
-	}
-	for (const layer of Object.values(board.layers ?? {})) {
-		for (const node of Object.values(layer?.nodes ?? {})) {
-			processNode(node);
-		}
-	}
+	const { oauth_requirements } = extractOAuthRequirementsFromBoard(board);
 
 	// Build full providers from Hub config + collected scopes
 	const providers: IOAuthProvider[] = [];
-	for (const [providerId, nodeScopes] of scopesMap) {
+	for (const { provider_id: providerId, scopes } of oauth_requirements) {
 		const hubConfig = hubOAuthProviders[providerId];
 		if (!hubConfig) {
 			console.warn(
@@ -252,11 +207,7 @@ export function extractOAuthProvidersFromBoard(
 			continue;
 		}
 
-		const provider = buildOAuthProviderFromHub(
-			providerId,
-			Array.from(nodeScopes),
-			hubConfig,
-		);
+		const provider = buildOAuthProviderFromHub(providerId, scopes, hubConfig);
 		providers.push(provider);
 		console.log(
 			`[OAuth] Built provider ${provider.name} with scopes:`,
@@ -277,12 +228,23 @@ export function extractOAuthProvidersFromBoard(
 export function storedTokenToBackendFormat(
 	token: IStoredOAuthToken,
 ): IOAuthToken {
+	const subject = token.binding
+		? (JSON.parse(token.binding.sessionKey) as [string, string, string])[2]
+		: undefined;
+	if (
+		token.refresh_token?.startsWith("fl_oauth_") &&
+		(!token.binding || !subject)
+	)
+		throw new Error("OAuth connection is missing its Hub owner");
 	return {
+		hub_origin: token.binding?.apiBaseUrl,
+		hub_subject: subject,
 		access_token: token.access_token,
 		refresh_token: token.refresh_token,
-		expires_at: token.expires_at
-			? Math.floor(token.expires_at / 1000)
-			: undefined,
+		expires_at:
+			token.expires_at !== undefined
+				? Math.floor(token.expires_at / 1000)
+				: undefined,
 		token_type: token.token_type ?? "Bearer",
 	};
 }
@@ -313,9 +275,13 @@ export async function getOAuthTokensForProviders(
 ): Promise<IOAuthTokenCheckResult> {
 	const tokens: Record<string, IOAuthToken> = {};
 	const missingProviders: IOAuthProvider[] = [];
+	const firstProvider = providers[0];
+	const binding = firstProvider
+		? await tokenStore.getBinding?.(firstProvider)
+		: undefined;
 
 	for (const provider of providers) {
-		let storedToken = await tokenStore.getToken(provider.id);
+		let storedToken = await tokenStore.getToken(provider.id, provider);
 		const requiredScopes = provider.merged_scopes ?? provider.scopes ?? [];
 
 		// If token exists but is expired, try to refresh it
@@ -330,6 +296,8 @@ export async function getOAuthTokensForProviders(
 						`[OAuth] Token for ${provider.id} refreshed successfully`,
 					);
 				} catch (e) {
+					if (!(e instanceof OAuthRefreshError) || !e.reauthorizationRequired)
+						throw e;
 					console.warn(
 						`[OAuth] Failed to refresh token for ${provider.id}:`,
 						e,
@@ -359,6 +327,14 @@ export async function getOAuthTokensForProviders(
 		}
 	}
 
+	if (
+		binding &&
+		tokenStore.isCurrentBinding &&
+		!(await tokenStore.isCurrentBinding(binding))
+	)
+		throw new Error(
+			"The OAuth account or provider changed during token collection",
+		);
 	return { tokens, missingProviders };
 }
 

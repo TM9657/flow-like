@@ -39,6 +39,7 @@ pub mod mcp;
 pub mod mqtt;
 pub mod nfc;
 pub mod notion;
+pub(crate) mod oauth;
 pub mod rss;
 pub mod shortcut;
 pub mod slack;

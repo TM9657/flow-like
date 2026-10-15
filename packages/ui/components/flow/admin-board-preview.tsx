@@ -1,4 +1,5 @@
 "use client";
+import { LegacyBoardRuntimeScope } from "./board-runtime";
 
 import { useTranslation } from "@flow-like/locales";
 import {
@@ -1113,8 +1114,10 @@ export function AdminBoardPreview({ board }: AdminBoardPreviewProps) {
 	}
 
 	return (
-		<ReactFlowProvider>
-			<BoardPreviewInner board={board} />
-		</ReactFlowProvider>
+		<LegacyBoardRuntimeScope>
+			<ReactFlowProvider>
+				<BoardPreviewInner board={board} />
+			</ReactFlowProvider>
+		</LegacyBoardRuntimeScope>
 	);
 }

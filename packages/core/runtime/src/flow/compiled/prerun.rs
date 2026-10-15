@@ -38,7 +38,8 @@ use crate::flow::{
 /// not format-versioned — they are namespaced only by the version byte in
 /// `draft_artifact_stem` (compiled/mod.rs). Bump that byte together with this
 /// constant.
-pub const MANIFEST_FORMAT_VERSION: u16 = 3;
+// Version 4 collects OAuth scopes regardless of provider and service node order.
+pub const MANIFEST_FORMAT_VERSION: u16 = 4;
 
 const LEGACY_MANIFEST_FORMAT_VERSION_V1: u16 = 1;
 const LEGACY_MANIFEST_FORMAT_VERSION_V2: u16 = 2;
@@ -2620,6 +2621,7 @@ fn validate_entry_node(board: &Board, page_id: &str, source: &str, node_id: &str
 /// manifest is byte-identical for identical boards.
 #[derive(Default)]
 struct NodeFacts {
+    oauth_providers: BTreeSet<String>,
     oauth_scopes: BTreeMap<String, Vec<String>>,
     requires_local_execution: bool,
     wasm_package_ids: Vec<String>,
@@ -2649,18 +2651,17 @@ impl NodeFacts {
         }
         if let Some(providers) = &node.oauth_providers {
             for provider_id in providers {
-                self.oauth_scopes.entry(provider_id.clone()).or_default();
+                self.oauth_providers.insert(provider_id.clone());
             }
         }
-        // required_oauth_scopes only contributes scopes for providers already
-        // registered via oauth_providers — it's informational, not a trigger.
+        // Nodes and layers are unordered. Keep scopes until the whole board has
+        // been visited, then require a provider node before requesting OAuth.
         if let Some(required_scopes) = &node.required_oauth_scopes {
             for (provider_id, scopes) in required_scopes {
-                if let Some(entry) = self.oauth_scopes.get_mut(provider_id) {
-                    for scope in scopes {
-                        if !entry.contains(scope) {
-                            entry.push(scope.clone());
-                        }
+                let entry = self.oauth_scopes.entry(provider_id.clone()).or_default();
+                for scope in scopes {
+                    if !entry.contains(scope) {
+                        entry.push(scope.clone());
                     }
                 }
             }
@@ -2668,10 +2669,14 @@ impl NodeFacts {
     }
 
     fn oauth_requirements(&self) -> Vec<PrerunOAuthRequirement> {
-        self.oauth_scopes
+        self.oauth_providers
             .iter()
-            .map(|(provider_id, scopes)| {
-                let mut scopes = scopes.clone();
+            .map(|provider_id| {
+                let mut scopes = self
+                    .oauth_scopes
+                    .get(provider_id)
+                    .cloned()
+                    .unwrap_or_default();
                 scopes.sort();
                 PrerunOAuthRequirement {
                     provider_id: provider_id.clone(),
@@ -3075,6 +3080,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_v3_manifests_that_may_omit_oauth_scopes() {
+        let mut bytes = encode_manifest(&sample_manifest()).unwrap();
+        bytes[4..6].copy_from_slice(&3_u16.to_le_bytes());
+        let err = decode_manifest(&bytes).unwrap_err().to_string();
+        assert!(err.contains("format v3"), "{err}");
+    }
+
+    #[test]
     fn rejects_unknown_codec() {
         let mut bytes = encode_manifest(&sample_manifest()).unwrap();
         bytes[6] = 7;
@@ -3112,13 +3125,92 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_v3_manifest_with_stale_entry_authority() {
+    fn rejects_a_current_manifest_with_stale_entry_authority() {
         let mut manifest = sample_manifest();
         manifest.entry_node_ids.push("foreign-entry".into());
         let bytes = encode_manifest(&manifest).unwrap();
 
         let error = decode_manifest(&bytes).unwrap_err().to_string();
         assert!(error.contains("signature does not match"), "{error}");
+    }
+
+    #[test]
+    fn oauth_scopes_include_service_nodes_visited_before_the_provider() {
+        let mut provider = Node::new("data_google_provider", "Google", "", "Google");
+        provider.add_oauth_provider("google");
+        let mut read = Node::new("data_google_docs_get", "Read document", "", "Google");
+        read.add_required_oauth_scopes("google", vec!["documents.readonly"]);
+        let mut write = Node::new("data_google_docs_create", "Create document", "", "Google");
+        write.add_required_oauth_scopes("google", vec!["documents", "documents.readonly"]);
+
+        let expected = vec![PrerunOAuthRequirement {
+            provider_id: "google".into(),
+            scopes: vec!["documents".into(), "documents.readonly".into()],
+        }];
+        for order in [
+            [&read, &write, &provider],
+            [&read, &provider, &write],
+            [&provider, &read, &write],
+        ] {
+            let mut facts = NodeFacts::default();
+            for node in order {
+                facts.visit(node);
+            }
+            assert_eq!(facts.oauth_requirements(), expected);
+        }
+    }
+
+    #[test]
+    fn oauth_scopes_include_root_and_function_nodes_with_a_provider_in_a_function() {
+        let mut board = Board::new_detached(Some("oauth-layer-board".into()), Path::default());
+        let mut root_service = Node::new("data_google_gmail_send", "Send email", "", "Google");
+        root_service.add_required_oauth_scopes("google", vec!["gmail.send"]);
+        board.nodes.insert(root_service.id.clone(), root_service);
+
+        let mut provider = Node::new("data_google_provider", "Google", "", "Google");
+        provider.add_oauth_provider("google");
+        let mut provider_layer =
+            Layer::new("provider".into(), "Provider".into(), LayerType::Function);
+        provider_layer.nodes.insert(provider.id.clone(), provider);
+        board
+            .layers
+            .insert(provider_layer.id.clone(), provider_layer);
+
+        let mut layer_service = Node::new("data_google_docs_get", "Read document", "", "Google");
+        layer_service.add_required_oauth_scopes("google", vec!["documents.readonly"]);
+        let mut service_layer = Layer::new("service".into(), "Service".into(), LayerType::Function);
+        service_layer
+            .nodes
+            .insert(layer_service.id.clone(), layer_service);
+        board.layers.insert(service_layer.id.clone(), service_layer);
+
+        assert_eq!(
+            PrerunManifest::from_board(&board).oauth_requirements,
+            vec![PrerunOAuthRequirement {
+                provider_id: "google".into(),
+                scopes: vec!["documents.readonly".into(), "gmail.send".into()],
+            }]
+        );
+    }
+
+    #[test]
+    fn oauth_scopes_without_a_provider_do_not_request_authorization() {
+        let mut service = Node::new("data_google_gmail_send", "Send email", "", "Google");
+        service.add_required_oauth_scopes("google", vec!["gmail.send"]);
+        let mut provider = Node::new("data_other_provider", "Other", "", "Other");
+        provider.add_oauth_provider("other");
+
+        let mut facts = NodeFacts::default();
+        facts.visit(&service);
+        assert!(facts.oauth_requirements().is_empty());
+        facts.visit(&provider);
+        assert_eq!(
+            facts.oauth_requirements(),
+            vec![PrerunOAuthRequirement {
+                provider_id: "other".into(),
+                scopes: vec![],
+            }]
+        );
     }
 
     #[test]
@@ -4666,7 +4758,10 @@ mod tests {
         let artifact = super::super::artifact_path(&board_dir, "board-1", (1, 2, 3)).to_string();
         let manifest = manifest_path(&board_dir, "board-1", (1, 2, 3)).to_string();
         let legacy = legacy_manifest_path(&board_dir, "board-1", (1, 2, 3)).to_string();
-        assert_eq!(manifest, "apps/app-1/meta/compiled/board-1/1_2_3.v3.prerun");
+        assert_eq!(
+            manifest,
+            format!("apps/app-1/meta/compiled/board-1/1_2_3.v{MANIFEST_FORMAT_VERSION}.prerun")
+        );
         assert_eq!(legacy, "apps/app-1/meta/compiled/board-1/1_2_3.prerun");
         assert_ne!(manifest, legacy);
         assert_eq!(
@@ -4676,7 +4771,9 @@ mod tests {
         let version_page =
             version_page_manifest_path(&board_dir, "board-1", (1, 2, 3), "page-1", "revision-1")
                 .to_string();
-        assert!(version_page.starts_with("apps/app-1/meta/compiled/board-1/1_2_3.v3."));
+        assert!(version_page.starts_with(&format!(
+            "apps/app-1/meta/compiled/board-1/1_2_3.v{MANIFEST_FORMAT_VERSION}."
+        )));
         assert!(version_page.ends_with(".page.prerun"));
         assert_ne!(version_page, manifest);
         assert_ne!(
@@ -4702,6 +4799,19 @@ mod tests {
         assert!(draft_page_manifest.starts_with("tmp/apps/app-1/compiled/drafts/board-1/"));
         assert!(draft_manifest.ends_with(".prerun"));
         assert!(draft_page_manifest.ends_with(".page.prerun"));
+        let mut previous_stem = Hasher::new();
+        previous_stem.update(b"flow-like/draft-artifact");
+        previous_stem.update(&[2]);
+        previous_stem.update(b"etag");
+        let previous_stem = previous_stem.finalize().to_hex();
+        assert!(
+            !draft_manifest.contains(&previous_stem.as_str()[..32]),
+            "drafts with incomplete OAuth scopes must be rebuilt under a new key"
+        );
+        assert!(
+            !draft_page_manifest.contains(&previous_stem.as_str()[..32]),
+            "Page manifests must also rebuild their OAuth requirements"
+        );
         assert_ne!(
             draft_page_manifest,
             draft_page_manifest_path("app-1", "board-1", "etag", "page-1", "revision-2")

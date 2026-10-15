@@ -397,13 +397,13 @@
 		},
 		"google": {
 			"name": "Google",
-			"client_id": "290832386845-thpbvl5av7u4c4m02egdtgvcf2rrc00j.apps.googleusercontent.com",
+			"client_id": "290832386845-a6jpdaodta54k43gcmtdafmhmbnlv05m.apps.googleusercontent.com",
+			"client_secret_env": "GOOGLE_CLIENT_SECRET",
 			"auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
 			"token_url": "https://oauth2.googleapis.com/token",
 			"scopes": ["openid", "email", "profile"],
-			"pkce_required": false,
-			"requires_secret_proxy": false,
-			"use_implicit_flow": true,
+			"pkce_required": true,
+			"requires_secret_proxy": true,
 			"userinfo_url": "https://www.googleapis.com/oauth2/v2/userinfo",
 			"revoke_url": "https://oauth2.googleapis.com/revoke"
 		},

@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { doPinsMatch, parseBoard } from "./flow-board-utils";
+import { type FlowSceneEdge, edgeNeedsDom } from "./board-canvas/scene";
+import { doPinsMatch, isValidConnection, parseBoard } from "./flow-board-utils";
 import { GEOMETRY_KINDS, geometryMarker } from "./geometry";
 import type {
 	IBoard,
@@ -10,6 +11,7 @@ import type {
 } from "./schema/flow/board";
 import {
 	ICommentType,
+	IExecutionMode,
 	ILayerCacheScope,
 	ILayerType,
 } from "./schema/flow/board";
@@ -22,8 +24,12 @@ import { convertJsonToUint8Array, parseUint8ArrayToJson } from "./uint8";
 /** Only the slice of a rendered React Flow node these tests read. */
 interface IRenderedNode {
 	id: string;
+	position?: { x: number; y: number };
 	data: {
 		node: INode;
+		executionMode?: IExecutionMode;
+		isOffline?: boolean;
+		onRemoteExecute?: (node: INode, payload?: object) => Promise<void>;
 		comment?: IComment;
 		presignedUrl?: string;
 		boardDataVersion?: string;
@@ -127,6 +133,163 @@ const node = (parsed: IParsed, id: string): IRenderedNode => {
 	if (!found) throw new Error(`node ${id} was not rendered`);
 	return found;
 };
+
+describe("historical canvas controls", () => {
+	test("cached nodes refresh their read-only version even when the board object is unchanged", () => {
+		const source = board();
+		const latest = parse(source);
+		const historical = parseBoard(
+			source,
+			"app-1",
+			() => {},
+			() => {},
+			async () => {},
+			async () => undefined,
+			new Set<string>(),
+			undefined,
+			latest.nodes,
+			latest.edges,
+			undefined,
+			{ current: source },
+			[0, 0, 1],
+		);
+		expect(
+			historical.nodes.find((node) => node.id === "n1")?.data.version,
+		).toEqual([0, 0, 1]);
+		const restored = parseBoard(
+			source,
+			"app-1",
+			() => {},
+			() => {},
+			async () => {},
+			async () => undefined,
+			new Set<string>(),
+			undefined,
+			historical.nodes,
+			historical.edges,
+			undefined,
+			{ current: source },
+		);
+		expect(
+			restored.nodes.find((node) => node.id === "n1")?.data.version,
+		).toBeUndefined();
+	});
+
+	test("historical layers and boundary pins carry version and cannot submit mutations", async () => {
+		const layer = functionLayer("layer", { type: ILayerType.Collapsed });
+		const source = board({ layers: { layer } });
+		const commands: unknown[] = [];
+		for (const currentLayer of [undefined, "layer"]) {
+			const parsed = parseBoard(
+				source,
+				"app-1",
+				() => {},
+				() => {},
+				async () => {},
+				async (command) => {
+					commands.push(command);
+				},
+				new Set<string>(),
+				undefined,
+				undefined,
+				undefined,
+				currentLayer,
+				{ current: source },
+				[0, 0, 1],
+			);
+			const layers = parsed.nodes.filter((node) => node.data.layer);
+			expect(layers.length).toBe(currentLayer ? 2 : 1);
+			for (const node of layers) {
+				expect(node.data.version).toEqual([0, 0, 1]);
+				await node.data.onLayerUpdate({ ...layer, name: "Edited" });
+				await node.data.onLayerRemove(layer, false);
+			}
+		}
+		expect(commands).toEqual([]);
+	});
+});
+
+test("optional layer boundary coordinates use runtime defaults before their first move", () => {
+	const source = board({ layers: { layer: functionLayer("layer") } });
+	const parsed = parseBoard(
+		source,
+		"app-1",
+		() => {},
+		() => {},
+		async () => {},
+		async () => undefined,
+		new Set<string>(),
+		undefined,
+		undefined,
+		undefined,
+		"layer",
+		{ current: source },
+	);
+	expect(
+		parsed.nodes.find((node) => node.id === "layer-input")?.position,
+	).toEqual({ x: -200, y: 0 });
+	expect(
+		parsed.nodes.find((node) => node.id === "layer-return")?.position,
+	).toEqual({ x: 200, y: 0 });
+	expect(source.layers.layer.in_coordinates).toBeUndefined();
+	expect(source.layers.layer.out_coordinates).toBeUndefined();
+});
+
+test("cached function-reference edges follow path preference and selection changes", () => {
+	const from = getNode("from", "v1");
+	const to = getNode("to", "v1");
+	from.fn_refs = {
+		can_reference_fns: true,
+		can_be_referenced_by_fns: false,
+		fn_refs: ["to"],
+	};
+	to.fn_refs = {
+		can_reference_fns: false,
+		can_be_referenced_by_fns: true,
+		fn_refs: [],
+	};
+	const source = board({ nodes: { from, to }, layers: {} });
+	const initial = parseBoard(
+		source,
+		"app-1",
+		() => {},
+		() => {},
+		async () => {},
+		async () => undefined,
+		new Set<string>(),
+		"default",
+	);
+	const id = "ref_out_from-ref_in_to";
+	const changed = parseBoard(
+		source,
+		"app-1",
+		() => {},
+		() => {},
+		async () => {},
+		async () => undefined,
+		new Set([id]),
+		"straight",
+		initial.nodes,
+		initial.edges,
+	);
+	expect(changed.edges.find((edge) => edge.id === id)).toMatchObject({
+		selected: true,
+		data: { pathType: "straight" },
+	});
+	const cleared = parseBoard(
+		source,
+		"app-1",
+		() => {},
+		() => {},
+		async () => {},
+		async () => undefined,
+		new Set<string>(),
+		"straight",
+		changed.nodes,
+		changed.edges,
+	);
+	expect(cleared.edges.find((edge) => edge.id === id)?.selected).toBe(false);
+});
 
 const contentVersion = (parsed: IParsed, id: string) =>
 	node(parsed, id).data.boardContentVersion;
@@ -475,6 +638,243 @@ const structPin = (name: string, overrides: Partial<IPin> = {}): IPin =>
 		index: 0,
 		...overrides,
 	}) as IPin;
+
+describe("stationary connection dashes", () => {
+	function connectedBoard() {
+		const from = getNode("from", "v1");
+		const to = getNode("to", "v1");
+		from.pins = {};
+		to.pins = {};
+		for (const dataType of [IVariableType.Struct, IVariableType.Execution]) {
+			const output = structPin(`${dataType}_out`, {
+				data_type: dataType,
+			});
+			const input = structPin(`${dataType}_in`, {
+				data_type: dataType,
+				pin_type: IPinType.Input,
+				depends_on: [output.id],
+			});
+			output.connected_to = [input.id];
+			from.pins[output.id] = output;
+			to.pins[input.id] = input;
+		}
+		from.fn_refs = {
+			can_reference_fns: true,
+			can_be_referenced_by_fns: false,
+			fn_refs: [to.id],
+		};
+		to.fn_refs = {
+			can_reference_fns: false,
+			can_be_referenced_by_fns: true,
+			fn_refs: [],
+		};
+		return board({ nodes: { from, to }, layers: {} });
+	}
+
+	test("generated connections do not enable moving dashes", () => {
+		const parsed = parse(connectedBoard());
+		expect(parsed.edges).toHaveLength(3);
+		for (const edge of parsed.edges as FlowSceneEdge[]) {
+			expect(edge).toMatchObject({ animated: false });
+			if (edge.type === "data" || edge.type === "veil") {
+				expect(edgeNeedsDom(edge)).toBe(false);
+			}
+		}
+	});
+
+	test("cached animated edges are rebuilt once and then reused", () => {
+		const source = connectedBoard();
+		const initial = parse(source);
+		const animated = initial.edges.map((edge) => ({
+			...(edge as object),
+			animated: true,
+		}));
+		const updated = parse(source, initial.nodes, animated);
+		expect(updated.edges).toHaveLength(3);
+		for (const [index, edge] of updated.edges.entries()) {
+			expect(edge).not.toBe(animated[index]);
+			expect(edge).toMatchObject({ animated: false });
+		}
+		const unchanged = parse(source, updated.nodes, updated.edges);
+		for (const [index, edge] of unchanged.edges.entries()) {
+			expect(edge).toBe(updated.edges[index]);
+		}
+	});
+});
+
+describe("boundary pin validation", () => {
+	const boundaryCases = [
+		["-input", IPinType.Input],
+		["-return", IPinType.Output],
+	] as const;
+
+	for (const [suffix, pinType] of boundaryCases) {
+		test(`${suffix} validation is repeatable with shared frozen pins in either drag direction`, () => {
+			const boundary = Object.freeze(
+				structPin("boundary", { pin_type: pinType }),
+			);
+			const peer = Object.freeze(structPin("peer", { pin_type: pinType }));
+			const owner = functionLayer(`layer${suffix}`);
+
+			for (let attempt = 0; attempt < 3; attempt++) {
+				expect(doPinsMatch(boundary, peer, {}, owner)).toBe(true);
+				expect(doPinsMatch(peer, boundary, {}, undefined, owner)).toBe(true);
+			}
+			expect(boundary.pin_type).toBe(pinType);
+			expect(peer.pin_type).toBe(pinType);
+		});
+
+		test(`${suffix} uses the visible direction for asymmetric schema coverage`, () => {
+			const wide =
+				'{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"number"}},"required":["name","age"]}';
+			const narrow =
+				'{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}';
+			const owner = functionLayer(`layer${suffix}`);
+			for (const allowed of [true, false]) {
+				const boundaryIsOutput = pinType === IPinType.Input;
+				const boundary = Object.freeze(
+					structPin("boundary", {
+						pin_type: pinType,
+						schema: allowed === boundaryIsOutput ? wide : narrow,
+					}),
+				);
+				const peer = Object.freeze(
+					structPin("peer", {
+						pin_type: pinType,
+						schema: allowed === boundaryIsOutput ? narrow : wide,
+					}),
+				);
+				expect(doPinsMatch(boundary, peer, {}, owner)).toBe(allowed);
+				expect(doPinsMatch(peer, boundary, {}, undefined, owner)).toBe(allowed);
+			}
+		});
+
+		test(`${suffix} uses the visible direction for geometry subtypes`, () => {
+			const owner = functionLayer(`layer${suffix}`);
+			for (const allowed of [true, false]) {
+				const boundaryIsOutput = pinType === IPinType.Input;
+				const boundary = Object.freeze(
+					structPin("boundary", {
+						pin_type: pinType,
+						data_type: IVariableType.Geometry,
+						schema:
+							allowed === boundaryIsOutput ? geometryMarker("Point") : null,
+					}),
+				);
+				const peer = Object.freeze(
+					structPin("peer", {
+						pin_type: pinType,
+						data_type: IVariableType.Geometry,
+						schema:
+							allowed === boundaryIsOutput ? null : geometryMarker("Point"),
+					}),
+				);
+				expect(doPinsMatch(boundary, peer, {}, owner)).toBe(allowed);
+				expect(doPinsMatch(peer, boundary, {}, undefined, owner)).toBe(allowed);
+			}
+		});
+	}
+
+	test("generic reroute matching leaves boundary direction unchanged", () => {
+		const boundary = Object.freeze(
+			structPin("route_in", {
+				pin_type: IPinType.Input,
+				data_type: IVariableType.Generic,
+			}),
+		);
+		expect(
+			doPinsMatch(
+				boundary,
+				structPin("peer"),
+				{},
+				functionLayer("layer-input"),
+			),
+		).toBe(true);
+		expect(boundary.pin_type).toBe(IPinType.Input);
+	});
+
+	test("the parsed inner-layer cache already has inverted pins owned by the real layer", () => {
+		const input = Object.freeze(
+			structPin("boundary_input", { pin_type: IPinType.Input }),
+		);
+		const output = Object.freeze(structPin("boundary_return"));
+		const innerInput = Object.freeze(
+			structPin("inner_input", { pin_type: IPinType.Input }),
+		);
+		const innerOutput = Object.freeze(structPin("inner_output"));
+		const source = board({
+			nodes: {
+				inner: {
+					...getNode("inner", ""),
+					layer: "layer",
+					pins: { [innerInput.id]: innerInput, [innerOutput.id]: innerOutput },
+				},
+			},
+			layers: {
+				layer: functionLayer("layer", {
+					pins: { [input.id]: input, [output.id]: output },
+				}),
+			},
+		});
+		const { cache } = parseBoard(
+			source,
+			"app",
+			() => {},
+			() => {},
+			async () => {},
+			async () => {},
+			new Set(),
+			undefined,
+			undefined,
+			undefined,
+			"layer",
+		);
+		for (const [pin] of cache.values()) Object.freeze(pin);
+		for (const [sourceHandle, targetHandle] of [
+			[input.id, innerInput.id],
+			[innerOutput.id, output.id],
+		]) {
+			for (let attempt = 0; attempt < 3; attempt++) {
+				expect(
+					isValidConnection({ sourceHandle, targetHandle }, cache, {}),
+				).toBe(true);
+				expect(
+					isValidConnection(
+						{ sourceHandle: targetHandle, targetHandle: sourceHandle },
+						cache,
+						{},
+					),
+				).toBe(true);
+			}
+		}
+		expect(cache.get(input.id)?.[0].pin_type).toBe(IPinType.Output);
+		expect(cache.get(output.id)?.[0].pin_type).toBe(IPinType.Input);
+		expect(cache.get(input.id)?.[1].id).toBe("layer");
+		expect(input.pin_type).toBe(IPinType.Input);
+		expect(output.pin_type).toBe(IPinType.Output);
+	});
+
+	test.each([undefined, null, ""])(
+		"incomplete handle %p is rejected without throwing",
+		(missing) => {
+			const cache = new Map<string, [IPin, INode | ILayer, boolean]>();
+			expect(
+				isValidConnection(
+					{ sourceHandle: missing, targetHandle: "pin" },
+					cache,
+					{},
+				),
+			).toBe(false);
+			expect(
+				isValidConnection(
+					{ sourceHandle: "pin", targetHandle: missing },
+					cache,
+					{},
+				),
+			).toBe(false);
+		},
+	);
+});
 
 /**
  * A pin declaring an open shape must never veto a peer. Regression guard for the break that
@@ -849,5 +1249,135 @@ describe("Geometry pin compatibility", () => {
 				{},
 			),
 		).toBe(false);
+	});
+});
+
+describe("presentation updates outside the runtime node hash", () => {
+	test("cached nodes follow offline and remote execution availability changes", async () => {
+		const source = board();
+		const boardRef = { current: source };
+		const executions: INode[] = [];
+		const remote = async (value: INode) => {
+			executions.push(value);
+		};
+		const render = (
+			isOffline: boolean,
+			onRemoteExecute: typeof remote | undefined,
+			previous?: IParsed,
+		) =>
+			parseBoard(
+				source,
+				"app-1",
+				() => {},
+				() => {},
+				async () => {},
+				async () => undefined,
+				new Set<string>(),
+				undefined,
+				previous?.nodes,
+				previous?.edges,
+				undefined,
+				boardRef,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				{ isOffline, onRemoteExecute },
+			) as IParsed;
+		const offline = render(true, remote);
+		const online = render(false, remote, offline);
+		expect(node(online, "n1").data.isOffline).toBe(false);
+		expect(node(online, "n1").data.onRemoteExecute).toBe(
+			node(offline, "n1").data.onRemoteExecute,
+		);
+		const unavailable = render(false, undefined, online);
+		expect(node(unavailable, "n1").data.onRemoteExecute).toBeUndefined();
+		const restored = render(false, remote, unavailable);
+		await node(restored, "n1").data.onRemoteExecute?.(source.nodes.n1);
+		expect(executions).toEqual([source.nodes.n1]);
+		const unchanged = render(false, async (value) => remote(value), restored);
+		expect(node(unchanged, "n1")).toBe(node(restored, "n1"));
+		expect(node(offline, "n1").data.isOffline).toBe(true);
+	});
+
+	test("execution mode changes reach cached nodes without changing node hashes", () => {
+		const before = board({ execution_mode: IExecutionMode.Hybrid });
+		const first = parse(before);
+		const second = parse(
+			edit(before, { execution_mode: IExecutionMode.Remote }),
+			first.nodes,
+			first.edges,
+		);
+		expect(node(second, "n1").data.executionMode).toBe(IExecutionMode.Remote);
+		expect(node(second, "n1").data.node).toBe(before.nodes.n1);
+		expect(node(first, "n1").data.executionMode).toBe(IExecutionMode.Hybrid);
+	});
+
+	test("a replaced node snapshot updates its position even if its hash is unchanged", () => {
+		const before = board();
+		const first = parse(before);
+		const moved = edit(before, {
+			nodes: {
+				...before.nodes,
+				n1: { ...before.nodes.n1, coordinates: [140, 220, 0] },
+			},
+		});
+		const second = parse(moved, first.nodes, first.edges);
+		expect(node(second, "n1").position).toEqual({ x: 140, y: 220 });
+		expect(node(first, "n1").position).toEqual({ x: 0, y: 0 });
+
+		const dragging = {
+			...node(first, "n1"),
+			position: { x: 175, y: 260 },
+			dragging: true,
+		};
+		const duringDrag = parse(moved, [dragging], first.edges);
+		expect(node(duringDrag, "n1").position).toBe(dragging.position);
+	});
+
+	test("node errors appear and clear without requiring a geometry or pin edit", () => {
+		const before = board();
+		const first = parse(before);
+		const errorNode = {
+			...before.nodes.n1,
+			error: "Required schema is missing",
+		};
+		const withError = edit(before, {
+			nodes: { ...before.nodes, n1: errorNode },
+		});
+		const second = parse(withError, first.nodes, first.edges);
+		expect(node(second, "n1").data.node.error).toBe(
+			"Required schema is missing",
+		);
+		expect(node(second, "n1").data.node.hash).toBe(before.nodes.n1.hash);
+		expect(node(second, "n1")).not.toBe(node(first, "n1"));
+		const cleared = edit(withError, {
+			nodes: { ...withError.nodes, n1: { ...errorNode, error: null } },
+		});
+		const third = parse(cleared, second.nodes, second.edges);
+		expect(node(third, "n1").data.node.error).toBeNull();
+		expect(node(first, "n1").data.node.error).toBeUndefined();
+	});
+
+	test("unchanged raw nodes keep their rendering while execution availability refreshes", () => {
+		const before = board();
+		const first = parse(before);
+		const unchanged = parse(
+			edit(before, { name: "Renamed board" }),
+			first.nodes,
+			first.edges,
+		);
+		expect(node(unchanged, "n1")).toBe(node(first, "n1"));
+		const changed = parse(
+			edit(before, {
+				nodes: {
+					...before.nodes,
+					n1: { ...before.nodes.n1, only_offline: true },
+				},
+			}),
+			first.nodes,
+			first.edges,
+		);
+		expect(node(changed, "n1").data.node.only_offline).toBe(true);
 	});
 });

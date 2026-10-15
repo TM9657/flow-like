@@ -1880,8 +1880,13 @@ pub(crate) fn packaged_metadata(bytes: &[u8], pin: &ProjectBitPin) -> Result<Pac
             && artifact_sha256(bytes) == pin.metadata_sha256,
         "Selected Bit metadata digest differs"
     );
-    let metadata: PackagedBitMetadata = serde_json::from_slice(bytes)
+    let mut metadata: PackagedBitMetadata = serde_json::from_slice(bytes)
         .with_context(|| format!("Read the metadata of Bit {}", pin.bit_id))?;
+    // Older desktop exports carried repeated hub cache entries and qualified
+    // dependency references. Keep the pin bound to the original bytes.
+    metadata
+        .normalize_dependencies()
+        .with_context(|| format!("Resolve the dependencies of Bit {}", pin.bit_id))?;
     metadata
         .validate(&pin.bit_id)
         .with_context(|| format!("Check the metadata of Bit {}", pin.bit_id))?;
@@ -3487,6 +3492,38 @@ mod tests {
         assert!(
             import_local_selected(&store, dir.path(), "project", source.path(), &assets).is_err()
         );
+    }
+
+    #[test]
+    fn bit_metadata_normalizes_repeated_dependencies_after_checking_pinned_bytes() {
+        let dependency = serde_json::json!({
+            "id": "weights", "hub": "models.example", "hash": "hash",
+            "file_name": "model.bin", "size": 7
+        });
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "bit": {"id": "model", "dependencies": ["models.example:weights"]},
+            "dependencies": [dependency, dependency],
+            "artifacts": [{
+                "path": "bits/hash/model.bin", "size": 7,
+                "sha256": artifact_sha256(b"weights")
+            }]
+        }))
+        .unwrap();
+        let pin = ProjectBitPin {
+            bit_id: "model".into(),
+            metadata_sha256: artifact_sha256(&bytes),
+        };
+        let metadata = packaged_metadata(&bytes, &pin).unwrap();
+        assert_eq!(metadata.dependencies(), &[dependency]);
+        assert_eq!(
+            metadata.bit()["dependencies"],
+            serde_json::json!(["weights"])
+        );
+        assert_eq!(metadata_assets(&bytes, &pin, true).unwrap().len(), 1);
+
+        // Equivalent metadata with different bytes still needs its own pin.
+        let normalized_bytes = serde_json::to_vec(&metadata).unwrap();
+        assert!(packaged_metadata(&normalized_bytes, &pin).is_err());
     }
 
     #[test]

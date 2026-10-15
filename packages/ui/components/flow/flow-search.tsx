@@ -105,8 +105,12 @@ function buildSearchDocuments(board: IBoard | undefined): SearchResult[] {
 
 	const results: SearchResult[] = [];
 	const layers = board.layers ?? {};
+	const indexedNodes = new Set<string>();
 
 	const processNode = (node: INode, layerId?: string, layerPath?: string[]) => {
+		// The canonical board map and a layer's cached children can contain the same node.
+		if (indexedNodes.has(node.id)) return;
+		indexedNodes.add(node.id);
 		const nodeName = node.friendly_name || node.name;
 		const nodeDescription = resolveBoardRef(node.description, board.refs);
 

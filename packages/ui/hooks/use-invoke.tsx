@@ -8,6 +8,11 @@ import {
 } from "@tanstack/react-query";
 import { isEqual } from "lodash-es";
 import { useCallback } from "react";
+import { isBoardSnapshot } from "../lib/board-sync/identity";
+import {
+	setSnapshotQueryData,
+	shareBoardSnapshot,
+} from "../lib/board-sync/query";
 import { isRecord } from "../lib/response-shape";
 import { useBackend } from "../state/backend-state";
 
@@ -56,6 +61,7 @@ export function useInvoke<T, Args extends any[]>(
 ): UseQueryResult<T, Error> {
 	const backend = useBackend();
 	const query = useQuery<T, Error>({
+		structuralSharing: shareBoardSnapshot,
 		queryKey: toQueryKey([
 			backendFn.name || "backendFn",
 			...args,
@@ -277,8 +283,7 @@ export function injectData<T, Args extends any[]>(
 		...additionalDeps,
 	]);
 
-	// Immediately set the data in the cache
-	queryClient.setQueryData(queryKey, data);
+	setSnapshotQueryData(queryClient, queryKey, data);
 
 	// Return a query object that reflects the injected data
 	return {
@@ -328,8 +333,10 @@ export async function injectDataFunction<T, Args extends any[]>(
 			);
 		}
 
-		if (!isEqual(result, oldData)) {
-			queryClient?.setQueryData(queryKey, result);
+		if (
+			isBoardSnapshot(result) ? result !== oldData : !isEqual(result, oldData)
+		) {
+			injectData(queryClient, backendFn, args, result, additionalDeps);
 		}
 
 		return {

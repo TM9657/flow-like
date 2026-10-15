@@ -189,7 +189,7 @@ fn artifact_inventory(pack: &PackagedBit) -> Result<BTreeMap<String, u64>> {
     let mut assets = BTreeMap::new();
     for bit in std::iter::once(&pack.bit).chain(&pack.dependencies) {
         crate::config::validate_id("Bit", &bit.id)?;
-        ensure!(ids.insert(&bit.id), "Duplicate Bit dependency");
+        ensure!(ids.insert(&bit.id), "Duplicate Bit dependency {}", bit.id);
         if stored.contains(bit.id.as_str()) {
             bit_location(bit)?
                 .with_context(|| format!("Bit {} has model assets but no file", bit.id))?;
@@ -1499,6 +1499,7 @@ mod tests {
         .unwrap();
         let dependency = Bit {
             id: "weights".into(),
+            hub: "unreachable.invalid".into(),
             hash: "source-identity".into(),
             file_name: Some("model.bin".into()),
             size: Some(4),
@@ -1527,7 +1528,13 @@ mod tests {
         .unwrap();
         std::fs::create_dir_all(directory.path().join("bits/metadata")).unwrap();
         std::fs::create_dir_all(directory.path().join("bits/source-identity")).unwrap();
-        let metadata = serde_json::to_vec(&pack).unwrap();
+        let mut legacy_pack = pack.clone();
+        legacy_pack.bit.dependencies = vec!["unreachable.invalid:weights".into()];
+        legacy_pack
+            .dependencies
+            .push(legacy_pack.dependencies[0].clone());
+        legacy_pack.dependencies.push(legacy_pack.bit.clone());
+        let metadata = serde_json::to_vec(&legacy_pack).unwrap();
         std::fs::write(directory.path().join("bits/metadata/model.json"), &metadata).unwrap();
         config
             .bit_pins
@@ -1581,6 +1588,7 @@ mod tests {
             .await
             .unwrap();
         let resolved = model.pack(state.clone()).await.unwrap();
+        assert_eq!(model.dependencies, vec!["weights"]);
         assert_eq!(resolved.bits.len(), 2);
         assert!(resolved.bits.iter().all(|bit| bit.download_link.is_none()));
         assert!(resolved.bits.iter().any(|bit| bit.id == "weights"));

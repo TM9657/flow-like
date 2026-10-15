@@ -1,6 +1,8 @@
 "use client";
+import { Handle } from "./board-runtime-primitives";
+
 import { useTranslation } from "@flow-like/locales";
-import { Handle, type HandleType, Position, useReactFlow } from "@xyflow/react";
+import { type HandleType, Position } from "@xyflow/react";
 import { EllipsisVerticalIcon, GripIcon, ListIcon, Trash2 } from "lucide-react";
 import {
 	type RefObject,
@@ -18,6 +20,7 @@ import type { IBoard, ILayer } from "../../lib/schema/flow/board";
 import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IPinType, IValueType } from "../../lib/schema/flow/pin";
 import { useBackendStore } from "../../state/backend-state";
+import { useReactFlow } from "./board-runtime";
 import { useUndoRedo } from "./flow-history";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { PIN_LABEL_CAP_SHARED } from "./flow-pin/pin-label-caps";
@@ -144,12 +147,29 @@ const DeletePinButton = memo(function DeletePinButton({
 	onPinRemove: (pin: IPin) => Promise<void>;
 }>) {
 	const { t } = useTranslation("flow");
+	const [removing, setRemoving] = useState(false);
 	return (
 		<button
 			type="button"
-			className={className}
+			className={`nodrag nopan ${className}`}
 			title={t("deletePin", "Delete Pin")}
-			onClick={() => onPinRemove(pin)}
+			disabled={removing}
+			onClick={async (event) => {
+				event.stopPropagation();
+				if (removing) return;
+				setRemoving(true);
+				try {
+					await onPinRemove(pin);
+				} catch (cause) {
+					toast.error(
+						cause instanceof Error
+							? cause.message
+							: t("deletePinFailed", "Could not delete the pin."),
+					);
+				} finally {
+					setRemoving(false);
+				}
+			}}
 		>
 			<Trash2 className="w-1.5 h-1.5" />
 		</button>

@@ -1588,8 +1588,15 @@ fn nice_axis(max: f64, target_ticks: usize) -> (f64, f64) {
         } else {
             10.0
         };
+    if !step.is_finite() || step <= 0.0 {
+        return (max, max);
+    }
     let axis_max = (max / step).ceil() * step;
-    (axis_max, step)
+    if axis_max.is_finite() {
+        (axis_max, step)
+    } else {
+        (max, raw_step)
+    }
 }
 
 fn format_tick(value: f64) -> String {
@@ -1758,8 +1765,8 @@ fn draw_cartesian(
     let (axis_max, step) = nice_axis(max_value, 4);
 
     // Gridlines and value labels
-    let mut tick = 0.0;
-    while tick <= axis_max + step / 2.0 {
+    let mut tick: f64 = 0.0;
+    while tick.is_finite() && tick / step <= axis_max / step + 0.5 {
         let ratio = tick / axis_max;
         if horizontal {
             let gx = x + ratio * width;
@@ -2661,6 +2668,22 @@ mod tests {
             assert!(axis_max >= max, "axis {axis_max} below data {max}");
             assert!(axis_max <= max * 1.5, "axis {axis_max} overshoots {max}");
             assert!(step > 0.0);
+        }
+    }
+
+    #[test]
+    fn extreme_chart_values_produce_finite_bounded_ticks() {
+        for max in [1.7e308, f64::MAX, f64::MIN_POSITIVE, f64::from_bits(1)] {
+            let (axis_max, step) = nice_axis(max, 4);
+            assert!(axis_max.is_finite() && axis_max >= max);
+            assert!(step.is_finite() && step > 0.0);
+            let mut tick: f64 = 0.0;
+            let mut count = 0;
+            while tick.is_finite() && tick / step <= axis_max / step + 0.5 {
+                count += 1;
+                assert!(count <= 10);
+                tick += step;
+            }
         }
     }
 

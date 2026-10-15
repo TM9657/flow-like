@@ -27,7 +27,7 @@ function primaryIncomingY(graph: LGraph, node: LNode): number | null {
 /**
  * Vertical placement in three passes:
  *   1. the exec spine, straightened at the pins and packed per column
- *   2. pure clusters, banded below the exec node that consumes them
+ *   2. pure clusters, fitted into free space below their consuming exec node
  *   3. one monotone downward sweep per column
  *
  * Because column x is derived from the widest node in each column, two nodes in
@@ -51,10 +51,9 @@ export function placeComponent(
 		}
 	}
 
-	// Pass 1 — the exec spine, left to right. Reroutes are excluded: they are
+	// Pass 1: the exec spine, left to right. Reroutes are excluded: they are
 	// 16x12 dots that exist to sit ON a wire, so paying a full vGap for them
 	// would drag them off the line they route.
-	const spineBottom = new Map<number, number>();
 	for (const column of columns) {
 		const spine = (byColumn.get(column) ?? [])
 			.filter((node) => node.kind !== "pure" && node.kind !== "reroute")
@@ -69,12 +68,10 @@ export function placeComponent(
 			node.placed = true;
 			cursor = node.y + node.height;
 		}
-		if (Number.isFinite(cursor)) spineBottom.set(column, cursor);
 	}
 
-	// Pass 2 — pure clusters hang in a band below their owner. Bands are
-	// allocated contiguously per column in owner order, so two owners' clusters
-	// can never interleave, and every band starts below that column's spine.
+	// Pass 2: pure clusters hang below their owner. Keep each cluster together,
+	// using gaps between execution branches before extending the whole column.
 	for (const column of columns) {
 		const pures = (byColumn.get(column) ?? []).filter(
 			(node) => node.kind === "pure",
@@ -95,7 +92,10 @@ export function placeComponent(
 			return (ownerA?.y ?? 0) - (ownerB?.y ?? 0) || a.localeCompare(b);
 		});
 
-		let cursor = spineBottom.get(column) ?? Number.NEGATIVE_INFINITY;
+		const occupied = (byColumn.get(column) ?? [])
+			.filter((node) => node.kind !== "pure" && node.kind !== "reroute")
+			.sort((a, b) => a.y - b.y || a.id.localeCompare(b.id));
+		let cursor = Number.NEGATIVE_INFINITY;
 		for (const key of ownerKeys) {
 			const owner = graph.nodes.get(key);
 			const bandTop = owner
@@ -116,6 +116,14 @@ export function placeComponent(
 					a.id.localeCompare(b.id)
 				);
 			});
+			const bandHeight =
+				members.reduce((height, node) => height + node.height, 0) +
+				Math.max(0, members.length - 1) * cfg.vGap;
+			for (const obstacle of occupied) {
+				if (y + bandHeight + cfg.vGap <= obstacle.y) break;
+				if (y >= obstacle.y + obstacle.height + cfg.vGap) continue;
+				y = obstacle.y + obstacle.height + cfg.vGap;
+			}
 
 			for (const node of members) {
 				node.y = y;
@@ -131,7 +139,7 @@ export function placeComponent(
 	// real node and never get displaced by one.
 	placeReroutes(graph, byColumn, columns, cfg);
 
-	// Pass 3 — monotone downward sweep over the real nodes. Never moves anything
+	// Pass 3: monotone downward sweep over the real nodes. Never moves anything
 	// up, so it cannot undo the straightening above a collision and it converges
 	// in a single pass.
 	for (const column of columns) {

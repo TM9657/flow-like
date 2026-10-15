@@ -64,8 +64,8 @@ remote-metadata = [
 # Metadata advertised by APIs paired with a local-ML server executor. The API can describe
 # ONNX, training and published-model nodes without linking their execution dependencies.
 server-local-metadata = ["remote-metadata", "package-onnx", "training-metadata"]
-# Metadata paired with executors that also ship desktop/RPA automation.
-executor-local-metadata = ["server-local-metadata", "package-automation"]
+# Metadata paired with remote executors that support local ML inference.
+executor-local-metadata = ["server-local-metadata"]
 all-metadata = [
     "portable-metadata",
     "package-automation",
@@ -107,25 +107,12 @@ server = ["remote-all", "portable-execute", "remote"]
 # ml-inference they serve models published under storage/models with Burn CPU, without
 # GPU crates.
 server-local-ml = ["server", "package-onnx", "local-ml", "ml-inference"]
-executor = [
-    "remote-all",
-    "portable-execute",
-    "package-automation",
-    "flow-like-catalog-automation/execute",
-    "remote",
-]
+# Network executors exclude desktop/RPA automation, including locally hosted backends.
+executor = ["server"]
 executor-local-ml = ["executor", "local-ml", "ml-inference"]
-# Self-contained local runtime bundle. Depending on this feature alone must
-# enable both the package cfg flags used by get_catalog() and their execution
-# implementations; relying on a sibling executor dependency to unify `all`
-# made the advertised bundle silently empty in isolation.
-local-runtime = [
-    "remote-all",
-    "portable-execute",
-    "package-automation",
-    "flow-like-catalog-automation/execute",
-    "remote",
-]
+# Self-contained bundle for the local and Docker backend services. The server
+# bundle supplies both the catalog package flags and their implementations.
+local-runtime = ["server"]
 local-runtime-ml = ["local-runtime", "local-ml", "ml-inference"]
 
 # Execution environment - determines how interactions are handled
@@ -274,7 +261,7 @@ all-with-odbc = ["all-metadata", "all-lakes", "all-databases-with-odbc", "all-da
 portable-all = ["portable-metadata", "all-lakes", "all-databases", "all-databases-federation"]
 remote-all = ["remote-metadata", "all-lakes", "all-databases", "all-databases-federation"]
 
-# Full with execution (for executors and desktop app)
+# Full catalog with execution, including desktop automation.
 all-execute = ["all", "execute"]
 
 # Full with server execution (no RPA/desktop automation)

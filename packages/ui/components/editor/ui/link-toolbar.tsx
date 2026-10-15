@@ -97,8 +97,6 @@ export function LinkFloatingToolbar({
 		preventDefaultOnEnterKeydown: true,
 	});
 
-	if (hidden) return null;
-
 	const input = (
 		<div className="flex w-[330px] flex-col" {...inputProps}>
 			<div className="flex items-center">
@@ -179,6 +177,8 @@ export function LinkFloatingToolbar({
 		};
 		return { ...rest, style: cleanStyle };
 	}, [editProps]);
+
+	if (hidden) return null;
 
 	return (
 		<>

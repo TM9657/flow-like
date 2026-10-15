@@ -302,6 +302,13 @@ impl EventBusEvent {
 
         let event_name = loaded_event.name.clone();
         let event_type = loaded_event.event_type.clone();
+        let (oauth_tokens, oauth_authorization) = crate::event_sink::oauth::resolve_tokens(
+            &profile.hub_profile.hub,
+            profile.hub_profile.secure,
+            self.token.as_deref(),
+            &self.oauth_tokens,
+        )
+        .await?;
 
         let mut internal_run = InternalRun::from_template(
             &self.app_id,
@@ -313,8 +320,8 @@ impl EventBusEvent {
             false,
             buffered_sender.into_callback(),
             credentials,
-            self.token.clone(),
-            self.oauth_tokens.clone(),
+            oauth_authorization.or_else(|| self.token.clone()),
+            oauth_tokens,
             None,
             None,
         )

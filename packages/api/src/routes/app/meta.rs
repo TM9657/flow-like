@@ -3,7 +3,7 @@ use axum::{
     routing::{delete, get, put},
 };
 use flow_like_storage::Path as FlowPath;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
@@ -13,6 +13,7 @@ use crate::{
     entity::{
         app_group, app_group_member, meta,
         sea_orm_active_enums::{AppGroupMemberStatus, Visibility},
+        template, widget,
     },
     error::ApiError,
     middleware::jwt::AppPermissionResponse,
@@ -137,38 +138,57 @@ impl MetaMode {
         app_id: &str,
         state: &AppState,
     ) -> Result<AppPermissionResponse, ApiError> {
-        match self {
-            MetaMode::Template(_) => Ok(ensure_permission!(
-                user,
-                app_id,
-                state,
-                RolePermissions::WriteTemplates
-            )),
-            MetaMode::Course(_) => Ok(ensure_permission!(
-                user,
-                app_id,
-                state,
-                RolePermissions::WriteCourses
-            )),
-            MetaMode::Widget(_) => Ok(ensure_permission!(
-                user,
-                app_id,
-                state,
-                RolePermissions::WriteWidgets
-            )),
-            MetaMode::App(_) => Ok(ensure_permission!(
-                user,
-                app_id,
-                state,
-                RolePermissions::WriteMeta
-            )),
+        let permission = match self {
+            MetaMode::Template(_) => {
+                ensure_permission!(user, app_id, state, RolePermissions::WriteTemplates)
+            }
+            MetaMode::Course(_) => {
+                ensure_permission!(user, app_id, state, RolePermissions::WriteCourses)
+            }
+            MetaMode::Widget(_) => {
+                ensure_permission!(user, app_id, state, RolePermissions::WriteWidgets)
+            }
+            MetaMode::App(_) => ensure_permission!(user, app_id, state, RolePermissions::WriteMeta),
             MetaMode::Group(group_id) => {
                 deny_connected_app(user)?;
                 let permission = ensure_permission!(user, app_id, state, RolePermissions::Admin);
                 Self::ensure_group_anchor(group_id, app_id, state).await?;
-                Ok(permission)
+                permission
             }
+        };
+        self.ensure_app_target(app_id, &state.db).await?;
+        Ok(permission)
+    }
+
+    /// An app role authorizes only metadata belonging to that app.
+    pub(crate) async fn ensure_app_target<C: sea_orm::ConnectionTrait>(
+        &self,
+        app_id: &str,
+        db: &C,
+    ) -> Result<(), ApiError> {
+        let exists = match self {
+            Self::Template(id) => template::Entity::find_by_id(id)
+                .filter(template::Column::AppId.eq(app_id))
+                .select_only()
+                .column(template::Column::Id)
+                .into_tuple::<String>()
+                .one(db)
+                .await?
+                .is_some(),
+            Self::Widget(id) => widget::Entity::find_by_id(id)
+                .filter(widget::Column::AppId.eq(app_id))
+                .select_only()
+                .column(widget::Column::Id)
+                .into_tuple::<String>()
+                .one(db)
+                .await?
+                .is_some(),
+            _ => true,
+        };
+        if !exists {
+            return Err(ApiError::NOT_FOUND);
         }
+        Ok(())
     }
 
     /// A group's branding is editable only through its owner (anchor) app, so
@@ -210,26 +230,17 @@ impl MetaMode {
         app_id: &str,
         state: &AppState,
     ) -> Result<AppPermissionResponse, ApiError> {
-        match self {
-            MetaMode::Template(_) => Ok(ensure_permission!(
-                user,
-                app_id,
-                state,
-                RolePermissions::ReadTemplates
-            )),
-            MetaMode::Course(_) => Ok(ensure_permission!(
-                user,
-                app_id,
-                state,
-                RolePermissions::ReadCourses
-            )),
-            MetaMode::Widget(_) => Ok(ensure_permission!(
-                user,
-                app_id,
-                state,
-                RolePermissions::ReadWidgets
-            )),
-            MetaMode::App(_) => Ok(ensure_in_project!(user, &app_id, &state)),
+        let permission = match self {
+            MetaMode::Template(_) => {
+                ensure_permission!(user, app_id, state, RolePermissions::ReadTemplates)
+            }
+            MetaMode::Course(_) => {
+                ensure_permission!(user, app_id, state, RolePermissions::ReadCourses)
+            }
+            MetaMode::Widget(_) => {
+                ensure_permission!(user, app_id, state, RolePermissions::ReadWidgets)
+            }
+            MetaMode::App(_) => ensure_in_project!(user, &app_id, &state),
             MetaMode::Group(group_id) => {
                 let permission = ensure_permission!(user, app_id, state, RolePermissions::ReadTeam);
                 let group = app_group::Entity::find_by_id(group_id)
@@ -249,9 +260,11 @@ impl MetaMode {
                 if !is_member {
                     return Err(ApiError::FORBIDDEN);
                 }
-                Ok(permission)
+                permission
             }
-        }
+        };
+        self.ensure_app_target(app_id, &state.db).await?;
+        Ok(permission)
     }
 
     pub async fn find_existing_meta<C: sea_orm::ConnectionTrait>(
@@ -302,6 +315,55 @@ impl MetaMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn metadata_targets_must_belong_to_the_authorized_app() {
+        use sea_orm::{ConnectOptions, ConnectionTrait, Database};
+        let mut options = ConnectOptions::new("sqlite::memory:");
+        options.max_connections(1);
+        let db = Database::connect(options).await.unwrap();
+        db.execute_unprepared("ATTACH DATABASE ':memory:' AS public")
+            .await
+            .unwrap();
+        for table in ["Template", "Widget"] {
+            db.execute_unprepared(&format!(
+                "CREATE TABLE public.\"{table}\" (id TEXT PRIMARY KEY, \"appId\" TEXT NOT NULL)"
+            ))
+            .await
+            .unwrap();
+            db.execute_unprepared(&format!(
+                "INSERT INTO public.\"{table}\" VALUES ('owned', 'app-a'), ('foreign', 'app-b')"
+            ))
+            .await
+            .unwrap();
+        }
+        for target in [MetaMode::Template, MetaMode::Widget] {
+            assert!(
+                target("owned".into())
+                    .ensure_app_target("app-a", &db)
+                    .await
+                    .is_ok()
+            );
+            assert!(
+                target("foreign".into())
+                    .ensure_app_target("app-a", &db)
+                    .await
+                    .is_err()
+            );
+            assert!(
+                target("missing".into())
+                    .ensure_app_target("app-a", &db)
+                    .await
+                    .is_err()
+            );
+            assert!(
+                target("foreign".into())
+                    .ensure_app_target("app-b", &db)
+                    .await
+                    .is_ok()
+            );
+        }
+    }
 
     #[test]
     fn sanitize_ext_keeps_only_ascii_alphanumerics() {

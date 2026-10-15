@@ -671,6 +671,7 @@
         "@uidotdev/usehooks": "^2.4.1",
         "@vitejs/plugin-react": "^4.3.4",
         "@xyflow/react": "^12.10.0",
+        "@xyflow/system": "0.0.74",
         "add": "^2.0.6",
         "ai": "7.0.106",
         "class-variance-authority": "^0.7.1",
@@ -783,6 +784,7 @@
         "cheerio": "^1.0.0",
         "eslint": "^9.31.0",
         "eslint-config-next": "16.0.3",
+        "fake-indexeddb": "6.2.5",
         "license-report": "^6.7.1",
         "puppeteer": "24.43.1",
         "sharp": "^0.35.3",
@@ -3328,6 +3330,8 @@
     "extend": ["extend@3.0.2", "", {}, "sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g=="],
 
     "extract-zip": ["extract-zip@2.0.1", "", { "dependencies": { "debug": "^4.1.1", "get-stream": "^5.1.0", "yauzl": "^2.10.0" }, "optionalDependencies": { "@types/yauzl": "^2.9.1" }, "bin": { "extract-zip": "cli.js" } }, "sha512-GDhU9ntwuKyGXdZBUgTIe+vXnWj0fppUEtMDL0+idd5Sta8TGpHssn/eusA9mrPr9qNDym6SxAYZjNvCn/9RBg=="],
+
+    "fake-indexeddb": ["fake-indexeddb@6.2.5", "", {}, "sha512-CGnyrvbhPlWYMngksqrSSUT1BAVP49dZocrHuK0SvtR0D5TMs5wP0o3j7jexDJW01KSadjBp1M/71o/KR3nD1w=="],
 
     "fast-check": ["fast-check@3.23.2", "", { "dependencies": { "pure-rand": "^6.1.0" } }, "sha512-h5+1OzzfCC3Ef7VbtKdcv7zsstUQwUDlYpUTvjeUsJAssPgLn7QzbboPtL5ro04Mq0rPOsMzl7q5hIbRs2wD1A=="],
 

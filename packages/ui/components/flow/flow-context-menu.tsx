@@ -1,6 +1,7 @@
 import { useTranslation } from "@flow-like/locales";
 import { createId } from "@paralleldrive/cuid2";
 import { Slot } from "@radix-ui/react-slot";
+import { toast } from "sonner";
 import {
 	type PointerEvent,
 	useCallback,
@@ -85,6 +86,7 @@ export function FlowContextMenu({
 	const [open, setOpen] = useState(false);
 	const [point, setPoint] = useState({ x: 0, y: 0 });
 	const [session, setSession] = useState(0);
+	const pendingAction = useRef(false);
 	const longPressRef = useRef<ReturnType<typeof setTimeout> | undefined>(
 		undefined,
 	);
@@ -180,8 +182,21 @@ export function FlowContextMenu({
 		const thenClose =
 			<A extends unknown[]>(run: (...args: A) => unknown) =>
 			(...args: A) => {
-				void run(...args);
-				close();
+				if (pendingAction.current) return;
+				pendingAction.current = true;
+				void Promise.resolve()
+					.then(() => run(...args))
+					.then(close)
+					.catch((error: unknown) => {
+						toast.error(
+							error instanceof Error
+								? error.message
+								: "Could not apply the palette action",
+						);
+					})
+					.finally(() => {
+						pendingAction.current = false;
+					});
 			};
 		const eventNode = nodes.find((node) => node.name === "events_simple");
 		const canCreateVariable =

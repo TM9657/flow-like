@@ -11,6 +11,7 @@
 import { boardFormatVersion } from "../board-format";
 import type { IBoard } from "../schema/flow/board";
 import type { INode, IPin } from "../schema/flow/node";
+import { markBoardSnapshot } from "./identity";
 import type {
 	IBoardSyncManifest,
 	IBoardSyncRequest,
@@ -56,6 +57,7 @@ export function nodeSegment(node: { layer?: string | null }): string {
 
 export interface IAppliedBoardSync {
 	board: IBoard;
+	changes: BoardChangeSet;
 	manifest: IBoardSyncManifest;
 	/**
 	 * Segments containing at least one node the server shipped lean but the supplied catalog
@@ -71,8 +73,48 @@ export interface IAppliedBoardSync {
 	 * manifest and applied onto that same held board, but a diff must never be trusted blindly.
 	 */
 	unpatchable: Set<string>;
-	/** `false` when the response carried no part at all and `board` is `prev` by identity. */
+	/** `false` when no values changed and `board` is `prev` by identity. */
 	changed: boolean;
+}
+
+export interface BoardChangeSet {
+	meta: boolean;
+	variables: boolean;
+	comments: boolean;
+	refs: string[];
+	layers: { upserted: string[]; removed: string[] };
+	nodes: { upserted: string[]; removed: string[] };
+}
+
+const segmentIndexes = new WeakMap<IBoard["nodes"], Map<string, Set<string>>>();
+
+function segmentIndex(nodes: IBoard["nodes"]): Map<string, Set<string>> {
+	let index = segmentIndexes.get(nodes);
+	if (!index) {
+		index = new Map();
+		for (const [id, node] of Object.entries(nodes)) {
+			const segment = nodeSegment(node);
+			let members = index.get(segment);
+			if (!members) {
+				members = new Set();
+				index.set(segment, members);
+			}
+			members.add(id);
+		}
+		segmentIndexes.set(nodes, index);
+	}
+	return index;
+}
+
+export function emptyBoardChanges(): BoardChangeSet {
+	return {
+		meta: false,
+		variables: false,
+		comments: false,
+		refs: [],
+		layers: { upserted: [], removed: [] },
+		nodes: { upserted: [], removed: [] },
+	};
 }
 
 export type CatalogByName = ReadonlyMap<string, INode>;
@@ -232,78 +274,112 @@ export function applyBoardSync(
 	const changedLayers = response.layers ?? {};
 	const droppedLayers = response.dropped_layers ?? [];
 	const manifest = resolveManifest(request, response);
-	const changed =
-		response.meta != null ||
-		response.variables != null ||
-		response.comments != null ||
-		Object.keys(changedLayers).length > 0 ||
-		droppedLayers.length > 0 ||
-		Object.keys(segments).length > 0 ||
-		dropped.length > 0;
-
-	if (prev && !changed) {
-		return {
-			board: prev,
-			manifest,
-			unhydratable: new Set(),
-			unpatchable: new Set(),
-			changed: false,
-		};
-	}
-
+	const changes = emptyBoardChanges();
 	const base = prev ?? (EMPTY_BOARD_PARTS() as unknown as IBoard);
 	const unhydratable = new Set<string>();
 	const unpatchable = new Set<string>();
-
-	// Segments split three ways: replaced wholesale (or dropped), patched onto the held revision,
-	// and untouched. A patch whose base is not the token this client sent is refused whole — it
-	// would be applied onto nodes it was not computed against.
-	const replaced = new Set<string>(dropped);
-	const patched = new Map<string, Set<string>>();
+	let nodes = base.nodes;
+	const previousIndex = segmentIndex(nodes);
+	let index = previousIndex;
+	const touchedSegments = new Set<string>();
+	const touchedNodes = new Set<string>();
+	const writableMembers = (segment: string) => {
+		if (index === previousIndex) index = new Map(previousIndex);
+		let members = index.get(segment);
+		if (!members || !touchedSegments.has(segment)) {
+			members = new Set(members);
+			index.set(segment, members);
+			touchedSegments.add(segment);
+		}
+		return members;
+	};
+	const removeNode = (id: string) => {
+		if (!Object.hasOwn(nodes, id)) return;
+		const old = nodes[id];
+		if (nodes === base.nodes) nodes = { ...nodes };
+		delete nodes[id];
+		writableMembers(nodeSegment(old)).delete(id);
+		touchedNodes.add(id);
+	};
+	// Remove replaced segments first, so a node moving to another segment survives
+	// regardless of the order in which the server serialized those segments.
+	for (const segment of dropped) {
+		for (const id of previousIndex.get(segment) ?? []) removeNode(id);
+	}
 	for (const [segmentId, segment] of Object.entries(segments)) {
 		if (segment.base == null) {
-			replaced.add(segmentId);
-			continue;
-		}
-		if (request?.segments?.[segmentId] !== segment.base) {
+			for (const id of previousIndex.get(segmentId) ?? []) removeNode(id);
+		} else if (request?.segments?.[segmentId] !== segment.base) {
 			unpatchable.add(segmentId);
-			continue;
+		} else {
+			for (const id of segment.removed ?? []) {
+				if (Object.hasOwn(nodes, id) && nodeSegment(nodes[id]) === segmentId)
+					removeNode(id);
+			}
 		}
-		patched.set(segmentId, new Set(segment.removed ?? []));
-	}
-
-	// Nodes: keep every node whose segment the server did not touch, keep patched segments'
-	// nodes unless removed or upserted, then take replaced segments verbatim. Segment membership
-	// of a *previous* node is judged by its own layer, so a node that left a segment disappears
-	// with that segment's replacement (or its patch's `removed` list).
-	const nodes: IBoard["nodes"] = {};
-	for (const [id, node] of Object.entries(prev?.nodes ?? {})) {
-		const segmentId = nodeSegment(node);
-		if (replaced.has(segmentId)) continue;
-		const removed = patched.get(segmentId);
-		if (removed?.has(id)) continue;
-		setEntry(nodes, id, node);
 	}
 	for (const [segmentId, segment] of Object.entries(segments)) {
 		if (unpatchable.has(segmentId)) continue;
 		for (const [id, wire] of Object.entries(segment.nodes ?? {})) {
 			const { node, hydratable } = toNode(wire, catalog);
 			if (!hydratable) unhydratable.add(segmentId);
+			if (Object.hasOwn(nodes, id))
+				writableMembers(nodeSegment(nodes[id])).delete(id);
+			if (nodes === base.nodes) nodes = { ...nodes };
 			setEntry(nodes, id, node);
+			writableMembers(nodeSegment(node)).add(id);
+			touchedNodes.add(id);
 		}
 	}
-
-	// Layer definitions are independent records keyed by id, so unlike node segments they merge:
-	// take the changed ones, drop the removed ones, keep the rest by identity.
-	const layers: IBoard["layers"] = {};
-	for (const [id, layer] of Object.entries(prev?.layers ?? {})) {
-		if (
-			!droppedLayers.includes(id) &&
-			!Object.prototype.hasOwnProperty.call(changedLayers, id)
-		)
-			setEntry(layers, id, layer);
+	if (nodes !== base.nodes) segmentIndexes.set(nodes, index);
+	for (const id of touchedNodes) {
+		if (Object.hasOwn(nodes, id)) changes.nodes.upserted.push(id);
+		else if (Object.hasOwn(base.nodes, id)) changes.nodes.removed.push(id);
 	}
-	assignEntries(layers, changedLayers);
+
+	let layers = base.layers;
+	for (const id of droppedLayers) {
+		if (!Object.hasOwn(layers, id) || Object.hasOwn(changedLayers, id))
+			continue;
+		if (layers === base.layers) layers = { ...layers };
+		delete layers[id];
+		changes.layers.removed.push(id);
+	}
+	for (const [id, layer] of Object.entries(changedLayers)) {
+		if (Object.hasOwn(layers, id) && layers[id] === layer) continue;
+		if (layers === base.layers) layers = { ...layers };
+		setEntry(layers, id, layer);
+		changes.layers.upserted.push(id);
+	}
+	let refs = base.refs ?? {};
+	for (const [id, value] of Object.entries(response.refs ?? {})) {
+		if (Object.hasOwn(refs, id) && refs[id] === value) continue;
+		if (refs === base.refs) refs = { ...refs };
+		setEntry(refs, id, value);
+		changes.refs.push(id);
+	}
+	changes.meta = response.meta != null;
+	changes.variables =
+		response.variables != null && response.variables !== base.variables;
+	changes.comments =
+		response.comments != null && response.comments !== base.comments;
+	const changed =
+		!prev ||
+		changes.meta ||
+		changes.variables ||
+		changes.comments ||
+		changes.refs.length > 0 ||
+		layers !== base.layers ||
+		nodes !== base.nodes;
+	if (!changed)
+		return {
+			board: base,
+			manifest,
+			changes,
+			unhydratable,
+			unpatchable,
+			changed: false,
+		};
 
 	const meta = response.meta;
 	const board: IBoard = {
@@ -331,11 +407,15 @@ export function applyBoardSync(
 		variables: response.variables ?? base.variables ?? {},
 		comments: response.comments ?? base.comments ?? {},
 		layers,
-		// Refs are content-addressed: a key never changes meaning, so upserting is the merge.
-		refs: response.refs
-			? { ...(base.refs ?? {}), ...response.refs }
-			: (base.refs ?? {}),
+		refs,
 	};
 
-	return { board, manifest, unhydratable, unpatchable, changed: true };
+	return {
+		board: markBoardSnapshot(board),
+		manifest,
+		changes,
+		unhydratable,
+		unpatchable,
+		changed: true,
+	};
 }

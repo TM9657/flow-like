@@ -102,6 +102,9 @@ pub(crate) async fn resolve_run_template(
         &wasm_registry_signature(request),
     );
     if let Some(template) = TEMPLATE_CACHE.get(&cache_key) {
+        template
+            .ensure_execution_environment(state.execution_environment)
+            .map_err(|e| ExecutorError::BoardLoad(e.to_string()))?;
         tracing::debug!(cache_key = %cache_key, "Template cache hit");
         return Ok(template);
     }
@@ -115,7 +118,13 @@ pub(crate) async fn resolve_run_template(
                 request.artifact.path, request.board_id
             ))
         })?;
-    let template = template_from_fetched(&bytes, &fingerprint, registry.as_ref(), request)?;
+    let template = template_from_fetched(
+        &bytes,
+        &fingerprint,
+        registry.as_ref(),
+        request,
+        state.execution_environment,
+    )?;
     TEMPLATE_CACHE.insert(cache_key, template.clone());
     Ok(template)
 }
@@ -146,6 +155,7 @@ pub(crate) fn template_from_fetched(
     fingerprint: &[u8; 32],
     registry: &FlowNodeRegistryInner,
     request: &ExecutionRequest,
+    environment: ExecutionEnvironment,
 ) -> Result<Arc<CompiledRunTemplate>, ExecutorError> {
     let storage_root = Path::from("apps").join(request.app_id.clone());
     let template =
@@ -168,6 +178,9 @@ pub(crate) fn template_from_fetched(
             request.artifact.path, template.board.id, request.board_id
         )));
     }
+    template
+        .ensure_execution_environment(environment)
+        .map_err(|e| ExecutorError::BoardLoad(e.to_string()))?;
     Ok(template)
 }
 
@@ -869,6 +882,8 @@ async fn execute_inner(
                         refresh_token: v.refresh_token.clone(),
                         expires_at: v.expires_at.map(|e| e as u64),
                         token_type: v.token_type.clone(),
+                        hub_origin: None,
+                        hub_subject: None,
                     };
                     (k.clone(), token)
                 })
@@ -2318,7 +2333,7 @@ mod shadow_claim_binding_tests {
         let mut node = registry
             .get_nodes()
             .into_iter()
-            .next()
+            .find(|node| !node.only_offline)
             .expect("the catalog is not empty");
         node.id = "n1".into();
         let mut board =
@@ -2339,6 +2354,7 @@ mod shadow_claim_binding_tests {
             &fingerprint,
             registry.as_ref(),
             &request,
+            ExecutionEnvironment::Server,
         )
         .expect("an artifact for this board and registry is accepted");
         assert_eq!(template.board.id, "board-1");
@@ -2348,6 +2364,7 @@ mod shadow_claim_binding_tests {
             &fingerprint,
             registry.as_ref(),
             &request,
+            ExecutionEnvironment::Server,
         )
         .err()
         .expect("an artifact for another board is refused");
@@ -2358,6 +2375,7 @@ mod shadow_claim_binding_tests {
             &fingerprint,
             registry.as_ref(),
             &request,
+            ExecutionEnvironment::Server,
         )
         .err()
         .expect("an artifact for another registry is refused");
@@ -2403,6 +2421,111 @@ mod shadow_claim_binding_tests {
         assert!(validate_executor_request_claims(&claims(None), &request(true)).is_err());
         assert!(validate_executor_request_claims(&claims(Some(true)), &request(false)).is_err());
         assert!(validate_executor_request_claims(&claims(Some(false)), &request(true)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod offline_node_tests {
+    use super::shadow_claim_binding_tests::request;
+    use super::*;
+    use flow_like::flow::board::Board;
+    use flow_like::flow::compiled::{compile::compile_board_with_catalog, encode_artifact};
+    use flow_like::flow::execution::context::ExecutionContext;
+    use flow_like::flow::node::{Node, NodeLogic};
+
+    struct TestNode {
+        only_offline: bool,
+    }
+
+    #[flow_like_types::async_trait]
+    impl NodeLogic for TestNode {
+        fn get_node(&self) -> Node {
+            let mut node = Node::new("test_offline", "Test", "", "Test");
+            node.set_only_offline(self.only_offline);
+            node
+        }
+
+        async fn run(&self, _: &mut ExecutionContext) -> flow_like_types::Result<()> {
+            panic!("artifact resolution must never execute a node")
+        }
+    }
+
+    fn artifact(only_offline: bool) -> (FlowNodeRegistryInner, ExecutionRequest, Vec<u8>) {
+        let logic: Arc<dyn NodeLogic> = Arc::new(TestNode { only_offline });
+        let mut registry = FlowNodeRegistryInner::new(1);
+        registry.insert(logic.get_node(), logic);
+        let mut request = request(false);
+        request.board_id = create_id();
+        request.board_version = Some((1, 0, 0));
+        let mut board = Board::new_detached(Some(request.board_id.clone()), Path::default());
+        let mut node = registry.get_node("test_offline").unwrap();
+        node.id = request.node_id.clone();
+        // A workflow author can clear the serialized flag. The catalog remains authoritative.
+        node.only_offline = false;
+        board.nodes.insert(node.id.clone(), node);
+        let mut compiled = compile_board_with_catalog(&board, &registry).unwrap();
+        for node in &mut compiled.nodes {
+            node.only_offline = false;
+        }
+        let bytes = encode_artifact(&compiled, &registry.fingerprint()).unwrap();
+        (registry, request, bytes)
+    }
+
+    #[test]
+    fn remote_artifact_resolution_rejects_offline_nodes_with_forged_metadata() {
+        for only_offline in [false, true] {
+            let (registry, request, bytes) = artifact(only_offline);
+            let result = template_from_fetched(
+                &bytes,
+                &registry.fingerprint(),
+                &registry,
+                &request,
+                ExecutionEnvironment::Server,
+            );
+            if only_offline {
+                let error = result.err().expect("offline node must be rejected");
+                assert!(matches!(error, ExecutorError::BoardLoad(_)));
+                assert!(error.to_string().contains("test_offline"), "{error}");
+            } else {
+                assert!(result.is_ok(), "ordinary nodes remain executable");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn cached_local_template_is_rechecked_for_remote_execution() {
+        let (registry, request, bytes) = artifact(true);
+        let fingerprint = registry.fingerprint();
+        let template = template_from_fetched(
+            &bytes,
+            &fingerprint,
+            &registry,
+            &request,
+            ExecutionEnvironment::Local,
+        )
+        .expect("a local host can load offline nodes");
+        let cache_key = TemplateCache::cache_key(
+            &request.app_id,
+            &request.board_id,
+            &artifact_version_key(&request).unwrap(),
+            &fingerprint,
+            &wasm_registry_signature(&request),
+        );
+        TEMPLATE_CACHE.insert(cache_key, template);
+        let registry = Arc::new(registry);
+        for environment in [ExecutionEnvironment::Local, ExecutionEnvironment::Server] {
+            let mut state =
+                FlowLikeState::new(FlowLikeConfig::new(), HTTPClient::new_without_refetch());
+            state.execution_environment = environment;
+            state.node_registry.write().await.node_registry = registry.clone();
+            let result = resolve_run_template(&Arc::new(state), &request).await;
+            if environment == ExecutionEnvironment::Server {
+                let error = result.err().expect("cached offline node must be rejected");
+                assert!(error.to_string().contains("test_offline"), "{error}");
+            } else {
+                assert!(result.is_ok(), "local cache lookup must succeed");
+            }
+        }
     }
 }
 

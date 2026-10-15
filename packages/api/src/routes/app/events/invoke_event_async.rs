@@ -254,7 +254,7 @@ pub async fn invoke_event_async(
     Path((app_id, event_id)): Path<(String, String)>,
     Query(query): Query<InvokeEventAsyncQuery>,
     headers: HeaderMap,
-    Json(params): Json<InvokeEventAsyncRequest>,
+    Json(mut params): Json<InvokeEventAsyncRequest>,
 ) -> Result<Json<InvokeEventAsyncResponse>, ApiError> {
     let variant_pin = variant::pin_from_request(&headers, query.variant.clone());
     let permission = if params.page_trigger.is_some() {
@@ -268,6 +268,8 @@ pub async fn invoke_event_async(
         )
     })?;
     let technical_user_id = permission.technical_user_id().map(ToOwned::to_owned);
+    crate::routes::oauth::authorize_incoming_oauth_tokens(&state, &user, &mut params.oauth_tokens)
+        .await?;
     let caller_app_chain = match &user {
         AppUser::ConnectedApp(connected) => Some(connected.app_chain.clone()),
         _ => None,

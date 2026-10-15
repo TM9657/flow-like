@@ -81,6 +81,8 @@ jobs:
           backend-executor-aws
           backend-executor-azure
           backend-executor-gcp
+          backend-runtime-local
+          backend-runtime-docker
           api-remote-catalog
           api-aws-catalog
           api-local-ml-catalog

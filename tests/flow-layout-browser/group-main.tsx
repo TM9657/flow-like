@@ -309,6 +309,7 @@ function Fixture() {
 				layerNodes: Object.values(board.nodes).filter((node) => !node.layer),
 				layerEntities: [],
 				currentLayer: undefined,
+				preserveAutoReroutes: true,
 			},
 			"compact",
 		);

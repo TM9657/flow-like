@@ -9,8 +9,9 @@ import {
 	updateNodeCommand,
 	upsertLayerCommand,
 } from ".";
+import { buildConnectionCommands } from "./board-canvas/connection-commands";
 import { doPinsMatch, isOpenObjectSchema } from "./flow-board-utils";
-import { isWebkitLite } from "./platform";
+import type { IGenericCommand } from "./schema/flow/board/commands/generic-command";
 import { ILayerType } from "./schema/flow/board/commands/upsert-layer";
 import type { INode } from "./schema/flow/node";
 import type { IPin } from "./schema/flow/pin";
@@ -25,7 +26,7 @@ interface PlaceNodeParams {
 	refs: Record<string, any>;
 	boardNodes: Record<string, INode>;
 	pinCache: Map<string, [IPin, INode | ILayer, boolean]>;
-	executeCommand: (command: any, refetch?: boolean) => Promise<any>;
+	executeCommands: (commands: IGenericCommand[]) => Promise<unknown>;
 }
 
 export async function handlePlaceNode({
@@ -36,107 +37,59 @@ export async function handlePlaceNode({
 	refs,
 	boardNodes,
 	pinCache,
-	executeCommand,
+	executeCommands,
 }: PlaceNodeParams) {
+	const template = structuredClone(node);
+	for (const pin of Object.values(template.pins)) {
+		pin.connected_to = [];
+		pin.depends_on = [];
+	}
 	const result = addNodeCommand({
-		node: { ...node, coordinates: [position.x, position.y, 0] },
+		node: { ...template, coordinates: [position.x, position.y, 0] },
 		current_layer: currentLayer,
 	});
-
-	await executeCommand(result.command);
-	const new_node = result.node;
-
-	if (!droppedPin) return;
-
-	const isRefInHandle = droppedPin.id.startsWith("ref_in_");
-	const isRefOutHandle = droppedPin.id.startsWith("ref_out_");
-
-	if (isRefInHandle || isRefOutHandle) {
-		await handleFunctionReferenceConnection({
-			droppedPin,
-			newNode: new_node,
-			isRefOutHandle,
-			boardNodes,
-			executeCommand,
-		});
-	} else {
-		await handleRegularPinConnection({
-			droppedPin,
-			newNode: new_node,
+	const commands = [result.command];
+	if (droppedPin) {
+		const added = result.node;
+		const nextCache = new Map(pinCache);
+		for (const pin of Object.values(added.pins))
+			nextCache.set(pin.id, [pin, added, true]);
+		const refOut = droppedPin.id.startsWith("ref_out_");
+		const refIn = droppedPin.id.startsWith("ref_in_");
+		const owner =
+			refOut || refIn
+				? boardNodes[droppedPin.id.slice(refOut ? 8 : 7)]
+				: pinCache.get(droppedPin.id)?.[1];
+		const target =
+			refOut || refIn
+				? undefined
+				: findDropTargetPin(added.pins, droppedPin, refs);
+		if (!owner || (!(refOut || refIn) && !target))
+			throw new Error("The dropped pin is no longer available or compatible.");
+		const output =
+			refOut || (!refIn && droppedPin.pin_type === IPinType.Output);
+		const addedHandle = refOut
+			? `ref_in_${added.id}`
+			: refIn
+				? `ref_out_${added.id}`
+				: (target?.id ?? "");
+		const connection = {
+			source: output ? owner.id : added.id,
+			sourceHandle: output ? droppedPin.id : addedHandle,
+			target: output ? added.id : owner.id,
+			targetHandle: output ? addedHandle : droppedPin.id,
+		};
+		const connected = buildConnectionCommands({
+			connection,
+			boardNodes: { ...boardNodes, [added.id]: added },
+			pinCache: nextCache,
 			refs,
-			pinCache,
-			executeCommand,
 		});
+		if (!connected)
+			throw new Error("The dropped pin is no longer available or compatible.");
+		commands.push(...connected);
 	}
-}
-
-interface FunctionReferenceConnectionParams {
-	droppedPin: IPin;
-	newNode: INode;
-	isRefOutHandle: boolean;
-	boardNodes: Record<string, INode>;
-	executeCommand: (command: any) => Promise<any>;
-}
-
-async function handleFunctionReferenceConnection({
-	droppedPin,
-	newNode,
-	isRefOutHandle,
-	boardNodes,
-	executeCommand,
-}: FunctionReferenceConnectionParams) {
-	const sourceNodeId = isRefOutHandle
-		? droppedPin.id.replace("ref_out_", "")
-		: droppedPin.id.replace("ref_in_", "");
-
-	const sourceNode = boardNodes[sourceNodeId];
-	if (!sourceNode) return;
-
-	if (isRefOutHandle) {
-		// ref_out was dropped: source node references the new node
-		const currentRefs = sourceNode.fn_refs?.fn_refs ?? [];
-		const updatedRefs = Array.from(new Set([...currentRefs, newNode.id]));
-
-		const updatedNode = {
-			...sourceNode,
-			fn_refs: {
-				...sourceNode.fn_refs,
-				fn_refs: updatedRefs,
-				can_reference_fns: sourceNode.fn_refs?.can_reference_fns ?? false,
-				can_be_referenced_by_fns:
-					sourceNode.fn_refs?.can_be_referenced_by_fns ?? false,
-			},
-		};
-
-		const command = updateNodeCommand({ node: updatedNode });
-		await executeCommand(command);
-	} else {
-		// ref_in was dropped: new node references the source node
-		const currentRefs = newNode.fn_refs?.fn_refs ?? [];
-		const updatedRefs = Array.from(new Set([...currentRefs, sourceNodeId]));
-
-		const updatedNode = {
-			...newNode,
-			fn_refs: {
-				...newNode.fn_refs,
-				fn_refs: updatedRefs,
-				can_reference_fns: newNode.fn_refs?.can_reference_fns ?? false,
-				can_be_referenced_by_fns:
-					newNode.fn_refs?.can_be_referenced_by_fns ?? false,
-			},
-		};
-
-		const command = updateNodeCommand({ node: updatedNode });
-		await executeCommand(command);
-	}
-}
-
-interface RegularPinConnectionParams {
-	droppedPin: IPin;
-	newNode: INode;
-	refs: Record<string, any>;
-	pinCache: Map<string, [IPin, INode | ILayer, boolean]>;
-	executeCommand: (command: any) => Promise<any>;
+	await executeCommands(commands);
 }
 
 /** Reference pins a preset node arrives bound through (Get/Set Variable, Call Function/Event). */
@@ -167,28 +120,6 @@ export function findDropTargetPin(
 	);
 }
 
-async function handleRegularPinConnection({
-	droppedPin,
-	newNode,
-	refs,
-	pinCache,
-	executeCommand,
-}: RegularPinConnectionParams) {
-	const pin = findDropTargetPin(newNode.pins, droppedPin, refs);
-
-	const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
-	if (!sourcePin || !sourceNode || !pin) return;
-
-	const command = connectPinsCommand({
-		from_node: droppedPin.pin_type === "Output" ? sourceNode.id : newNode.id,
-		from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin.id,
-		to_node: droppedPin.pin_type === "Input" ? sourceNode.id : newNode.id,
-		to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin.id,
-	});
-
-	await executeCommand(command);
-}
-
 interface FindMatchingPinParams {
 	pinType: string;
 	pinValueType: string;
@@ -213,7 +144,9 @@ function matchingPins(
 	// as "no schema" here exactly as it does in `doPinsMatch`. Without this, dragging off a typed
 	// struct pin would stop offering Break Struct, whose `struct_in` accepts any struct.
 	const droppedSchema =
-		typeof schema === "string" && !isOpenObjectSchema(schema) ? schema : undefined;
+		typeof schema === "string" && !isOpenObjectSchema(schema)
+			? schema
+			: undefined;
 
 	// `pins` is keyed by cuid, so its iteration order is arbitrary. Pin index is the order the
 	// node declares — and the order the user sees — so a node with two pins a drop could land on
@@ -880,29 +813,17 @@ export function handleEdgesChange({
 	if (!changes || changes.length === 0)
 		return applyEdgeChanges(changes, currentEdges);
 
-	let edges = currentEdges;
-
 	const selectChanges = changes.filter(
 		(change: any) => change.type === "select",
 	);
 	for (const change of selectChanges) {
 		const selectedId = change.id;
-		const selectedEdge: any = edges.find((edge) => edge.id === selectedId);
-
 		if (change.selected) selected.current.add(selectedId);
 		if (!change.selected) selected.current.delete(selectedId);
-
-		if (selectedEdge?.data_type !== "Execution") {
-			edges = edges.map((edge) =>
-				edge.id === selectedId
-					? { ...edge, animated: !isWebkitLite() && !change.selected }
-					: edge,
-			);
-		}
 	}
 
 	if (typeof version !== "undefined") {
-		return applyEdgeChanges(changes, edges);
+		return applyEdgeChanges(changes, currentEdges);
 	}
 
 	const removeChanges = changes.filter(
@@ -915,7 +836,7 @@ export function handleEdgesChange({
 				.map((change: any) => {
 					const selectedId = change.id;
 					const selectedEdge: FunctionReferenceEdgeLike | undefined =
-						edges.find((edge) => edge.id === selectedId);
+						currentEdges.find((edge) => edge.id === selectedId);
 					const [fallbackFromPinId, fallbackToPinId] = selectedId.split("-");
 					const fromPinId = selectedEdge?.sourceHandle ?? fallbackFromPinId;
 					const toPinId = selectedEdge?.targetHandle ?? fallbackToPinId;
@@ -967,5 +888,5 @@ export function handleEdgesChange({
 	const nonRemoveChanges = changes.filter(
 		(change: any) => change.type !== "remove",
 	);
-	return applyEdgeChanges(nonRemoveChanges, edges);
+	return applyEdgeChanges(nonRemoveChanges, currentEdges);
 }
