@@ -46,6 +46,10 @@ const harness = vi.hoisted(() => {
 		path: "/apps/app-1",
 		childMounts: 0,
 		showLibrary: false,
+		showCallbackReadiness: false,
+		useRealOidc: false,
+		getUser: vi.fn(),
+		signinCallback: vi.fn(),
 		auth: {
 			get: () => state,
 			set(next: Partial<AuthContextProps>) {
@@ -75,6 +79,24 @@ vi.mock("aws-amplify/auth", () => ({ decodeJWT: vi.fn() }));
 vi.mock("next/navigation", () => ({ usePathname: () => harness.path }));
 vi.mock("oidc-client-ts", () => ({
 	UserManager: class {
+		settings;
+		events = {
+			addUserLoaded: vi.fn(),
+			removeUserLoaded: vi.fn(),
+			addUserUnloaded: vi.fn(),
+			removeUserUnloaded: vi.fn(),
+			addUserSignedOut: vi.fn(),
+			removeUserSignedOut: vi.fn(),
+			addAccessTokenExpired: vi.fn(),
+			removeAccessTokenExpired: vi.fn(),
+			addSilentRenewError: vi.fn(),
+			removeSilentRenewError: vi.fn(),
+		};
+		getUser = harness.getUser;
+		signinCallback = harness.signinCallback;
+		constructor(settings: unknown) {
+			this.settings = settings;
+		}
 		stopSilentRenew() {}
 	},
 }));
@@ -87,12 +109,20 @@ vi.mock(
 		coordinateOidcRenewal: vi.fn(),
 	}),
 );
-vi.mock("react-oidc-context", async () => {
-	const { useSyncExternalStore } = await import("react");
+vi.mock("react-oidc-context", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("react-oidc-context")>();
+	const { useContext, useSyncExternalStore } = await import("react");
 	return {
-		AuthProvider: ({ children }: { children: React.ReactNode }) => children,
-		useAuth: () =>
-			useSyncExternalStore(harness.auth.subscribe, harness.auth.get),
+		AuthProvider: (props: React.ComponentProps<typeof actual.AuthProvider>) =>
+			harness.useRealOidc ? <actual.AuthProvider {...props} /> : props.children,
+		useAuth: () => {
+			const simulated = useSyncExternalStore(
+				harness.auth.subscribe,
+				harness.auth.get,
+			);
+			const restored = useContext(actual.AuthContext);
+			return harness.useRealOidc ? restored : simulated;
+		},
 	};
 });
 vi.mock("../lib/api", () => ({
@@ -113,15 +143,24 @@ vi.mock("./sign-in-required", () => ({
 }));
 vi.mock("./web-provider", () => ({ WebBackend: harness.WebBackend }));
 
-const { WebAuthProvider } = await import("./auth-provider");
+const { WebAuthProvider, useOAuthCallbackReady } = await import(
+	"./auth-provider"
+);
 
 function ProtectedContent() {
+	const callbackReady = useOAuthCallbackReady();
 	useEffect(() => {
 		harness.childMounts += 1;
 	}, []);
 	return (
 		<div data-testid="protected-content">
-			{harness.showLibrary ? <LibraryProbe /> : "App content"}
+			{harness.showCallbackReadiness ? (
+				<output>{callbackReady ? "Callback ready" : "Callback waiting"}</output>
+			) : harness.showLibrary ? (
+				<LibraryProbe />
+			) : (
+				"App content"
+			)}
 		</div>
 	);
 }
@@ -189,6 +228,10 @@ beforeEach(() => {
 	harness.path = "/apps/app-1";
 	harness.childMounts = 0;
 	harness.showLibrary = false;
+	harness.showCallbackReadiness = false;
+	harness.useRealOidc = false;
+	harness.getUser.mockReset().mockResolvedValue(user());
+	harness.signinCallback.mockReset().mockResolvedValue(user());
 	window.history.replaceState(null, "", harness.path);
 	localStorage.clear();
 	sessionStorage.clear();
@@ -220,6 +263,109 @@ afterEach(async () => {
 });
 
 describe("WebAuthProvider", () => {
+	it.each(["/thirdparty/callback", "/thirdparty/callback/"])(
+		"restores the Hub user without consuming third-party state on %s",
+		async (path) => {
+			harness.useRealOidc = true;
+			harness.showCallbackReadiness = true;
+			harness.path = path;
+			window.history.replaceState(
+				null,
+				"",
+				`${path}?code=google&state=workflow`,
+			);
+			harness.signinCallback.mockRejectedValue(new Error("No matching state"));
+
+			await renderProvider();
+
+			expect(harness.signinCallback).not.toHaveBeenCalled();
+			expect(harness.getUser).toHaveBeenCalledOnce();
+			expect(harness.backend.pushAuthContext).toHaveBeenLastCalledWith(
+				expect.objectContaining({
+					isAuthenticated: true,
+					user: user(),
+				}),
+			);
+			expect(container.textContent).toBe("Callback ready");
+		},
+	);
+
+	it("still consumes the Hub sign-in callback on the account callback route", async () => {
+		harness.useRealOidc = true;
+		harness.path = "/callback";
+		window.history.replaceState(null, "", "/callback?code=hub&state=account");
+
+		await renderProvider();
+
+		expect(harness.signinCallback).toHaveBeenCalledOnce();
+		expect(harness.getUser).not.toHaveBeenCalled();
+		expect(harness.backend.pushAuthContext).toHaveBeenLastCalledWith(
+			expect.objectContaining({ isAuthenticated: true, user: user() }),
+		);
+	});
+
+	it("keeps a public OAuth callback waiting until the Hub user and profile are ready", async () => {
+		harness.path = "/thirdparty/callback";
+		harness.showCallbackReadiness = true;
+		harness.auth.set({
+			isLoading: true,
+			isAuthenticated: false,
+			user: undefined,
+		});
+		let finishProfile!: (
+			settings: Awaited<
+				ReturnType<typeof harness.backend.userState.getSettingsProfile>
+			>,
+		) => void;
+		harness.backend.userState.getSettingsProfile.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finishProfile = resolve;
+				}),
+		);
+
+		await renderProvider();
+		expect(container.textContent).toBe("Callback waiting");
+		expect(harness.backend.userState.getSettingsProfile).not.toHaveBeenCalled();
+
+		await act(async () =>
+			harness.auth.set({
+				isLoading: false,
+				isAuthenticated: true,
+				user: user(),
+			}),
+		);
+		expect(harness.backend.userState.getSettingsProfile).toHaveBeenCalledOnce();
+		expect(container.textContent).toBe("Callback waiting");
+		expect(harness.backend.pushProfile).not.toHaveBeenCalled();
+
+		await act(async () =>
+			finishProfile({
+				hub_profile: await harness.backend.userState.getProfile(),
+				execution_settings: { gpu_mode: false, max_context_size: 8192 },
+			}),
+		);
+		expect(harness.backend.pushProfile).toHaveBeenCalledOnce();
+		expect(container.textContent).toBe("Callback ready");
+	});
+
+	it("settles OAuth callback readiness after initialization without a signed-in user", async () => {
+		harness.path = "/thirdparty/callback";
+		harness.showCallbackReadiness = true;
+		harness.auth.set({
+			isLoading: true,
+			isAuthenticated: false,
+			user: undefined,
+		});
+		await renderProvider();
+		expect(container.textContent).toBe("Callback waiting");
+
+		await act(async () => harness.auth.set({ isLoading: false }));
+
+		expect(container.textContent).toBe("Callback ready");
+		expect(harness.backend.userState.getSettingsProfile).not.toHaveBeenCalled();
+	});
+
 	it("replaces fresh empty library caches after login without switching profiles", async () => {
 		harness.showLibrary = true;
 		queryClient.setQueryData(["getApps"], []);

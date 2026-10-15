@@ -14,7 +14,7 @@ import {
 } from "aws-amplify/auth";
 import { usePathname } from "next/navigation";
 import { UserManager, type UserManagerSettings } from "oidc-client-ts";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { get } from "../lib/api";
 import { getWebOidcSettings } from "../lib/oidc-settings";
@@ -31,6 +31,12 @@ const PUBLIC_PATHS = [
 	"/store",
 	"/store/explore",
 ];
+
+const OAuthCallbackReadyContext = createContext(false);
+
+export function useOAuthCallbackReady(): boolean {
+	return useContext(OAuthCallbackReadyContext);
+}
 
 function defaultProfile(): IProfile {
 	return {
@@ -64,6 +70,7 @@ export class OIDCTokenProvider implements TokenProvider {
 export function WebAuthProvider({
 	children,
 }: Readonly<{ children: React.ReactNode }>) {
+	const pathname = usePathname();
 	const [openIdAuthConfig, setOpenIdAuthConfig] =
 		useState<UserManagerSettings>();
 	const [userManager, setUserManager] = useState<UserManager>();
@@ -129,11 +136,16 @@ export function WebAuthProvider({
 		return <LoadingScreen progress={loadingProgress} />;
 	}
 
+	// Third-party state belongs to the workflow connection, not Hub sign-in.
+	const skipSigninCallback =
+		pathname === "/thirdparty/callback" || pathname === "/thirdparty/callback/";
+
 	return (
 		<AuthProvider
 			key={openIdAuthConfig.client_id}
 			{...openIdAuthConfig}
 			userManager={userManager}
+			skipSigninCallback={skipSigninCallback}
 		>
 			<AuthInner>{children}</AuthInner>
 		</AuthProvider>
@@ -394,5 +406,14 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 		return <LoadingScreen progress={99} />;
 	}
 
-	return <>{children}</>;
+	const oauthCallbackReady =
+		!auth.isLoading &&
+		(!auth.isAuthenticated ||
+			(authPushed && profileLoaded && sessionRecovery === "ready"));
+
+	return (
+		<OAuthCallbackReadyContext.Provider value={oauthCallbackReady}>
+			{children}
+		</OAuthCallbackReadyContext.Provider>
+	);
 }

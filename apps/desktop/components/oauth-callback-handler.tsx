@@ -1,9 +1,10 @@
 "use client";
 
-import type {
-	IOAuthCallbackData,
-	IOAuthPendingAuth,
-	IOAuthProvider,
+import {
+	type IOAuthCallbackData,
+	type IOAuthPendingAuth,
+	type IOAuthProvider,
+	useBackendStore,
 } from "@flow-like/flow-like-ui";
 import { i18n as i18next } from "@flow-like/locales";
 import { listen } from "@tauri-apps/api/event";
@@ -11,6 +12,7 @@ import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { oauthTokenStore } from "../lib/oauth-db";
 import { oauthService } from "../lib/oauth-service";
+import type { TauriBackend } from "./tauri-provider";
 
 type OAuthCallbackListener = (
 	pending: IOAuthPendingAuth,
@@ -18,6 +20,8 @@ type OAuthCallbackListener = (
 ) => void;
 
 const listeners = new Set<OAuthCallbackListener>();
+const callbacksInProgress = new Set<string>();
+const completedCallbacks = new Set<string>();
 
 export function addOAuthCallbackListener(listener: OAuthCallbackListener) {
 	listeners.add(listener);
@@ -93,7 +97,17 @@ async function processCallback(payload: IOAuthCallbackData) {
 		return;
 	}
 
+	// Native deep links can be delivered again while an exchange is running or
+	// after it consumed the pending authorization. Keep this across remounts.
+	if (callbacksInProgress.has(state) || completedCallbacks.has(state)) return;
+	callbacksInProgress.add(state);
+
 	try {
+		// Startup deep links can arrive before the Hub account and profile restore.
+		// Pending authorizations are readable only within that restored session.
+		const backend = useBackendStore.getState().backend as TauriBackend | null;
+		await backend?.waitForPackageSession?.();
+
 		// Peek at the pending auth to get the provider ID
 		const pending = await oauthTokenStore.getPendingAuth(state);
 
@@ -132,6 +146,7 @@ async function processCallback(payload: IOAuthCallbackData) {
 			token = await oauthService.handleCallback(url, provider);
 		}
 
+		completedCallbacks.add(state);
 		console.log("Token obtained for provider:", provider.name);
 		toast.success(`Connected to ${provider.name}`);
 
@@ -149,6 +164,8 @@ async function processCallback(payload: IOAuthCallbackData) {
 				val: e instanceof Error ? e.message : "Unknown error",
 			}),
 		);
+	} finally {
+		callbacksInProgress.delete(state);
 	}
 }
 
