@@ -381,7 +381,6 @@ mod tests {
     }
 }
 
-
 /// A field holding a list of structs: the field pin must describe one element, so a Push into it
 /// and a Make Struct (Schema) building that element stay typed, nested lists included.
 #[cfg(test)]
@@ -423,8 +422,14 @@ mod list_field_tests {
     fn connect(from: &mut Node, from_pin: &str, to: &mut Node, to_pin: &str) {
         let from_id = from.get_pin_by_name(from_pin).unwrap().id.clone();
         let to_id = to.get_pin_by_name(to_pin).unwrap().id.clone();
-        from.get_pin_mut_by_name(from_pin).unwrap().connected_to.insert(to_id.clone());
-        to.get_pin_mut_by_name(to_pin).unwrap().depends_on.insert(from_id);
+        from.get_pin_mut_by_name(from_pin)
+            .unwrap()
+            .connected_to
+            .insert(to_id.clone());
+        to.get_pin_mut_by_name(to_pin)
+            .unwrap()
+            .depends_on
+            .insert(from_id);
     }
 
     fn board(nodes: &[&Node]) -> Board {
@@ -443,7 +448,11 @@ mod list_field_tests {
         let mut names: Vec<String> = node
             .pins
             .values()
-            .filter_map(|pin| pin.name.strip_prefix(MAKE_STRUCT_PIN_PREFIX).map(str::to_string))
+            .filter_map(|pin| {
+                pin.name
+                    .strip_prefix(MAKE_STRUCT_PIN_PREFIX)
+                    .map(str::to_string)
+            })
             .collect();
         names.sort();
         names
@@ -477,7 +486,10 @@ mod list_field_tests {
         PushArrayNode::default()
             .on_update(&mut push, &board(&[&consumer, &make_response]))
             .await;
-        assert_eq!(schema_of(push.get_pin_by_name("value").unwrap())["type"], "object");
+        assert_eq!(
+            schema_of(push.get_pin_by_name("value").unwrap())["type"],
+            "object"
+        );
 
         // …so a Make Struct (Schema) building one element gets its fields, nested lists included.
         let mut make_entry = MakeStructFromSchemaNode::default().get_node();
