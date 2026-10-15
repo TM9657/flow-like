@@ -16,12 +16,31 @@ runs:
       env:
         RUST_TARGETS: ${{ inputs.targets }}
       run: |
+        # Retry the whole command when a component download aborts the install.
+        retry_rustup() {
+          local attempt status delay=5
+          for attempt in 1 2 3 4 5; do
+            if rustup "$@"; then
+              return 0
+            else
+              status=$?
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::rustup $* failed after $attempt attempts."
+              return "$status"
+            fi
+            echo "::warning::rustup $* failed (attempt $attempt/5); retrying in ${delay}s."
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
+        }
+
         unset RUSTUP_TOOLCHAIN
-        rustup toolchain install
+        retry_rustup toolchain install
         toolchain="$(rustup show active-toolchain | cut -d ' ' -f 1)"
-        echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
         if [ -n "$RUST_TARGETS" ]; then
           IFS=',' read -r -a targets <<< "$RUST_TARGETS"
-          rustup target add "${targets[@]}"
+          retry_rustup target add "${targets[@]}"
         fi
         rustc --version --verbose
+        echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
