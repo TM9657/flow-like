@@ -118,12 +118,11 @@ fn sequence_data() -> TensorDataset {
 fn fit_and_check(recipe: Recipe, data: &TensorDataset, epochs: usize) -> TrainingReport {
     let dir = tempfile::tempdir().unwrap();
     let mut settings = config(recipe, epochs);
-    if matches!(
-        settings.recipe,
-        Recipe::ResNet18 { .. } | Recipe::UNet { .. }
-    ) {
-        settings.learning_rate = 0.005;
-    }
+    settings.learning_rate = match settings.recipe {
+        Recipe::ResNet18 { .. } => 0.001,
+        Recipe::UNet { .. } => 0.005,
+        _ => settings.learning_rate,
+    };
     let report = train(
         &settings,
         data,
@@ -135,7 +134,8 @@ fn fit_and_check(recipe: Recipe, data: &TensorDataset, epochs: usize) -> Trainin
     .unwrap();
     assert!(
         report.final_loss < report.initial_loss,
-        "loss did not decrease: {report:?}"
+        "{:?} loss did not decrease: {report:?}",
+        settings.recipe
     );
     let first = Predictor::load(dir.path(), BackendChoice::Cpu)
         .unwrap()
@@ -147,13 +147,15 @@ fn fit_and_check(recipe: Recipe, data: &TensorDataset, epochs: usize) -> Trainin
         .unwrap();
     assert_eq!(
         first.output, second.output,
-        "Saved weights must reload deterministically"
+        "{:?} saved weights must reload deterministically",
+        settings.recipe
     );
     if let (Some(actual), Targets::Classes { values: expected }) = (first.classes, &data.targets) {
         let correct = actual.iter().zip(expected).filter(|(a, b)| a == b).count();
         assert!(
             correct * 10 >= expected.len() * 9,
-            "classifier did not learn fixture: {actual:?}"
+            "{:?} classifier did not learn fixture: {actual:?}",
+            settings.recipe
         );
     }
     report
@@ -682,29 +684,35 @@ fn automatic_training_records_actual_backend_and_preserves_requested_mode() {
     );
 }
 #[test]
-fn image_models_train_on_cpu_and_roundtrip() {
+fn resnet18_trains_on_cpu_and_roundtrip() {
     let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // Preserve spatial detail until the final residual stage and vary samples so
+    // batch normalization sees more than two repeated images.
+    let size = 32;
     let mut inputs = Vec::new();
     let mut labels = Vec::new();
-    let mut masks = Vec::new();
     for i in 0..8 {
         let class = (i % 2) as i64;
         labels.push(class);
-        for y in 0..8 {
-            for x in 0..8 {
-                let foreground = if class == 0 { x >= 4 } else { y >= 4 };
-                inputs.push(if foreground { 1.0 } else { -1.0 });
-                masks.push(i64::from(foreground));
-                let _ = y;
+        for y in 0..size {
+            for x in 0..size {
+                let foreground = if class == 0 {
+                    x >= size / 2
+                } else {
+                    y >= size / 2
+                };
+                let pixel = if foreground { 1.0 } else { -1.0 };
+                let texture = ((i * 13 + x * 7 + y * 11) % 17) as f32 / 16.0 - 0.5;
+                let brightness = (i / 2) as f32 * 0.04;
+                inputs.push(pixel + (texture * 0.2 + brightness));
             }
         }
     }
-    let inputs = TensorData {
-        shape: vec![8, 1, 8, 8],
-        values: inputs,
-    };
     let data = TensorDataset {
-        inputs: inputs.clone(),
+        inputs: TensorData {
+            shape: vec![8, 1, size, size],
+            values: inputs,
+        },
         targets: Targets::Classes { values: labels },
     };
     fit_and_check(
@@ -716,8 +724,27 @@ fn image_models_train_on_cpu_and_roundtrip() {
         &data,
         50,
     );
+}
+
+#[test]
+fn unet_trains_on_cpu_and_roundtrip() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut inputs = Vec::new();
+    let mut masks = Vec::new();
+    for i in 0..8 {
+        for y in 0..8 {
+            for x in 0..8 {
+                let foreground = if i % 2 == 0 { x >= 4 } else { y >= 4 };
+                inputs.push(if foreground { 1.0 } else { -1.0 });
+                masks.push(i64::from(foreground));
+            }
+        }
+    }
     let data = TensorDataset {
-        inputs,
+        inputs: TensorData {
+            shape: vec![8, 1, 8, 8],
+            values: inputs,
+        },
         targets: Targets::Segmentation {
             shape: vec![8, 8, 8],
             values: masks,
