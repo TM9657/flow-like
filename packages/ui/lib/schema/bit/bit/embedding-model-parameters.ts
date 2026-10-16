@@ -36,6 +36,7 @@ export interface IRemoteExecutionConfig {
 	implementation?: null | IRemoteEmbeddingProvider;
 	model_id?: null | string;
 	secret_name?: null | string;
+	supports_dimensions?: boolean | null;
 	[property: string]: any;
 }
 

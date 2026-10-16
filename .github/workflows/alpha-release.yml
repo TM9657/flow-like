@@ -17,6 +17,8 @@ env:
 jobs:
   compiler-checks:
     uses: ./.github/workflows/compiler-reproducibility.yml
+    with:
+      namespace_runners: true
     permissions:
       contents: read
 
@@ -207,7 +209,7 @@ jobs:
       - alpha-release
       - alpha-release-macos-arm
     if: ${{ always() && needs['alpha-release'].result == 'success' && needs['alpha-release-macos-arm'].result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd-small-24
     permissions:
       contents: write
     steps:

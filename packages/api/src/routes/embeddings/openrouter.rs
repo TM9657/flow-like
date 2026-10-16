@@ -267,14 +267,18 @@ pub(super) fn request_body(
         }).collect();
         if has_media { serde_json::json!({"content": content}) } else { text.into() }
     }).collect();
-    serde_json::json!({
+    let mut body = serde_json::json!({
         "model": nonempty(config.model_id.as_deref()),
         "input": input,
         "encoding_format": "float",
-        "dimensions": provider.vector_length,
         "input_type": match payload.embed_type {
             EmbedType::Query => "search_query",
             EmbedType::Document => "search_document",
         },
-    })
+    });
+    // Fixed-width providers can reject this field even at their native width.
+    if config.supports_dimensions != Some(false) {
+        body["dimensions"] = provider.vector_length.into();
+    }
+    body
 }

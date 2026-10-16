@@ -189,6 +189,35 @@ export function HostedEmbeddingConfiguration({
 								/>
 							</div>
 						</div>
+						{isOpenRouter && (
+							<div className="space-y-2">
+								<div className="flex items-center gap-3">
+									<Switch
+										id={`${id}-dimensions`}
+										aria-describedby={`${id}-dimensions-help`}
+										checked={remote.supports_dimensions ?? true}
+										onCheckedChange={(supports_dimensions) =>
+											update({ supports_dimensions })
+										}
+									/>
+									<Label htmlFor={`${id}-dimensions`}>
+										{t(
+											"openRouterRequestVectorDimensions",
+											"Request vector dimensions",
+										)}
+									</Label>
+								</div>
+								<p
+									id={`${id}-dimensions-help`}
+									className="text-sm text-muted-foreground"
+								>
+									{t(
+										"openRouterRequestVectorDimensionsHelp",
+										"When enabled, the server requests this Bit's vector length. Turn off for models with a fixed output size and set the Bit's vector length to the model's native size. Returned vectors must match the Bit's vector length.",
+									)}
+								</p>
+							</div>
+						)}
 						{cloudflareBatchLimit && (
 							<p className="text-sm text-muted-foreground">
 								{t(
@@ -203,7 +232,7 @@ export function HostedEmbeddingConfiguration({
 								<p className="text-sm text-muted-foreground">
 									{t(
 										"openRouterGeminiEmbeddingCapabilities",
-										"Gemini Embedding 2 accepts text, images, audio, video and PDF files. Set 128 to 3072 vector dimensions and an input length of at most 8192 tokens. The server requests the vector length configured for this Bit.",
+										"Gemini Embedding 2 accepts text, images, audio, video and PDF files. Set 128 to 3072 vector dimensions and an input length of at most 8192 tokens. The returned vector length must match this Bit's configuration.",
 									)}
 								</p>
 							)}

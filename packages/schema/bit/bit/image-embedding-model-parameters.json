@@ -108,6 +108,10 @@
 					"description": "Deployed model ID for the upstream provider (e.g., Internal gateway model name)",
 					"type": ["string", "null"],
 					"default": null
+				},
+				"supports_dimensions": {
+					"description": "Whether OpenRouter accepts a requested output dimension count. Set false\nfor fixed-width models. When absent, the Bit's vector length is requested.",
+					"type": ["boolean", "null"]
 				}
 			}
 		},
