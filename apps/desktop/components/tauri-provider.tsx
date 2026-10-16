@@ -1205,10 +1205,15 @@ export function ProfileSyncer({
 		hub === getApiOrigin(profile.data);
 	const accessToken = isAuthenticated ? auth.accessToken : undefined;
 	const hubUrl = getApiOrigin(profile.data);
+	const profileId = profile.data?.id;
+	const profileRevision = profile.data?.updated;
+	const profileSecure = profile.data?.secure;
 
 	const syncQueueRef = useRef(createProfileSyncQueue());
+	const profileRef = useRef(profile.data);
 
 	useEffect(() => {
+		profileRef.current = profile.data;
 		if (profile.data && backend instanceof TauriBackend) {
 			backend.pushProfile(profile.data);
 		} else if (profile.error && backend instanceof TauriBackend) {
@@ -1216,12 +1221,15 @@ export function ProfileSyncer({
 		}
 	}, [profile.data, profile.error, backend]);
 
+	// Signed media URLs change during a pull without changing the revision.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: Restart for profile selection and persisted edits, while keeping refreshed media in the ref.
 	useEffect(() => {
 		if (!(backend instanceof TauriBackend)) {
 			console.log("[ProfileSync] Skipping: not TauriBackend");
 			return;
 		}
-		if (!isAuthenticated || !accessToken || !profile.data) {
+		const syncProfile = profileRef.current;
+		if (!isAuthenticated || !accessToken || !syncProfile) {
 			console.log("[ProfileSync] Skipping: missing auth state", {
 				isAuthenticated,
 				hasAccessToken: !!accessToken,
@@ -1229,15 +1237,16 @@ export function ProfileSyncer({
 			return;
 		}
 		let disposed = false;
-		const syncProfile = profile.data;
 		const subject = backend.auth?.user?.profile.sub;
 		const fetchWithDeadline = (url: string, init: RequestInit) => {
 			if (!new Headers(init.headers).has("Authorization"))
 				return fetchProfileResource(url, init);
 			const currentAuth = backend.auth;
+			const currentProfile = profileRef.current;
 			if (
 				disposed ||
 				!currentAuth ||
+				!currentProfile ||
 				currentAuth.user?.profile.sub !== subject ||
 				getApiOrigin(backend.profile) !== hub ||
 				new URL(url).origin !== new URL(hub).origin
@@ -1247,7 +1256,7 @@ export function ProfileSyncer({
 				);
 			}
 			return fetchProfileResource(url, init, {
-				profile: syncProfile,
+				profile: currentProfile,
 				auth: currentAuth,
 			});
 		};
@@ -1470,7 +1479,7 @@ export function ProfileSyncer({
 
 				const baseUrl =
 					process.env.NEXT_PUBLIC_API_URL ?? hubUrl ?? "api.flow-like.com";
-				const protocol = profile.data?.secure === false ? "http" : "https";
+				const protocol = profileSecure === false ? "http" : "https";
 				const apiBase = (
 					baseUrl.startsWith("http") ? baseUrl : `${protocol}://${baseUrl}`
 				).replace(/\/+$/, "");
@@ -1480,7 +1489,7 @@ export function ProfileSyncer({
 					"hubUrl:",
 					hubUrl,
 					"secure:",
-					profile.data?.secure,
+					profileSecure,
 				);
 
 				let rawProfiles =
@@ -2300,7 +2309,17 @@ export function ProfileSyncer({
 			window.removeEventListener("online", requestSync);
 			window.removeEventListener("focus", syncOnFocus);
 		};
-	}, [backend, isAuthenticated, accessToken, hubUrl, hub, profile.data, t]);
+	}, [
+		backend,
+		isAuthenticated,
+		accessToken,
+		hubUrl,
+		hub,
+		profileId,
+		profileRevision,
+		profileSecure,
+		t,
+	]);
 
 	return null;
 }
