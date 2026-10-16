@@ -143,6 +143,10 @@ fn openrouter_validates_model_dimensions_media_formats_and_fixed_origin() {
     for dimensions in [128, 768, 1536, 3072] {
         provider.vector_length = dimensions;
         validate_request(&provider, &config, &image).unwrap();
+        assert_eq!(
+            request_body(&provider, &config, &image)["dimensions"],
+            dimensions
+        );
     }
     for dimensions in [0, 127, 3073] {
         provider.vector_length = dimensions;
@@ -171,6 +175,88 @@ fn openrouter_validates_model_dimensions_media_formats_and_fixed_origin() {
     config.model_id = Some("openai/text-embedding-3-small".into());
     assert!(validate_request(&provider, &config, &image).is_err());
     validate_request(&provider, &config, &request(serde_json::json!("text"))).unwrap();
+}
+
+#[tokio::test]
+async fn openrouter_bit_can_disable_dimension_requests_without_relaxing_response_validation() {
+    use axum::{Json, Router, http::StatusCode, routing::post};
+
+    let router = Router::new().route(
+        "/v1/embeddings",
+        post(|Json(body): Json<serde_json::Value>| async move {
+            if body.get("dimensions").is_some() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": "Model does not support matryoshka representation"})),
+                );
+            }
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "data": [{"index": 0, "embedding": vec![0.1; 1024]}],
+                    "usage": {"prompt_tokens": 5, "total_tokens": 5, "cost": 0.00000005}
+                })),
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = Url::parse(&format!(
+        "http://{}/v1/embeddings",
+        listener.local_addr().unwrap()
+    ))
+    .unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let mut config = config(RemoteEmbeddingProvider::OpenRouter);
+    config.model_id = Some("example/fixed-width-embedding".into());
+    config.supports_dimensions = Some(false);
+    let mut provider = provider();
+    provider.vector_length = 1024;
+    provider.input_length = 512;
+    let input = request(serde_json::json!("test passage"));
+    validate_request(&provider, &config, &input).unwrap();
+    let body = request_body(&provider, &config, &input);
+    let result = send_request(
+        &RemoteEmbeddingProvider::OpenRouter,
+        endpoint.clone(),
+        "test-key",
+        &body,
+        1,
+        provider.vector_length as usize,
+        2000,
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.embeddings.len(), 1);
+    assert_eq!(result.embeddings[0].len(), 1024);
+    assert!(
+        openrouter::decode_response(
+            &serde_json::to_vec(&serde_json::json!({
+                "data": [{"index": 0, "embedding": vec![0.1; 512]}]
+            }))
+            .unwrap(),
+            1,
+            provider.vector_length as usize,
+        )
+        .is_err()
+    );
+    server.abort();
+}
+
+#[test]
+fn openrouter_dimension_requests_follow_bit_configuration() {
+    let mut config = config(RemoteEmbeddingProvider::OpenRouter);
+    config.model_id = Some("example/embedding-model".into());
+    let mut provider = provider();
+    provider.vector_length = 768;
+    for supports_dimensions in [None, Some(true), Some(false)] {
+        config.supports_dimensions = supports_dimensions;
+        let body = request_body(&provider, &config, &payload());
+        if supports_dimensions == Some(false) {
+            assert!(body.get("dimensions").is_none());
+        } else {
+            assert_eq!(body["dimensions"], 768);
+        }
+    }
 }
 
 fn request(input: serde_json::Value) -> EmbedRequest {

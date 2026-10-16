@@ -107,6 +107,10 @@ pub struct RemoteExecutionConfig {
     /// Deployed model ID for the upstream provider (e.g., Internal gateway model name)
     #[serde(default)]
     pub model_id: Option<String>,
+    /// Whether OpenRouter accepts a requested output dimension count. Set false
+    /// for fixed-width models. When absent, the Bit's vector length is requested.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supports_dimensions: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
@@ -418,6 +422,26 @@ mod tests {
         .unwrap();
         assert_eq!(legacy.implementation, None);
         assert_eq!(legacy.endpoint_secret_name, None);
+        assert_eq!(legacy.supports_dimensions, None);
+        assert!(
+            serde_json::to_value(&legacy)
+                .unwrap()
+                .get("supports_dimensions")
+                .is_none()
+        );
+        for supports_dimensions in [false, true] {
+            let value = serde_json::json!({
+                "implementation": "OpenRouter",
+                "model_id": "provider/model",
+                "supports_dimensions": supports_dimensions,
+            });
+            let parsed: RemoteExecutionConfig = serde_json::from_value(value).unwrap();
+            assert_eq!(parsed.supports_dimensions, Some(supports_dimensions));
+            assert_eq!(
+                serde_json::to_value(parsed).unwrap()["supports_dimensions"],
+                supports_dimensions
+            );
+        }
     }
 
     #[test]

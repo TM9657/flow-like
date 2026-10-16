@@ -976,8 +976,8 @@ class WorkflowTests(unittest.TestCase):
         job = job_body("runtime-packs")
         matrix = dict(re.findall(r"^          - pack: (\S+)\n            runner: (\S+)$", job, re.MULTILINE))
         self.assertEqual(set(matrix), set(runtime.LLAMACPP_PACKS) | {"mlx-macos-arm64-metal"})
-        runners = {"aarch64-apple-darwin": "macos-15",
-                   "x86_64-unknown-linux-gnu": "ubuntu-22.04",
+        runners = {"aarch64-apple-darwin": "namespace-profile-mac-large",
+                   "x86_64-unknown-linux-gnu": "namespace-profile-linux-amd-small-24",
                    "aarch64-unknown-linux-gnu": "namespace-profile-linux-arm-large"}
         for pack, spec in runtime.LLAMACPP_PACKS.items():
             self.assertEqual(matrix[pack], runners[spec["target"]], pack)

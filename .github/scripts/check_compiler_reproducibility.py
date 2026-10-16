@@ -60,7 +60,7 @@ def check_reproducibility(target, attempts, output_dir, linked=False):
             command += ["--", "--emit=obj"]
         subprocess.run(command, cwd=FIXTURE, env=env, check=True)
 
-        # Object checks also work without a target linker. Linked checks need a native runner.
+        # Object checks need no target linker. Linked checks need a compatible runtime.
         deps = target_dir / target / "release/deps"
         if linked:
             suffix = ".exe" if "windows" in target else ""
@@ -76,7 +76,7 @@ def check_reproducibility(target, attempts, output_dir, linked=False):
         saved = output_dir / f"build-{attempt}{objects[0].suffix}"
         saved.write_bytes(data)
         if linked:
-            # Exercise the executable on its native runner, including its loader.
+            # Exercise the executable through the target runtime, including its loader.
             subprocess.run([str(objects[0])], env=env, check=True, timeout=15)
         digest = hashlib.sha256(data).hexdigest()
         print(f"Build {attempt}/{attempts}: {len(data)} bytes, SHA-256 {digest}", flush=True)
@@ -100,7 +100,7 @@ def main():
     parser.add_argument("--attempts", type=int, default=4)
     parser.add_argument("--output-dir", type=Path, help="Empty directory for compared outputs")
     parser.add_argument("--linked", action="store_true",
-                        help="Build and run native executables with the caller's release flags")
+                        help="Build and run executables with the caller's release flags")
     args = parser.parse_args()
     output_dir = args.output_dir or Path(tempfile.mkdtemp(prefix="compiler-reproducibility-"))
     try:
