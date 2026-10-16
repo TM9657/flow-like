@@ -1504,7 +1504,7 @@ const BUILDERS: { [F in EnumFamily]: Builder<F> } = {
 	}),
 	logStream: (t) => ({
 		stdout: row(t("devices:enum.logStream.stdout", "Output")),
-		stderr: row(t("devices:enum.logStream.stderr", "Errors")),
+		stderr: row(t("devices:enum.logStream.stderr", "Diagnostics")),
 	}),
 	messageKind: (t) => ({
 		operation: row(t("devices:enum.messageKind.operation", "Command")),

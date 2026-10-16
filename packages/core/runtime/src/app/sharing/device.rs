@@ -2,10 +2,13 @@
 //! version; mutable project objects must keep their revisions throughout export.
 
 use super::{App, AppVisibility, FlowLikeState};
-use crate::flow::{
-    board::Board,
-    event::{Event, filter_event_secrets},
-    node::Node,
+use crate::{
+    bit::{Bit, BitTypes},
+    flow::{
+        board::Board,
+        event::{Event, filter_event_secrets},
+        node::Node,
+    },
 };
 use flow_like_storage::{
     Path,
@@ -123,6 +126,7 @@ pub struct DeviceProjectSnapshot {
     bytes: u64,
     latest_events: Vec<DeviceLatestEvent>,
     bit_references: BTreeSet<String>,
+    requires_completion_model: bool,
 }
 
 impl DeviceProjectSnapshot {
@@ -135,6 +139,7 @@ impl DeviceProjectSnapshot {
             bytes: 0,
             latest_events: Vec::new(),
             bit_references: BTreeSet::new(),
+            requires_completion_model: false,
         })
     }
 
@@ -173,6 +178,11 @@ impl DeviceProjectSnapshot {
     /// Constant Load Bit references in this copy's active event versions and current templates.
     pub fn bit_references(&self) -> &BTreeSet<String> {
         &self.bit_references
+    }
+
+    /// Whether an exported flow selects a completion model from the deployment's Bits.
+    pub fn requires_completion_model(&self) -> bool {
+        self.requires_completion_model
     }
 
     pub fn read_chunk(&self, path: &str, offset: u64, length: usize) -> Result<Vec<u8>> {
@@ -439,6 +449,32 @@ pub fn board_bit_references(board: &Board) -> BTreeSet<String> {
         .collect()
 }
 
+/// Find Model chooses from the deployment's selected Bits, including inside layers.
+pub fn board_requires_completion_model(board: &Board) -> bool {
+    board
+        .nodes
+        .values()
+        .chain(board.layers.values().flat_map(|layer| layer.nodes.values()))
+        .any(|node| node.name == "ai_generative_find_model")
+}
+
+/// Dependency packs do not activate their nested models. Only selected roots are candidates.
+pub fn validate_completion_model_dependencies<'a>(
+    required: bool,
+    roots: impl IntoIterator<Item = &'a Bit>,
+) -> Result<()> {
+    if required
+        && !roots
+            .into_iter()
+            .any(|bit| matches!(bit.bit_type, BitTypes::Llm | BitTypes::Vlm))
+    {
+        bail!(
+            "This deployment uses Find Model but includes no language or vision-language model. Add a completion model to the project's model dependencies and prepare the deployment again. Models in your profile alone are not included."
+        );
+    }
+    Ok(())
+}
+
 impl DeviceProjectSnapshot {
     fn read_compressed(&self, path: &str) -> Result<Vec<u8>> {
         let size = *self
@@ -504,6 +540,7 @@ impl DeviceProjectSnapshot {
         }
         paths.extend(templates.iter().map(|id| format!("{base}/{id}.template")));
         let mut references = BTreeSet::new();
+        let mut requires_completion_model = false;
         for path in paths {
             // Event readiness reports a missing flow; dependency discovery adds no target.
             if !self.files.contains_key(&path) {
@@ -512,8 +549,10 @@ impl DeviceProjectSnapshot {
             let plain = self.read_compressed(&path)?;
             let board = Board::from_proto(flow_like_types::proto::Board::decode(plain.as_slice())?);
             references.extend(board_bit_references(&board));
+            requires_completion_model |= board_requires_completion_model(&board);
         }
         self.bit_references = references;
+        self.requires_completion_model = requires_completion_model;
         Ok(())
     }
 
@@ -945,6 +984,34 @@ mod tests {
         );
     }
 
+    #[test]
+    fn find_model_requires_a_selected_completion_model_including_inside_layers() {
+        use crate::flow::board::{Layer, LayerType};
+        let mut board = Board::from_proto(flow_like_types::proto::Board::default());
+        assert!(!board_requires_completion_model(&board));
+        let mut layer = Layer::new("layer".into(), "Layer".into(), LayerType::Module);
+        let finder = Node::new("ai_generative_find_model", "Find Model", "", "AI");
+        layer.nodes.insert(finder.id.clone(), finder);
+        board.layers.insert(layer.id.clone(), layer);
+        assert!(board_requires_completion_model(&board));
+
+        let embedding = Bit {
+            bit_type: BitTypes::Embedding,
+            ..Bit::default()
+        };
+        assert!(validate_completion_model_dependencies(false, []).is_ok());
+        assert!(validate_completion_model_dependencies(true, []).is_err());
+        let error = validate_completion_model_dependencies(true, [&embedding]).unwrap_err();
+        assert!(error.to_string().contains("project's model dependencies"));
+        for bit_type in [BitTypes::Llm, BitTypes::Vlm] {
+            let model = Bit {
+                bit_type,
+                ..Bit::default()
+            };
+            assert!(validate_completion_model_dependencies(true, [&embedding, &model]).is_ok());
+        }
+    }
+
     #[tokio::test]
     async fn deployment_snapshot_collects_references_from_staged_boards_and_templates() -> Result<()>
     {
@@ -958,6 +1025,10 @@ mod tests {
             let mut board = Board::from_proto(flow_like_types::proto::Board::default());
             let node = load_bit(serde_json::json!(reference));
             board.nodes.insert(node.id.clone(), node);
+            if path == "flow.board" {
+                let finder = Node::new("ai_generative_find_model", "Find Model", "", "AI");
+                board.nodes.insert(finder.id.clone(), finder);
+            }
             snapshot
                 .add_bytes(
                     &format!("apps/project/{path}"),
@@ -985,6 +1056,22 @@ mod tests {
             snapshot.bit_references(),
             &BTreeSet::from(["board-model".into(), "template-model".into()])
         );
+        assert!(!snapshot.requires_completion_model());
+        let mut template = Board::from_proto(flow_like_types::proto::Board::default());
+        let finder = Node::new("ai_generative_find_model", "Find Model", "", "AI");
+        template.nodes.insert(finder.id.clone(), finder);
+        snapshot
+            .add_bytes(
+                "apps/project/finder.template",
+                &lz4_flex::compress_prepend_size(&template.to_proto().encode_to_vec()),
+            )
+            .await?;
+        snapshot.collect_bit_references(
+            &Path::from("apps/project"),
+            &["event".into()],
+            &["flow".into(), "finder".into()],
+        )?;
+        assert!(snapshot.requires_completion_model());
         Ok(())
     }
 

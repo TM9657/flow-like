@@ -71,6 +71,26 @@ test("online export resolves and pins dependencies without exporting offline dat
 		).not.toContain("token=private");
 });
 
+test("online export stops before packaging when Find Model has no selected completion model", async () => {
+	const f = fixture();
+	f.app.bits = [];
+	f.backend.apiState.get = async () =>
+		({
+			version: 1,
+			project_id: f.app.id,
+			documents: {
+				app: f.app,
+				"boards/flow/versions/1/0/0": {
+					nodes: { finder: { name: "ai_generative_find_model" } },
+				},
+			},
+		}) as never;
+	await expect(
+		prepareOnlineDependencies(f.app, f.backend, profile),
+	).rejects.toThrow("project's model dependencies");
+	expect(f.calls).toEqual([]);
+});
+
 test("online export shares one pin for matching plain and qualified workflow references", async () => {
 	const f = fixture();
 	f.app.bits = ["model", "models.test:model"];

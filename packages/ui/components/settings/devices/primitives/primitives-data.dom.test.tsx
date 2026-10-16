@@ -1360,7 +1360,7 @@ function fakeViewport(height: number, width: number) {
 }
 
 describe("logs and commands", () => {
-	test("short buffers render whole with gap markers; Errors only keeps stderr and gaps", async () => {
+	test("short buffers render whole with gap markers; Diagnostics only keeps stderr and gaps", async () => {
 		const { container } = await dom.render(
 			<At>
 				<LogViewer records={SHORT_LOG} label="invoice-extractor output" />
@@ -1377,9 +1377,9 @@ describe("logs and commands", () => {
 		);
 		expect(log.textContent).toContain("[line cut at 2 048 bytes]");
 		expect(log.querySelector("[data-stream=stderr]")?.textContent).toContain(
-			"Errors",
+			"Diagnostics",
 		);
-		await click(byRole("button", "Errors only"));
+		await click(byRole("button", "Diagnostics only"));
 		expect(log.querySelectorAll("[data-stream=stdout]")).toHaveLength(0);
 		expect(log.querySelectorAll("[data-stream=stderr]")).toHaveLength(2);
 		expect(log.querySelectorAll("[data-gap]")).toHaveLength(2);
@@ -1390,7 +1390,7 @@ describe("logs and commands", () => {
 		byRole("button", "Follow");
 	});
 
-	test("follow keeps up when a full buffer swaps lines; Errors only names an empty result", async () => {
+	test("follow keeps up when a full buffer swaps lines; Diagnostics only names an empty result", async () => {
 		const window3 = (from: number) =>
 			[0, 1, 2].map((offset) => {
 				const line: LogRecord = {
@@ -1418,8 +1418,8 @@ describe("logs and commands", () => {
 			</At>,
 		);
 		expect(log.scrollTop).toBe(640);
-		await click(byRole("button", "Errors only"));
-		expect(log.textContent).toBe("No error lines.");
+		await click(byRole("button", "Diagnostics only"));
+		expect(log.textContent).toBe("No diagnostic lines.");
 	});
 
 	describe("long buffers", () => {

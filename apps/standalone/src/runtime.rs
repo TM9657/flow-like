@@ -2,7 +2,12 @@ use std::{collections::HashSet, future::Future, path::Path, sync::Arc, time::Dur
 
 use anyhow::{Context, Result, bail, ensure};
 use flow_like_runtime::{
-    app::{App, AppVisibility},
+    app::{
+        App, AppVisibility,
+        sharing::device::{
+            board_requires_completion_model, validate_completion_model_dependencies,
+        },
+    },
     flow::{
         compiled::TemplateCache,
         execution::{
@@ -564,6 +569,7 @@ async fn run_with_state_listener<F: Future<Output = Result<()>>>(
                     template.id == pin.id && template.version == version,
                     "Template does not match the placement pin"
                 );
+                validate_board_model_dependencies(&template, &profile)?;
             }
         }
     }
@@ -636,8 +642,10 @@ async fn run_with_state_listener<F: Future<Output = Result<()>>>(
         );
         let source_board = app
             .open_board(event.board_id.clone(), Some(false), Some(board_version))
-            .await?;
-        crate::dependencies::validate_board_packages(config, &source_board.snapshot())?;
+            .await?
+            .snapshot();
+        crate::dependencies::validate_board_packages(config, &source_board)?;
+        validate_board_model_dependencies(&source_board, &profile)?;
         let template = template_cache
             .resolve(
                 &state,
@@ -1097,6 +1105,20 @@ fn person_started_context(
         supervised.intent_revision,
         crate::on_demand::time_limit(config),
     ))
+}
+
+fn validate_board_model_dependencies(
+    board: &flow_like_runtime::flow::board::Board,
+    profile: &Profile,
+) -> Result<()> {
+    validate_completion_model_dependencies(
+        board_requires_completion_model(board),
+        profile
+            .custom_bits
+            .iter()
+            .map(|bit| &bit.0)
+            .filter(|bit| profile.bits.contains(&bit.id)),
+    )
 }
 
 /// Every override names a variable of the pinned flows, or, for a secret, the token of a bot
@@ -1623,6 +1645,91 @@ pub(crate) mod tests {
             restart: RestartPolicy::default(),
         };
         (config, state, started, starts)
+    }
+
+    #[test]
+    fn completion_models_must_be_selected_roots() {
+        use flow_like_runtime::{
+            bit::{Bit, BitTypes},
+            profile::ProfileCustomBit,
+        };
+
+        let mut board = Board::new_detached(None, StorePath::from("apps/project"));
+        let find_model = Node::new("ai_generative_find_model", "Find Model", "", "AI");
+        board.nodes.insert(find_model.id.clone(), find_model);
+        let mut profile = Profile::default();
+        profile.custom_bits.push(ProfileCustomBit(Bit {
+            id: "model".into(),
+            bit_type: BitTypes::Llm,
+            ..Bit::default()
+        }));
+
+        assert!(validate_board_model_dependencies(&board, &profile).is_err());
+        profile.bits.push("model".into());
+        validate_board_model_dependencies(&board, &profile).unwrap();
+    }
+
+    #[tokio::test]
+    async fn missing_completion_model_fails_before_service_readiness() -> Result<()> {
+        for selected_template in [false, true] {
+            let directory = tempfile::tempdir()?;
+            let (mut config, state, _, starts) = fixture(directory.path()).await;
+            let app = App::load(config.project_id.clone(), state.clone()).await?;
+            let board = app
+                .open_board("board".into(), Some(false), Some((1, 0, 0)))
+                .await?
+                .snapshot();
+            let mut board = (*board).clone();
+            let find_model = {
+                let registry = state.node_registry.read().await;
+                let definition = registry.get_node("ai_generative_find_model")?;
+                registry.instantiate(&definition)?.get_node()
+            };
+            board.nodes.insert(find_model.id.clone(), find_model);
+            if selected_template {
+                board.id = "model-template".into();
+                board.version = (1, 0, 0);
+                board
+                    .overwrite_template_version((1, 0, 0), None, None)
+                    .await?;
+                config.artifact_pins.push(crate::config::ArtifactPin {
+                    kind: crate::config::ArtifactKind::Template,
+                    id: board.id,
+                    version: [1, 0, 0],
+                });
+            } else {
+                board.snapshot_at_version((2, 0, 0), None).await?;
+                let mut event = app.get_event("event", Some((1, 0, 0))).await?;
+                event.board_version = Some((2, 0, 0));
+                event.event_version = (2, 0, 0);
+                event.save(&app, Some((2, 0, 0))).await?;
+                config.events[0].event_version = [2, 0, 0];
+                config.events[0].board_version = [2, 0, 0];
+            }
+
+            let validation_error = validate_rollout_with_state(&config, state.clone())
+                .await
+                .unwrap_err();
+            assert!(validation_error.to_string().contains("uses Find Model"));
+
+            let mut acknowledged = false;
+            let error = run_with_state_ready(
+                &config,
+                state,
+                CancellationToken::new(),
+                Profile::default(),
+                || async {
+                    acknowledged = true;
+                    bail!("Unexpected readiness acknowledgement")
+                },
+            )
+            .await
+            .unwrap_err();
+            assert!(error.to_string().contains("uses Find Model"));
+            assert!(!acknowledged);
+            assert_eq!(starts.load(Ordering::SeqCst), 0);
+        }
+        Ok(())
     }
 
     #[tokio::test]

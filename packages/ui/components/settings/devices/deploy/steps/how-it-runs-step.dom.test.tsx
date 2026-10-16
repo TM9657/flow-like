@@ -2,18 +2,21 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { ApiResponseError } from "../../../../../lib/api-error";
 import { APPS } from "../../../../../lib/device-management/model/__fixtures__/apps";
 import type { ExportCommands } from "../../../../../lib/device-management/project-export";
+import type { IApp } from "../../../../../lib/schema/app/app";
+import { type IBit, IBitTypes } from "../../../../../lib/schema/bit/bit";
+import type { IBackendState } from "../../../../../state/backend-state";
 import {
 	byRole,
 	click,
 	clickByText,
 	installDom,
+	queryByRole,
 	typeInto,
 } from "../../testing/dom-harness";
 
 const dom = installDom();
-const { mountDevices, cleanupDevices, preloadDevices } = await import(
-	"../../testing/mount-devices"
-);
+const { mountDevices, cleanupDevices, preloadDevices, fakeBackend } =
+	await import("../../testing/mount-devices");
 const { createFakeWorkspace } = await import("../../testing/fake-workspace");
 const { act } = await import("react");
 const { deployPrepareSeams } = await import("../use-deploy-prepare");
@@ -84,6 +87,114 @@ describe("How it runs · online (APP §3.6)", () => {
 			{ device: [EDGE, STUDIO], step: "how" },
 			options,
 		);
+
+	for (const keep of [false, true]) {
+		test(keep
+			? "saving models replaces Keep version with a freshly prepared version"
+			: "a missing-model preflight is repaired by saving models and preparing fresh metadata", async () => {
+			const fake = await createFakeWorkspace();
+			const model = {
+				id: "completion",
+				hub: "models.example",
+				type: IBitTypes.Llm,
+				meta: { en: { name: "Completion model" } },
+				parameters: {},
+			} as unknown as IBit;
+			let app = {
+				...(fake.hub.deviceMetadata(VISITOR).documents.app as IApp),
+				bits: [] as string[],
+			};
+			fake.api.on("GET", METADATA, () => {
+				const metadata = fake.hub.deviceMetadata(VISITOR);
+				metadata.documents.app = app;
+				metadata.documents["boards/model-check/versions/1/0/0"] = {
+					nodes: { find: { name: "ai_generative_find_model" } },
+				};
+				return metadata;
+			});
+			if (keep)
+				kit.seedDraft(fake, {
+					appId: VISITOR,
+					scope: { kind: "app", appId: VISITOR },
+					route: { deviceIds: [EDGE], mode: "update" },
+					change: (draft) => ({ ...draft, version: "keep" }),
+				});
+			const collected: string[][] = [];
+			const source = new TextEncoder().encode(
+				JSON.stringify({ version: 1, project_id: VISITOR }),
+			);
+			deployPrepareSeams.exportCommands = async (approved) => {
+				collected.push([...(approved?.bits ?? [])]);
+				return {
+					prepare: async (project) => ({
+						export_id: "a0000000-0000-4000-8000-000000000000",
+						project_id: project,
+						source: "online",
+						files: [
+							{
+								path: `apps/${project}/online-source.json`,
+								size: source.length,
+							},
+						],
+						assets: { bit_pins: [], package_pins: [] },
+					}),
+					read: async (_, _path, offset, length) =>
+						source.slice(offset, offset + length).buffer,
+					release: async () => {},
+				};
+			};
+			const backend = fakeBackend(fake);
+			const view = await kit.mountApp(
+				mountDevices,
+				VISITOR,
+				{ device: EDGE, step: "how", mode: keep ? "update" : "new" },
+				{
+					fake,
+					platform: "desktop",
+					backend: {
+						appState: {
+							...backend.appState,
+							getAppAuthoritative: async () => app,
+							updateAppAuthoritative: async (next) => {
+								app = next;
+							},
+						},
+						bitState: {
+							getProfileBits: async () => [model],
+							listCustomBits: async () => [],
+							searchBits: async () => [model],
+							getBit: async () => model,
+						} as unknown as IBackendState["bitState"],
+					},
+				},
+			);
+			if (keep) {
+				expect(checks(view.container)).toEqual([]);
+				expect(kit.savedText()).toContain('"version":"keep"');
+			} else expect(kit.footBlocking(view.container)).toContain("Find Model");
+			const before = metadataRequests(view);
+			await click(byRole("button", "Edit models", view.container));
+			await view.settle();
+			expect(kit.footBlocking(view.container)).toContain(
+				"Save or cancel model changes",
+			);
+			expect(
+				queryByRole("button", "Go to step 1: What", view.container),
+			).toBeNull();
+			expect(queryByRole("button", "Back", view.container)).toBeNull();
+			await click(byRole("checkbox", "Completion model", view.container));
+			await click(byRole("button", "Save models", view.container));
+			await view.settle();
+			expect(app.bits).toEqual(["models.example:completion"]);
+			expect(metadataRequests(view)).toBe(before + 1);
+			expect(collected).toEqual([["models.example:completion"]]);
+			expect(checks(view.container).at(-1)).toMatch(
+				/^pass: Definitions approved/,
+			);
+			expect(kit.footBlocking(view.container)).toBeNull();
+			expect(kit.savedText()).toContain('"version":"newest"');
+		});
+	}
 
 	test("the mode is a fact, and the version is prepared once", async () => {
 		const view = await mount();
