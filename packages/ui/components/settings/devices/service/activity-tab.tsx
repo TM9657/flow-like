@@ -3,7 +3,7 @@
 import { ActivityView } from "../observe/activity-view";
 import type { ServiceTabProps } from "../screen-props";
 
-/** N3 › Activity & logs: one service; `stream=errors` opens its logs on Errors only. */
+/** N3 › Activity & logs: one service; `stream=errors` opens its logs on Diagnostics only. */
 export function ServiceActivityTab({
 	route,
 	deviceId,

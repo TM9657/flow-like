@@ -2,6 +2,7 @@ import { sha256 } from "@noble/hashes/sha2";
 import type { IBackendState } from "../../state/backend-state";
 import type { IProfile } from "../../types";
 import type { IApp } from "../schema/app/app";
+import { IBitTypes } from "../schema/bit/bit";
 import type { ArtifactInput } from "./artifacts";
 import {
 	type DeploymentCatalog,
@@ -17,6 +18,58 @@ export type ApprovedOnlineMetadata = {
 	/** Deployment choices derived from exactly these approved bytes. */
 	catalog: DeploymentCatalog;
 };
+
+function record(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
+}
+
+function requiresCompletionModel(documents: Record<string, unknown>): boolean {
+	return Object.entries(documents).some(([path, value]) => {
+		if (!/^(boards|templates)\/[^/]+\/versions\/\d+\/\d+\/\d+$/.test(path))
+			return false;
+		const board = record(value);
+		const nodes = [
+			...Object.values(record(board.nodes)),
+			...Object.values(record(board.layers)).flatMap((layer) =>
+				Object.values(record(record(layer).nodes)),
+			),
+		];
+		return nodes.some(
+			(node) => record(node).name === "ai_generative_find_model",
+		);
+	});
+}
+
+/** Check the selected root Bits after model edits and before packaging either export format. */
+export async function validateOnlineCompletionModelDependencies(
+	metadata: ApprovedOnlineMetadata,
+	backend: IBackendState,
+	signal?: AbortSignal,
+): Promise<void> {
+	signal?.throwIfAborted();
+	const bundle = JSON.parse(
+		new TextDecoder().decode(await metadata.file.file.arrayBuffer()),
+	);
+	if (!requiresCompletionModel(record(bundle.documents))) return;
+	for (const reference of new Set(metadata.app.bits)) {
+		signal?.throwIfAborted();
+		const split = reference.lastIndexOf(":");
+		const id = reference.slice(split + 1);
+		const hub = split < 0 ? undefined : reference.slice(0, split);
+		const bit = await backend.bitState.getBit(id, hub);
+		if (
+			bit.id === id &&
+			(hub === undefined || bit.hub === hub) &&
+			(bit.type === IBitTypes.Llm || bit.type === IBitTypes.Vlm)
+		)
+			return;
+	}
+	throw new Error(
+		"This deployment uses Find Model but includes no language or vision-language model. Add a completion model to the project's model dependencies and prepare the deployment again. Models in your profile alone are not included.",
+	);
+}
 
 /** One export resolves at most this many events that follow Latest (the request is a GET). */
 export const MAX_LATEST_EVENTS = 64;

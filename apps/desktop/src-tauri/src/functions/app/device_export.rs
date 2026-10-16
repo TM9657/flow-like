@@ -8,7 +8,7 @@ use flow_like::{
         App,
         sharing::device::{
             DeviceExportFile, DeviceLatestEvent, DeviceProjectSnapshot, MAX_DEVICE_EXPORT_CHUNK,
-            validate_local_source,
+            validate_completion_model_dependencies, validate_local_source,
         },
     },
     bit::{Bit, BitContentDigest, BitDigestAlgorithm, BitPack, bit_sources},
@@ -684,6 +684,7 @@ async fn dependencies(
     let mut assets = Assets::default();
     let mut files = BTreeMap::<String, (u64, String)>::new();
     let mut resolved = BTreeMap::new();
+    let mut selected = Vec::new();
     for reference in &references {
         let (hub, id) = reference
             .rsplit_once(':')
@@ -707,7 +708,11 @@ async fn dependencies(
             );
             continue;
         }
-        let pin = bit_pin(&sources, id, &bit, snapshot, &mut files).await?;
+        selected.push(bit);
+    }
+    validate_completion_model_dependencies(snapshot.requires_completion_model(), &selected)?;
+    for bit in &selected {
+        let pin = bit_pin(&sources, &bit.id, bit, snapshot, &mut files).await?;
         assets.bit_pins.push(pin);
     }
     assets.package_pins = package_pins(handle, app, snapshot).await?;

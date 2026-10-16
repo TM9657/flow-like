@@ -675,6 +675,13 @@ function whatBlocking({ t, state }: BlockingContext): Blocking | null {
 
 /** How it runs: the preparation runs, or stopped at a check. */
 function howBlocking({ t, state, prepare }: BlockingContext): Blocking | null {
+	if (prepare.editingModels)
+		return {
+			text: t(
+				"devices:deploy.models.finish",
+				"Save or cancel model changes before continuing.",
+			),
+		};
 	if (prepare.state === "running")
 		return {
 			text: t("devices:deploy.frame.preparing", "Preparing on this computer…"),
@@ -1082,6 +1089,7 @@ function WizardFooter({
 						<DvButton
 							variant="danger-ghost"
 							icon={Trash2}
+							disabled={summary.navigationLocked}
 							onClick={onDiscard}
 							className={PHONE_DISCARD}
 						>
@@ -1151,9 +1159,11 @@ function Wizard({
 	}, [step]);
 
 	const goTo = useCallback(
-		(next: DeployStepId) =>
-			navigate({ ...route, step: next }, { replace: true }),
-		[navigate, route],
+		(next: DeployStepId) => {
+			if (!prepare.editingModels)
+				navigate({ ...route, step: next }, { replace: true });
+		},
+		[navigate, route, prepare.editingModels],
 	);
 	const { markDeployed } = state;
 	const onFinished = useCallback(
@@ -1193,6 +1203,7 @@ function Wizard({
 		reached: state.reached,
 		prefilled,
 		limitsOnly,
+		navigationLocked: prepare.editingModels,
 		...(state.versionLabel ? { versionLabel: state.versionLabel } : {}),
 		prepared: prepare.prepared,
 		blockers,
@@ -1337,7 +1348,11 @@ function Wizard({
 							stepLabel={stepTitle(t, step, limitsOnly)}
 							nextStepLabel={next ? stepTitle(t, next, limitsOnly) : undefined}
 							onDiscard={discard}
-							onBack={index > 0 ? () => goTo(steps[index - 1]) : undefined}
+							onBack={
+								index > 0 && !prepare.editingModels
+									? () => goTo(steps[index - 1])
+									: undefined
+							}
 							onNext={
 								next
 									? () => {

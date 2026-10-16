@@ -17,6 +17,7 @@ import {
 import {
 	type ApprovedOnlineMetadata,
 	prepareOnlineMetadata,
+	validateOnlineCompletionModelDependencies,
 } from "./online-metadata";
 
 function check(value: unknown, message: string): asserts value {
@@ -242,6 +243,7 @@ export async function prepareOnlineDependencies(
 		approved ??
 		(await prepareOnlineMetadata(requested.id, backend, profile, signal));
 	check(metadata.app.id === requested.id, "Approved project identity differs.");
+	await validateOnlineCompletionModelDependencies(metadata, backend, signal);
 	const app = metadata.app;
 	check(
 		app.bits.length <= 256 && Object.keys(app.packages ?? {}).length <= 64,

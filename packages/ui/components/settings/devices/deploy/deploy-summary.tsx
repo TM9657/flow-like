@@ -42,6 +42,7 @@ export interface DeploySummaryInput {
 	/** Steps the entry filled in. */
 	prefilled: ReadonlySet<DeployStepId>;
 	limitsOnly: boolean;
+	navigationLocked?: boolean;
 	versionLabel?: string;
 	prepared?: DeployPrepared | null;
 	/** Current failures and pending checks, including preparation outside the plan's validation. */
@@ -447,11 +448,16 @@ function itemState(
 export function canVisit(
 	input: Pick<
 		DeploySummaryInput,
-		"steps" | "current" | "reached" | "prefilled"
+		"steps" | "current" | "reached" | "prefilled" | "navigationLocked"
 	>,
 	step: DeployStepId,
 ): boolean {
-	if (input.current === "rollout" || step === "rollout") return false;
+	if (
+		input.navigationLocked ||
+		input.current === "rollout" ||
+		step === "rollout"
+	)
+		return false;
 	if (step === input.current) return false;
 	const index = input.steps.indexOf(step);
 	const here = input.steps.indexOf(input.current);

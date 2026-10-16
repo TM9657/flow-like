@@ -4054,6 +4054,18 @@
 			"writesInvalid": "Check the tables, folders and budgets of write buffering.",
 			"writesOffline": "Write buffering is for online apps only."
 		},
+		"models": {
+			"approval": "Hosted models also need approval in each service's Cloud access tab. Saving models keeps existing approvals and spending limits.",
+			"cancel": "Cancel model changes",
+			"edit": "Edit models",
+			"finish": "Save or cancel model changes before continuing.",
+			"save": "Save models",
+			"saved": "Models saved. The update will use the new choices.",
+			"scope": "Save model choices to this app, then prepare a new version for the selected services. Running services keep their current models until the update.",
+			"searchLabel": "Search models",
+			"title": "Project models",
+			"working": "Reading or saving models…"
+		},
 		"needApp": "Choose an app first",
 		"needAppText": "This step depends on the app you deploy. Go back to What.",
 		"prepare": {
@@ -6782,7 +6794,7 @@
 			"message": "Activity"
 		},
 		"logStream": {
-			"stderr": "Errors",
+			"stderr": "Diagnostics",
 			"stdout": "Output"
 		},
 		"memoryBasis": {
@@ -10344,8 +10356,8 @@
 			"following": "following",
 			"noAccess": "No access to logs.",
 			"noteAgent": "Agent logs only. Service output is on each service's page, or pick a service above.",
-			"notePicked": "Output of {{service}}. Errors are its standard error stream.",
-			"noteService": "Output of {{service}}: Output is its standard output, Errors its standard error stream. Agent logs are on <1>{{device}} › Activity & logs</1>.",
+			"notePicked": "Output of {{service}}. Diagnostics is its standard error stream and can include information, warnings, and errors.",
+			"noteService": "Output of {{service}}: Diagnostics is its standard error stream and can include information, warnings, and errors. Agent logs are on <1>{{device}} › Activity & logs</1>.",
 			"paused": "paused",
 			"reading": "Reading logs…",
 			"rejected": "{{device}} didn't return these logs",
@@ -13324,11 +13336,11 @@
 			"dropped_one": "{{count, number}} line dropped here: more than 100 lines per second.",
 			"dropped_other": "{{count, number}} lines dropped here: more than 100 lines per second.",
 			"empty": "No lines yet.",
-			"errorsOnly": "Errors only",
+			"errorsOnly": "Diagnostics only",
 			"evicted": "Older lines were deleted on the device.",
 			"evictedBefore": "Older lines were deleted on the device (before #{{before, number}}).",
 			"follow": "Follow",
-			"noErrors": "No error lines.",
+			"noErrors": "No diagnostic lines.",
 			"older": "Load older",
 			"pause": "Pause",
 			"source": "Log source",

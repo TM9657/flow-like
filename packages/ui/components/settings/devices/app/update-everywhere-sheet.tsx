@@ -32,6 +32,7 @@ import { deviceName as nameOfRow } from "../../../../lib/device-management/model
 import { Checkbox } from "../../../ui/checkbox";
 import { appCopy } from "../copy/app-copy";
 import { flowLabel, runRefusalText } from "../deploy/deploy-copy";
+import { ProjectModelsEditor } from "../deploy/project-models-editor";
 import { useFlowNames } from "../deploy/use-deploy-reads";
 import { type DeployRunHandle, useDeployRun } from "../deploy/use-deploy-run";
 import { type DevicesT, useAreaTime } from "../primitives/area-context";
@@ -545,6 +546,7 @@ export function UpdateEverywhereSheet({
 		stopOnFail: true,
 	});
 	const [accept, setAccept] = useState(false);
+	const [editingModels, setEditingModels] = useState(false);
 	const ids = useRef<string[]>([]);
 	useEffect(() => {
 		if (!open) return;
@@ -552,6 +554,7 @@ export function UpdateEverywhereSheet({
 		setStep("choose");
 		setUnpicked(new Set());
 		setAccept(false);
+		setEditingModels(false);
 	}, [open]);
 	const idOf = useCallback((batch: number) => {
 		ids.current[batch] ??= crypto.randomUUID();
@@ -649,7 +652,9 @@ export function UpdateEverywhereSheet({
 				"Every service of {{app}} you can see · one version for all",
 				{ app: view.app.name },
 			)}
-			{...(index > 0 ? { onBack: () => setStep(STEPS[index - 1]) } : {})}
+			{...(index > 0 && !editingModels
+				? { onBack: () => setStep(STEPS[index - 1]) }
+				: {})}
 			footNote={
 				services
 					? t(
@@ -693,8 +698,10 @@ export function UpdateEverywhereSheet({
 						<DvButton
 							variant="primary"
 							data-act="update-all-next"
-							aria-disabled={!services || undefined}
-							onClick={() => services && setStep(STEPS[index + 1])}
+							aria-disabled={!services || editingModels || undefined}
+							onClick={() =>
+								services && !editingModels && setStep(STEPS[index + 1])
+							}
 						>
 							{step === "choose"
 								? t("app.updateAll.toStrategy", "Next: strategy")
@@ -724,12 +731,18 @@ export function UpdateEverywhereSheet({
 				/>
 			) : null}
 			{step === "strategy" ? (
-				<StrategyStep
-					{...options}
-					onChange={(patch) =>
-						setOptions((current) => ({ ...current, ...patch }))
-					}
-				/>
+				<div className="flex flex-col gap-4">
+					<StrategyStep
+						{...options}
+						onChange={(patch) =>
+							setOptions((current) => ({ ...current, ...patch }))
+						}
+					/>
+					<ProjectModelsEditor
+						appId={data.appId}
+						onEditingChange={setEditingModels}
+					/>
+				</div>
 			) : null}
 			{step === "review" ? (
 				<div className="flex flex-col gap-3">
