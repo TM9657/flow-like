@@ -14,7 +14,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { message } from "@tauri-apps/plugin-dialog";
 import {
 	type DownloadEvent,
 	type Update,
@@ -616,16 +616,19 @@ export function UpdateProvider() {
 			);
 
 			try {
-				const shouldUpdate = await confirm(
+				// Native dialog 2.7 removed the confirm command. Use message directly
+				// so older JavaScript wrappers cannot send the removed command.
+				const response = await message(
 					t(
 						"flowLikeVersionIsAvailableWouldYouLikeToDownloadAndInstallItNow",
 						"Flow Like {{version}} is available. Would you like to download and install it now?",
 						{ version: update.version },
 					),
+					{ buttons: "OkCancel" },
 				);
 				if (!active) return;
 
-				if (shouldUpdate) {
+				if (response === "Ok") {
 					addUpdaterBreadcrumb(`prompt_accepted ${update.version}`);
 					await installUpdate(update, trigger);
 					return;

@@ -6,6 +6,7 @@ import type {
 	IOAuthProviderConfig,
 } from "../schema";
 import { OAuthRefreshError } from "./service";
+import { hasRequiredScopes } from "./token-scopes";
 import type {
 	IOAuthProvider,
 	IOAuthToken,
@@ -14,37 +15,7 @@ import type {
 	IStoredOAuthToken,
 } from "./types";
 
-/**
- * Check if a stored token has all the required scopes.
- * Returns true if the token has all required scopes, false otherwise.
- */
-export function hasRequiredScopes(
-	storedToken: IStoredOAuthToken,
-	requiredScopes: string[],
-): boolean {
-	if (!requiredScopes || requiredScopes.length === 0) {
-		return true;
-	}
-
-	const tokenScopes = new Set(storedToken.scopes ?? []);
-	const missingScopes = requiredScopes.filter(
-		(scope) => !tokenScopes.has(scope),
-	);
-
-	if (missingScopes.length > 0) {
-		console.log(
-			`[OAuth] Token for ${storedToken.providerId} is missing scopes:`,
-			missingScopes,
-			"| Has scopes:",
-			storedToken.scopes,
-			"| Required:",
-			requiredScopes,
-		);
-		return false;
-	}
-
-	return true;
-}
+export { hasRequiredScopes } from "./token-scopes";
 /**
  * Build a full IOAuthProvider from Hub config and node's provider_id + scopes.
  * Returns undefined if the provider is not configured in the Hub.

@@ -8,7 +8,8 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 
 use super::{
     hosted_input::{
-        HostedEmbeddingInput, HostedEmbeddingStructuredInput, supports_internal_multimodal,
+        HostedEmbeddingInput, HostedEmbeddingPart, HostedEmbeddingStructuredInput,
+        OPENROUTER_MULTIMODAL_MODEL, supports_hosted_multimodal, supports_openrouter_multimodal,
     },
     interface::{
         AudioInput, EmbeddingBatch, EmbeddingDescriptor, EmbeddingError, EmbeddingInput,
@@ -19,6 +20,7 @@ use super::{
 };
 
 pub const INTERNAL_MULTIMODAL_ADAPTER: &str = "internal_multimodal";
+pub const OPENROUTER_MULTIMODAL_ADAPTER: &str = "openrouter_multimodal";
 
 pub struct ProxyMultimodalEmbeddingModel {
     proxy: ProxyEmbeddingModel,
@@ -28,26 +30,45 @@ pub struct ProxyMultimodalEmbeddingModel {
 impl ProxyMultimodalEmbeddingModel {
     pub fn new(proxy: ProxyEmbeddingModel) -> Result<Self> {
         ensure!(
-            supports_internal_multimodal(&proxy.provider),
-            "The multimodal embedding proxy requires Internal embeddinggemma-2"
+            supports_hosted_multimodal(&proxy.provider),
+            "The hosted embedding model does not support multimodal inputs"
         );
+        let openrouter = supports_openrouter_multimodal(&proxy.provider);
+        let dimensions = proxy.provider.vector_length as usize;
         ensure!(
-            proxy.provider.vector_length == 768,
-            "Internal embeddinggemma-2 returns 768-dimensional vectors"
+            if openrouter {
+                (128..=3072).contains(&dimensions)
+            } else {
+                dimensions == 768
+            },
+            "Configured dimensions are not supported by the hosted embedding model"
         );
-        let mut identity =
-            serde_json::to_value((INTERNAL_MULTIMODAL_ADAPTER, &proxy.bit_id, &proxy.provider))?;
+        if openrouter {
+            ensure!(
+                (1..=8192).contains(&proxy.provider.input_length),
+                "Gemini Embedding 2 supports up to 8192 input tokens"
+            );
+        }
+        let adapter = if openrouter {
+            OPENROUTER_MULTIMODAL_ADAPTER
+        } else {
+            INTERNAL_MULTIMODAL_ADAPTER
+        };
+        let mut identity = serde_json::to_value((adapter, &proxy.bit_id, &proxy.provider))?;
         identity.sort_all_objects();
         let pipeline_fingerprint = blake3::hash(&serde_json::to_vec(&identity)?)
             .to_hex()
             .to_string();
-        let modalities = vec![
+        let mut modalities = vec![
             EmbeddingModality::Text,
             EmbeddingModality::Image,
             EmbeddingModality::Audio,
             EmbeddingModality::Video,
         ];
-        let joint_combinations = (1u8..16)
+        if openrouter {
+            modalities.push(EmbeddingModality::File);
+        }
+        let joint_combinations = (1u8..(1 << modalities.len()))
             .filter(|mask| mask.count_ones() > 1)
             .map(|mask| {
                 modalities
@@ -59,21 +80,28 @@ impl ProxyMultimodalEmbeddingModel {
             .collect();
         let descriptor = EmbeddingDescriptor {
             model_id: proxy.bit_id.clone(),
-            adapter: INTERNAL_MULTIMODAL_ADAPTER.into(),
+            adapter: adapter.into(),
             modalities,
             joint_combinations,
             purposes: vec![EmbeddingPurpose::Query, EmbeddingPurpose::Document],
             space: EmbeddingSpace {
-                id: "internal:embeddinggemma-2:768".into(),
-                dimensions: 768,
+                id: if openrouter {
+                    format!("openrouter:{OPENROUTER_MULTIMODAL_MODEL}:{dimensions}")
+                } else {
+                    "internal:embeddinggemma-2:768".into()
+                },
+                dimensions,
                 normalized: false,
                 metric: EmbeddingMetric::Cosine,
             },
-            supported_dimensions: vec![768],
+            // The API requests this Bit's dimensions upstream. Do not truncate provider vectors.
+            supported_dimensions: vec![dimensions],
             limits: EmbeddingLimits {
                 max_tokens: 8192,
-                max_images_per_item: Some(1),
-                max_audio_duration_ms: Some(327_000),
+                max_images_per_item: Some(if openrouter { 6 } else { 1 }),
+                max_audio_duration_ms: Some(if openrouter { 180_000 } else { 327_000 }),
+                max_video_duration_ms: openrouter.then_some(120_000),
+                max_file_pages: openrouter.then_some(6),
                 ..Default::default()
             },
             // The gateway owns its preprocessing and weights; do not claim local recipe parity.
@@ -88,7 +116,16 @@ impl ProxyMultimodalEmbeddingModel {
         response: EmbedResponse,
     ) -> Result<EmbeddingBatch, EmbeddingError> {
         let mut batch = self.descriptor.finish(request, response.embeddings)?;
-        if response.usage_available && !response.usage_estimated {
+        let text_only = request.items.iter().all(|item| {
+            item.parts
+                .iter()
+                .all(|part| matches!(part, EmbeddingPart::Text(_)))
+        });
+        // OpenRouter's prompt total includes media tokens; it is not a text-token count.
+        if response.usage_available
+            && !response.usage_estimated
+            && (!supports_openrouter_multimodal(&self.proxy.provider) || text_only)
+        {
             batch.usage.text_tokens = u64::try_from(response.usage.prompt_tokens).ok();
         }
         Ok(batch)
@@ -105,12 +142,22 @@ impl EmbeddingModel for ProxyMultimodalEmbeddingModel {
         true
     }
 
+    fn requires_typed_media_sources(&self) -> bool {
+        supports_openrouter_multimodal(&self.proxy.provider)
+    }
+
     async fn embed(&self, request: EmbeddingRequest) -> Result<EmbeddingBatch, EmbeddingError> {
         self.descriptor.validate(&request)?;
         let inputs = request
             .items
             .iter()
-            .map(hosted_input)
+            .map(|input| {
+                if supports_openrouter_multimodal(&self.proxy.provider) {
+                    hosted_content_input(input)
+                } else {
+                    hosted_input(input)
+                }
+            })
             .collect::<Result<Vec<_>, _>>()?;
         if inputs.is_empty() {
             return self.descriptor.finish(&request, Vec::new());
@@ -160,12 +207,13 @@ fn hosted_input(input: &EmbeddingInput) -> Result<HostedEmbeddingInput, Embeddin
             EmbeddingPart::Video(_) => return Err(EmbeddingError::InvalidInput(
                 "Hosted video embeddings need the original encoded video file or URL; sampled frames cannot preserve its video timeline".into())),
             EmbeddingPart::EncodedMedia { modality, source } => (*modality, source.clone()),
+            EmbeddingPart::File(_) => return Err(EmbeddingError::UnsupportedModality(EmbeddingModality::File)),
         };
         let (slot, marker) = match modality {
             EmbeddingModality::Image => (&mut image, "<|image|>"),
             EmbeddingModality::Audio => (&mut audio, "<|audio|>"),
             EmbeddingModality::Video => (&mut video, "<|video|>"),
-            EmbeddingModality::Text => {
+            EmbeddingModality::Text | EmbeddingModality::File => {
                 return Err(EmbeddingError::InvalidInput(
                     "Encoded media must be an image, audio, or video".into(),
                 ));
@@ -225,6 +273,57 @@ fn hosted_input(input: &EmbeddingInput) -> Result<HostedEmbeddingInput, Embeddin
             audio,
             video,
         },
+    ))
+}
+
+fn hosted_content_input(input: &EmbeddingInput) -> Result<HostedEmbeddingInput, EmbeddingError> {
+    if input.title.is_some() {
+        return Err(EmbeddingError::InvalidInput(
+            "Hosted embedding inputs do not support a separate title; include it in the text"
+                .into(),
+        ));
+    }
+    let mut parts = Vec::with_capacity(input.parts.len());
+    for part in &input.parts {
+        parts.push(match part {
+            EmbeddingPart::Text(text) => HostedEmbeddingPart::Text { text: text.clone() },
+            EmbeddingPart::Image(image) => {
+                let mut bytes = Cursor::new(Vec::new());
+                image.write_to(&mut bytes, image::ImageFormat::Png)
+                    .map_err(|error| EmbeddingError::Backend(error.into()))?;
+                HostedEmbeddingPart::Image { source: data_url("image/png", bytes.get_ref()) }
+            }
+            EmbeddingPart::Audio(audio) => HostedEmbeddingPart::Audio { source: audio_data_url(audio)? },
+            EmbeddingPart::Video(_) => return Err(EmbeddingError::InvalidInput("Hosted video embeddings need the original encoded video file or URL; sampled frames cannot preserve its video timeline".into())),
+            EmbeddingPart::File(file) => {
+                if file.mime_type != "application/pdf" {
+                    return Err(EmbeddingError::InvalidInput("Gemini Embedding 2 file inputs require application/pdf".into()));
+                }
+                if file.source.starts_with("https://") || file.source.starts_with("http://") {
+                    return Err(EmbeddingError::InvalidInput("OpenRouter file embeddings require base64 PDF data; read the file before embedding".into()));
+                }
+                HostedEmbeddingPart::File { source: file.source.clone(), mime_type: file.mime_type.clone(), filename: file.filename.clone() }
+            }
+            EmbeddingPart::EncodedMedia { modality, source } => match modality {
+                EmbeddingModality::Image => HostedEmbeddingPart::Image { source: source.clone() },
+                EmbeddingModality::Audio => {
+                    if source.starts_with("https://") || source.starts_with("http://") {
+                        return Err(EmbeddingError::InvalidInput("OpenRouter audio embeddings require base64 WAV or MP3 data; read the audio file before embedding".into()));
+                    }
+                    HostedEmbeddingPart::Audio { source: source.clone() }
+                }
+                EmbeddingModality::Video => {
+                    if source.starts_with("https://") || source.starts_with("http://") {
+                        return Err(EmbeddingError::InvalidInput("OpenRouter video embeddings require base64 MP4 or MOV data; read the video file before embedding".into()));
+                    }
+                    HostedEmbeddingPart::Video { source: source.clone() }
+                },
+                modality => return Err(EmbeddingError::UnsupportedModality(*modality)),
+            }
+        });
+    }
+    Ok(HostedEmbeddingInput::Structured(
+        HostedEmbeddingStructuredInput::Content { parts },
     ))
 }
 
@@ -309,6 +408,154 @@ mod tests {
             vec![("x-flow-like-run-id".into(), "run".into())],
             "https://api.example.test".into(),
         )
+    }
+
+    fn openrouter_proxy() -> ProxyEmbeddingModel {
+        let mut proxy = proxy();
+        proxy.provider.vector_length = 1536;
+        let remote = proxy.provider.remote.as_mut().unwrap();
+        remote.implementation = Some(crate::provider::RemoteEmbeddingProvider::OpenRouter);
+        remote.model_id = Some(OPENROUTER_MULTIMODAL_MODEL.into());
+        proxy
+    }
+
+    #[tokio::test]
+    async fn openrouter_keeps_ordered_parts_and_files_on_authenticated_transport() {
+        let model = ProxyMultimodalEmbeddingModel::new(openrouter_proxy()).unwrap();
+        let input = EmbeddingInput {
+            title: None,
+            parts: vec![
+                EmbeddingPart::Text("Compare ".into()),
+                EmbeddingPart::EncodedMedia {
+                    modality: EmbeddingModality::Image,
+                    source: "https://example.test/one.png?token=a%2Fb".into(),
+                },
+                EmbeddingPart::Text(" with ".into()),
+                EmbeddingPart::EncodedMedia {
+                    modality: EmbeddingModality::Image,
+                    source: "https://example.test/two.png".into(),
+                },
+                EmbeddingPart::File(super::super::interface::EmbeddingFile {
+                    source: "data:application/pdf;base64,JVBERg==".into(),
+                    mime_type: "application/pdf".into(),
+                    filename: Some("report.pdf".into()),
+                }),
+            ],
+        };
+        let request = model
+            .proxy
+            .build_hosted_request(&[hosted_content_input(&input).unwrap()], "document")
+            .await
+            .unwrap();
+        assert_eq!(request.headers()["authorization"], "Bearer token");
+        let body: serde_json::Value =
+            serde_json::from_slice(request.body().unwrap().as_bytes().unwrap()).unwrap();
+        assert_eq!(body["input"][0]["type"], "content");
+        let parts = body["input"][0]["parts"].as_array().unwrap();
+        assert_eq!(parts.len(), 5);
+        assert_eq!(
+            parts[1]["source"],
+            "https://example.test/one.png?token=a%2Fb"
+        );
+        assert_eq!(parts[2]["text"], " with ");
+        assert_eq!(parts[3]["source"], "https://example.test/two.png");
+        assert_eq!(parts[4]["filename"], "report.pdf");
+        assert_eq!(parts[4]["mime_type"], "application/pdf");
+    }
+
+    #[test]
+    fn openrouter_advertises_model_limits_and_requires_configured_dimensions() {
+        let model = ProxyMultimodalEmbeddingModel::new(openrouter_proxy()).unwrap();
+        assert_eq!(model.descriptor.adapter, OPENROUTER_MULTIMODAL_ADAPTER);
+        assert!(model.requires_typed_media_sources());
+        assert!(
+            model
+                .descriptor
+                .modalities
+                .contains(&EmbeddingModality::File)
+        );
+        assert_eq!(model.descriptor.limits.max_images_per_item, Some(6));
+        assert_eq!(model.descriptor.limits.max_audio_duration_ms, Some(180_000));
+        assert_eq!(model.descriptor.limits.max_video_duration_ms, Some(120_000));
+        assert_eq!(model.descriptor.limits.max_file_pages, Some(6));
+        let mut request = EmbeddingRequest::texts(["query".into()], EmbeddingPurpose::Query);
+        request.options.dimensions = Some(768);
+        assert!(matches!(
+            model.descriptor.validate(&request),
+            Err(EmbeddingError::UnsupportedDimensions(768))
+        ));
+        request.options.dimensions = None;
+        assert!(
+            model
+                .descriptor
+                .finish(&request, vec![vec![0.0; 3072]])
+                .is_err()
+        );
+        request.items[0].parts = vec![EmbeddingPart::Audio(AudioInput {
+            samples: Arc::from(vec![0.0; 181]),
+            sample_rate: 1,
+            channels: 1,
+        })];
+        assert!(matches!(
+            model.descriptor.validate(&request),
+            Err(EmbeddingError::LimitExceeded(_))
+        ));
+        request.items[0].parts = (0..7)
+            .map(|_| EmbeddingPart::EncodedMedia {
+                modality: EmbeddingModality::Image,
+                source: "https://example.test/photo.png".into(),
+            })
+            .collect();
+        assert!(matches!(
+            model.descriptor.validate(&request),
+            Err(EmbeddingError::LimitExceeded(_))
+        ));
+        for dimensions in [0, 127, 3073] {
+            let mut proxy = openrouter_proxy();
+            proxy.provider.vector_length = dimensions;
+            assert!(ProxyMultimodalEmbeddingModel::new(proxy).is_err());
+        }
+        let mut unsupported = openrouter_proxy();
+        unsupported.provider.remote.as_mut().unwrap().model_id = Some("another/model".into());
+        assert!(ProxyMultimodalEmbeddingModel::new(unsupported).is_err());
+        for legacy_model_id in [None, Some("  ".into())] {
+            let mut legacy = openrouter_proxy();
+            legacy.provider.remote.as_mut().unwrap().model_id = legacy_model_id;
+            legacy.provider.provider.model_id = Some(OPENROUTER_MULTIMODAL_MODEL.into());
+            assert!(ProxyMultimodalEmbeddingModel::new(legacy).is_ok());
+        }
+    }
+
+    #[test]
+    fn openrouter_rejects_unsupported_files_and_audio_urls() {
+        for part in [
+            EmbeddingPart::EncodedMedia {
+                modality: EmbeddingModality::Audio,
+                source: "https://example.test/audio.wav".into(),
+            },
+            EmbeddingPart::File(super::super::interface::EmbeddingFile {
+                source: "AAAA".into(),
+                mime_type: "application/msword".into(),
+                filename: None,
+            }),
+            EmbeddingPart::EncodedMedia {
+                modality: EmbeddingModality::Video,
+                source: "https://example.test/video.mp4".into(),
+            },
+            EmbeddingPart::File(super::super::interface::EmbeddingFile {
+                source: "https://example.test/report.pdf".into(),
+                mime_type: "application/pdf".into(),
+                filename: None,
+            }),
+        ] {
+            assert!(
+                hosted_content_input(&EmbeddingInput {
+                    parts: vec![part],
+                    title: None
+                })
+                .is_err()
+            );
+        }
     }
 
     #[tokio::test]
@@ -532,5 +779,48 @@ mod tests {
                 tokens
             );
         }
+    }
+
+    #[test]
+    fn openrouter_media_prompt_usage_is_not_labeled_as_text_tokens() {
+        let model = ProxyMultimodalEmbeddingModel::new(openrouter_proxy()).unwrap();
+        let mut request = EmbeddingRequest::texts(["query".into()], EmbeddingPurpose::Query);
+        let response = || {
+            serde_json::from_value::<EmbedResponse>(serde_json::json!({
+                "model": "gemma-bit", "embeddings": [vec![0.0; 1536]],
+                "usage": {"prompt_tokens": 42, "total_tokens": 42},
+                "usage_available": true, "usage_estimated": false
+            }))
+            .unwrap()
+        };
+        assert_eq!(
+            model
+                .finish_response(&request, response())
+                .unwrap()
+                .usage
+                .text_tokens,
+            Some(42)
+        );
+        request.items[0].parts.push(EmbeddingPart::EncodedMedia {
+            modality: EmbeddingModality::Image,
+            source: "https://example.test/photo.png".into(),
+        });
+        assert_eq!(
+            model
+                .finish_response(&request, response())
+                .unwrap()
+                .usage
+                .text_tokens,
+            None
+        );
+        request.items[0].parts.remove(0);
+        assert_eq!(
+            model
+                .finish_response(&request, response())
+                .unwrap()
+                .usage
+                .text_tokens,
+            None
+        );
     }
 }

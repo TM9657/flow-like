@@ -121,6 +121,17 @@ fn read_embedding_pricing(bit: &Bit) -> Result<EmbeddingPricing, ApiError> {
 /// External embeddings require a saved tariff so admission reserves their cost.
 pub(crate) fn hosted_embedding_rate(bit: &Bit) -> Result<HostedRateSnapshot, ApiError> {
     let pricing = read_embedding_pricing(bit)?;
+    if bit
+        .parameters
+        .pointer("/remote/implementation")
+        .and_then(|value| value.as_str())
+        == Some("OpenRouter")
+        && pricing.input_micro_usd_per_million_bytes.is_some()
+    {
+        return Err(ApiError::bad_request(
+            "OpenRouter embeddings require a maximum input token tariff for reservation; settlement uses the provider-reported cost",
+        ));
+    }
     let context_tokens = bit
         .parameters
         .get("input_length")
@@ -398,6 +409,7 @@ mod tests {
         for implementation in [
             "CloudflareWorkersAI",
             "OpenAI",
+            "OpenRouter",
             "AzureOpenAI",
             "HuggingfaceEndpoint",
             "OpenAICompatible",
@@ -438,6 +450,20 @@ mod tests {
         assert_eq!(byte_rate.input_micro_usd_per_million_tokens, 0);
         assert_eq!(byte_rate.max_input_bytes, Some(1_000_000));
         validate_bit_pricing(&byte_bit).unwrap();
+    }
+
+    #[test]
+    fn openrouter_embedding_reservations_require_a_token_tariff() {
+        let mut bit = embedding_bit(json!({
+            "input_micro_usd_per_million_bytes": 50_000,
+            "max_input_bytes": 10_000,
+        }));
+        bit.parameters["remote"]["implementation"] = json!("OpenRouter");
+        assert!(validate_bit_pricing(&bit).is_err());
+        bit.parameters["pricing"] = json!({
+            "input_micro_usd_per_million_tokens": 12_000_000,
+        });
+        assert!(validate_bit_pricing(&bit).is_ok());
     }
 
     #[test]

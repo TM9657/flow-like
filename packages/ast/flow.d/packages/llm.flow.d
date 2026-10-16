@@ -307,7 +307,7 @@ declare namespace ai {
         // === AI/Embedding ===
 
         /**
-         * Embeds ordered text, image, audio, and video parts into one vector
+         * Embeds ordered text, image, audio, video, and file parts into one vector
          * @node embed_content @alias embedContent
          * @param model — A loaded embedding model
          * @param purpose (optional) — The model task, such as a search query or indexed document

@@ -399,6 +399,126 @@ describe("authorization and revocation", () => {
 });
 
 describe("execution grants", () => {
+	it.each([
+		{
+			name: "Google returns full identity scope URLs",
+			requestedIdentityScopes: ["email", "profile"],
+			grantedIdentityScopes: [
+				"https://www.googleapis.com/auth/userinfo.email",
+				"https://www.googleapis.com/auth/userinfo.profile",
+			],
+		},
+		{
+			name: "Google returns short identity scope names",
+			requestedIdentityScopes: [
+				"https://www.googleapis.com/auth/userinfo.email",
+				"https://www.googleapis.com/auth/userinfo.profile",
+			],
+			grantedIdentityScopes: ["email", "profile"],
+		},
+	])(
+		"accepts equivalent grants when $name",
+		async ({ requestedIdentityScopes, grantedIdentityScopes }) => {
+			const apiScope = "https://www.googleapis.com/auth/calendar.readonly";
+			const google: IOAuthProvider = {
+				...provider,
+				id: "google",
+				name: "Google",
+				auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
+				token_url: "https://oauth2.googleapis.com/token",
+				scopes: ["openid", ...requestedIdentityScopes],
+				merged_scopes: ["openid", ...requestedIdentityScopes, apiScope],
+			};
+			const granted = ["openid", ...grantedIdentityScopes, apiScope];
+			transport = async () =>
+				response({
+					access_token: "google-access",
+					refresh_token: "fl_oauth_google",
+					expires_in: 3600,
+					scope: granted.join(" "),
+				});
+			const auth = service();
+			const { state } = await auth.startAuthorization(google);
+			const token = await auth.handleCallback(
+				`flow-like://thirdparty/callback?state=${state}&code=google-code`,
+				google,
+			);
+			expect(token.scopes).toEqual(granted);
+			expect(
+				(await oauthTokenStore.getToken(google.id, google))?.scopes,
+			).toEqual(granted);
+
+			const execution = await getOAuthTokensForProviders(
+				[google],
+				oauthTokenStore,
+			);
+			expect(execution.missingProviders).toEqual([]);
+			expect(execution.tokens.google.access_token).toBe(token.access_token);
+			const status = await auth.getValidTokensForProviders([google]);
+			expect(status.missing).toEqual([]);
+			expect(status.needsRefresh.size).toBe(0);
+			expect(status.valid.get(google.id)?.access_token).toBe(
+				token.access_token,
+			);
+			expect(
+				(await auth.ensureTokensForProviders([google])).get(google.id)
+					?.access_token,
+			).toBe(token.access_token);
+
+			await oauthConsentStore.setConsent(
+				"app",
+				google.id,
+				google.merged_scopes!,
+			);
+			for (const requiredScopes of [google.merged_scopes!, granted]) {
+				expect(
+					await oauthConsentStore.hasConsentWithScopes(
+						"app",
+						google.id,
+						requiredScopes,
+					),
+				).toBe(true);
+				expect(
+					await oauthConsentStore.getConsentedProviderIdsWithScopes(
+						"app",
+						new Map([[google.id, requiredScopes]]),
+					),
+				).toEqual(new Set([google.id]));
+			}
+		},
+	);
+	it("accepts Google's canonical identity scopes after refreshing an expired grant", async () => {
+		const google = {
+			...provider,
+			id: "google",
+			scopes: ["openid", "email", "profile"],
+		};
+		await oauthTokenStore.setToken({
+			providerId: google.id,
+			binding: await oauthTokenStore.getBinding!(google),
+			access_token: "expired-google-access",
+			refresh_token: "fl_oauth_google",
+			expires_at: 0,
+			scopes: google.scopes,
+			storedAt: 1,
+		});
+		const granted = [
+			"openid",
+			"https://www.googleapis.com/auth/userinfo.email",
+			"https://www.googleapis.com/auth/userinfo.profile",
+		];
+		transport = async () =>
+			response({
+				access_token: "refreshed-google-access",
+				refresh_token: "fl_oauth_google",
+				expires_in: 3600,
+				scope: granted.join(" "),
+			});
+		const valid = await service().ensureTokensForProviders([google]);
+		expect(valid.get(google.id)?.scopes).toEqual(granted);
+		expect(valid.get(google.id)?.access_token).toBe("refreshed-google-access");
+		expect(calls).toHaveLength(1);
+	});
 	it("stamps canonical handles with their Hub owner and preserves access-only credentials", async () => {
 		const token = await seed();
 		expect(storedTokenToBackendFormat(token)).toMatchObject({

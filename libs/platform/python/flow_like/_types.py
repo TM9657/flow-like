@@ -267,6 +267,35 @@ class EmbeddingVideoInput(TypedDict):
     video: str
 
 
+class _EmbeddingFileFields(TypedDict, total=False):
+    filename: str
+
+
+class EmbeddingFileInput(_EmbeddingFileFields):
+    """An inline base64 file with an explicit MIME type, such as ``application/pdf``."""
+
+    type: Literal["file"]
+    source: str
+    mime_type: str
+
+
+class EmbeddingMediaPart(TypedDict):
+    """An image, audio, or video source within an ordered content input."""
+
+    type: Literal["image", "audio", "video"]
+    source: str
+
+
+EmbeddingPart = EmbeddingTextInput | EmbeddingMediaPart | EmbeddingFileInput
+
+
+class EmbeddingContentInput(TypedDict):
+    """Ordered parts that produce one vector when the model supports them."""
+
+    type: Literal["content"]
+    parts: list[EmbeddingPart]
+
+
 class _EmbeddingMultimodalFields(TypedDict, total=False):
     text: str
     image: str
@@ -286,6 +315,8 @@ EmbeddingInput = (
     | EmbeddingImageInput
     | EmbeddingAudioInput
     | EmbeddingVideoInput
+    | EmbeddingFileInput
+    | EmbeddingContentInput
     | EmbeddingMultimodalInput
 )
 
@@ -377,6 +408,10 @@ __all__ = [
     "EmbeddingImageInput",
     "EmbeddingAudioInput",
     "EmbeddingVideoInput",
+    "EmbeddingFileInput",
+    "EmbeddingMediaPart",
+    "EmbeddingPart",
+    "EmbeddingContentInput",
     "EmbeddingMultimodalInput",
     "EmbeddingResult",
     "ModelInfo",

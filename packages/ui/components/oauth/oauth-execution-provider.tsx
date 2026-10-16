@@ -12,10 +12,11 @@ import {
 import type { IOAuthConsentStore } from "../../db/oauth-db";
 import {
 	checkOAuthTokens,
-	hasRequiredScopes,
 	checkOAuthTokensFromPrerun,
+	hasRequiredScopes,
 } from "../../lib/oauth/helpers";
 import type { OAuthService } from "../../lib/oauth/service";
+import { getMissingOAuthScopes } from "../../lib/oauth/token-scopes";
 import type {
 	IOAuthProvider,
 	IOAuthRuntime,
@@ -103,6 +104,9 @@ export function OAuthExecutionProvider({
 	const [authorizedProviders, setAuthorizedProviders] = useState<Set<string>>(
 		new Set(),
 	);
+	const [missingScopesByProvider, setMissingScopesByProvider] = useState<
+		Record<string, string[]>
+	>({});
 	const [preAuthorizedProviders, setPreAuthorizedProviders] = useState<
 		Set<string>
 	>(new Set());
@@ -144,9 +148,7 @@ export function OAuthExecutionProvider({
 			const tokenHasAllScopes =
 				existingToken &&
 				!tokenStore.isExpired(existingToken) &&
-				requiredScopes.every((scope: string) =>
-					existingToken.scopes?.includes(scope),
-				);
+				hasRequiredScopes(existingToken, requiredScopes);
 
 			if (tokenHasAllScopes) {
 				setAuthorizedProviders((prev) => {
@@ -224,9 +226,7 @@ export function OAuthExecutionProvider({
 				const tokenMissingScopes =
 					existingToken &&
 					!tokenStore.isExpired(existingToken) &&
-					requiredScopes.some(
-						(scope: string) => !existingToken.scopes?.includes(scope),
-					);
+					!hasRequiredScopes(existingToken, requiredScopes);
 
 				// Check if consent exists but is missing required scopes (scope-aware consent check)
 				const hasConsentWithRequiredScopes =
@@ -264,6 +264,7 @@ export function OAuthExecutionProvider({
 			}
 
 			if (needsDialogProviders.length > 0) {
+				setMissingScopesByProvider({});
 				setAuthorizedProviders(new Set());
 				setPreAuthorizedProviders(hasTokenNeedsConsent);
 				setMissingProviders(needsDialogProviders);
@@ -283,6 +284,7 @@ export function OAuthExecutionProvider({
 				(p) => p.id === providerId,
 			);
 			if (!provider) return;
+			setMissingScopesByProvider((prev) => ({ ...prev, [providerId]: [] }));
 
 			if (provider.use_device_flow && provider.device_auth_url) {
 				setDeviceFlowProvider(provider);
@@ -323,6 +325,7 @@ export function OAuthExecutionProvider({
 			}
 
 			setIsDialogOpen(false);
+			setMissingScopesByProvider({});
 			setMissingProviders([]);
 			setAuthorizedProviders(new Set());
 			setPreAuthorizedProviders(new Set());
@@ -346,25 +349,37 @@ export function OAuthExecutionProvider({
 		[consentStore],
 	);
 
+	const handleOAuthCallbackInternal = useCallback(
+		(providerId: string, token: IStoredOAuthToken) => {
+			const provider = missingProvidersRef.current.find(
+				(p) => p.id === providerId,
+			);
+			if (!provider) return;
+			const missingScopes = getMissingOAuthScopes(
+				token,
+				provider.merged_scopes ?? provider.scopes,
+			);
+			setMissingScopesByProvider((prev) => ({
+				...prev,
+				[providerId]: missingScopes,
+			}));
+			setAuthorizedProviders((prev) => {
+				const next = new Set(prev);
+				if (missingScopes.length === 0) next.add(providerId);
+				else next.delete(providerId);
+				return next;
+			});
+			if (missingScopes.length === 0) onOAuthCallback?.(providerId, token);
+		},
+		[onOAuthCallback],
+	);
+
 	const handleDeviceFlowSuccess = useCallback(
 		(token: IStoredOAuthToken) => {
 			setDeviceFlowProvider(null);
-			const provider = missingProvidersRef.current.find(
-				(p) => p.id === token.providerId,
-			);
-			if (
-				!provider ||
-				!hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
-			)
-				return;
-			setAuthorizedProviders((prev) => {
-				const next = new Set(prev);
-				next.add(token.providerId);
-				return next;
-			});
-			onOAuthCallback?.(token.providerId, token);
+			handleOAuthCallbackInternal(token.providerId, token);
 		},
-		[onOAuthCallback],
+		[handleOAuthCallbackInternal],
 	);
 
 	const handleDeviceFlowCancel = useCallback(() => {
@@ -373,6 +388,7 @@ export function OAuthExecutionProvider({
 
 	const handleCancel = useCallback(() => {
 		setIsDialogOpen(false);
+		setMissingScopesByProvider({});
 		setMissingProviders([]);
 		setAuthorizedProviders(new Set());
 		setPreAuthorizedProviders(new Set());
@@ -395,6 +411,7 @@ export function OAuthExecutionProvider({
 			}
 
 			setMissingProviders(result.missingProviders);
+			setMissingScopesByProvider({});
 			setIsDialogOpen(true);
 
 			throw new Error("OAuth authorization required");
@@ -423,32 +440,12 @@ export function OAuthExecutionProvider({
 			}
 
 			setMissingProviders(result.missingProviders);
+			setMissingScopesByProvider({});
 			setIsDialogOpen(true);
 
 			throw new Error("OAuth authorization required");
 		},
 		[tokenStore, hub, oauthService],
-	);
-
-	// Register callback handler for OAuth callbacks
-	const handleOAuthCallbackInternal = useCallback(
-		(providerId: string, token: IStoredOAuthToken) => {
-			const provider = missingProvidersRef.current.find(
-				(p) => p.id === providerId,
-			);
-			if (
-				!provider ||
-				!hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
-			)
-				return;
-			setAuthorizedProviders((prev) => {
-				const next = new Set(prev);
-				next.add(providerId);
-				return next;
-			});
-			onOAuthCallback?.(providerId, token);
-		},
-		[onOAuthCallback],
 	);
 
 	return (
@@ -469,6 +466,7 @@ export function OAuthExecutionProvider({
 				onCancel={handleCancel}
 				authorizedProviders={authorizedProviders}
 				preAuthorizedProviders={preAuthorizedProviders}
+				missingScopesByProvider={missingScopesByProvider}
 			/>
 			<DeviceFlowDialog
 				provider={deviceFlowProvider}

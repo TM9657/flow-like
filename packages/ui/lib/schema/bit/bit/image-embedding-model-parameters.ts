@@ -35,6 +35,7 @@ export enum IRemoteEmbeddingProvider {
 	Internal = "Internal",
 	CloudflareWorkersAI = "CloudflareWorkersAI",
 	OpenAI = "OpenAI",
+	OpenRouter = "OpenRouter",
 	AzureOpenAI = "AzureOpenAI",
 	HuggingfaceEndpoint = "HuggingfaceEndpoint",
 	OpenAICompatible = "OpenAICompatible",

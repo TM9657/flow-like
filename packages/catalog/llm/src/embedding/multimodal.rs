@@ -67,6 +67,7 @@ async fn resolve_content(
                 EmbeddingPart::Image(resolver.resolve(image).await?)
             }
             EmbeddingContentPart::Audio(audio) => EmbeddingPart::Audio(audio.into_audio()?),
+            EmbeddingContentPart::File(file) => EmbeddingPart::File(file),
             EmbeddingContentPart::EncodedMedia { modality, source } => {
                 EmbeddingPart::EncodedMedia { modality, source }
             }
@@ -244,7 +245,7 @@ impl NodeLogic for EmbedContentNode {
         let mut node = base_node(
             "embed_content",
             "Embed Content",
-            "Embeds ordered text, image, audio, and video parts into one vector",
+            "Embeds ordered text, image, audio, video, and file parts into one vector",
             "embedContent",
         );
         add_request_pins(&mut node);
@@ -438,6 +439,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn preserves_pdf_parts_and_metadata_without_image_resolution() {
+        let content = flow_like_types::json::from_value(json!({
+            "parts": [{"type": "file", "source": "data:application/pdf;base64,JVBERg==", "mime_type": "application/pdf", "filename": "report.pdf"}]
+        })).unwrap();
+        let mut resolver = Images::default();
+        let resolved = resolve_content(content, &mut resolver).await.unwrap();
+        assert!(resolver.0.is_empty());
+        let EmbeddingPart::File(file) = &resolved.parts[0] else {
+            panic!("expected file");
+        };
+        assert_eq!(file.mime_type, "application/pdf");
+        assert_eq!(file.filename.as_deref(), Some("report.pdf"));
+    }
+
+    #[tokio::test]
     async fn rejects_missing_images_invalid_audio_and_unordered_video() {
         for value in [
             json!({"parts": []}),
@@ -461,7 +477,7 @@ mod tests {
     fn content_schema_exposes_all_modalities_and_node_outputs_are_typed() {
         let schema = schemars::schema_for!(EmbeddingContent);
         let schema = flow_like_types::json::to_string(&schema).unwrap();
-        for modality in ["text", "image", "audio", "video"] {
+        for modality in ["text", "image", "audio", "video", "file"] {
             assert!(schema.contains(&format!("\"{modality}\"")));
         }
         assert!(

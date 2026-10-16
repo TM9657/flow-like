@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	HomeProfileRunError,
+	HomeProfileRuns,
+	assertHomeProfileRun,
+} from "../../components/global-chat/tools/home/profile-run";
 
 const mocks = vi.hoisted(() => ({
 	replyToChannel: vi.fn(async () => undefined),
@@ -94,6 +99,82 @@ describe("dispatchSpecialistToolRequest", () => {
 				parentRequestId: "home-parent",
 				context: expect.objectContaining({ profileId: "profile-a" }),
 			}),
+		);
+	});
+
+	it.each([
+		{
+			name: "executes Data Studio reads in their launching profile",
+			parentRequestId: "data-studio-parent",
+			currentProfileId: "profile-a",
+			expectedCode: undefined,
+		},
+		{
+			name: "blocks Data Studio reads after the profile changes",
+			parentRequestId: "data-studio-parent",
+			currentProfileId: "profile-b",
+			expectedCode: "home_profile_changed",
+		},
+		{
+			name: "blocks late reads from a completed Home run",
+			parentRequestId: "home-parent",
+			currentProfileId: "profile-a",
+			expectedCode: "home_run_expired",
+		},
+	])("$name", async ({ parentRequestId, currentProfileId, expectedCode }) => {
+		const runs = new HomeProfileRuns();
+		runs.begin("home-parent", "profile-a");
+		runs.finish("home-parent");
+		const listTables = vi.fn(async () => ({
+			status: "ok",
+			tables: [{ name: "contacts" }],
+		}));
+
+		await dispatchSpecialistToolRequest({
+			data: JSON.stringify({
+				...JSON.parse(toolRequest()),
+				toolName: "database_tool",
+				arguments: { operation: "list_tables", app_id: "office" },
+			}),
+			parentRequestId,
+			profileId: "profile-a",
+			onToolRequest: async (request) => {
+				try {
+					await assertHomeProfileRun(
+						runs,
+						{
+							parentRequestId: request.parentRequestId,
+							profileId: request.context?.profileId,
+						},
+						async () => currentProfileId,
+						() => currentProfileId,
+					);
+					return {
+						requestId: request.requestId,
+						approved: true,
+						result: await listTables(),
+					};
+				} catch (error) {
+					if (!(error instanceof HomeProfileRunError)) throw error;
+					return {
+						requestId: request.requestId,
+						approved: true,
+						result: error.result,
+					};
+				}
+			},
+		});
+
+		expect(listTables).toHaveBeenCalledTimes(expectedCode ? 0 : 1);
+		expect(mocks.replyToChannel).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({
+				approved: true,
+				result: expectedCode
+					? expect.objectContaining({ status: "stale", code: expectedCode })
+					: { status: "ok", tables: [{ name: "contacts" }] },
+			}),
+			expect.anything(),
 		);
 	});
 });

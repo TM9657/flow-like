@@ -321,7 +321,7 @@ const result = await client.embed("bit-id-for-embedding", [
 console.log(result.embeddings); // number[][]
 ```
 
-For media, select a compatible model such as Gemma 2
+For Internal media embeddings, select a compatible model such as Gemma 2
 (`i6un3u7arw9mt59xzpc6rmzm`). `embed()` also accepts structured `text`, `image`,
 `audio`, and `video` inputs, or a mixed array that returns one vector per item.
 A `multimodal` input combines text and up to one file per modality into one vector:
@@ -345,6 +345,45 @@ forwards signed URLs with their query parameters unchanged. Keep them valid thro
 the worker's download, including cold starts. Redirects, private addresses, and local
 paths are rejected. Video contributes sampled frames; provide its soundtrack in
 `audio` to include it in the combined embedding.
+
+For OpenRouter, use a Bit configured with `remote.implementation: "OpenRouter"`
+and `remote.model_id: "google/gemini-embedding-2"`. A `content` input keeps the
+order of its parts and returns one vector. It can contain text, multiple images,
+audio, video, and PDF files:
+
+```typescript
+import { readFile } from "node:fs/promises";
+import type { EmbeddingContentInput } from "@flow-like/sdk";
+
+const pdf = await readFile("manual.pdf");
+const input: EmbeddingContentInput = {
+  type: "content",
+  parts: [
+    { type: "text", text: "Product and installation manual" },
+    { type: "image", source: "https://example.com/product.jpg" },
+    {
+      type: "file",
+      source: `data:application/pdf;base64,${pdf.toString("base64")}`,
+      mime_type: "application/pdf",
+      filename: "manual.pdf",
+    },
+  ],
+};
+const result = await client.embed("your-openrouter-embedding-bit-id", input, {
+  embed_type: "document",
+});
+console.log(result.embeddings[0]); // Dimensions come from the Bit's vector_length
+```
+
+The OpenRouter adapter accepts image URLs and PNG/JPEG data URLs. Audio, video,
+and PDFs require inline base64: use data URLs with WAV/MP3, MP4/MOV, or PDF MIME
+types. For example, an audio part is `{ type: "audio", source: audioDataUrl }`.
+An `EmbeddingFileInput` can also be passed directly to `embed()`. Its
+`mime_type` must be `application/pdf`; `filename` is optional and is not sent to
+OpenRouter. An array of inputs returns one vector per item, while each item's
+parts stay together. Existing `image`, `audio`, `video`, and `multimodal` forms
+remain supported. See [embedding models](/topics/genai/models/#embedding-models)
+for source restrictions and provider limits.
 
 ## Model Discovery
 

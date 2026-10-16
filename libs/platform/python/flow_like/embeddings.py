@@ -33,7 +33,9 @@ class EmbeddingsMixin(HTTPClient):
             bit_id: Identifier of the embedding model bit to use.
             input: A string, structured input, or sequence of inputs. Media
                 fields accept HTTP(S) URLs, base64 data URLs, or raw base64.
-                A ``"multimodal"`` input produces one combined embedding.
+                A ``"content"`` input preserves part order and produces one
+                combined embedding. File inputs require ``mime_type``. Supported
+                media types and combinations depend on the model bit.
             embed_type: Whether the input is a ``"query"`` or ``"document"``.
             **kwargs: Additional payload fields forwarded to the API.
 

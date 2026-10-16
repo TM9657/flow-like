@@ -68,7 +68,8 @@
         "text",
         "image",
         "audio",
-        "video"
+        "video",
+        "file"
       ]
     },
     "EmbeddingPurpose": {
@@ -155,6 +156,24 @@
           ],
           "format": "uint",
           "minimum": 0
+        },
+        "max_video_duration_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "default": null
+        },
+        "max_file_pages": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0,
+          "default": null
         }
       },
       "required": [
