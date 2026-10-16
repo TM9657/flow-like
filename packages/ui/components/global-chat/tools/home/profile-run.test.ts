@@ -6,6 +6,34 @@ import {
 } from "./profile-run";
 
 describe("Home profile run ownership", () => {
+	test("allows a Data Studio request with a parent and the current profile", async () => {
+		const runs = new HomeProfileRuns();
+		runs.begin("home-parent", "profile-b");
+		await expect(
+			assertHomeProfileRun(
+				runs,
+				{ parentRequestId: "data-studio-parent", profileId: "profile-a" },
+				async () => "profile-a",
+				() => "profile-a",
+				"profile-a",
+			),
+		).resolves.toBeUndefined();
+	});
+
+	test("still rejects a different profile for an unrelated specialist", async () => {
+		const runs = new HomeProfileRuns();
+		await expect(
+			assertHomeProfileRun(
+				runs,
+				{ parentRequestId: "data-studio-parent", profileId: "profile-a" },
+				async () => "profile-b",
+				() => undefined,
+			),
+		).rejects.toMatchObject({
+			result: { code: "home_profile_changed", profile_id: "profile-a" },
+		});
+	});
+
 	test("rechecks the live editor after an awaited profile read before staging", async () => {
 		const runs = new HomeProfileRuns();
 		runs.begin("parent", "profile-a");
@@ -38,21 +66,58 @@ describe("Home profile run ownership", () => {
 		).rejects.toBeInstanceOf(HomeProfileRunError);
 	});
 
-	test("does not revive a run completed during an asynchronous profile read", async () => {
+	test.each(["profile-a", undefined])(
+		"does not revive a run completed during an asynchronous profile read (profile: %s)",
+		async (profileId) => {
+			const runs = new HomeProfileRuns();
+			runs.begin("parent", "profile-a");
+			await expect(
+				assertHomeProfileRun(
+					runs,
+					{ parentRequestId: "parent", profileId },
+					async () => {
+						runs.finish("parent");
+						return "profile-a";
+					},
+					() => "profile-a",
+				),
+			).rejects.toMatchObject({
+				result: { code: "home_run_expired", profile_id: "profile-a" },
+			});
+		},
+	);
+
+	test.each(["profile-a", "profile-b", undefined])(
+		"rejects late Home requests using the original profile (profile: %s)",
+		(profileId) => {
+			const runs = new HomeProfileRuns();
+			runs.begin("parent", "profile-a");
+			runs.finish("parent");
+			expect(() =>
+				runs.assertCurrent(
+					{ parentRequestId: "parent", profileId },
+					"profile-a",
+				),
+			).toThrow(
+				expect.objectContaining({
+					result: expect.objectContaining({
+						code: "home_run_expired",
+						profile_id: "profile-a",
+					}),
+				}),
+			);
+		},
+	);
+
+	test("cannot rebind a completed Home request to another profile", () => {
 		const runs = new HomeProfileRuns();
 		runs.begin("parent", "profile-a");
-		await expect(
-			assertHomeProfileRun(
-				runs,
-				{ parentRequestId: "parent", profileId: "profile-a" },
-				async () => {
-					runs.finish("parent");
-					return "profile-a";
-				},
-				() => "profile-a",
-			),
-		).rejects.toBeInstanceOf(HomeProfileRunError);
+		runs.finish("parent");
+		expect(() => runs.begin("parent", "profile-b")).toThrow(
+			HomeProfileRunError,
+		);
 	});
+
 	test("pins nested context, discovery, validation, and apply to the parent profile", () => {
 		const runs = new HomeProfileRuns();
 		runs.begin("parent", "profile-a");

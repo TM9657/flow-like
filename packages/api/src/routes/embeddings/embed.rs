@@ -387,8 +387,12 @@ async fn embed_authorized_text(
         ));
     }
     let reservation_bytes = providers::reservation_input_bytes(&payload.input, prefix);
-    let token_count_estimate =
-        embedding_reservation_units(&rate, reservation_bytes, payload.input.len());
+    let token_count_estimate = embedding_provider_reservation_units(
+        &remote_config,
+        &rate,
+        reservation_bytes,
+        payload.input.len(),
+    );
     let price_estimate = match rate.input_micro_usd_per_million_bytes {
         Some(_) => rate.provider_cost_bytes(reservation_bytes)?,
         None => rate.provider_cost(token_count_estimate, 0),
@@ -475,6 +479,22 @@ fn embedding_reservation_units(
     input_bytes.saturating_add(rate.context_tokens.saturating_mul(item_count as i64))
 }
 
+fn embedding_provider_reservation_units(
+    config: &RemoteExecutionConfig,
+    rate: &HostedRateSnapshot,
+    input_bytes: i64,
+    item_count: usize,
+) -> i64 {
+    if config.implementation == Some(RemoteEmbeddingProvider::OpenRouter)
+        && config.model_id.as_deref().map(str::trim) == Some("google/gemini-embedding-2")
+    {
+        // The model's token limit covers all modalities. Encoded file bytes are
+        // not tokens; reserve each item's full context at the maximum input rate.
+        return 8192_i64.saturating_mul(item_count as i64);
+    }
+    embedding_reservation_units(rate, input_bytes, item_count)
+}
+
 struct EmbeddingMetering {
     tokens: i64,
     price: i64,
@@ -500,6 +520,38 @@ fn embedding_metering(
     let byte_priced = rate.input_micro_usd_per_million_bytes.is_some();
     let usage_available = reported_tokens.is_some();
     let usage_estimated = byte_priced && !usage_available;
+    if *implementation == RemoteEmbeddingProvider::OpenRouter {
+        // OpenRouter reports the charge across all input modalities. Missing or
+        // invalid costs must not settle media at the configured text token rate.
+        let cost = result
+            .raw_usage
+            .as_ref()
+            .and_then(|usage| usage.get("cost"))
+            .and_then(serde_json::Value::as_f64)
+            .filter(|cost| cost.is_finite() && *cost >= 0.0)
+            .map(|cost| (cost * 1_000_000.0).ceil())
+            .filter(|cost| cost.is_finite() && *cost < i64::MAX as f64)
+            .map(|cost| cost as i64);
+        return Ok(EmbeddingMetering {
+            tokens: reported_tokens.unwrap_or(0),
+            price: cost
+                .map(|cost| cost.saturating_add(rate.request_micro_usd))
+                .unwrap_or(0),
+            known_usage: cost.is_some(),
+            usage_available,
+            usage_estimated: false,
+            details: serde_json::json!({
+                "meteringBasis": "provider_reported_cost",
+                "inputBytes": input_bytes,
+                "providerUsage": result.raw_usage,
+                "tokenCountEstimated": false,
+                "usageAvailable": usage_available,
+                "providerCostAvailable": cost.is_some(),
+                "costEstimated": false,
+                "reservedTokens": reserved_tokens,
+            }),
+        });
+    }
     Ok(EmbeddingMetering {
         tokens: reported_tokens.unwrap_or(if byte_priced { input_bytes } else { 0 }),
         price: if byte_priced {
@@ -565,6 +617,74 @@ mod byte_meter_tests {
         rate.input_micro_usd_per_million_tokens = 100_000;
         rate.request_micro_usd = 5;
         rate
+    }
+
+    #[test]
+    fn openrouter_reserves_model_context_instead_of_encoded_file_bytes() {
+        let config = RemoteExecutionConfig {
+            implementation: Some(RemoteEmbeddingProvider::OpenRouter),
+            model_id: Some("google/gemini-embedding-2".into()),
+            ..Default::default()
+        };
+        let mut rate = token_rate();
+        rate.context_tokens = 512;
+        assert_eq!(
+            embedding_provider_reservation_units(&config, &rate, 100_000_000, 2),
+            16_384
+        );
+    }
+
+    #[test]
+    fn openrouter_settles_reported_media_cost_including_free_requests() {
+        for (cost, expected) in [(0.0, 0), (0.000_000_1, 1), (0.023_45, 23_450)] {
+            let mut result = result(Some(20));
+            result.raw_usage = Some(serde_json::json!({
+                "cost": cost, "prompt_tokens": 20, "total_tokens": 20,
+                "prompt_tokens_details": {"audio_tokens": 20},
+            }));
+            let rate = token_rate();
+            let meter = embedding_metering(
+                &RemoteEmbeddingProvider::OpenRouter,
+                &result,
+                &rate,
+                1000,
+                8192,
+            )
+            .unwrap();
+            assert_eq!(meter.price, expected + rate.request_micro_usd);
+            assert_eq!(meter.tokens, 20);
+            assert!(meter.known_usage && meter.usage_available);
+            assert!(!meter.usage_estimated);
+            assert_eq!(
+                meter.details["providerUsage"]["prompt_tokens_details"]["audio_tokens"],
+                20
+            );
+        }
+    }
+
+    #[test]
+    fn openrouter_missing_or_invalid_cost_keeps_reservation_even_with_tokens() {
+        for cost in [
+            serde_json::Value::Null,
+            serde_json::json!(-1),
+            serde_json::json!("0.01"),
+            serde_json::json!(1e30),
+        ] {
+            let mut result = result(Some(20));
+            result.raw_usage = Some(serde_json::json!({"cost": cost}));
+            let meter = embedding_metering(
+                &RemoteEmbeddingProvider::OpenRouter,
+                &result,
+                &token_rate(),
+                1000,
+                8192,
+            )
+            .unwrap();
+            assert_eq!(meter.price, 0);
+            assert!(!meter.known_usage);
+            assert!(meter.usage_available);
+            assert_eq!(meter.details["providerCostAvailable"], false);
+        }
     }
 
     #[test]

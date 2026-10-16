@@ -1,4 +1,5 @@
 import { oauthCredentialKey, oauthProviderKey } from "./scope";
+import { hasRequiredScopes } from "./token-scopes";
 import type {
 	IDeviceAuthResponse,
 	IOAuthBinding,
@@ -924,9 +925,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 				if (
 					!token ||
-					!(provider.merged_scopes ?? provider.scopes).every((scope) =>
-						token.scopes.includes(scope),
-					)
+					!hasRequiredScopes(token, provider.merged_scopes ?? provider.scopes)
 				) {
 					missing.push(provider);
 				} else if (tokenStore.isExpired(token)) {
@@ -954,8 +953,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				try {
 					const refreshed = await this.refreshToken(provider, token);
 					if (
-						(provider.merged_scopes ?? provider.scopes).every((scope) =>
-							refreshed.scopes.includes(scope),
+						hasRequiredScopes(
+							refreshed,
+							provider.merged_scopes ?? provider.scopes,
 						)
 					)
 						valid.set(providerId, refreshed);

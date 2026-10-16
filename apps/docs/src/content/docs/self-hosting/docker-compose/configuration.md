@@ -281,6 +281,7 @@ Custom secret names also need explicit entries in the API's environment.
 | `Internal` | `INTERNAL_EMBEDDING_SECRET` | `INTERNAL_EMBEDDING_ENDPOINT` |
 | `CloudflareWorkersAI` | `HOSTED_CLOUDFLARE_API_TOKEN` | Fixed Cloudflare API; account ID from `HOSTED_CLOUDFLARE_ACCOUNT_ID` |
 | `OpenAI` | `HOSTED_OPENAI_API_KEY` | Fixed `https://api.openai.com/v1/embeddings` |
+| `OpenRouter` | `OPENROUTER_API_KEY` | Fixed `https://openrouter.ai/api/v1/embeddings` |
 | `AzureOpenAI` | `HOSTED_AZURE_API_KEY` | `HOSTED_AZURE_ENDPOINT`; `remote.model_id` is the Azure deployment name |
 | `HuggingfaceEndpoint` | `HOSTED_HUGGINGFACE_API_KEY` | `HOSTED_HUGGINGFACE_EMBEDDING_ENDPOINT`, a Text Embeddings Inference service with `/v1/embeddings` support |
 | `OpenAICompatible` | `HOSTED_OPENAI_COMPATIBLE_API_KEY` | `HOSTED_OPENAI_COMPATIBLE_EMBEDDING_ENDPOINT` |
@@ -298,9 +299,19 @@ For EmbeddingGemma 2, set `remote.implementation` to `Internal` and
 `remote.model_id` to `embeddinggemma-2`. The `/embeddings/embed` API accepts text
 strings, structured image/audio/video inputs, combined multimodal inputs, and
 mixed batches for this model. Media fields contain URLs or base64 strings; the
-API forwards them to the gateway without downloading them. Other embedding
-providers retain their text input contract. See [embedding models](/topics/genai/models/#embedding-models)
-for media limits and workflow nodes.
+API forwards them to the gateway without downloading them.
+
+For Gemini Embedding 2 on OpenRouter, set `remote.implementation` to `OpenRouter`
+and `remote.model_id` to `google/gemini-embedding-2`. The API uses
+`OPENROUTER_API_KEY`; the chat setting `OPENROUTER_ENDPOINT` does not change the
+embedding destination. This model supports text, images, audio, video, and PDF
+files. An input with `type: "content"` and ordered `parts` produces one combined
+vector, including repeated image parts. Existing structured image/audio/video
+and `multimodal` inputs remain accepted. Other hosted providers retain their
+text input contract. See [embedding models](/topics/genai/models/#embedding-models)
+for source formats, media limits, and workflow nodes, and the
+[Node.js](/dev/sdks/nodejs/#embeddings) or [Python](/dev/sdks/python/#embeddings)
+SDK examples for ordered content.
 
 Before upgrading, review existing Bits that use `CloudflareWorkersAI` or
 `HuggingfaceEndpoint`. Earlier releases treated these names as aliases for
@@ -331,15 +342,16 @@ EmbeddingGemma and BGE Large accept at most 100. The API rejects larger batches
 before reserving usage. Cloudflare BGE Large requires `pooling: "Mean"`; create a
 separate Bit and re-embed data when migrating an existing CLS index.
 
-Cohere and Voyage AI receive the query or document task type through their native
-API fields. Leave the Bit prefixes empty unless the deployment specifically needs
-additional text. Cohere accepts at most 96 items per request; Voyage AI accepts
-at most 1,000. Requests disable upstream truncation so oversized inputs return an
-error instead of silently losing text.
+Cohere, Voyage AI, and OpenRouter receive the query or document task type through
+their native API fields. Leave the Bit prefixes empty unless the deployment
+specifically needs additional text. Cohere accepts at most 96 items per request;
+Voyage AI accepts at most 1,000. Cohere and Voyage AI requests disable upstream
+truncation so oversized inputs return an error instead of silently losing text.
 
-External providers require an explicit `parameters.pricing` object. Choose
-exactly one input tariff, expressed as integer micro-USD per million tokens or
-million UTF-8 bytes. For example, a rate of USD 0.10 per million tokens is:
+External providers require an explicit `parameters.pricing` object. For providers
+other than OpenRouter, choose exactly one input tariff, expressed as integer
+micro-USD per million tokens or million UTF-8 bytes. For example, a rate of
+USD 0.10 per million tokens is:
 
 ```json
 {
@@ -359,9 +371,22 @@ For an explicitly estimated byte tariff, use
 `input_micro_usd_per_million_bytes` and a positive `max_input_bytes` limit for the
 whole request, including prefixes. This mode settles from submitted bytes.
 `request_micro_usd` optionally adds a fee for each request. All prices must be
-nonnegative integers; an explicit zero means zero provider cost. Output token
-pricing must be omitted or zero. Internal embeddings continue to use their
-built-in estimated byte tariff.
+nonnegative integers; zero rates produce zero cost when settlement uses those
+configured rates. Output token pricing must be omitted or zero. Internal
+embeddings continue to use their built-in estimated byte tariff.
+
+OpenRouter requires token pricing. Set `input_micro_usd_per_million_tokens` to
+the highest input rate among the model's enabled modalities and upstream
+providers so the reservation covers media. For `google/gemini-embedding-2`, the
+API reserves the full 8,192-token context for each item at that rate; encoded
+file lengths do not determine the reservation. Other OpenRouter models use the
+text reservation described above. The API settles against OpenRouter's reported
+`usage.cost`, which accounts for the modalities actually processed, and adds
+`request_micro_usd` if configured. Missing or invalid cost leaves the reservation
+unresolved. Byte pricing is not supported for OpenRouter. Check the
+[model's current provider prices](https://openrouter.ai/google/gemini-embedding-2)
+before setting the reservation rate; a text-only rate does not cover audio or
+video.
 
 Embedding responses expose `usage_available` when the provider reports token
 usage. `usage_estimated` marks token counts estimated from submitted bytes. A

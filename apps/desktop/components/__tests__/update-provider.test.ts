@@ -1,3 +1,4 @@
+import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import type { DownloadEvent } from "@tauri-apps/plugin-updater";
 import { Window } from "happy-dom";
 import { act, createElement } from "react";
@@ -9,7 +10,7 @@ type EventHandler = (event: { payload?: unknown }) => void;
 const mocks = vi.hoisted(() => ({
 	addTelemetryBreadcrumb: vi.fn(),
 	check: vi.fn(),
-	confirm: vi.fn(),
+	dialog: vi.fn(),
 	captureTelemetryError: vi.fn(),
 	endTelemetrySpan: vi.fn(),
 	getVersion: vi.fn(),
@@ -52,7 +53,10 @@ vi.mock("@flow-like/flow-like-ui/lib/telemetry/tracing", () => ({
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
-	invoke: mocks.invoke,
+	invoke: (command: string, ...args: unknown[]) =>
+		command.startsWith("plugin:dialog|")
+			? mocks.dialog(command, ...args)
+			: mocks.invoke(command, ...args),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -61,10 +65,6 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
 	getCurrentWebviewWindow: () => ({ label: mocks.windowLabel }),
-}));
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-	confirm: mocks.confirm,
 }));
 
 vi.mock("@tauri-apps/plugin-updater", () => ({
@@ -228,7 +228,13 @@ beforeEach(() => {
 	mocks.windowLabel = "main";
 	mocks.invoke.mockResolvedValue(undefined);
 	mocks.getVersion.mockResolvedValue("0.1.4");
-	mocks.confirm.mockResolvedValue(true);
+	// Keep the real dialog adapter so a removed IPC command fails these tests.
+	mocks.dialog.mockImplementation(async (command: string) => {
+		if (command !== "plugin:dialog|message") {
+			throw new Error(`Command ${command} not allowed by ACL`);
+		}
+		return "Ok";
+	});
 	mocks.listen.mockImplementation(
 		async (event: string, handler: EventHandler) => {
 			mocks.listeners.set(event, handler);
@@ -238,6 +244,7 @@ beforeEach(() => {
 
 	browserWindow = new Window({ url: "http://localhost" });
 	restoreGlobals = installBrowserGlobals(browserWindow);
+	mockIPC(mocks.dialog);
 	originalNavigatorOnLine = Object.getOwnPropertyDescriptor(
 		globalThis.navigator,
 		"onLine",
@@ -252,6 +259,7 @@ afterEach(async () => {
 		root = undefined;
 	}
 	container.remove();
+	clearMocks();
 	browserWindow.close();
 	if (originalNavigatorOnLine) {
 		Object.defineProperty(
@@ -454,9 +462,13 @@ describe("UpdateProvider", () => {
 
 		expect(mocks.check).toHaveBeenCalledTimes(1);
 		expect(mocks.check).toHaveBeenCalledWith({ timeout: 30_000 });
-		expect(mocks.confirm).toHaveBeenCalledWith(
-			"Flow Like 0.1.6 is available. Would you like to download and install it now?",
-		);
+		expect(mocks.dialog).toHaveBeenCalledWith("plugin:dialog|message", {
+			message:
+				"Flow Like 0.1.6 is available. Would you like to download and install it now?",
+			buttons: "OkCancel",
+			title: undefined,
+			kind: undefined,
+		});
 		expect(update.downloadAndInstall).toHaveBeenCalledTimes(1);
 		expect(update.close).toHaveBeenCalledTimes(1);
 		expect(
@@ -498,7 +510,7 @@ describe("UpdateProvider", () => {
 	test("declining remembers only that version and closes its updater resource", async () => {
 		const update = fakeUpdate("0.1.7");
 		mocks.check.mockResolvedValue(update);
-		mocks.confirm.mockResolvedValue(false);
+		mocks.dialog.mockResolvedValue("Cancel");
 
 		await mountProvider();
 
@@ -529,7 +541,7 @@ describe("UpdateProvider", () => {
 			expect(update.close).toHaveBeenCalledTimes(1);
 		});
 
-		expect(mocks.confirm).not.toHaveBeenCalled();
+		expect(mocks.dialog).not.toHaveBeenCalled();
 		expect(update.downloadAndInstall).not.toHaveBeenCalled();
 	});
 
@@ -543,7 +555,7 @@ describe("UpdateProvider", () => {
 		await vi.waitFor(() => {
 			expect(update.downloadAndInstall).toHaveBeenCalledTimes(1);
 		});
-		expect(mocks.confirm).toHaveBeenCalledTimes(1);
+		expect(mocks.dialog).toHaveBeenCalledTimes(1);
 	});
 
 	test("restarts only after installation has completed", async () => {
@@ -758,7 +770,7 @@ describe("UpdateProvider", () => {
 
 		expect(update.close).toHaveBeenCalledTimes(1);
 		expect(update.downloadAndInstall).not.toHaveBeenCalled();
-		expect(mocks.confirm).not.toHaveBeenCalled();
+		expect(mocks.dialog).not.toHaveBeenCalled();
 		expect(mocks.captureTelemetryError).not.toHaveBeenCalled();
 		expect(mocks.toastError).not.toHaveBeenCalled();
 	});
@@ -855,7 +867,7 @@ describe("UpdateProvider", () => {
 		const promptError = new Error("dialog unavailable");
 		const update = fakeUpdate("0.1.8");
 		mocks.check.mockResolvedValue(update);
-		mocks.confirm.mockRejectedValue(promptError);
+		mocks.dialog.mockRejectedValue(promptError);
 
 		await mountProvider();
 
@@ -886,7 +898,7 @@ describe("UpdateProvider", () => {
 		});
 		const update = fakeUpdate("0.1.8");
 		mocks.check.mockResolvedValue(update);
-		mocks.confirm.mockRejectedValue(new Error("dialog unavailable"));
+		mocks.dialog.mockRejectedValue(new Error("dialog unavailable"));
 
 		await mountProvider();
 
@@ -1034,7 +1046,7 @@ describe("UpdateProvider", () => {
 		});
 		const declinedUpdate = fakeUpdate("0.1.8");
 		const refreshedUpdate = fakeUpdate("0.1.9");
-		mocks.confirm.mockResolvedValueOnce(false);
+		mocks.dialog.mockResolvedValueOnce("Cancel");
 		mocks.check
 			.mockResolvedValueOnce(declinedUpdate)
 			.mockRejectedValueOnce(REQUEST_ERROR)
@@ -1042,7 +1054,7 @@ describe("UpdateProvider", () => {
 
 		await mountProvider();
 		expect(declinedUpdate.close).toHaveBeenCalledTimes(1);
-		mocks.confirm.mockClear();
+		mocks.dialog.mockClear();
 		await act(async () => intervalCallback?.());
 		expect(timers.pending.size).toBe(1);
 
@@ -1054,7 +1066,7 @@ describe("UpdateProvider", () => {
 
 		expect(mocks.check).toHaveBeenCalledTimes(3);
 		expect(refreshedUpdate.downloadAndInstall).toHaveBeenCalledTimes(1);
-		expect(mocks.confirm).not.toHaveBeenCalled();
+		expect(mocks.dialog).not.toHaveBeenCalled();
 		expect(mocks.captureTelemetryError).not.toHaveBeenCalled();
 		expect(mocks.toastError).not.toHaveBeenCalled();
 		expect(
@@ -1071,7 +1083,7 @@ describe("UpdateProvider", () => {
 		let resolveRefresh: ((update: FakeUpdate) => void) | undefined;
 		const declinedUpdate = fakeUpdate("0.1.8");
 		const refreshedUpdate = fakeUpdate("0.1.9");
-		mocks.confirm.mockResolvedValueOnce(false);
+		mocks.dialog.mockResolvedValueOnce("Cancel");
 		mocks.check.mockResolvedValueOnce(declinedUpdate).mockImplementationOnce(
 			() =>
 				new Promise<FakeUpdate>((resolve) => {
@@ -1085,7 +1097,7 @@ describe("UpdateProvider", () => {
 			expect(declinedUpdate.close).toHaveBeenCalledTimes(1);
 			expect(intervalCallback).toBeDefined();
 		});
-		mocks.confirm.mockClear();
+		mocks.dialog.mockClear();
 		intervalCallback?.();
 
 		await vi.waitFor(() => {
@@ -1100,7 +1112,7 @@ describe("UpdateProvider", () => {
 			expect(refreshedUpdate.downloadAndInstall).toHaveBeenCalledTimes(1);
 		});
 		expect(mocks.check).toHaveBeenCalledTimes(2);
-		expect(mocks.confirm).not.toHaveBeenCalled();
+		expect(mocks.dialog).not.toHaveBeenCalled();
 	});
 
 	test("does not start an updater owner in secondary webviews", async () => {

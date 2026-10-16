@@ -16,6 +16,7 @@ pub enum EmbeddingModality {
     Image,
     Audio,
     Video,
+    File,
 }
 
 #[derive(
@@ -90,11 +91,21 @@ pub enum EmbeddingPart {
     Image(Arc<DynamicImage>),
     Audio(AudioInput),
     Video(VideoInput),
+    File(EmbeddingFile),
     /// An encoded media file or HTTP(S) URL, passed intact to a remote adapter.
     EncodedMedia {
         modality: EmbeddingModality,
         source: String,
     },
+}
+
+/// Original document bytes or a remote URL. A provider decides which MIME types it accepts.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EmbeddingFile {
+    pub source: String,
+    pub mime_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
 }
 
 impl EmbeddingPart {
@@ -104,6 +115,7 @@ impl EmbeddingPart {
             Self::Image(_) => EmbeddingModality::Image,
             Self::Audio(_) => EmbeddingModality::Audio,
             Self::Video(_) => EmbeddingModality::Video,
+            Self::File(_) => EmbeddingModality::File,
             Self::EncodedMedia { modality, .. } => *modality,
         }
     }
@@ -180,6 +192,10 @@ pub struct EmbeddingLimits {
     pub max_images_per_item: Option<usize>,
     pub max_audio_duration_ms: Option<u64>,
     pub max_video_frames: Option<usize>,
+    #[serde(default)]
+    pub max_video_duration_ms: Option<u64>,
+    #[serde(default)]
+    pub max_file_pages: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
@@ -271,6 +287,10 @@ pub trait EmbeddingModel: Send + Sync {
     fn supports_encoded_media(&self) -> bool {
         false
     }
+    /// A typed source carries its media format in a data URL instead of bare base64.
+    fn requires_typed_media_sources(&self) -> bool {
+        false
+    }
     async fn embed(&self, request: EmbeddingRequest) -> Result<EmbeddingBatch, EmbeddingError>;
 }
 
@@ -309,7 +329,9 @@ impl EmbeddingDescriptor {
                 match part {
                     EmbeddingPart::Text(_) => {}
                     EmbeddingPart::EncodedMedia { modality, source } => {
-                        if *modality == EmbeddingModality::Text || source.trim().is_empty() {
+                        if matches!(modality, EmbeddingModality::Text | EmbeddingModality::File)
+                            || source.trim().is_empty()
+                        {
                             return Err(EmbeddingError::InvalidInput(
                                 "Encoded media needs an image, audio, or video source".into(),
                             ));
@@ -330,6 +352,15 @@ impl EmbeddingDescriptor {
                         if video.frames.is_empty() || video.duration_ms == 0 {
                             return Err(EmbeddingError::InvalidInput(
                                 "Video needs frames and a duration".into(),
+                            ));
+                        }
+                        if self
+                            .limits
+                            .max_video_duration_ms
+                            .is_some_and(|max| video.duration_ms > max)
+                        {
+                            return Err(EmbeddingError::LimitExceeded(
+                                "Embedding video exceeds the duration limit".into(),
                             ));
                         }
                         if self
@@ -363,6 +394,13 @@ impl EmbeddingDescriptor {
                             audio.validate()?;
                             audio_ms = audio_ms.saturating_add(audio.duration_ms());
                             modalities.push(EmbeddingModality::Audio);
+                        }
+                    }
+                    EmbeddingPart::File(file) => {
+                        if file.source.trim().is_empty() || file.mime_type.trim().is_empty() {
+                            return Err(EmbeddingError::InvalidInput(
+                                "Embedding files need a source and MIME type".into(),
+                            ));
                         }
                     }
                 }

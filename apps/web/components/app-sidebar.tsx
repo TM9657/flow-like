@@ -12,9 +12,6 @@ import {
 	AnimatedSparklesIcon,
 	AnimatedStudyHatIcon,
 	AnimatedThemeIcon,
-	Avatar,
-	AvatarFallback,
-	AvatarImage,
 	Button,
 	Collapsible,
 	CollapsibleContent,
@@ -67,6 +64,7 @@ import {
 } from "@flow-like/flow-like-ui";
 import { AccountMenu } from "@flow-like/flow-like-ui/components/account/account-menu";
 import { AccountMenuProvider } from "@flow-like/flow-like-ui/components/account/account-menu-context";
+import { ProfileAvatar } from "@flow-like/flow-like-ui/components/profile/profile-avatar";
 import { ownsWindowChrome } from "@flow-like/flow-like-ui/lib/chrome-route";
 import { useClientRouter } from "@flow-like/flow-like-ui/lib/client-navigation";
 import { clearPageSurfaceCache } from "@flow-like/flow-like-ui/lib/page-surface-cache";
@@ -493,20 +491,10 @@ function Profiles() {
 							whileHover="hover"
 						>
 							<div className="flex relative aspect-square size-8 items-center justify-center rounded-lg">
-								<Avatar className="h-8 w-8 rounded-lg">
-									<AvatarImage
-										className="rounded-lg size-8 w-8 h-8"
-										src={
-											currentProfile.data?.hub_profile.icon ??
-											"/placeholder.webp"
-										}
-									/>
-									<AvatarImage
-										className="rounded-lg size-8 w-8 h-8"
-										src="/app-logo.webp"
-									/>
-									<AvatarFallback>NA</AvatarFallback>
-								</Avatar>
+								<ProfileAvatar
+									className="h-8 w-8 rounded-lg"
+									profile={currentProfile.data?.hub_profile}
+								/>
 							</div>
 							<div className="grid flex-1 text-left text-sm leading-tight pl-1">
 								<span className="truncate font-semibold">
@@ -551,20 +539,10 @@ function Profiles() {
 										className="gap-4 p-2"
 									>
 										<div className="flex size-6 items-center justify-center rounded-sm">
-											<Avatar className="h-8 w-8 rounded-sm">
-												<AvatarImage
-													className="rounded-sm w-8 h-8"
-													src={
-														profile.hub_profile.icon ??
-														"/thumbnail-placeholder.webp"
-													}
-												/>
-												<AvatarImage
-													className="rounded-sm w-8 h-8"
-													src="/app-logo.webp"
-												/>
-												<AvatarFallback>NA</AvatarFallback>
-											</Avatar>
+											<ProfileAvatar
+												className="h-8 w-8 rounded-sm"
+												profile={profile.hub_profile}
+											/>
 										</div>
 										{profile.hub_profile.name || "Unnamed Profile"}
 										{isCurrentProfile && <Check className="ml-auto size-4" />}

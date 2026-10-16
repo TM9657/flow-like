@@ -381,6 +381,32 @@ export interface EmbeddingVideoInput {
 	video: string;
 }
 
+export interface EmbeddingFileInput {
+	type: "file";
+	/** Base64 data URL or raw base64. The model must support the MIME type. */
+	source: string;
+	mime_type: string;
+	filename?: string;
+}
+
+export interface EmbeddingMediaPart {
+	type: "image" | "audio" | "video";
+	/** URL support and accepted formats depend on the provider. */
+	source: string;
+}
+
+/** An ordered part of one embedding input. Media sources retain their encoding. */
+export type EmbeddingPart =
+	| EmbeddingTextInput
+	| EmbeddingMediaPart
+	| EmbeddingFileInput;
+
+/** All parts produce one vector. Supported combinations depend on the model. */
+export interface EmbeddingContentInput {
+	type: "content";
+	parts: EmbeddingPart[];
+}
+
 /** Combines text and up to one file per modality into one embedding. */
 export interface EmbeddingMultimodalInput {
 	type: "multimodal";
@@ -396,6 +422,8 @@ export type EmbeddingInput =
 	| EmbeddingImageInput
 	| EmbeddingAudioInput
 	| EmbeddingVideoInput
+	| EmbeddingFileInput
+	| EmbeddingContentInput
 	| EmbeddingMultimodalInput;
 
 export interface EmbedOptions {

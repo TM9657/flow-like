@@ -46,6 +46,133 @@ fn gemma2() -> (EmbeddingModelProvider, RemoteExecutionConfig) {
     (provider, config)
 }
 
+fn openrouter_gemini() -> (EmbeddingModelProvider, RemoteExecutionConfig) {
+    let mut provider = provider();
+    provider.vector_length = 768;
+    let mut config = config(RemoteEmbeddingProvider::OpenRouter);
+    config.model_id = Some("google/gemini-embedding-2".into());
+    (provider, config)
+}
+
+#[test]
+fn openrouter_preserves_order_and_uses_embedding_media_parts_for_a_mixed_batch() {
+    let (provider, config) = openrouter_gemini();
+    let input = request(serde_json::json!([
+        "plain text",
+        {"type": "content", "parts": [
+            {"type": "image", "source": "https://media.example/a.png?signature=a%2Fb"},
+            {"type": "text", "text": "Compare these"},
+            {"type": "image", "source": "data:image/jpeg;base64,AAAA"},
+            {"type": "text", "text": " and this recording"},
+            {"type": "audio", "source": "data:audio/mpeg;base64,AAAA"},
+            {"type": "video", "source": "data:video/quicktime;base64,AAAA"},
+            {"type": "file", "source": "AAAA", "mime_type": "application/pdf", "filename": "report.pdf"}
+        ]}
+    ]));
+    validate_request(&provider, &config, &input).unwrap();
+    let body = request_body(&provider, &config, &input);
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "model": "google/gemini-embedding-2", "dimensions": 768,
+            "encoding_format": "float", "input_type": "search_query",
+            "input": [
+                {"content": [{"type": "text", "text": "query: plain text"}]},
+                {"content": [
+                    {"type": "image_url", "image_url": {"url": "https://media.example/a.png?signature=a%2Fb"}},
+                    {"type": "text", "text": "query: Compare these"},
+                    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,AAAA"}},
+                    {"type": "text", "text": " and this recording"},
+                    {"type": "input_audio", "input_audio": {"data": "data:audio/mpeg;base64,AAAA", "format": "mp3"}},
+                    {"type": "input_video", "input_video": {"data": "data:video/quicktime;base64,AAAA", "format": "mov"}},
+                    {"type": "input_file", "input_file": {"data": "data:application/pdf;base64,AAAA", "format": "pdf"}}
+                ]}
+            ]
+        })
+    );
+    assert_eq!(media_metering_details(&input.input)["inlineMediaCount"], 4);
+    assert_eq!(media_metering_details(&input.input)["mediaUrlCount"], 1);
+}
+
+#[test]
+fn openrouter_text_and_legacy_media_keep_batch_and_task_semantics() {
+    let (provider, config) = openrouter_gemini();
+    let mut input = request(serde_json::json!({"type":"content", "parts": [
+        {"type":"text", "text":"first"}, {"type":"text", "text":" second"}
+    ]}));
+    input.embed_type = EmbedType::Document;
+    let body = request_body(&provider, &config, &input);
+    assert_eq!(body["input"], serde_json::json!(["passage: first second"]));
+    assert_eq!(body["input_type"], "search_document");
+    assert_eq!(
+        input_metered_bytes(&input.input[0], "passage: "),
+        "passage: first second".len() as i64
+    );
+    for (kind, field, expected) in [
+        ("image", "image", "image_url"),
+        ("audio", "audio", "input_audio"),
+        ("video", "video", "input_video"),
+    ] {
+        let input = request(serde_json::json!({"type": kind, field: "AAAA"}));
+        validate_request(&provider, &config, &input).unwrap();
+        assert_eq!(
+            request_body(&provider, &config, &input)["input"][0]["content"][0]["type"],
+            expected
+        );
+    }
+}
+
+#[test]
+fn openrouter_validates_model_dimensions_media_formats_and_fixed_origin() {
+    let (mut provider, mut config) = openrouter_gemini();
+    assert_eq!(
+        key_secret(&RemoteEmbeddingProvider::OpenRouter),
+        "OPENROUTER_API_KEY"
+    );
+    assert_eq!(
+        endpoint_url(
+            &RemoteEmbeddingProvider::OpenRouter,
+            Some("https://untrusted.example"),
+            None
+        )
+        .unwrap()
+        .as_str(),
+        "https://openrouter.ai/api/v1/embeddings"
+    );
+    let image = request(serde_json::json!({"type":"image", "image":"AAAA"}));
+    for dimensions in [128, 768, 1536, 3072] {
+        provider.vector_length = dimensions;
+        validate_request(&provider, &config, &image).unwrap();
+    }
+    for dimensions in [0, 127, 3073] {
+        provider.vector_length = dimensions;
+        assert!(validate_request(&provider, &config, &image).is_err());
+    }
+    provider.vector_length = 768;
+    for invalid in [
+        serde_json::json!({"type":"content", "parts":[]}),
+        serde_json::json!({"type":"content", "parts":vec![serde_json::json!({"type":"image", "source":"AAAA"});7]}),
+        serde_json::json!({"type":"audio", "audio":"https://media.example/a.wav"}),
+        serde_json::json!({"type":"video", "video":"https://media.example/a.mp4"}),
+        serde_json::json!({"type":"image", "image":"data:image/svg+xml;base64,AAAA"}),
+        serde_json::json!({"type":"audio", "audio":"data:image/png;base64,AAAA"}),
+        serde_json::json!({"type":"audio", "audio":"badbase64"}),
+        serde_json::json!({"type":"file", "source":"AAAA", "mime_type":"text/plain"}),
+        serde_json::json!({"type":"file", "source":"data:image/png;base64,AAAA", "mime_type":"application/pdf"}),
+    ] {
+        assert!(
+            validate_request(&provider, &config, &request(invalid.clone())).is_err(),
+            "accepted {invalid}"
+        );
+    }
+    config.endpoint_secret_name = Some("OTHER_ENDPOINT".into());
+    assert!(validate_request(&provider, &config, &image).is_err());
+    config.endpoint_secret_name = None;
+    config.model_id = Some("openai/text-embedding-3-small".into());
+    assert!(validate_request(&provider, &config, &image).is_err());
+    validate_request(&provider, &config, &request(serde_json::json!("text"))).unwrap();
+}
+
 fn request(input: serde_json::Value) -> EmbedRequest {
     serde_json::from_value(serde_json::json!({"model": "bit-id", "input": input})).unwrap()
 }
@@ -95,6 +222,7 @@ fn rejects_media_for_every_other_provider_model_and_wrong_gemma_dimensions() {
     for implementation in [
         RemoteEmbeddingProvider::CloudflareWorkersAI,
         RemoteEmbeddingProvider::OpenAI,
+        RemoteEmbeddingProvider::OpenRouter,
         RemoteEmbeddingProvider::AzureOpenAI,
         RemoteEmbeddingProvider::HuggingfaceEndpoint,
         RemoteEmbeddingProvider::OpenAICompatible,
@@ -103,7 +231,10 @@ fn rejects_media_for_every_other_provider_model_and_wrong_gemma_dimensions() {
     ] {
         config.implementation = Some(implementation);
         assert!(validate_request(&provider, &config, &input).is_err());
-        assert!(validate_request(&provider, &config, &multimodal_text).is_err());
+        assert_eq!(
+            validate_request(&provider, &config, &multimodal_text).is_err(),
+            implementation != RemoteEmbeddingProvider::OpenRouter,
+        );
     }
     config.implementation = Some(RemoteEmbeddingProvider::Internal);
     config.model_id = Some("gte-multilingual-base".into());
@@ -609,6 +740,7 @@ fn validates_known_dimensions_and_requests_openai_reductions() {
 fn invalid_credentials_are_rejected_and_authorization_headers_are_sensitive() {
     for implementation in [
         RemoteEmbeddingProvider::OpenAI,
+        RemoteEmbeddingProvider::OpenRouter,
         RemoteEmbeddingProvider::AzureOpenAI,
     ] {
         let (_, header) = credential_header(&implementation, "key").unwrap();
@@ -664,6 +796,39 @@ fn cohere_does_not_substitute_unbilled_tokens_and_rejects_invalid_billed_counts(
         assert!(decode_cohere_response(&serde_json::to_vec(&response).unwrap(), 1, 2).is_err());
     }
     assert!(decode_cohere_response(br#"{"embeddings":{"float":[[1e39, 0.2]]}}"#, 1, 2).is_err());
+}
+
+#[test]
+fn openrouter_accepts_unindexed_vectors_and_rejects_ambiguous_order() {
+    let response = serde_json::json!({
+        "data": [{"embedding": [0.1, 0.2]}, {"embedding": [0.3, 0.4]}],
+        "usage": {"prompt_tokens": 8, "total_tokens": 8, "cost": 0.001},
+    });
+    let result =
+        openrouter::decode_response(&serde_json::to_vec(&response).unwrap(), 2, 2).unwrap();
+    assert_eq!(result.embeddings, vec![vec![0.1, 0.2], vec![0.3, 0.4]]);
+    assert_eq!(result.raw_usage.unwrap()["cost"], 0.001);
+    for data in [
+        serde_json::json!([
+            {"index": 1, "embedding": [0.1, 0.2]}, {"embedding": [0.3, 0.4]},
+        ]),
+        serde_json::json!([
+            {"index": 0, "embedding": [0.1, 0.2]}, {"index": 0, "embedding": [0.3, 0.4]},
+        ]),
+        serde_json::json!([{"embedding": [0.1, 0.2]}]),
+        serde_json::json!([{"embedding": [0.1]}, {"embedding": [0.3, 0.4]}]),
+    ] {
+        assert!(
+            openrouter::decode_response(
+                &serde_json::to_vec(&serde_json::json!({"data": data})).unwrap(),
+                2,
+                2
+            )
+            .is_err()
+        );
+    }
+    // Existing providers still require their documented indexes.
+    assert!(decode_response(&serde_json::to_vec(&response).unwrap(), 2, 2).is_err());
 }
 
 #[test]
@@ -765,6 +930,7 @@ async fn sends_expected_json_and_provider_authentication_to_http_stub() {
         RemoteEmbeddingProvider::Internal,
         RemoteEmbeddingProvider::CloudflareWorkersAI,
         RemoteEmbeddingProvider::OpenAI,
+        RemoteEmbeddingProvider::OpenRouter,
         RemoteEmbeddingProvider::AzureOpenAI,
         RemoteEmbeddingProvider::HuggingfaceEndpoint,
         RemoteEmbeddingProvider::OpenAICompatible,

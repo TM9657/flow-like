@@ -27,6 +27,33 @@ const cases: { name: string; input: EmbeddingInput | EmbeddingInput[] }[] = [
 	},
 	{ name: "signed video URL", input: { type: "video", video: signedUrl } },
 	{
+		name: "PDF file",
+		input: {
+			type: "file",
+			source: "data:application/pdf;base64,JVBERi0xLjQ=",
+			mime_type: "application/pdf",
+			filename: "manual.pdf",
+		},
+	},
+	{
+		name: "ordered content with repeated images and all media types",
+		input: {
+			type: "content",
+			parts: [
+				{ type: "image", source: "https://example.com/front.jpg" },
+				{ type: "text", text: "Front and back of the product" },
+				{ type: "image", source: "https://example.com/back.jpg" },
+				{ type: "audio", source: "data:audio/wav;base64,YXVkaW8=" },
+				{ type: "video", source: signedUrl },
+				{
+					type: "file",
+					source: "https://example.com/manual.pdf?signature=a%2Fb",
+					mime_type: "application/pdf",
+				},
+			],
+		},
+	},
+	{
 		name: "combined input",
 		input: {
 			type: "multimodal",
@@ -40,6 +67,10 @@ const cases: { name: string; input: EmbeddingInput | EmbeddingInput[] }[] = [
 		name: "mixed batch",
 		input: [
 			"demo",
+			{
+				type: "content",
+				parts: [{ type: "text", text: "second item" }],
+			},
 			{ type: "audio", audio: "data:audio/wav;base64,YXVkaW8=" },
 			{ type: "video", video: signedUrl },
 		],

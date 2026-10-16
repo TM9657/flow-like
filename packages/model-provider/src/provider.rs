@@ -73,6 +73,8 @@ pub enum RemoteEmbeddingProvider {
     CloudflareWorkersAI,
     /// OpenAI's hosted embeddings API.
     OpenAI,
+    /// OpenRouter's hosted text and multimodal embeddings API.
+    OpenRouter,
     /// Azure OpenAI v1 API; model_id names the deployment.
     AzureOpenAI,
     /// A Hugging Face Text Embeddings Inference endpoint.
@@ -381,6 +383,7 @@ mod tests {
                 RemoteEmbeddingProvider::CloudflareWorkersAI,
             ),
             ("OpenAI", RemoteEmbeddingProvider::OpenAI),
+            ("OpenRouter", RemoteEmbeddingProvider::OpenRouter),
             ("AzureOpenAI", RemoteEmbeddingProvider::AzureOpenAI),
             (
                 "HuggingfaceEndpoint",

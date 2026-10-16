@@ -458,9 +458,9 @@ declare namespace ai {
         // === AI/Embedding ===
 
         /**
-         * Embeds a file using its extension to select text, image, audio, or video input
+         * Embeds a file using its extension to select text, image, audio, video, or PDF input
          * @node embed_audio @alias embedAudio
-         * @param source — A media or UTF-8 text file; its extension selects the embedding modality
+         * @param source — A media, PDF, or UTF-8 text file; its extension selects the embedding modality
          * @param model — A loaded embedding model that supports the detected file modality
          * @param purpose (optional) — The embedding task supported by the model
          * @param options (optional) — Optional output dimensions supported by the model
@@ -471,7 +471,7 @@ declare namespace ai {
         function embedAudio({ source: Struct, model: Struct, purpose?: string, options?: Struct }): { vector: float[], result: Struct };
 
         /**
-         * Embeds ordered text, image, audio, and video parts into one vector
+         * Embeds ordered text, image, audio, video, and file parts into one vector
          * @node embed_content @alias embedContent
          * @param model — A loaded embedding model
          * @param purpose (optional) — The model task, such as a search query or indexed document
@@ -526,9 +526,9 @@ declare namespace ai {
         function embedQuery({ queryString: string, model: Struct }): float[];
 
         /**
-         * Embeds a file using its extension to select text, image, audio, or video input
+         * Embeds a file using its extension to select text, image, audio, video, or PDF input
          * @node embed_video @alias embedVideo
-         * @param source — A media or UTF-8 text file; its extension selects the embedding modality
+         * @param source — A media, PDF, or UTF-8 text file; its extension selects the embedding modality
          * @param model — A loaded embedding model that supports the detected file modality
          * @param purpose (optional) — The embedding task supported by the model
          * @param options (optional) — Optional output dimensions supported by the model
@@ -559,9 +559,9 @@ declare namespace ai {
         function modelInfo({ model: Struct }): Struct;
 
         /**
-         * Prepares an audio or video file as decoded content or an encoded source for a hosted model
+         * Prepares audio, video, or PDF content for an embedding model
          * @node prepare_embedding_media @alias prepareEmbeddingMedia
-         * @param source — Audio or video file
+         * @param source — Audio, video, or PDF file
          * @param encoded (optional) — Keep the original media file for hosted models; local models need decoded content
          * @param kind (optional) — Which media input to prepare
          * @param maxFrames (optional) — Maximum uniformly sampled video frames

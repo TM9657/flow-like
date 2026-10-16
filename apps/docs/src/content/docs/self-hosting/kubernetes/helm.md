@@ -168,6 +168,12 @@ For example, OpenRouter uses `OPENROUTER_API_KEY` and optionally
 `OPENROUTER_ENDPOINT`; OpenAI uses `HOSTED_OPENAI_API_KEY` and optionally
 `HOSTED_OPENAI_ENDPOINT`. These installation-wide keys do not enter isolated runners.
 
+Hosted embedding Bits with `remote.implementation: "OpenRouter"` reuse
+`OPENROUTER_API_KEY` from the same Secret. Embeddings always use
+`https://openrouter.ai/api/v1/embeddings`; `OPENROUTER_ENDPOINT` applies to the
+chat provider. See [hosted embedding configuration](/self-hosting/docker-compose/configuration/#hosted-embedding-providers)
+for model IDs, supported inputs, and pricing requirements.
+
 ## Images
 
 Every first-party image is a map with `repository`, `tag`, `digest` and

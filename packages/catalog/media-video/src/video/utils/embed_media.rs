@@ -9,8 +9,8 @@ use {
         EmbeddingMediaKind, decode_embedding_media, embedding_media_kind,
     },
     flow_like_model_provider::embedding::interface::{
-        EmbeddingDescriptor, EmbeddingError, EmbeddingInput, EmbeddingModality, EmbeddingPart,
-        EmbeddingRequest,
+        EmbeddingDescriptor, EmbeddingError, EmbeddingFile, EmbeddingInput, EmbeddingModality,
+        EmbeddingPart, EmbeddingRequest,
     },
     flow_like_storage::object_store::ObjectStoreExt,
 };
@@ -24,7 +24,7 @@ fn media_embedding_node(video: bool) -> Node {
     let mut node = Node::new(
         name,
         label,
-        "Embeds a file using its extension to select text, image, audio, or video input",
+        "Embeds a file using its extension to select text, image, audio, video, or PDF input",
         "AI/Embedding",
     );
     node.set_flowscript_name("ai.embedding", method);
@@ -46,7 +46,7 @@ fn media_embedding_node(video: bool) -> Node {
         &mut node,
         "source",
         "Source",
-        "A media or UTF-8 text file; its extension selects the embedding modality",
+        "A media, PDF, or UTF-8 text file; its extension selects the embedding modality",
     );
     node.add_input_pin(
         "model",
@@ -135,6 +135,7 @@ fn validate_media_request(
         EmbeddingMediaKind::Text => vec![EmbeddingModality::Text],
         EmbeddingMediaKind::Image => vec![EmbeddingModality::Image],
         EmbeddingMediaKind::Audio => vec![EmbeddingModality::Audio],
+        EmbeddingMediaKind::File => vec![EmbeddingModality::File],
         EmbeddingMediaKind::Video {
             include_audio: true,
             ..
@@ -186,7 +187,8 @@ async fn run_media_embedding(
     validate_media_request(model.descriptor(), kind, purpose, &options)?;
     let (store, path) = flow_path_object(context, &source).await?;
     let input = if model.supports_encoded_media() && kind != EmbeddingMediaKind::Text {
-        encoded_media_input(store.as_ref(), &path, kind).await?
+        let typed_sources = model.requires_typed_media_sources();
+        encoded_media_input_with_types(store.as_ref(), &path, kind, typed_sources).await?
     } else {
         decode_embedding_media(store.as_ref(), &path, kind)
             .await?
@@ -226,12 +228,41 @@ pub(super) async fn encoded_media_input(
     path: &ObjectPath,
     kind: EmbeddingMediaKind,
 ) -> flow_like_types::Result<EmbeddingInput> {
+    encoded_media_input_with_types(store, path, kind, false).await
+}
+
+#[cfg(feature = "execute")]
+async fn encoded_media_input_with_types(
+    store: &dyn ObjectStore,
+    path: &ObjectPath,
+    kind: EmbeddingMediaKind,
+    typed_sources: bool,
+) -> flow_like_types::Result<EmbeddingInput> {
     use flow_like_types::{
         base64::{Engine, engine::general_purpose::STANDARD},
         futures::StreamExt,
     };
 
     const MAX_MEDIA_BYTES: usize = 100 * 1024 * 1024;
+    let extension = path.extension().unwrap_or_default().to_ascii_lowercase();
+    let mime = match (kind, extension.as_str()) {
+        (EmbeddingMediaKind::Image, "png") => Some("image/png"),
+        (EmbeddingMediaKind::Image, "jpg" | "jpeg" | "jpe") => Some("image/jpeg"),
+        (EmbeddingMediaKind::Audio, "wav" | "wave") => Some("audio/wav"),
+        (EmbeddingMediaKind::Audio, "mp3") => Some("audio/mpeg"),
+        (EmbeddingMediaKind::Video { .. }, "mp4" | "m4v") => Some("video/mp4"),
+        (EmbeddingMediaKind::Video { .. }, "mov") => Some("video/quicktime"),
+        (EmbeddingMediaKind::File, "pdf") => Some("application/pdf"),
+        _ => None,
+    };
+    if typed_sources
+        && mime.is_none()
+        && !matches!(kind, EmbeddingMediaKind::Image | EmbeddingMediaKind::Audio)
+    {
+        return Err(flow_like_types::anyhow!(
+            "This hosted model requires MP4 or MOV video"
+        ));
+    }
     let object = store.get(path).await?;
     if object.meta.size > MAX_MEDIA_BYTES as u64 {
         return Err(flow_like_types::anyhow!(
@@ -249,17 +280,43 @@ pub(super) async fn encoded_media_input(
         }
         bytes.extend_from_slice(&chunk);
     }
+    if typed_sources && mime.is_none() {
+        return super::prepare_embedding_media::decode_hosted_image_or_audio(
+            Bytes::from(bytes),
+            path.clone(),
+            kind,
+        )
+        .await;
+    }
     let modality = match kind {
         EmbeddingMediaKind::Image => EmbeddingModality::Image,
         EmbeddingMediaKind::Audio => EmbeddingModality::Audio,
         EmbeddingMediaKind::Video { .. } => EmbeddingModality::Video,
+        EmbeddingMediaKind::File => {
+            return Ok(EmbeddingInput {
+                parts: vec![EmbeddingPart::File(EmbeddingFile {
+                    source: format!("data:application/pdf;base64,{}", STANDARD.encode(&bytes)),
+                    mime_type: "application/pdf".into(),
+                    filename: path.filename().map(str::to_owned),
+                })],
+                title: None,
+            });
+        }
         EmbeddingMediaKind::Text => {
             return Err(flow_like_types::anyhow!("Text must be decoded as UTF-8"));
         }
     };
     let mut parts = vec![EmbeddingPart::EncodedMedia {
         modality,
-        source: STANDARD.encode(&bytes),
+        source: if typed_sources {
+            format!(
+                "data:{};base64,{}",
+                mime.expect("typed media MIME checked"),
+                STANDARD.encode(&bytes)
+            )
+        } else {
+            STANDARD.encode(&bytes)
+        },
     }];
     if matches!(
         kind,
@@ -327,5 +384,73 @@ impl NodeLogic for EmbedVideoNode {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         run_media_embedding(context, true).await
+    }
+}
+
+#[cfg(all(test, feature = "execute"))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn typed_sources_keep_mime_and_pdf_metadata_without_changing_internal_sources() {
+        let store = flow_like_storage::object_store::memory::InMemory::new();
+        let image = ObjectPath::from("photo.jpg");
+        store
+            .put(&image, Bytes::from_static(b"image-bytes").into())
+            .await
+            .unwrap();
+        let internal = encoded_media_input(&store, &image, EmbeddingMediaKind::Image)
+            .await
+            .unwrap();
+        let hosted =
+            encoded_media_input_with_types(&store, &image, EmbeddingMediaKind::Image, true)
+                .await
+                .unwrap();
+        let EmbeddingPart::EncodedMedia {
+            source: internal, ..
+        } = &internal.parts[0]
+        else {
+            panic!("expected image");
+        };
+        let EmbeddingPart::EncodedMedia { source: hosted, .. } = &hosted.parts[0] else {
+            panic!("expected image");
+        };
+        assert_eq!(hosted, &format!("data:image/jpeg;base64,{internal}"));
+        let bitmap = ObjectPath::from("photo.bmp");
+        let mut encoded = std::io::Cursor::new(Vec::new());
+        flow_like_types::image::DynamicImage::new_rgb8(2, 3)
+            .write_to(&mut encoded, flow_like_types::image::ImageFormat::Bmp)
+            .unwrap();
+        store
+            .put(&bitmap, Bytes::from(encoded.into_inner()).into())
+            .await
+            .unwrap();
+        let converted =
+            encoded_media_input_with_types(&store, &bitmap, EmbeddingMediaKind::Image, true)
+                .await
+                .unwrap();
+        let EmbeddingPart::Image(image) = &converted.parts[0] else {
+            panic!("expected decoded bitmap");
+        };
+        assert_eq!((image.width(), image.height()), (2, 3));
+        let pdf = ObjectPath::from("docs/report.pdf");
+        store
+            .put(&pdf, Bytes::from_static(b"%PDF-1.7").into())
+            .await
+            .unwrap();
+        let input = encoded_media_input_with_types(&store, &pdf, EmbeddingMediaKind::File, true)
+            .await
+            .unwrap();
+        let EmbeddingPart::File(file) = &input.parts[0] else {
+            panic!("expected PDF");
+        };
+        assert!(file.source.starts_with("data:application/pdf;base64,"));
+        assert_eq!(file.mime_type, "application/pdf");
+        assert_eq!(file.filename.as_deref(), Some("report.pdf"));
+        assert!(
+            decode_embedding_media(&store, &pdf, EmbeddingMediaKind::File)
+                .await
+                .is_err()
+        );
     }
 }

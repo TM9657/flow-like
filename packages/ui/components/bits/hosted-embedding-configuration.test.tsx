@@ -34,6 +34,7 @@ test("fixed endpoints omit endpoint overrides and external routes show input pri
 	for (const provider of [
 		"CloudflareWorkersAI",
 		"OpenAI",
+		"OpenRouter",
 		"Cohere",
 		"VoyageAI",
 	]) {
@@ -51,6 +52,22 @@ test("fixed endpoints omit endpoint overrides and external routes show input pri
 	])
 		expect(render(provider)).toContain("Endpoint secret name");
 	expect(render("Internal")).not.toContain("Hosted embedding pricing");
+});
+
+test("OpenRouter exposes its default key and Gemini multimodal configuration", () => {
+	const markup = render("OpenRouter", "google/gemini-embedding-2");
+	expect(markup).toContain('placeholder="google/gemini-embedding-2"');
+	expect(markup).toContain('placeholder="OPENROUTER_API_KEY"');
+	expect(markup).toContain("text, images, audio, video and PDF files");
+	expect(markup).toContain("128 to 3072 vector dimensions");
+	expect(markup).toContain("at most 8192 tokens");
+	expect(markup).toContain("Maximum USD per 1M input tokens");
+	expect(markup).toContain("cost reported by OpenRouter");
+	expect(markup).not.toContain("Input price unit");
+	expect(markup).not.toContain("Input bytes");
+	expect(render("OpenRouter", "another-model")).not.toContain(
+		"Gemini Embedding 2 accepts",
+	);
 });
 
 test("internal gateway prices cannot be edited as if they override the server tariff", () => {
