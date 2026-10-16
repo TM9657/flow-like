@@ -485,7 +485,7 @@ describe("logs", () => {
 			const shown = text(logsBlock);
 			expect(shown).toContain("Agent logs");
 			expect(shown).toContain("Output");
-			expect(shown).toContain("Errors");
+			expect(shown).toContain("Diagnostics");
 			expect(shown).toContain("line cut at 2 048 bytes");
 			expect(shown).toContain("37 lines dropped here");
 			expect(shown).toContain("Agent logs only.");
@@ -511,7 +511,7 @@ describe("logs", () => {
 	);
 
 	test(
-		"stream=errors: Errors only is preselected and the block scrolls into view",
+		"stream=errors: Diagnostics only is preselected and the block scrolls into view",
 		async () => {
 			const scrolled: Element[] = [];
 			const proto = window.HTMLElement.prototype as unknown as {
@@ -570,7 +570,7 @@ describe("logs", () => {
 					"Saved 2 lines as edge-berlin-01-agent-2026-09-30.log.",
 				);
 				expect(await blobs[0]?.text()).toContain(
-					"ERR certificate renewal failed",
+					"DIAG certificate renewal failed",
 				);
 			} finally {
 				[urls.createObjectURL, urls.revokeObjectURL] = original;

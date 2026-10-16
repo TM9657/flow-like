@@ -41,10 +41,22 @@ is a decision model and returns its typed answers without streaming.
 A deployed service resolves model Bits pinned during deployment preparation.
 A literal ID on a **Load Bit** node in an exported Flow or template includes
 that Bit automatically. For IDs computed at runtime or candidates selected by
-**Find Decision Model**, declare the Bits in the project's manifest dependencies.
+**Find Model** or **Find Decision Model**, declare the Bits in the project's dependencies.
 Adding a model to a profile alone does not package it. Services using the same
 model assets share the device's cached files. See the
 [deployment prerequisites](/topics/genai/models/#decision-models).
+
+To change these dependencies during deployment or an update, choose **Edit models**
+under **Project models** in **How it runs**. The **Update everywhere** dialog also
+offers this editor in its strategy step. **Save models** updates the project's
+dependencies for future deployments. Running services receive the new selection
+when their update is applied. A model change requires preparing a new package,
+even when the workflow itself has not changed.
+
+Deployment preparation checks that a Flow using **Find Model** includes a language
+or vision-language model. An embedding model alone cannot satisfy that node.
+Hosted models also need access and a spending limit under each service's
+**Cloud access** tab. Editing project models keeps the service's existing approvals.
 
 ## Open the Models tab
 

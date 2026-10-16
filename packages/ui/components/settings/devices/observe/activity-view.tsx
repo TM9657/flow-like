@@ -19,7 +19,7 @@ export interface ActivityViewProps {
 	/** Absent: the whole device (agent logs, every service's changes). */
 	serviceId?: string;
 	scope: DevicesScope;
-	/** `stream=errors`: the logs open with Errors only and scroll into view. */
+	/** `stream=errors`: the logs open with Diagnostics only and scroll into view. */
 	errorsFirst?: boolean;
 }
 

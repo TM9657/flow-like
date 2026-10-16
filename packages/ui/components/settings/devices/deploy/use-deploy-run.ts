@@ -104,7 +104,10 @@ import type {
 } from "../../../../lib/device-management/model/types";
 import { desktopArtifactUpload } from "../../../../lib/device-management/native-client";
 import { prepareOnlineDependencies } from "../../../../lib/device-management/online-dependencies";
-import { prepareOnlineMetadata } from "../../../../lib/device-management/online-metadata";
+import {
+	prepareOnlineMetadata,
+	validateOnlineCompletionModelDependencies,
+} from "../../../../lib/device-management/online-metadata";
 import { prepareDesktopProject } from "../../../../lib/device-management/project-export";
 import type { ManagementCall } from "../../../../lib/device-management/telemetry";
 import type {
@@ -655,6 +658,7 @@ async function prepareOnline(
 		);
 		return { bundle: bundleOf(exported.artifact, facts, approved) };
 	}
+	await validateOnlineCompletionModelDependencies(approved, backend, signal);
 	const exported = await prepareDesktopProject(
 		appId,
 		await desktopExport(app, undefined, modelStore),

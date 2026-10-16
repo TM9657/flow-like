@@ -2,10 +2,12 @@ import { expect, test } from "bun:test";
 import { sha256 } from "@noble/hashes/sha2";
 import type { IBackendState } from "../../state/backend-state";
 import type { IProfile } from "../../types";
+import { type IBit, IBitTypes } from "../schema/bit/bit";
 import {
 	deviceMetadataPath,
 	exportTypes,
 	prepareOnlineMetadata,
+	validateOnlineCompletionModelDependencies,
 } from "./online-metadata";
 
 const profile = {} as IProfile;
@@ -19,6 +21,90 @@ function backend(payload: unknown) {
 		},
 	} as unknown as IBackendState;
 }
+
+test("Find Model preflight uses selected roots in exported flows and templates", async () => {
+	const finder = { name: "ai_generative_find_model" };
+	for (const [path, board] of [
+		["boards/flow/versions/1/0/0", { nodes: { finder } }],
+		[
+			"templates/template/versions/1/0/0",
+			{ layers: { nested: { nodes: { finder } } } },
+		],
+	] as const) {
+		const bundle = {
+			version: 1,
+			project_id: "project",
+			documents: {
+				app: {
+					id: "project",
+					visibility: "Private",
+					bits: ["hub:embedding"],
+				},
+				[path]: board,
+			},
+		};
+		const requested: string[] = [];
+		const models: Record<string, IBit> = {
+			embedding: {
+				id: "embedding",
+				hub: "hub",
+				type: IBitTypes.Embedding,
+				dependencies: ["profile-model"],
+			} as IBit,
+		};
+		const source = backend(bundle);
+		source.bitState = {
+			getBit: async (id: string, hub?: string) => {
+				requested.push(id);
+				expect(hub).toBe("hub");
+				return models[id];
+			},
+		} as IBackendState["bitState"];
+		const metadata = await prepareOnlineMetadata("project", source, profile);
+		const file = metadata.file.file;
+		metadata.file.file = {
+			size: file.size,
+			arrayBuffer: () => file.arrayBuffer(),
+			slice: (start, end) => file.slice(start, end),
+		};
+		await expect(
+			validateOnlineCompletionModelDependencies(metadata, source),
+		).rejects.toThrow("project's model dependencies");
+		expect(requested).toEqual(["embedding"]);
+		metadata.app.bits = [];
+		await expect(
+			validateOnlineCompletionModelDependencies(metadata, source),
+		).rejects.toThrow("Find Model");
+		for (const type of [IBitTypes.Llm, IBitTypes.Vlm]) {
+			for (const provider_name of ["OpenAI", "Device", "custom"]) {
+				models.completion = {
+					id: "completion",
+					hub: "hub",
+					type,
+					parameters: { provider: { provider_name } },
+				} as IBit;
+				metadata.app.bits = ["hub:completion"];
+				await validateOnlineCompletionModelDependencies(metadata, source);
+			}
+		}
+	}
+});
+
+test("metadata remains editable before model validation and unrelated documents need no model", async () => {
+	const source = backend({
+		version: 1,
+		project_id: "project",
+		documents: {
+			app: { id: "project", visibility: "Private", bits: [] },
+			"boards/flow/versions/1/0/0": { nodes: {} },
+			"boards/flow/versions/1/0/0/pages/page": {
+				nodes: { finder: { name: "ai_generative_find_model" } },
+			},
+		},
+	});
+	const metadata = await prepareOnlineMetadata("project", source, profile);
+	await validateOnlineCompletionModelDependencies(metadata, source);
+});
 test("controller approval binds exact local bytes including same-version executable changes", async () => {
 	const bundle = {
 		version: 1,

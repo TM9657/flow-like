@@ -45,6 +45,7 @@ import {
 	preparedFlowText,
 } from "../deploy-copy";
 import { Disclosure, HeadChip, Note } from "../deploy-parts";
+import { ProjectModelsEditor } from "../project-models-editor";
 import type { PlanStepProps } from "../step-props";
 import type {
 	DeployPrepareState,
@@ -938,6 +939,15 @@ export function HowItRunsStep(props: Readonly<PlanStepProps>) {
 			{mode === "offline" ? <UnfinishedUploads {...props} /> : null}
 			<ModeCard app={app.name} mode={mode} />
 			{updating ? <UpdateBlock {...props} /> : null}
+			<ProjectModelsEditor
+				appId={app.id}
+				onEditingChange={props.prepare.editModels}
+				onSaved={() => {
+					if (draft.version === "keep") props.update({ version: "newest" });
+					if (props.prepare.imported) props.prepare.importCopy(null);
+					else props.prepare.again();
+				}}
+			/>
 			{prepares && updating ? <PreparingBlock {...props} /> : null}
 			{prepares ? <ShipBlock {...props} /> : null}
 			{prepares && !updating ? <PreparingBlock {...props} /> : null}

@@ -7,7 +7,7 @@ use flow_like_standalone::{
     supervisor, vault,
 };
 use std::{
-    io::Read,
+    io::{IsTerminal, Read},
     path::{Path, PathBuf},
 };
 use tokio_util::sync::CancellationToken;
@@ -248,6 +248,7 @@ async fn main() -> Result<()> {
             matches!(cli.command, Commands::RunPlacement { .. }),
         ))
         .with_writer(std::io::stderr)
+        .with_ansi(std::io::stderr().is_terminal())
         .init();
     if let Commands::RunPlacement {
         placement,

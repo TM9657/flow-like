@@ -136,7 +136,7 @@ function LineRow({ line }: Readonly<{ line: LogLine }>) {
 	return (
 		<div
 			data-stream={line.stream}
-			className="grid h-5 grid-cols-[64px_52px_max-content] gap-3 px-3 whitespace-pre"
+			className="grid h-5 grid-cols-[64px_88px_max-content] gap-3 px-3 whitespace-pre"
 		>
 			<span className="text-muted-foreground tabular-nums">
 				{time.clock(line.at)}
@@ -384,7 +384,10 @@ function LogToolbar({
 				onChange={(value) => setErrors(value === "errors")}
 				options={[
 					{ value: "all", label: t("view.logs.all", "All") },
-					{ value: "errors", label: t("view.logs.errorsOnly", "Errors only") },
+					{
+						value: "errors",
+						label: t("view.logs.errorsOnly", "Diagnostics only"),
+					},
 				]}
 			/>
 			<DvButton
@@ -426,7 +429,7 @@ export function LogViewer(props: Readonly<LogViewerProps>) {
 	const windowed = shown.length >= (props.windowAt ?? LOG_WINDOW_AT);
 	const empty =
 		errors && records.length
-			? t("view.logs.noErrors", "No error lines.")
+			? t("view.logs.noErrors", "No diagnostic lines.")
 			: (props.emptyText ?? t("view.logs.empty", "No lines yet."));
 	const body = windowed ? (
 		<WindowedBody records={shown} follow={following} label={label} />

@@ -38,7 +38,7 @@ function logFile(records: readonly LogRecord[], clock: (at: number) => string) {
 		.flatMap((record) =>
 			record.kind === "line"
 				? [
-						`${clock(record.at)} ${record.stream === "stderr" ? "ERR" : "OUT"} ${record.message}`,
+						`${clock(record.at)} ${record.stream === "stderr" ? "DIAG" : "OUT"} ${record.message}`,
 					]
 				: [],
 		)
@@ -59,7 +59,7 @@ function useHeld<T>(stream: LiveStreamView<T>, key: string): LiveStreamView<T> {
 
 export interface LogsBlockProps {
 	target: ObserveTarget;
-	/** `stream=errors`: Errors only is preselected and the block scrolls into view. */
+	/** `stream=errors`: Diagnostics only is preselected and the block scrolls into view. */
 	errorsFirst?: boolean;
 }
 
@@ -175,7 +175,7 @@ export function LogsBlock({
 		<Trans
 			t={t}
 			i18nKey="observe.logs.noteService"
-			defaults="Output of {{service}}: Output is its standard output, Errors its standard error stream. Agent logs are on <1>{{device}} › Activity & logs</1>."
+			defaults="Output of {{service}}: Diagnostics is its standard error stream and can include information, warnings, and errors. Agent logs are on <1>{{device}} › Activity & logs</1>."
 			values={{ service: serviceId, device: name }}
 			components={{
 				1: (
@@ -194,7 +194,7 @@ export function LogsBlock({
 	) : (
 		t(
 			"observe.logs.notePicked",
-			"Output of {{service}}. Errors are its standard error stream.",
+			"Output of {{service}}. Diagnostics is its standard error stream and can include information, warnings, and errors.",
 			{ service: scope },
 		)
 	);

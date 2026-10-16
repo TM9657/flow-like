@@ -27,6 +27,7 @@ import { prepareOnlineDependencies } from "../../../../lib/device-management/onl
 import {
 	type ApprovedOnlineMetadata,
 	prepareOnlineMetadata,
+	validateOnlineCompletionModelDependencies,
 } from "../../../../lib/device-management/online-metadata";
 import {
 	type ExportCommands,
@@ -110,6 +111,8 @@ export interface DeployPrepareState {
 	prepared: DeployPrepared | null;
 	failure: PrepareFailure | null;
 	imported: boolean;
+	editingModels?: boolean;
+	editModels?(editing: boolean): void;
 	again(): void;
 	importCopy(copy: ImportedCopy | null): void;
 }
@@ -289,6 +292,7 @@ async function prepareOnline(context: PrepareContext): Promise<PrepareResult> {
 			prepared: { artifact, approved, preparedAt: Date.now(), ...facts },
 		};
 	}
+	await validateOnlineCompletionModelDependencies(approved, backend, signal);
 	const exported = await prepareDesktopProject(
 		appId,
 		await deployPrepareSeams.exportCommands(
@@ -554,12 +558,13 @@ export function useDeployPrepare(
 	const desktop = workspace.deps.platform === "desktop";
 	const { profile } = workspace.deps;
 	const [attempt, setAttempt] = useState(0);
+	const [editingModels, setEditingModels] = useState(false);
 	const [imported, setImported] = useState<ImportedCopy | null>(null);
 	const [run, setRun] = useState<RunState>({ key: "", ...IDLE });
 
 	const target = prepareTarget(
 		plan,
-		options.enabled !== false,
+		options.enabled !== false && !editingModels,
 		desktop,
 		options.hubTypes,
 	);
@@ -611,6 +616,11 @@ export function useDeployPrepare(
 
 	const current = run.key === key && key ? run : { key, ...IDLE };
 	const again = useCallback(() => setAttempt((value) => value + 1), []);
+	const editModels = useCallback((editing: boolean) => {
+		setEditingModels(editing);
+		setRun({ key: "", ...IDLE });
+		setAttempt((value) => value + 1);
+	}, []);
 	const importCopy = useCallback((copy: ImportedCopy | null) => {
 		setImported(copy);
 		setAttempt((value) => value + 1);
@@ -625,6 +635,8 @@ export function useDeployPrepare(
 			prepared,
 			failure,
 			imported: imported !== null,
+			editingModels,
+			editModels,
 			again,
 			importCopy,
 		}),
@@ -636,6 +648,8 @@ export function useDeployPrepare(
 			prepared,
 			ids,
 			imported,
+			editingModels,
+			editModels,
 			again,
 			importCopy,
 		],
