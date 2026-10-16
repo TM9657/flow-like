@@ -34,6 +34,16 @@ if [[ "$RUNTIME_PACK" == llamacpp-linux-arm64-cpu ]]; then
   # Load this before Ubuntu's aarch64-linux-gnu.conf so the pinned C++ runtime wins.
   printf '%s\n' "$LD_LIBRARY_PATH" | tr ':' '\n' > /etc/ld.so.conf.d/00-flow-runtime-gcc.conf
   ldconfig
+  # Use the host's musl-linked sccache binary without changing the frozen toolchain.
+  export CMAKE_C_COMPILER_LAUNCHER=/scratch/compiler-cache-bin/sccache
+  export CMAKE_CXX_COMPILER_LAUNCHER=/scratch/compiler-cache-bin/sccache
+  cleanup_cache() {
+    "$CMAKE_C_COMPILER_LAUNCHER" --stop-server || true
+    # The container runs as root; the runner must retain access to its cache.
+    chown -R "$SCCACHE_CACHE_OWNER" "$SCCACHE_DIR"
+  }
+  trap cleanup_cache EXIT
+  "$CMAKE_C_COMPILER_LAUNCHER" --start-server
   LLAMACPP_COMMIT="$(python3 .github/scripts/runtime_packs.py pin | sed -n 's/^commit=//p')"
   LLAMACPP_NUMBER="$(python3 .github/scripts/runtime_packs.py pin | sed -n 's/^number=//p')"
   git init -q /scratch/llama.cpp

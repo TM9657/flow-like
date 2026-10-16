@@ -977,10 +977,11 @@ class WorkflowTests(unittest.TestCase):
         matrix = dict(re.findall(r"^          - pack: (\S+)\n            runner: (\S+)$", job, re.MULTILINE))
         self.assertEqual(set(matrix), set(runtime.LLAMACPP_PACKS) | {"mlx-macos-arm64-metal"})
         runners = {"aarch64-apple-darwin": "macos-15",
-                   "x86_64-unknown-linux-gnu": "ubuntu-22.04", "aarch64-unknown-linux-gnu": "ubuntu-22.04-arm"}
+                   "x86_64-unknown-linux-gnu": "ubuntu-22.04",
+                   "aarch64-unknown-linux-gnu": "namespace-profile-linux-arm-large"}
         for pack, spec in runtime.LLAMACPP_PACKS.items():
             self.assertEqual(matrix[pack], runners[spec["target"]], pack)
-        self.assertEqual(matrix["mlx-macos-arm64-metal"], "macos-15")
+        self.assertEqual(matrix["mlx-macos-arm64-metal"], "namespace-profile-mac-large")
         self.assertIn("needs: prepare\n", job)
         self.assertNotIn("secrets.", job)
         self.assertNotIn("environment:", job)
