@@ -112,7 +112,7 @@ jobs:
 
   frontend:
     needs: prepare
-    runs-on: ubuntu-24.04
+    runs-on: namespace-profile-linux-amd-large-24
     timeout-minutes: 30
     env:
       SOURCE_DATE_EPOCH: ${{ needs.prepare.outputs.epoch }}
@@ -147,13 +147,13 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            runner: ubuntu-24.04
+            runner: namespace-profile-linux-amd-large-24
             arch: amd64
           - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-24.04-arm
+            runner: namespace-profile-linux-arm-large-24
             arch: arm64
           - target: aarch64-apple-darwin
-            runner: macos-15
+            runner: namespace-profile-mac-large
             arch: ''
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
@@ -170,16 +170,6 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Free Linux runner disk
-        if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
       - name: Install Linux native dependencies
         if: runner.os == 'Linux'
         run: |
@@ -200,6 +190,8 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           targets: ${{ matrix.target }}
+      - name: Configure Namespace compiler cache
+        uses: ./.github/actions/setup-namespace-cache
       - name: Restore compiled release dependencies
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5
         with:
@@ -401,9 +393,9 @@ jobs:
           - pack: llamacpp-linux-x64-vulkan
             runner: ubuntu-22.04
           - pack: llamacpp-linux-arm64-cpu
-            runner: ubuntu-22.04-arm
+            runner: namespace-profile-linux-arm-large
           - pack: mlx-macos-arm64-metal
-            runner: macos-15
+            runner: namespace-profile-mac-large
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     env:
@@ -417,6 +409,17 @@ jobs:
         name: Read the pinned Linux image, Ubuntu snapshot and compiler cache key
         if: runner.os == 'Linux'
         run: python3 .github/scripts/runtime_toolchain.py pins >> "$GITHUB_OUTPUT"
+      - name: Configure Namespace compiler cache
+        if: matrix.pack == 'llamacpp-linux-arm64-cpu'
+        uses: ./.github/actions/setup-namespace-cache
+        with:
+          cache-name: runtime-packs
+          start-server: 'false'
+      - name: Stage sccache for the frozen Linux build environment
+        if: matrix.pack == 'llamacpp-linux-arm64-cpu'
+        run: |
+          mkdir -p "$RUNNER_TEMP/compiler-cache-bin"
+          cp "$(command -v sccache)" "$RUNNER_TEMP/compiler-cache-bin/sccache"
       - name: Restore the pinned native arm64 C and C++ compiler
         if: matrix.pack == 'llamacpp-linux-arm64-cpu'
         uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
@@ -430,10 +433,18 @@ jobs:
           UBUNTU_SNAPSHOT: ${{ steps.linux-inputs.outputs.snapshot }}
         run: |
           mkdir -p "$RUNNER_TEMP/runtime-toolchain"
+          cache_mount=()
+          if [ "$RUNTIME_PACK" = llamacpp-linux-arm64-cpu ]; then
+            cache_mount=(--volume "$SCCACHE_DIR:/compiler-cache"
+              --env SCCACHE_DIR=/compiler-cache --env SCCACHE_CACHE_SIZE
+              --env "SCCACHE_CACHE_OWNER=$(id -u):$(id -g)"
+              --env SCCACHE_GHA_ENABLED --env SCCACHE_IDLE_TIMEOUT)
+          fi
           docker run --rm --volume "$PWD:/work:ro" --volume "$RUNNER_TEMP:/scratch" \
             --volume "$RUNNER_TEMP/runtime-toolchain:/toolchain" \
             --volume /etc/ssl/certs/ca-certificates.crt:/bootstrap-ca.crt:ro \
             --env RUNTIME_PACK --env SOURCE_DATE_EPOCH --env UBUNTU_SNAPSHOT \
+            "${cache_mount[@]}" \
             "$RUNTIME_IMAGE" bash /work/.github/scripts/build_linux_runtime.sh
       - id: pin
         name: Read the pinned llama.cpp build
