@@ -157,6 +157,11 @@
 					"const": "OpenAI"
 				},
 				{
+					"description": "OpenRouter's hosted text and multimodal embeddings API.",
+					"type": "string",
+					"const": "OpenRouter"
+				},
+				{
 					"description": "Azure OpenAI v1 API; model_id names the deployment.",
 					"type": "string",
 					"const": "AzureOpenAI"

@@ -431,6 +431,47 @@ describe("hosted embedding validation", () => {
 			}),
 		).toContain("exactly one");
 	});
+	test("OpenRouter Gemini validates dimensions, context and token reservation pricing", () => {
+		const remote = {
+			implementation: "OpenRouter",
+			model_id: "google/gemini-embedding-2",
+		};
+		const pricing = { input_micro_usd_per_million_tokens: 500_000 };
+		for (const vector_length of [128, 768, 1536, 3072])
+			expect(
+				embedding({ remote, pricing, vector_length, input_length: 8192 }),
+			).toBeNull();
+		for (const vector_length of [127, 3073])
+			expect(embedding({ remote, pricing, vector_length })).toContain(
+				"between 128 and 3072",
+			);
+		expect(embedding({ remote, pricing, input_length: 8193 })).toContain(
+			"at most 8192 input tokens",
+		);
+		expect(
+			embedding({
+				remote: { ...remote, endpoint_secret_name: "ENDPOINT" },
+				pricing,
+			}),
+		).toContain("fixed endpoint");
+		expect(
+			embedding({
+				remote,
+				pricing: {
+					input_micro_usd_per_million_bytes: 12,
+					max_input_bytes: 4096,
+				},
+			}),
+		).toContain("maximum input token price");
+		expect(
+			embedding({
+				remote: { ...remote, model_id: "another-model" },
+				pricing,
+				vector_length: 4096,
+				input_length: 16384,
+			}),
+		).toBeNull();
+	});
 	test("Cloudflare BGE requires mean pooling to prevent mixing CLS and mean vectors", () => {
 		const pricing = { input_micro_usd_per_million_tokens: 0 };
 		const bge = { ...remote, model_id: "@cf/baai/bge-large-en-v1.5" };

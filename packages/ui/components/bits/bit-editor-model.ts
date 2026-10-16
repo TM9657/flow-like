@@ -186,6 +186,18 @@ export function validateHostedEmbeddingParameters(
 		if (maximum && Number(params.vector_length) > maximum)
 			return `${model} supports at most ${maximum} vector dimensions.`;
 	}
+	if (
+		remote.implementation === "OpenRouter" &&
+		model === "google/gemini-embedding-2"
+	) {
+		if (
+			Number(params.vector_length) < 128 ||
+			Number(params.vector_length) > 3072
+		)
+			return `${model} requires between 128 and 3072 vector dimensions.`;
+		if (Number(params.input_length) > 8192)
+			return `${model} supports at most 8192 input tokens.`;
+	}
 	if (dimensions && !dimensions.includes(Number(params.vector_length)))
 		return `${model} requires ${dimensions.join(", ")} vector dimensions.`;
 	if (
@@ -194,9 +206,13 @@ export function validateHostedEmbeddingParameters(
 	)
 		return "Enter the upstream embedding model or deployment ID.";
 	if (
-		["OpenAI", "CloudflareWorkersAI", "Cohere", "VoyageAI"].includes(
-			String(remote.implementation),
-		) &&
+		[
+			"OpenAI",
+			"OpenRouter",
+			"CloudflareWorkersAI",
+			"Cohere",
+			"VoyageAI",
+		].includes(String(remote.implementation)) &&
 		remote.endpoint_secret_name != null
 	)
 		return "This embedding provider uses a fixed endpoint. Remove the endpoint secret name.";
@@ -207,6 +223,8 @@ export function validateHostedEmbeddingParameters(
 	const pricing = record(params.pricing);
 	const tokenKey = "input_micro_usd_per_million_tokens";
 	const byteKey = "input_micro_usd_per_million_bytes";
+	if (remote.implementation === "OpenRouter" && Object.hasOwn(pricing, byteKey))
+		return "OpenRouter requires a maximum input token price to reserve credits. Remove the input byte price.";
 	if (Object.hasOwn(pricing, tokenKey) === Object.hasOwn(pricing, byteKey))
 		return "Choose exactly one embedding input price: per million tokens or per million bytes.";
 	if (

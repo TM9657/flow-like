@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use flow_like::flow_like_model_provider::embedding::hosted_input::{
-    HostedEmbeddingInput, HostedEmbeddingStructuredInput,
+    HostedEmbeddingInput, HostedEmbeddingPart, HostedEmbeddingStructuredInput,
 };
 use flow_like::flow_like_model_provider::provider::{
     EmbeddingModelProvider, RemoteEmbeddingProvider, RemoteExecutionConfig,
@@ -12,6 +12,9 @@ use serde::Deserialize;
 
 use super::embed::{EmbedRequest, EmbedType, EmbedUsage};
 use crate::{error::ApiError, state::AppState};
+
+#[path = "openrouter.rs"]
+mod openrouter;
 
 const MAX_BATCH_SIZE: usize = 2048;
 const MAX_INPUT_BYTES: usize = 100_000;
@@ -33,6 +36,7 @@ pub(crate) fn provider_name(provider: &RemoteEmbeddingProvider) -> &'static str 
         RemoteEmbeddingProvider::Internal => "internal",
         RemoteEmbeddingProvider::CloudflareWorkersAI => "cloudflare",
         RemoteEmbeddingProvider::OpenAI => "openai",
+        RemoteEmbeddingProvider::OpenRouter => "openrouter",
         RemoteEmbeddingProvider::AzureOpenAI => "azure",
         RemoteEmbeddingProvider::HuggingfaceEndpoint => "huggingface",
         RemoteEmbeddingProvider::OpenAICompatible => "openai_compatible",
@@ -92,6 +96,27 @@ pub(crate) fn validate_request(
         nonempty(config.model_id.as_deref()).unwrap_or_default(),
         provider.vector_length,
     )?;
+    if implementation(config) == &RemoteEmbeddingProvider::OpenRouter {
+        if nonempty(config.endpoint_secret_name.as_deref()).is_some() {
+            return Err(ApiError::bad_request(
+                "This embedding provider uses a fixed endpoint",
+            ));
+        }
+        return openrouter::validate_request(provider, config, payload);
+    }
+    if payload.input.iter().any(|input| {
+        matches!(
+            input,
+            HostedEmbeddingInput::Structured(
+                HostedEmbeddingStructuredInput::Content { .. }
+                    | HostedEmbeddingStructuredInput::File { .. }
+            )
+        )
+    }) {
+        return Err(ApiError::bad_request(
+            "Content parts and files require an OpenRouter embedding model",
+        ));
+    }
     if implementation(config) == &RemoteEmbeddingProvider::CloudflareWorkersAI
         && nonempty(config.model_id.as_deref()) == Some("@cf/baai/bge-large-en-v1.5")
         && provider.pooling != flow_like::flow_like_model_provider::provider::Pooling::Mean
@@ -115,18 +140,23 @@ pub(crate) fn validate_request(
             ));
         }
         let (text, media) = input_parts(input);
-        if text.is_none() && media.iter().all(Option::is_none) {
+        if text.is_empty() && media.is_empty() {
             return Err(ApiError::bad_request("Embedding input is empty"));
         }
-        if let Some(text) = text
-            && ((text.is_empty() && media.iter().all(Option::is_none))
-                || text.len().saturating_add(prefix.len()) > MAX_INPUT_BYTES)
+        if !text.is_empty()
+            && ((text.iter().all(|text| text.is_empty()) && media.is_empty())
+                || text
+                    .iter()
+                    .map(|text| text.len())
+                    .sum::<usize>()
+                    .saturating_add(prefix.len())
+                    > MAX_INPUT_BYTES)
         {
             return Err(ApiError::bad_request(
                 "Embedding text must be nonempty and at most 100,000 bytes including the model prefix",
             ));
         }
-        for media in media.into_iter().flatten() {
+        for media in media {
             if !supports_media {
                 return Err(ApiError::bad_request(
                     "Media embeddings require the Internal embeddinggemma-2 model",
@@ -155,32 +185,49 @@ fn supports_media(config: &RemoteExecutionConfig) -> bool {
         && nonempty(config.model_id.as_deref()) == Some("embeddinggemma-2")
 }
 
-fn input_parts(input: &HostedEmbeddingInput) -> (Option<&str>, [Option<&str>; 3]) {
+fn input_parts(input: &HostedEmbeddingInput) -> (Vec<&str>, Vec<&str>) {
     use HostedEmbeddingStructuredInput as Structured;
     match input {
         HostedEmbeddingInput::Text(text)
-        | HostedEmbeddingInput::Structured(Structured::Text { text }) => {
-            (Some(text), [None, None, None])
-        }
-        HostedEmbeddingInput::Structured(Structured::Image { image }) => {
-            (None, [Some(image), None, None])
-        }
-        HostedEmbeddingInput::Structured(Structured::Audio { audio }) => {
-            (None, [None, Some(audio), None])
-        }
-        HostedEmbeddingInput::Structured(Structured::Video { video }) => {
-            (None, [None, None, Some(video)])
-        }
+        | HostedEmbeddingInput::Structured(Structured::Text { text }) => (vec![text], vec![]),
+        HostedEmbeddingInput::Structured(Structured::Image { image }) => (vec![], vec![image]),
+        HostedEmbeddingInput::Structured(Structured::Audio { audio }) => (vec![], vec![audio]),
+        HostedEmbeddingInput::Structured(Structured::Video { video }) => (vec![], vec![video]),
+        HostedEmbeddingInput::Structured(Structured::File { source, .. }) => (vec![], vec![source]),
         HostedEmbeddingInput::Structured(Structured::Multimodal {
             text,
             image,
             audio,
             video,
         }) => (
-            text.as_deref(),
-            [image.as_deref(), audio.as_deref(), video.as_deref()],
+            text.as_deref().into_iter().collect(),
+            [image.as_deref(), audio.as_deref(), video.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect(),
         ),
+        HostedEmbeddingInput::Structured(Structured::Content { parts }) => {
+            let mut text = Vec::new();
+            let mut media = Vec::new();
+            for part in parts {
+                match part {
+                    HostedEmbeddingPart::Text { text: value } => text.push(value.as_str()),
+                    HostedEmbeddingPart::Image { source }
+                    | HostedEmbeddingPart::Audio { source }
+                    | HostedEmbeddingPart::Video { source }
+                    | HostedEmbeddingPart::File { source, .. } => media.push(source.as_str()),
+                }
+            }
+            (text, media)
+        }
     }
+}
+
+fn text_metered_bytes(text: &[&str], prefix: &str) -> usize {
+    text.iter().fold(
+        if text.is_empty() { 0 } else { prefix.len() },
+        |sum, text| sum.saturating_add(text.len()),
+    )
 }
 
 fn is_media_url(media: &str) -> bool {
@@ -241,13 +288,10 @@ fn validate_media(media: &str) -> Result<usize, ApiError> {
 
 pub(super) fn input_metered_bytes(input: &HostedEmbeddingInput, prefix: &str) -> i64 {
     let (text, media) = input_parts(input);
-    let text_bytes = text.map_or(0, |text| text.len().saturating_add(prefix.len()));
-    media
-        .into_iter()
-        .flatten()
-        .fold(text_bytes as i64, |total, media| {
-            total.saturating_add(media.len() as i64)
-        })
+    let text_bytes = text_metered_bytes(&text, prefix);
+    media.into_iter().fold(text_bytes as i64, |total, media| {
+        total.saturating_add(media.len() as i64)
+    })
 }
 
 pub(super) fn reservation_input_bytes(input: &[HostedEmbeddingInput], prefix: &str) -> i64 {
@@ -255,9 +299,8 @@ pub(super) fn reservation_input_bytes(input: &[HostedEmbeddingInput], prefix: &s
     let mut media_bytes = 0_i64;
     for input in input {
         let (text, media) = input_parts(input);
-        text_bytes = text_bytes
-            .saturating_add(text.map_or(0, |text| text.len().saturating_add(prefix.len())) as i64);
-        for media in media.into_iter().flatten() {
+        text_bytes = text_bytes.saturating_add(text_metered_bytes(&text, prefix) as i64);
+        for media in media {
             // The API cannot know the downloaded size. Reserve the gateway's
             // file limit and release the excess when supplied-byte usage settles.
             media_bytes = media_bytes.saturating_add(if is_media_url(media) {
@@ -274,7 +317,7 @@ pub(super) fn media_metering_details(input: &[HostedEmbeddingInput]) -> serde_js
     let mut inline_media = 0;
     let mut media_urls = 0;
     for input in input {
-        for media in input_parts(input).1.into_iter().flatten() {
+        for media in input_parts(input).1 {
             if is_media_url(media) {
                 media_urls += 1;
             } else {
@@ -299,6 +342,7 @@ fn key_secret(provider: &RemoteEmbeddingProvider) -> &'static str {
         RemoteEmbeddingProvider::Internal => "INTERNAL_EMBEDDING_SECRET",
         RemoteEmbeddingProvider::CloudflareWorkersAI => "HOSTED_CLOUDFLARE_API_TOKEN",
         RemoteEmbeddingProvider::OpenAI => "HOSTED_OPENAI_API_KEY",
+        RemoteEmbeddingProvider::OpenRouter => "OPENROUTER_API_KEY",
         RemoteEmbeddingProvider::AzureOpenAI => "HOSTED_AZURE_API_KEY",
         RemoteEmbeddingProvider::HuggingfaceEndpoint => "HOSTED_HUGGINGFACE_API_KEY",
         RemoteEmbeddingProvider::OpenAICompatible => "HOSTED_OPENAI_COMPATIBLE_API_KEY",
@@ -319,6 +363,7 @@ fn endpoint_secret(provider: &RemoteEmbeddingProvider) -> Option<&'static str> {
         }
         RemoteEmbeddingProvider::CloudflareWorkersAI
         | RemoteEmbeddingProvider::OpenAI
+        | RemoteEmbeddingProvider::OpenRouter
         | RemoteEmbeddingProvider::Cohere
         | RemoteEmbeddingProvider::VoyageAI => None,
     }
@@ -354,6 +399,7 @@ fn endpoint_url(
             format!("https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/embeddings")
         }
         RemoteEmbeddingProvider::OpenAI => "https://api.openai.com/v1/embeddings".into(),
+        RemoteEmbeddingProvider::OpenRouter => "https://openrouter.ai/api/v1/embeddings".into(),
         RemoteEmbeddingProvider::Cohere => "https://api.cohere.com/v2/embed".into(),
         RemoteEmbeddingProvider::VoyageAI => "https://api.voyageai.com/v1/embeddings".into(),
         _ => server_endpoint
@@ -398,6 +444,9 @@ fn request_body(
     config: &RemoteExecutionConfig,
     payload: &EmbedRequest,
 ) -> serde_json::Value {
+    if implementation(config) == &RemoteEmbeddingProvider::OpenRouter {
+        return openrouter::request_body(provider, config, payload);
+    }
     let prefix = prefix(provider, payload);
     let input: Vec<_> = payload
         .input
@@ -516,6 +565,14 @@ fn validate_dimensions(
         ));
     }
     let max = match (provider, model) {
+        (RemoteEmbeddingProvider::OpenRouter, "google/gemini-embedding-2") => {
+            if dimensions < 128 {
+                return Err(ApiError::bad_request(
+                    "Gemini Embedding 2 requires 128 to 3072 dimensions",
+                ));
+            }
+            Some(3072)
+        }
         (RemoteEmbeddingProvider::OpenAI, "text-embedding-3-small") => Some(1536),
         (RemoteEmbeddingProvider::OpenAI, "text-embedding-3-large") => Some(3072),
         _ => None,
@@ -697,6 +754,9 @@ async fn send_request(
         RemoteEmbeddingProvider::Cohere => {
             decode_cohere_response(&bytes, expected_count, expected_dimensions)?
         }
+        RemoteEmbeddingProvider::OpenRouter => {
+            openrouter::decode_response(&bytes, expected_count, expected_dimensions)?
+        }
         _ => decode_response(&bytes, expected_count, expected_dimensions)?,
     };
     result.provider_request_id = request_id.or(result.provider_request_id);
@@ -715,8 +775,8 @@ struct EmbeddingObject {
 }
 
 #[derive(Deserialize)]
-struct UpstreamResponse {
-    data: Vec<EmbeddingObject>,
+struct UpstreamResponse<T = EmbeddingObject> {
+    data: Vec<T>,
     model: Option<String>,
     id: Option<String>,
     request_id: Option<String>,

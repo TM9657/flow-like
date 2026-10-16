@@ -34,6 +34,7 @@ interface OAuthConsentDialogProps {
 	authorizedProviders?: Set<string>;
 	/** Providers that already have valid tokens but need consent for this specific app */
 	preAuthorizedProviders?: Set<string>;
+	missingScopesByProvider?: Record<string, string[]>;
 }
 
 function formatScope(scope: string): string {
@@ -53,6 +54,7 @@ export function OAuthConsentDialog({
 	onCancel,
 	authorizedProviders: externalAuthorized,
 	preAuthorizedProviders = new Set(),
+	missingScopesByProvider = {},
 }: OAuthConsentDialogProps) {
 	const [authorizing, setAuthorizing] = useState<string | null>(null);
 	const [acknowledged, setAcknowledged] = useState(false);
@@ -123,6 +125,7 @@ export function OAuthConsentDialog({
 							const isAuthorized = authorizedProviders.has(provider.id);
 							const isPreAuthorized = preAuthorizedProviders.has(provider.id);
 							const isReady = isAuthorized || isPreAuthorized;
+							const missingScopes = missingScopesByProvider[provider.id] ?? [];
 							return (
 								<div
 									key={provider.id}
@@ -177,6 +180,14 @@ export function OAuthConsentDialog({
 											)}
 										</div>
 									</div>
+
+									{missingScopes.length > 0 && (
+										<p role="alert" className="text-sm text-destructive">
+											{provider.name} did not grant all required permissions.
+											Authorize again and allow:{" "}
+											{missingScopes.map(formatScope).join(", ")}.
+										</p>
+									)}
 
 									{provider.pkce_required && (
 										<div className="flex items-center gap-1 text-xs text-green-600">

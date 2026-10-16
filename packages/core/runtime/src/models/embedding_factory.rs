@@ -164,7 +164,7 @@ impl EmbeddingFactory {
                 .as_any()
                 .downcast_ref::<ProxyEmbeddingModel>()
                 && bit.try_to_embedding().as_ref().is_some_and(
-                    flow_like_model_provider::embedding::hosted_input::supports_internal_multimodal,
+                    flow_like_model_provider::embedding::hosted_input::supports_hosted_multimodal,
                 )
             {
                 return Ok(Arc::new(
@@ -817,6 +817,35 @@ mod tests {
                 .contains(&EmbeddingModality::Audio)
         );
         assert_ne!(model.descriptor().space.id, "local-multimodal-space");
+    }
+
+    #[cfg(feature = "remote-ml")]
+    #[tokio::test]
+    async fn openrouter_gemini_uses_multimodal_proxy_with_configured_dimensions() {
+        let mut bit = embedding_bit("Hosted");
+        bit.parameters["remote"]["implementation"] = json::json!("OpenRouter");
+        bit.parameters["remote"]["model_id"] = json::json!("google/gemini-embedding-2");
+        bit.parameters["vector_length"] = json::json!(1536);
+        bit.parameters["input_length"] = json::json!(8192);
+        let model = EmbeddingFactory::new()
+            .build(
+                &bit,
+                Arc::new(memory_state()),
+                Some("user-token".into()),
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(model.supports_encoded_media());
+        assert_eq!(model.descriptor().adapter, "openrouter_multimodal");
+        assert_eq!(model.descriptor().space.dimensions, 1536);
+        assert_eq!(model.descriptor().supported_dimensions, vec![1536]);
+        assert!(
+            model
+                .descriptor()
+                .modalities
+                .contains(&EmbeddingModality::File)
+        );
     }
 
     #[cfg(feature = "remote-ml")]

@@ -5,7 +5,10 @@ import httpx
 
 from flow_like import (
     EmbeddingAudioInput,
+    EmbeddingContentInput,
+    EmbeddingFileInput,
     EmbeddingImageInput,
+    EmbeddingMediaPart,
     EmbeddingMultimodalInput,
     EmbeddingTextInput,
     EmbeddingVideoInput,
@@ -29,6 +32,35 @@ CASES = [
     ),
     ("signed video", EmbeddingVideoInput(type="video", video=SIGNED_URL), None),
     (
+        "PDF file",
+        EmbeddingFileInput(
+            type="file",
+            source="data:application/pdf;base64,JVBERi0xLjQ=",
+            mime_type="application/pdf",
+            filename="manual.pdf",
+        ),
+        None,
+    ),
+    (
+        "ordered content with repeated images and all media types",
+        EmbeddingContentInput(
+            type="content",
+            parts=[
+                EmbeddingMediaPart(type="image", source="https://example.com/front.jpg"),
+                EmbeddingTextInput(type="text", text="Front and back of the product"),
+                EmbeddingMediaPart(type="image", source="https://example.com/back.jpg"),
+                EmbeddingMediaPart(type="audio", source="data:audio/wav;base64,YXVkaW8="),
+                EmbeddingMediaPart(type="video", source=SIGNED_URL),
+                EmbeddingFileInput(
+                    type="file",
+                    source="https://example.com/manual.pdf?signature=a%2Fb",
+                    mime_type="application/pdf",
+                ),
+            ],
+        ),
+        None,
+    ),
+    (
         "combined input",
         EmbeddingMultimodalInput(
             type="multimodal",
@@ -42,6 +74,9 @@ CASES = [
 ]
 MIXED_BATCH = [
     "demo",
+    EmbeddingContentInput(
+        type="content", parts=[EmbeddingTextInput(type="text", text="second item")]
+    ),
     EmbeddingAudioInput(type="audio", audio="data:audio/wav;base64,YXVkaW8="),
     EmbeddingVideoInput(type="video", video=SIGNED_URL),
 ]

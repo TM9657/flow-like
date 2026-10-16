@@ -5,6 +5,7 @@ import {
 	oauthCredentialKey,
 	oauthSessionKey,
 } from "../lib/oauth/scope";
+import { hasRequiredScopes } from "../lib/oauth/token-scopes";
 import type {
 	IOAuthBinding,
 	IOAuthPendingAuth,
@@ -169,10 +170,7 @@ export const oauthConsentStore: IOAuthConsentStore = {
 	},
 	async hasConsentWithScopes(appId, providerId, requiredScopes) {
 		const consent = await consentFor(appId, providerId);
-		return (
-			!!consent &&
-			requiredScopes.every((scope) => consent.scopes.includes(scope))
-		);
+		return !!consent && hasRequiredScopes(consent, requiredScopes);
 	},
 	async setConsent(appId, providerId, scopes) {
 		const binding = requireBinding(bindingFor(providerId));
@@ -183,11 +181,7 @@ export const oauthConsentStore: IOAuthConsentStore = {
 			oauthDB.scopedConsents,
 			async () => {
 				const token = await oauthDB.scopedTokens.get(credentialKey);
-				if (
-					!isCurrent(binding) ||
-					!token ||
-					!scopes.every((scope) => token.scopes.includes(scope))
-				)
+				if (!isCurrent(binding) || !token || !hasRequiredScopes(token, scopes))
 					throw new Error(
 						"Authorize all required scopes before remembering consent",
 					);
@@ -233,9 +227,7 @@ export const oauthConsentStore: IOAuthConsentStore = {
 				.filter(
 					(c) =>
 						c.appId === appId &&
-						(requiredScopesMap.get(c.providerId) ?? []).every((scope) =>
-							c.scopes.includes(scope),
-						),
+						hasRequiredScopes(c, requiredScopesMap.get(c.providerId) ?? []),
 				)
 				.map((c) => c.providerId),
 		);

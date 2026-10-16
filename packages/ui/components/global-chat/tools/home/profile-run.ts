@@ -29,29 +29,34 @@ export class HomeProfileRunError extends Error {
 export class HomeProfileRuns {
 	private readonly runs = new Map<
 		string,
-		{ profileId: string; stale: boolean }
+		{ profileId: string; stale: boolean; finished: boolean }
 	>();
 
 	begin(parentRequestId: string, profileId: string) {
 		if (!profileId || this.runs.has(parentRequestId)) {
 			throw new HomeProfileRunError("home_run_identity_invalid", profileId);
 		}
-		this.runs.set(parentRequestId, { profileId, stale: false });
+		this.runs.set(parentRequestId, {
+			profileId,
+			stale: false,
+			finished: false,
+		});
 	}
 
 	finish(parentRequestId: string) {
-		this.runs.delete(parentRequestId);
+		// Keep completed Home identities for this bridge's lifetime so late tools stay
+		// rejected without mistaking an unrelated specialist's parent for an expired run.
+		const run = this.runs.get(parentRequestId);
+		if (run) run.finished = true;
 	}
 
 	expectedProfile(scope: HomeProfileRunScope): string | undefined {
 		const run = scope.parentRequestId
 			? this.runs.get(scope.parentRequestId)
 			: undefined;
-		if (!run) {
-			if (scope.parentRequestId && scope.profileId) {
-				throw new HomeProfileRunError("home_run_expired", scope.profileId);
-			}
-			return scope.profileId;
+		if (!run) return scope.profileId;
+		if (run.finished) {
+			throw new HomeProfileRunError("home_run_expired", run.profileId);
 		}
 		if (run.stale || (scope.profileId && scope.profileId !== run.profileId)) {
 			run.stale = true;

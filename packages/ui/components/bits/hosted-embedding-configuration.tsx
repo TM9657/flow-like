@@ -38,6 +38,7 @@ const PROVIDERS = [
 		label: "Cloudflare Workers AI",
 	},
 	{ value: IRemoteEmbeddingProvider.OpenAI, label: "OpenAI" },
+	{ value: IRemoteEmbeddingProvider.OpenRouter, label: "OpenRouter" },
 	{ value: IRemoteEmbeddingProvider.Cohere, label: "Cohere" },
 	{ value: IRemoteEmbeddingProvider.VoyageAI, label: "Voyage AI" },
 	{ value: IRemoteEmbeddingProvider.AzureOpenAI, label: "Azure OpenAI" },
@@ -65,6 +66,7 @@ export function HostedEmbeddingConfiguration({
 		onChange({ ...parameters, remote: next });
 	const implementation =
 		remote?.implementation ?? IRemoteEmbeddingProvider.Internal;
+	const isOpenRouter = implementation === IRemoteEmbeddingProvider.OpenRouter;
 	const update = (updates: Partial<IRemoteExecutionConfig>) => {
 		setRemote({ ...remote, ...updates });
 	};
@@ -72,15 +74,15 @@ export function HostedEmbeddingConfiguration({
 	const supportsEndpoint = ![
 		IRemoteEmbeddingProvider.CloudflareWorkersAI,
 		IRemoteEmbeddingProvider.OpenAI,
+		IRemoteEmbeddingProvider.OpenRouter,
 		IRemoteEmbeddingProvider.Cohere,
 		IRemoteEmbeddingProvider.VoyageAI,
 	].includes(implementation);
 	const showPricing = implementation !== IRemoteEmbeddingProvider.Internal;
 	const pricing = record(parameters.pricing);
-	const bytePricing = Object.hasOwn(
-		pricing,
-		"input_micro_usd_per_million_bytes",
-	);
+	const bytePricing =
+		!isOpenRouter &&
+		Object.hasOwn(pricing, "input_micro_usd_per_million_bytes");
 	const priceKey = bytePricing
 		? "input_micro_usd_per_million_bytes"
 		: "input_micro_usd_per_million_tokens";
@@ -180,7 +182,9 @@ export function HostedEmbeddingConfiguration({
 										implementation ===
 										IRemoteEmbeddingProvider.CloudflareWorkersAI
 											? "@cf/qwen/qwen3-embedding-0.6b"
-											: undefined
+											: implementation === IRemoteEmbeddingProvider.OpenRouter
+												? "google/gemini-embedding-2"
+												: undefined
 									}
 								/>
 							</div>
@@ -194,6 +198,15 @@ export function HostedEmbeddingConfiguration({
 								)}
 							</p>
 						)}
+						{implementation === IRemoteEmbeddingProvider.OpenRouter &&
+							remote.model_id?.trim() === "google/gemini-embedding-2" && (
+								<p className="text-sm text-muted-foreground">
+									{t(
+										"openRouterGeminiEmbeddingCapabilities",
+										"Gemini Embedding 2 accepts text, images, audio, video and PDF files. Set 128 to 3072 vector dimensions and an input length of at most 8192 tokens. The server requests the vector length configured for this Bit.",
+									)}
+								</p>
+							)}
 						{implementation === IRemoteEmbeddingProvider.Cohere &&
 							remote.model_id?.trim() === "embed-v4.0" && (
 								<p className="text-sm text-muted-foreground">
@@ -222,6 +235,11 @@ export function HostedEmbeddingConfiguration({
 									aria-describedby={`${id}-secrets-help`}
 									autoComplete="off"
 									value={remote.secret_name ?? ""}
+									placeholder={
+										implementation === IRemoteEmbeddingProvider.OpenRouter
+											? "OPENROUTER_API_KEY"
+											: undefined
+									}
 									onChange={(event) =>
 										update({ secret_name: event.target.value || null })
 									}
@@ -277,58 +295,69 @@ export function HostedEmbeddingConfiguration({
 										{t("hostedEmbeddingPricing", "Hosted embedding pricing")}
 									</h4>
 									<p className="mt-1 text-sm text-muted-foreground">
-										{t(
-											"hostedEmbeddingPricingHelp",
-											"Set the rate charged for hosted embedding requests. Use 0 for a free input rate.",
-										)}
+										{isOpenRouter
+											? t(
+													"openRouterEmbeddingPricingHelp",
+													"Set the highest input token rate among this model's modalities and routed providers. This rate reserves credits before a request; the final charge uses the cost reported by OpenRouter, plus any request fee.",
+												)
+											: t(
+													"hostedEmbeddingPricingHelp",
+													"Set the rate charged for hosted embedding requests. Use 0 for a free input rate.",
+												)}
 									</p>
 								</div>
-								<div className="space-y-2">
-									<Label htmlFor={`${id}-pricing-unit`}>
-										{t("hostedEmbeddingPriceUnit", "Input price unit")}
-									</Label>
-									<select
-										id={`${id}-pricing-unit`}
-										className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-										value={bytePricing ? "bytes" : "tokens"}
-										onChange={(event) => {
-											const {
-												input_micro_usd_per_million_tokens: _tokens,
-												input_micro_usd_per_million_bytes: _bytes,
-												max_input_bytes: _limit,
-												...rest
-											} = pricing;
-											onChange({
-												...parameters,
-												pricing: {
-													...rest,
-													[event.target.value === "bytes"
-														? "input_micro_usd_per_million_bytes"
-														: "input_micro_usd_per_million_tokens"]: "",
-												},
-											});
-										}}
-									>
-										<option value="tokens">
-											{t("hostedEmbeddingTokens", "Provider-reported tokens")}
-										</option>
-										<option value="bytes">
-											{t("hostedEmbeddingBytes", "Input bytes")}
-										</option>
-									</select>
-								</div>
-								<p className="text-sm text-muted-foreground">
-									{t(
-										"hostedEmbeddingPriceUnitHelp",
-										"Token pricing requires the provider to report token usage. Choose input bytes when the provider does not report it.",
-									)}
-								</p>
+								{!isOpenRouter && (
+									<div className="space-y-2">
+										<Label htmlFor={`${id}-pricing-unit`}>
+											{t("hostedEmbeddingPriceUnit", "Input price unit")}
+										</Label>
+										<select
+											id={`${id}-pricing-unit`}
+											className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+											value={bytePricing ? "bytes" : "tokens"}
+											onChange={(event) => {
+												const {
+													input_micro_usd_per_million_tokens: _tokens,
+													input_micro_usd_per_million_bytes: _bytes,
+													max_input_bytes: _limit,
+													...rest
+												} = pricing;
+												onChange({
+													...parameters,
+													pricing: {
+														...rest,
+														[event.target.value === "bytes"
+															? "input_micro_usd_per_million_bytes"
+															: "input_micro_usd_per_million_tokens"]: "",
+													},
+												});
+											}}
+										>
+											<option value="tokens">
+												{t("hostedEmbeddingTokens", "Provider-reported tokens")}
+											</option>
+											<option value="bytes">
+												{t("hostedEmbeddingBytes", "Input bytes")}
+											</option>
+										</select>
+									</div>
+								)}
+								{!isOpenRouter && (
+									<p className="text-sm text-muted-foreground">
+										{t(
+											"hostedEmbeddingPriceUnitHelp",
+											"Token pricing requires the provider to report token usage. Choose input bytes when the provider does not report it.",
+										)}
+									</p>
+								)}
 								<div className="grid gap-4 sm:grid-cols-2">
 									<HostedPricingField
 										label={
-											bytePricing
-												? "USD per 1M input bytes"
-												: "USD per 1M input tokens"
+											isOpenRouter
+												? "Maximum USD per 1M input tokens"
+												: bytePricing
+													? "USD per 1M input bytes"
+													: "USD per 1M input tokens"
 										}
 										value={pricing[priceKey]}
 										optional={false}
@@ -338,6 +367,14 @@ export function HostedEmbeddingConfiguration({
 												priceKey,
 												text,
 											);
+											if (isOpenRouter) {
+												const {
+													input_micro_usd_per_million_bytes: _bytes,
+													max_input_bytes: _limit,
+													...tokenPricing
+												} = record(next.pricing);
+												next.pricing = tokenPricing;
+											}
 											if (!text.trim())
 												next.pricing = {
 													...record(next.pricing),

@@ -25,7 +25,7 @@ impl NodeLogic for PrepareEmbeddingMediaNode {
         let mut node = Node::new(
             "prepare_embedding_media",
             "Prepare Embedding Media",
-            "Prepares an audio or video file as decoded content or an encoded source for a hosted model",
+            "Prepares audio, video, or PDF content for an embedding model",
             "AI/Embedding",
         );
         node.set_flowscript_name("ai.embedding", "prepareMedia");
@@ -33,7 +33,7 @@ impl NodeLogic for PrepareEmbeddingMediaNode {
         node.set_long_running(true);
         add_video_icon_and_scores(&mut node);
         add_exec_pins(&mut node);
-        add_flow_path_input(&mut node, "source", "Source", "Audio or video file");
+        add_flow_path_input(&mut node, "source", "Source", "Audio, video, or PDF file");
         node.add_input_pin(
             "encoded",
             "Encoded Source",
@@ -50,7 +50,7 @@ impl NodeLogic for PrepareEmbeddingMediaNode {
         .set_default_value(Some(json!("audio")))
         .set_options(
             PinOptions::new()
-                .set_valid_values(vec!["audio".into(), "video".into()])
+                .set_valid_values(vec!["audio".into(), "video".into(), "file".into()])
                 .build(),
         );
         node.add_input_pin(
@@ -70,7 +70,7 @@ impl NodeLogic for PrepareEmbeddingMediaNode {
         node.add_output_pin(
             "content",
             "Content",
-            "Decoded media for Embed Content",
+            "Content parts for Embed Content",
             VariableType::Struct,
         )
         .set_schema::<EmbeddingContent>()
@@ -85,6 +85,14 @@ impl NodeLogic for PrepareEmbeddingMediaNode {
         let kind: String = context.evaluate_pin("kind").await?;
         let kind = match kind.as_str() {
             "audio" => EmbeddingMediaKind::Audio,
+            "file" => {
+                if !location_is_pdf(&source.object_path()) {
+                    return Err(flow_like_types::anyhow!(
+                        "File embedding inputs require a PDF file"
+                    ));
+                }
+                EmbeddingMediaKind::File
+            }
             "video" => {
                 let max_frames: i64 = context.evaluate_pin("max_frames").await?;
                 let max_frames = usize::try_from(max_frames).map_err(|_| {
@@ -103,13 +111,13 @@ impl NodeLogic for PrepareEmbeddingMediaNode {
             }
             _ => {
                 return Err(flow_like_types::anyhow!(
-                    "Media kind must be audio or video"
+                    "Media kind must be audio, video, or file"
                 ));
             }
         };
         let (store, location) = flow_path_object(context, &source).await?;
         let encoded: bool = context.evaluate_pin("encoded").await?;
-        let content = if encoded {
+        let content = if encoded || kind == EmbeddingMediaKind::File {
             let input =
                 super::embed_media::encoded_media_input(store.as_ref(), &location, kind).await?;
             let parts = input
@@ -117,8 +125,15 @@ impl NodeLogic for PrepareEmbeddingMediaNode {
                 .into_iter()
                 .map(|part| match part {
                     EmbeddingPart::EncodedMedia { modality, source } => {
-                        Ok(EmbeddingContentPart::EncodedMedia { modality, source })
+                        let mime = flow_like_types::mime_guess::from_path(location.to_string())
+                            .first_raw()
+                            .unwrap_or("application/octet-stream");
+                        Ok(EmbeddingContentPart::EncodedMedia {
+                            modality,
+                            source: format!("data:{mime};base64,{source}"),
+                        })
                     }
+                    EmbeddingPart::File(file) => Ok(EmbeddingContentPart::File(file)),
                     EmbeddingPart::Audio(audio) => {
                         Ok(EmbeddingContentPart::Audio(EmbeddingAudio {
                             samples: audio.samples.to_vec(),
@@ -148,11 +163,18 @@ impl NodeLogic for PrepareEmbeddingMediaNode {
 }
 
 #[cfg(feature = "execute")]
+fn location_is_pdf(path: &ObjectPath) -> bool {
+    path.extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+}
+
+#[cfg(feature = "execute")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum EmbeddingMediaKind {
     Text,
     Image,
     Audio,
+    File,
     Video {
         max_frames: usize,
         include_audio: bool,
@@ -171,6 +193,7 @@ pub(super) fn embedding_media_kind(
         .ok_or_else(|| flow_like_types::anyhow!("Embedding files need a supported file extension"))?
         .to_ascii_lowercase();
     match extension.as_str() {
+        "pdf" => Ok(EmbeddingMediaKind::File),
         "jpg" | "jpeg" | "jpe" | "png" | "gif" | "webp" | "tif" | "tiff" | "bmp" | "ico"
         | "avif" | "pnm" | "pbm" | "pgm" | "ppm" | "hdr" | "exr" | "qoi" => {
             Ok(EmbeddingMediaKind::Image)
@@ -194,7 +217,7 @@ pub(super) fn embedding_media_kind(
             "Video container .{extension} is not supported by the file decoder"
         )),
         _ => Err(flow_like_types::anyhow!(
-            "Unsupported embedding file extension .{extension}; use a supported text, image, audio, or video file"
+            "Unsupported embedding file extension .{extension}; use a supported text, image, audio, video, or PDF file"
         )),
     }
 }
@@ -284,6 +307,9 @@ pub(super) async fn decode_embedding_media(
     kind: EmbeddingMediaKind,
 ) -> flow_like_types::Result<DecodedEmbeddingMedia> {
     match kind {
+        EmbeddingMediaKind::File => Err(flow_like_types::anyhow!(
+            "PDF embedding requires a hosted model with file input support"
+        )),
         EmbeddingMediaKind::Text => {
             let bytes = video_utils_rs::read_object_bytes(store, path).await?;
             decode_off_thread(move || {
@@ -464,6 +490,26 @@ fn video_packet_timing(
         origin_seconds,
         duration_ms: ((end_seconds - origin_seconds) * 1000.0).ceil() as u64,
     })
+}
+
+#[cfg(feature = "execute")]
+pub(super) async fn decode_hosted_image_or_audio(
+    bytes: Bytes,
+    path: ObjectPath,
+    kind: EmbeddingMediaKind,
+) -> flow_like_types::Result<EmbeddingInput> {
+    decode_off_thread(move || match kind {
+        EmbeddingMediaKind::Image => {
+            let image = flow_like_types::image::load_from_memory(&bytes)?;
+            DecodedEmbeddingMedia::Image(image).into_input()
+        }
+        EmbeddingMediaKind::Audio => {
+            let frames = decode_embedding_audio_bytes(&bytes, &path)?;
+            DecodedEmbeddingMedia::Audio(audio_content(frames, None, None)?).into_input()
+        }
+        _ => Err(flow_like_types::anyhow!("Expected image or audio input")),
+    })
+    .await
 }
 
 #[cfg(feature = "execute")]
@@ -1000,6 +1046,10 @@ mod tests {
     #[cfg(feature = "execute")]
     #[test]
     fn classifies_extensions_without_guessing_unknown_file_types() {
+        assert_eq!(
+            embedding_media_kind(&ObjectPath::from("report.PDF"), 16, false).unwrap(),
+            EmbeddingMediaKind::File
+        );
         assert_eq!(
             embedding_media_kind(&ObjectPath::from("media/PHOTO.JpEg"), 16, false).unwrap(),
             EmbeddingMediaKind::Image

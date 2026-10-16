@@ -1,5 +1,7 @@
 use super::node_image::NodeImage;
-use flow_like_model_provider::embedding::interface::{AudioInput, EmbeddingModality};
+use flow_like_model_provider::embedding::interface::{
+    AudioInput, EmbeddingFile, EmbeddingModality,
+};
 use flow_like_types::Result;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -68,6 +70,7 @@ pub enum EmbeddingContentPart {
     },
     Audio(EmbeddingAudio),
     Video(EmbeddingVideo),
+    File(EmbeddingFile),
     /// A hosted model reads a URL, data URL, or raw base64 without decoding it locally.
     EncodedMedia {
         modality: EmbeddingModality,

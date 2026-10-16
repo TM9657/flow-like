@@ -19,6 +19,7 @@ export interface IEmbeddingDescriptor {
 
 export enum IModalityElement {
 	Audio = "audio",
+	File = "file",
 	Image = "image",
 	Text = "text",
 	Video = "video",
@@ -26,9 +27,11 @@ export enum IModalityElement {
 
 export interface ILimits {
 	max_audio_duration_ms?: number | null;
+	max_file_pages?: number | null;
 	max_batch_items?: number | null;
 	max_images_per_item?: number | null;
 	max_tokens: number;
+	max_video_duration_ms?: number | null;
 	max_video_frames?: number | null;
 	[property: string]: any;
 }
