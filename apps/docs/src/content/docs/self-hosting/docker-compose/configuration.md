@@ -313,6 +313,13 @@ for source formats, media limits, and workflow nodes, and the
 [Node.js](/dev/sdks/nodejs/#embeddings) or [Python](/dev/sdks/python/#embeddings)
 SDK examples for ordered content.
 
+For OpenRouter models with a fixed output size, turn off **Request vector
+dimensions** in the Bit editor or set `remote.supports_dimensions` to `false`.
+The API then omits the upstream `dimensions` parameter. Set the Bit's
+`vector_length` to the model's native output size; every returned vector must
+still match that length. When `supports_dimensions` is absent, null, or `true`,
+the API requests the Bit's `vector_length`, preserving existing behavior.
+
 Before upgrading, review existing Bits that use `CloudflareWorkersAI` or
 `HuggingfaceEndpoint`. Earlier releases treated these names as aliases for
 `Internal`; they now select the named provider. If a Bit should continue using

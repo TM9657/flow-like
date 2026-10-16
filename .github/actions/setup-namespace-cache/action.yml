@@ -1,0 +1,49 @@
+name: Setup Namespace compiler cache
+description: Cache Cargo and CMake compilation on the runner profile's cache volume.
+
+inputs:
+  cache-name:
+    description: Separate cache directory for builds with different users or toolchains
+    default: cargo
+  start-server:
+    description: Start the cache server on the host; disable when compiling inside a container
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Configure compiler cache directory
+      shell: bash
+      env:
+        COMPILER_CACHE_NAME: ${{ inputs.cache-name }}
+      run: |
+        set -euo pipefail
+        cache_dir="$(node -p 'require("path").join(require("os").homedir(), ".cache", "flow-like-sccache", process.env.COMPILER_CACHE_NAME)')"
+        {
+          printf 'SCCACHE_DIR=%s\n' "$cache_dir"
+          echo 'SCCACHE_CACHE_SIZE=20G'
+          echo 'RUSTC_WRAPPER=sccache'
+          echo 'CARGO_INCREMENTAL=0'
+          echo 'CMAKE_C_COMPILER_LAUNCHER=sccache'
+          echo 'CMAKE_CXX_COMPILER_LAUNCHER=sccache'
+          echo 'SCCACHE_GHA_ENABLED=false'
+          echo 'SCCACHE_IDLE_TIMEOUT=0'
+        } >> "$GITHUB_ENV"
+
+    # runner.temp is cleared after every job and cannot hold a persistent cache.
+    - name: Mount compiler cache from the Namespace profile
+      uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1
+      with:
+        path: ${{ env.SCCACHE_DIR }}
+
+    - name: Install sccache
+      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+      with:
+        version: v0.18.0
+        # The container prints its own statistics when its server stops.
+        disable_annotations: ${{ inputs.start-server != 'true' }}
+
+    - name: Start compiler cache
+      if: inputs.start-server == 'true'
+      shell: bash
+      run: sccache --start-server

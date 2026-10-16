@@ -4,10 +4,22 @@ import { act, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { HostedEmbeddingConfiguration } from "./hosted-embedding-configuration";
 
-function render(implementation: string, model = "model") {
+function render(
+	implementation: string,
+	model = "model",
+	supportsDimensions?: boolean | null,
+) {
 	return renderToStaticMarkup(
 		<HostedEmbeddingConfiguration
-			parameters={{ remote: { implementation, model_id: model } }}
+			parameters={{
+				remote: {
+					implementation,
+					model_id: model,
+					...(supportsDimensions !== undefined && {
+						supports_dimensions: supportsDimensions,
+					}),
+				},
+			}}
 			onChange={() => {}}
 		/>,
 	);
@@ -68,6 +80,54 @@ test("OpenRouter exposes its default key and Gemini multimodal configuration", (
 	expect(render("OpenRouter", "another-model")).not.toContain(
 		"Gemini Embedding 2 accepts",
 	);
+});
+
+test("OpenRouter dimension requests default to enabled and other providers hide the setting", () => {
+	const window = new Window();
+	Object.assign(window, { SyntaxError, TypeError });
+	try {
+		for (const value of [undefined, null, true, false]) {
+			window.document.body.innerHTML = render(
+				"OpenRouter",
+				"google/gemini-embedding-2",
+				value,
+			);
+			const label = [...window.document.querySelectorAll("label")].find(
+				(item) => item.textContent === "Request vector dimensions",
+			);
+			const toggle = window.document.getElementById(
+				label?.getAttribute("for") ?? "",
+			);
+			expect(toggle?.getAttribute("aria-checked")).toBe(
+				String(value !== false),
+			);
+			const help = window.document.getElementById(
+				toggle?.getAttribute("aria-describedby") ?? "",
+			);
+			expect(help?.textContent).toContain("models with a fixed output size");
+			expect(help?.textContent).toContain("model's native size");
+			expect(window.document.body.textContent).toContain(
+				"The returned vector length must match this Bit's configuration.",
+			);
+			expect(window.document.body.textContent).not.toContain(
+				"The server requests the vector length configured for this Bit.",
+			);
+		}
+		for (const provider of [
+			"Internal",
+			"CloudflareWorkersAI",
+			"OpenAI",
+			"Cohere",
+			"VoyageAI",
+			"AzureOpenAI",
+			"HuggingfaceEndpoint",
+			"OpenAICompatible",
+		]) {
+			expect(render(provider)).not.toContain("Request vector dimensions");
+		}
+	} finally {
+		window.happyDOM.abort();
+	}
 });
 
 test("internal gateway prices cannot be edited as if they override the server tariff", () => {
@@ -196,6 +256,87 @@ test("editing hosted configuration preserves local settings and byte pricing rep
 		expect(parameters.pricing).toBeUndefined();
 		expect(parameters.provider).toEqual({ provider_name: "Local" });
 		expect(parameters.prefix).toEqual({ query: "query: " });
+	} finally {
+		await act(async () => root.unmount());
+		for (const key of Object.keys(globals)) {
+			const descriptor = previous[key];
+			if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+			else Reflect.deleteProperty(globalThis, key);
+		}
+		window.happyDOM.abort();
+	}
+});
+
+test("toggling OpenRouter dimensions preserves the remote configuration and Bit settings", async () => {
+	const window = new Window();
+	Object.assign(window, { SyntaxError, TypeError });
+	const globals = {
+		window,
+		document: window.document,
+		navigator: window.navigator,
+		HTMLElement: window.HTMLElement,
+		HTMLInputElement: window.HTMLInputElement,
+		Element: window.Element,
+		Node: window.Node,
+		Event: window.Event,
+		IS_REACT_ACT_ENVIRONMENT: true,
+	};
+	const previous = Object.fromEntries(
+		Object.keys(globals).map((key) => [
+			key,
+			Object.getOwnPropertyDescriptor(globalThis, key),
+		]),
+	);
+	Object.assign(globalThis, globals);
+	const { createRoot } = await import("react-dom/client");
+	const container = window.document.createElement("form");
+	window.document.body.append(container);
+	const root = createRoot(container as unknown as Element);
+	const initial = {
+		provider: { provider_name: "Local", model_id: "local-model" },
+		prefix: { query: "query: ", paragraph: "passage: " },
+		vector_length: 1024,
+		input_length: 512,
+		pooling: "Mean",
+		languages: ["en"],
+		remote: {
+			implementation: "OpenRouter",
+			model_id: "provider/model",
+			secret_name: "CUSTOM_OPENROUTER_KEY",
+		},
+		pricing: { input_micro_usd_per_million_tokens: 250, request_micro_usd: 4 },
+	};
+	let parameters: Record<string, unknown> = initial;
+	function Harness() {
+		const [value, setValue] = useState(parameters);
+		return (
+			<HostedEmbeddingConfiguration
+				parameters={value}
+				onChange={(next) => {
+					parameters = next;
+					setValue(next);
+				}}
+			/>
+		);
+	}
+	try {
+		await act(async () => root.render(<Harness />));
+		const label = [...container.querySelectorAll("label")].find(
+			(item) => item.textContent === "Request vector dimensions",
+		);
+		const toggle = window.document.getElementById(
+			label?.getAttribute("for") ?? "",
+		);
+		if (!toggle) throw new Error("Missing vector dimensions switch");
+		expect(toggle.getAttribute("aria-checked")).toBe("true");
+		for (const enabled of [false, true]) {
+			await act(async () => toggle.click());
+			expect(toggle.getAttribute("aria-checked")).toBe(String(enabled));
+			expect(parameters).toEqual({
+				...initial,
+				remote: { ...initial.remote, supports_dimensions: enabled },
+			});
+		}
 	} finally {
 		await act(async () => root.unmount());
 		for (const key of Object.keys(globals)) {

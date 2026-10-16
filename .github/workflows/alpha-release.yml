@@ -17,12 +17,14 @@ env:
 jobs:
   compiler-checks:
     uses: ./.github/workflows/compiler-reproducibility.yml
+    with:
+      namespace_runners: true
     permissions:
       contents: read
 
   prepare-release-frontend:
     name: Prepare release frontend
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd-large
     permissions:
       contents: read
     steps:
@@ -63,6 +65,9 @@ jobs:
           BUN_INSTALL_CACHE_DIR: ${{ runner.temp }}/bun-install-cache
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Configure Namespace compiler cache
+        uses: ./.github/actions/setup-namespace-cache
+
       - name: Build frontend
         working-directory: apps/desktop
         run: bun run build
@@ -77,7 +82,7 @@ jobs:
 
   prepare-release-mlx:
     name: Prepare Apple MLX helper
-    runs-on: macos-latest
+    runs-on: namespace-profile-mac-large
     permissions:
       contents: read
     steps:
@@ -142,30 +147,28 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest"
+          - platform: "namespace-profile-mac-large"
             stablediffusion_platform: "mac-intel"
             cache_key: "macos-x64"
             release_bundle_dir: "target/x86_64-apple-darwin/release/bundle"
             retry_runner_arch: "X64"
             args: "--target x86_64-apple-darwin --config src-tauri/configs/tauri.macos.intel.conf.json --config src-tauri/configs/tauri.ci.conf.json --verbose"
-          # Pin the runner label because Linux artifacts inherit its glibc floor
-          # and the AppImage copies its WebKitGTK support libraries. Build on the
-          # oldest supported distribution so one artifact also runs on newer
-          # glibc versions.
-          - platform: "ubuntu-22.04"
+          # Keep these profiles on Ubuntu 22.04: Linux artifacts inherit its
+          # glibc floor and the AppImage copies its WebKitGTK support libraries.
+          - platform: "namespace-profile-linux-amd-large"
             stablediffusion_platform: "linux-x64"
             cache_key: "linux-x64-glibc-2.35"
             max_glibc_version: "2.35"
             release_bundle_dir: "target/release/bundle"
             args: "--config src-tauri/configs/tauri.linux.x64.conf.json --config src-tauri/configs/tauri.ci.conf.json --verbose"
-          - platform: "ubuntu-22.04-arm"
+          - platform: "namespace-profile-linux-arm-large"
             cache_key: "linux-arm64-glibc-2.35"
             max_glibc_version: "2.35"
             release_bundle_dir: "target/release/bundle"
             args: "--config src-tauri/configs/tauri.ci.conf.json --verbose"
-          # windows-latest currently resolves to the VS 2026 image, which breaks
-          # libduckdb-sys 1.3.0's vendored fmt headers.
-          - platform: "windows-2022"
+          # Keep this profile on Windows 2022: VS 2026 breaks libduckdb-sys
+          # 1.3.0's vendored fmt headers.
+          - platform: "namespace-profile-win-amd-large"
             stablediffusion_platform: "win-x64"
             cache_key: "windows-x64-msvc"
             release_bundle_dir: "target/release/bundle"
@@ -191,7 +194,7 @@ jobs:
       contents: write
     uses: ./.github/workflows/release-native.yml
     with:
-      platform: macos-latest
+      platform: namespace-profile-mac-large
       stablediffusion_platform: mac-arm
       mlx: true
       cache_key: macos-arm64
@@ -206,7 +209,7 @@ jobs:
       - alpha-release
       - alpha-release-macos-arm
     if: ${{ always() && needs['alpha-release'].result == 'success' && needs['alpha-release-macos-arm'].result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd-small-24
     permissions:
       contents: write
     steps:

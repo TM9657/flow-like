@@ -44,7 +44,7 @@ jobs:
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
     steps:
       - name: Free Disk Space (Ubuntu)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !startsWith(inputs.platform, 'namespace-profile-')
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
         with:
           tool-cache: false
@@ -56,7 +56,7 @@ jobs:
           swap-storage: true
 
       - name: Free Disk Space (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && !startsWith(inputs.platform, 'namespace-profile-')
         run: |
           sudo rm -rf /Users/runner/Library/Android/sdk || true
           sudo rm -rf /Library/Frameworks/Mono.framework || true
@@ -66,7 +66,7 @@ jobs:
           df -h
 
       - name: Free Disk Space (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !startsWith(inputs.platform, 'namespace-profile-')
         run: |
           Remove-Item -Recurse -Force "C:\Android\android-sdk" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk\*" -ErrorAction SilentlyContinue
@@ -336,6 +336,16 @@ jobs:
         with:
           targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      - name: Configure macOS ONNX Runtime
+        if: runner.os == 'macOS'
+        run: |
+          echo "ORT_LIB_LOCATION=${GITHUB_WORKSPACE}/apps/desktop/src-tauri/gen/apple/thirdparty/onnxruntime.xcframework/macos-arm64_x86_64" >> "$GITHUB_ENV"
+          echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"
+
+      - name: Configure Namespace compiler cache
+        if: startsWith(inputs.platform, 'namespace-profile-')
+        uses: ./.github/actions/setup-namespace-cache
+
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
         with:
@@ -345,6 +355,7 @@ jobs:
           # This workspace is much larger than the third-party dependency set;
           # preserve unchanged first-party crates between release runs too.
           cache-workspace-crates: ${{ runner.os == 'macOS' }}
+          env-vars: 'CARGO CC CFLAGS CXX CMAKE RUST ORT ImageOS ImageVersion MACOSX_DEPLOYMENT_TARGET SDKROOT'
 
       - name: Cache release tool downloads
         uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
@@ -362,12 +373,6 @@ jobs:
       - name: Sync desktop version
         working-directory: apps/desktop
         run: bun ./scripts/sync-version.ts
-
-      - name: Configure macOS ONNX Runtime
-        if: runner.os == 'macOS'
-        run: |
-          echo "ORT_LIB_LOCATION=${GITHUB_WORKSPACE}/apps/desktop/src-tauri/gen/apple/thirdparty/onnxruntime.xcframework/macos-arm64_x86_64" >> "$GITHUB_ENV"
-          echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"
 
       - name: Prepare Windows VC runtime DLLs
         if: runner.os == 'Windows'
