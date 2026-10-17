@@ -66,27 +66,28 @@ class NamespaceCacheTests(unittest.TestCase):
             capture_output=True, text=True, check=False, timeout=10,
         )
 
-    def configure(self, directory="/home/runner/.cache/flow-like-sccache/cargo", name="cargo", status=0):
+    def configure(self, directory="/home/runner/.cache/flow-like-sccache/cargo", name="cargo", status=0, runner_os="Linux"):
         return self.run_script(step_script(ACTION, "Configure compiler cache directory", "    "), {
             "NATIVE_CACHE_DIR": directory, "COMPILER_CACHE_NAME": name, "NODE_STATUS": str(status),
+            "RUNNER_OS": runner_os,
         })
 
     def exported_environment(self):
         return dict(line.split("=", 1) for line in self.environment_file.read_text().splitlines())
 
     def test_exports_native_paths_and_compiler_settings_without_shell_expansion(self):
-        for directory in (
-            "/Users/Runner User/.cache/flow-like-sccache/cargo",
-            r"C:\Users\Runner User\.cache\flow-like-sccache\cargo",
-            "/home/$(touch unexpected-command)/.cache/flow-like-sccache/cargo",
+        for runner_os, directory, rustc_wrapper in (
+            ("macOS", "/Users/Runner User/.cache/flow-like-sccache/cargo", "sccache"),
+            ("Windows", r"C:\Users\Runner User\.cache\flow-like-sccache\cargo", ""),
+            ("Linux", "/home/$(touch unexpected-command)/.cache/flow-like-sccache/cargo", "sccache"),
         ):
-            with self.subTest(directory=directory):
-                self.environment_file.write_text("EXISTING_VALUE=kept\n")
-                result = self.configure(directory)
+            with self.subTest(runner_os=runner_os, directory=directory):
+                self.environment_file.write_text("EXISTING_VALUE=kept\nRUSTC_WRAPPER=existing-wrapper\n")
+                result = self.configure(directory, runner_os=runner_os)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(self.exported_environment(), {
                     "EXISTING_VALUE": "kept", "SCCACHE_DIR": directory, "SCCACHE_CACHE_SIZE": "20G",
-                    "RUSTC_WRAPPER": "sccache", "CARGO_INCREMENTAL": "0",
+                    "RUSTC_WRAPPER": rustc_wrapper, "CARGO_INCREMENTAL": "0",
                     "CMAKE_C_COMPILER_LAUNCHER": "sccache", "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
                     "SCCACHE_GHA_ENABLED": "false", "SCCACHE_IDLE_TIMEOUT": "0",
                 })
