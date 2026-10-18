@@ -8,3 +8,4 @@ tmp
 GoogleService-Info.plist
 /binaries/apple-native/
 /apple/FlowLikeNative/.build/
+/gen/apple/assets/frontend-wasm/

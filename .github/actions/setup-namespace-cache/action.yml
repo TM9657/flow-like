@@ -22,7 +22,13 @@ runs:
         {
           printf 'SCCACHE_DIR=%s\n' "$cache_dir"
           echo 'SCCACHE_CACHE_SIZE=20G'
-          echo 'RUSTC_WRAPPER=sccache'
+          # Cargo handles long Windows command lines with argument files;
+          # sccache's rustc subprocess can exceed the Windows process limit.
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            echo 'RUSTC_WRAPPER='
+          else
+            echo 'RUSTC_WRAPPER=sccache'
+          fi
           echo 'CARGO_INCREMENTAL=0'
           echo 'CMAKE_C_COMPILER_LAUNCHER=sccache'
           echo 'CMAKE_CXX_COMPILER_LAUNCHER=sccache'

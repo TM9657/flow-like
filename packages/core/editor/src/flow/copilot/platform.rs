@@ -47,11 +47,12 @@ use super::stream::{
     tool_result_terminal_status, usage_stat_frame,
 };
 use super::tool_spec::{
-    ARCHIVE_LOOKUP_TOOL, INTERNET_SEARCH_TOOL, MEMORY_SEARCH_TOOL, MEMORY_STORE_TOOL,
-    OPEN_URL_TOOL, PlatformToolSpec, RESEARCH_AGENT_TOOL, data_studio_specialist_tool_specs,
-    find_data_studio_tool_spec, find_global_tool_spec, find_home_tool_spec, find_scout_tool_spec,
-    global_assistant_tool_specs, home_specialist_tool_specs, home_specialist_tool_specs_for_access,
-    public_web_tool_specs, resolve_tool_effect, scout_specialist_tool_specs, spec_arg_str,
+    ARCHIVE_LOOKUP_TOOL, HTTP_REQUEST_TOOL, INTERNET_SEARCH_TOOL, MEMORY_SEARCH_TOOL,
+    MEMORY_STORE_TOOL, OPEN_URL_TOOL, PlatformToolSpec, RESEARCH_AGENT_TOOL,
+    data_studio_specialist_tool_specs, find_data_studio_tool_spec, find_global_tool_spec,
+    find_home_tool_spec, find_scout_tool_spec, global_assistant_tool_specs,
+    home_specialist_tool_specs, home_specialist_tool_specs_for_access, public_web_tool_specs,
+    resolve_tool_effect, scout_specialist_tool_specs, spec_arg_str,
 };
 use super::types::{ChatImage, ChatMessage, ChatRole, PlanStepStatus};
 use crate::bit::{Bit, BitModelPreference, BitTypes, LLMParameters};
@@ -785,10 +786,6 @@ impl PlatformCopilot {
         let web_research_session = Arc::new(WebResearchSession::new(&user_prompt));
         let mut local_app_discovery_returned = false;
         let mut sealed_research_used = false;
-        // Set once a private/local tool has actually RUN — not merely been named. A wave that pairs
-        // research with a private call refuses both, and latching on the declared name there would
-        // re-block research on exactly the retry wave the model is told to use.
-        let mut private_tool_executed = false;
 
         // Tool rounds and answer generation have separate budgets. The last iteration deliberately
         // advertises no tools, guaranteeing that a search/open chain cannot consume the final turn
@@ -1040,11 +1037,17 @@ impl PlatformCopilot {
                     prepared_arguments.push(Err(error.to_string()));
                     continue;
                 }
+                if tool_name == HTTP_REQUEST_TOOL
+                    && let Some(refusal) =
+                        local_app_discovery_gate_error(tool_name, local_app_discovery_returned)
+                {
+                    prepared_arguments.push(Err(refusal.to_string()));
+                    continue;
+                }
                 let prepared = match tool_name {
                     RESEARCH_AGENT_TOOL => {
                         let output = if let Some(refusal) = sealed_research_gate_error(
                             round_has_private_call,
-                            private_tool_executed,
                             local_app_discovery_returned,
                             sealed_research_used,
                         ) {
@@ -1270,16 +1273,6 @@ impl PlatformCopilot {
             if round_entered_private_context {
                 web_research_session.close_public_web_phase();
             }
-            // Narrower than the web-phase latch above on purpose: a private call that the loop
-            // refused — deferred behind research, or never advertised on this surface — put nothing
-            // into the context and must not cost the run its public fallback.
-            if !round_has_research_fallback {
-                private_tool_executed |= tool_calls.iter().any(|tool_call| {
-                    let name = tool_call.function.name.as_str();
-                    advertised_tool_names.contains(name)
-                        && platform_tool_enters_private_context(name)
-                });
-            }
 
             for (i, (_id, name, output, _images)) in tool_results.iter().enumerate() {
                 if let (Some(callback), Some(frame_id)) = (&on_token, frame_ids.get(i)) {
@@ -1359,7 +1352,7 @@ impl PlatformCopilot {
                     let citation_allowlist =
                         citation_allowlist_text(&web_research_session.opened_urls());
                     image_contents.push(UserContent::text(format!(
-                        "The tool budget is complete. Produce the final answer now from the verified evidence already collected. Do not call more tools. Put citations next to their claims, state material gaps or conflicts, and use no clickable web citation outside this exact successfully-opened URL allowlist:\n{citation_allowlist}"
+                        "The tool budget is complete. Produce the final answer now from the verified evidence already collected. Do not call more tools. Put citations next to their claims and state material gaps or conflicts. Public-web research citations must use this exact successfully-opened URL allowlist:\n{citation_allowlist}\nDirect HTTP responses are separate tool evidence: report their status and returned data, and reference only the exact endpoint actually called without implying it was a public page verified by the researcher."
                     )));
                 } else if web_research_round {
                     let citation_allowlist =
@@ -1370,7 +1363,7 @@ impl PlatformCopilot {
                 }
                 if round_entered_private_context {
                     image_contents.push(UserContent::text(
-                        "Host privacy boundary: app, memory, or interactive user data has now entered the working context. Public-web tools are closed for the rest of this assistant run. Finish from public evidence already collected and do not derive a query or outbound URL from private data.",
+                        "Host privacy boundary: app, memory, or interactive user data has now entered the working context. Automatic public-web search and page-reading tools are closed for this assistant run. Finish from public evidence already collected; sealed research receives only the immutable user request. Direct http_request calls still require the existing execution approval controls and a user-authorized destination and purpose for any private data.",
                     ));
                 }
                 if !tool_images.is_empty() {
@@ -1659,24 +1652,25 @@ fn platform_tool_enters_private_context(name: &str) -> bool {
     !is_public_web_tool(name) && !matches!(name, "list_apps" | RESEARCH_AGENT_TOOL)
 }
 
-/// Why the sealed public researcher may not run right now, or `None` when it may.
-///
-/// Public research is a everyday capability, not a privileged one: a plainly public question should
-/// be answerable in the first wave without spending a round on `list_apps` first. What the host
-/// still enforces is the part the model cannot be trusted to self-police — ordering and spend:
-///
-/// - it never shares a wave with a private call, so untrusted page text and private data cannot
-///   land in one batch;
-/// - once private data HAS entered the run, local routing must have happened, because a run already
-///   working inside the user's apps should answer from them rather than reach for the public web;
-/// - it runs once per run.
-///
-/// The gate deliberately does not try to judge whether a request "is public". It cannot: the tool
-/// takes no arguments and the researcher sees only the immutable user prompt, so what goes out is
-/// identical in wave 1 and wave 5. That seal, not this gate, is what protects the user's data.
+/// Existing apps are checked before either public research or direct API requests. The model
+/// chooses the best matching interface from the returned inventory; the host enforces ordering.
+fn local_app_discovery_gate_error(
+    tool_name: &str,
+    local_app_discovery_returned: bool,
+) -> Option<Value> {
+    (!local_app_discovery_returned).then(|| json!({
+        "status": "error",
+        "tool": tool_name,
+        "code": "local_app_discovery_required",
+        "retryable": true,
+        "message": "Call list_apps and wait for its result first. Use an existing app if a configured interface handles the request; otherwise use web research or a direct API request. A partial inventory counts as discovery, but a failed listing does not.",
+    }))
+}
+
+/// Research requires a returned app inventory, its own call wave, and an unused research budget.
+/// Its input remains sealed to the immutable user request even after local app discovery or use.
 fn sealed_research_gate_error(
     round_has_private_call: bool,
-    private_tool_executed: bool,
     local_app_discovery_returned: bool,
     sealed_research_used: bool,
 ) -> Option<Value> {
@@ -1685,16 +1679,13 @@ fn sealed_research_gate_error(
             "status": "error",
             "code": "sealed_research_must_be_separate_wave",
             "retryable": true,
-            "message": "Run sealed public research in its own assistant wave before any local app, data, memory, file, or interactive call."
+            "message": "Run sealed public research in its own assistant wave, separate from local app, data, memory, file, or interactive calls."
         }));
     }
-    if private_tool_executed && !local_app_discovery_returned {
-        return Some(json!({
-            "status": "error",
-            "code": "local_app_discovery_required",
-            "retryable": true,
-            "message": "This run already works with local app or user data, so call list_apps and wait for its result before the public-web fallback. A partial inventory satisfies this; a failed one does not."
-        }));
+    if let Some(refusal) =
+        local_app_discovery_gate_error(RESEARCH_AGENT_TOOL, local_app_discovery_returned)
+    {
+        return Some(refusal);
     }
     if sealed_research_used {
         return Some(json!({
@@ -2041,7 +2032,7 @@ pub async fn run_internet_search(args: &Value) -> Value {
     let suggestions = compact_search_strings(payload.get("suggestions"), 5, 160);
     let corrections = compact_search_strings(payload.get("corrections"), 5, 160);
 
-    json!({
+    let mut output = json!({
         "status": "ok",
         "tool": "internet_search",
         "query": query,
@@ -2054,7 +2045,48 @@ pub async fn run_internet_search(args: &Value) -> Value {
         "corrections": corrections,
         "citation_eligible": false,
         "untrusted_content": true,
-    })
+    });
+    attach_search_engine_failures(&mut output, &payload);
+    output
+}
+
+fn attach_search_engine_failures(output: &mut Value, payload: &Value) {
+    let failures = payload
+        .get("unresponsive_engines")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|failure| {
+            let values = failure.as_array()?;
+            let engine = values.first()?.as_str()?;
+            let reason = values.get(1)?.as_str()?;
+            Some(json!({
+                "engine": sanitize_search_text(engine, 64),
+                "reason": sanitize_search_text(reason, 160),
+            }))
+        })
+        .take(8)
+        .collect::<Vec<_>>();
+    if failures.is_empty() {
+        return;
+    }
+    output["engine_failures"] = json!(failures);
+    output["degraded"] = json!(true);
+    if output
+        .get("results")
+        .and_then(Value::as_array)
+        .is_some_and(Vec::is_empty)
+    {
+        output["status"] = json!("error");
+        output["code"] = json!("search_engines_unavailable");
+        output["retryable"] = json!(false);
+        output["error"] = json!(
+            "Search returned no usable results while upstream engines reported failures. This does not establish that the requested information is unavailable."
+        );
+        output["recovery_hint"] = json!(
+            "Report the search service failure. Open a relevant user-supplied URL if available, or let the orchestrator use an authorized direct API request. Do not repeat the same query or build an app to work around the failure."
+        );
+    }
 }
 
 async fn read_bounded_search_body(
@@ -2245,6 +2277,33 @@ mod tests {
         assert!(!names.contains(&OPEN_URL_TOOL));
         assert!(!names.contains(&ARCHIVE_LOOKUP_TOOL));
         assert!(names.contains(&MEMORY_SEARCH_TOOL));
+        assert!(names.contains(&super::super::tool_spec::HTTP_REQUEST_TOOL));
+    }
+
+    #[tokio::test]
+    async fn direct_http_requests_go_through_the_host_approval_bridge() {
+        struct DenyingBridge;
+        #[async_trait]
+        impl PlatformToolBridge for DenyingBridge {
+            async fn call(&self, tool_name: &str, arguments: Value) -> String {
+                assert_eq!(tool_name, super::super::tool_spec::HTTP_REQUEST_TOOL);
+                assert_eq!(arguments["method"], "POST");
+                assert_eq!(arguments["json"]["city"], "Berlin");
+                json!({"status": "denied"}).to_string()
+            }
+        }
+        let bridge: Arc<dyn PlatformToolBridge> = Arc::new(DenyingBridge);
+        let result = execute_platform_tool(
+            super::super::tool_spec::HTTP_REQUEST_TOOL,
+            json!({"url": "https://api.example.com/weather", "method": "POST", "json": {"city": "Berlin"}}),
+            &bridge,
+            None,
+            &WebResearchSession::default(),
+        ).await;
+        assert_eq!(
+            serde_json::from_str::<Value>(&result).unwrap()["status"],
+            "denied"
+        );
     }
 
     /// A specialist surface must never inherit the orchestrator's delegation or public-web reach:
@@ -2264,6 +2323,7 @@ mod tests {
                 .collect();
             assert!(!names.is_empty());
             for forbidden in [
+                super::super::tool_spec::HTTP_REQUEST_TOOL,
                 RESEARCH_AGENT_TOOL,
                 INTERNET_SEARCH_TOOL,
                 OPEN_URL_TOOL,
@@ -2382,13 +2442,11 @@ mod tests {
 
     fn gate_code(
         round_has_private_call: bool,
-        private_tool_executed: bool,
         local_app_discovery_returned: bool,
         sealed_research_used: bool,
     ) -> Option<String> {
         sealed_research_gate_error(
             round_has_private_call,
-            private_tool_executed,
             local_app_discovery_returned,
             sealed_research_used,
         )
@@ -2401,34 +2459,37 @@ mod tests {
         })
     }
 
-    /// The point of the whole change: a plainly public question is answerable in the first wave,
-    /// with no `list_apps` round spent first.
     #[test]
-    fn public_research_runs_in_the_first_wave_without_listing_apps() {
-        assert_eq!(gate_code(false, false, false, false), None);
+    fn public_research_and_http_require_app_discovery_first() {
+        assert_eq!(
+            gate_code(false, false, false).as_deref(),
+            Some("local_app_discovery_required")
+        );
+        assert_eq!(gate_code(false, true, false), None);
+        let refusal = local_app_discovery_gate_error(HTTP_REQUEST_TOOL, false).unwrap();
+        assert_eq!(refusal["code"], "local_app_discovery_required");
+        assert_eq!(refusal["retryable"], true);
+        assert_eq!(refusal["tool"], HTTP_REQUEST_TOOL);
+        assert!(local_app_discovery_gate_error(HTTP_REQUEST_TOOL, true).is_none());
     }
 
     #[test]
     fn sealed_research_gate_refuses_in_priority_order() {
         // Sharing a wave with a private call outranks every other reason.
         assert_eq!(
-            gate_code(true, true, false, true).as_deref(),
+            gate_code(true, false, true).as_deref(),
             Some("sealed_research_must_be_separate_wave")
         );
-        // Once private data is in the run, local routing has to have happened.
+        // Every request checks local apps before public fallback, including a fresh run.
         assert_eq!(
-            gate_code(false, true, false, false).as_deref(),
+            gate_code(false, false, false).as_deref(),
             Some("local_app_discovery_required")
         );
         // ...and an inventory clears it.
-        assert_eq!(gate_code(false, true, true, false), None);
+        assert_eq!(gate_code(false, true, false), None);
         // One shot per run, however it was earned.
         assert_eq!(
-            gate_code(false, false, false, true).as_deref(),
-            Some("sealed_research_already_used")
-        );
-        assert_eq!(
-            gate_code(false, true, true, true).as_deref(),
+            gate_code(false, true, true).as_deref(),
             Some("sealed_research_already_used")
         );
     }
@@ -2438,12 +2499,11 @@ mod tests {
     #[test]
     fn only_the_recoverable_sealed_research_refusals_are_retryable() {
         for (args, retryable) in [
-            ((true, false, false, false), true),
-            ((false, true, false, false), true),
-            ((false, false, false, true), false),
+            ((true, false, false), true),
+            ((false, false, false), true),
+            ((false, true, true), false),
         ] {
-            let refusal =
-                sealed_research_gate_error(args.0, args.1, args.2, args.3).expect("a refusal");
+            let refusal = sealed_research_gate_error(args.0, args.1, args.2).expect("a refusal");
             assert_eq!(
                 refusal.get("retryable").and_then(Value::as_bool),
                 Some(retryable),
@@ -2516,6 +2576,49 @@ mod tests {
             ),
             vec!["https://example.com/search-only".to_string()]
         );
+    }
+
+    #[test]
+    fn search_engine_failures_are_distinct_from_genuine_empty_results() {
+        let failures = json!({"unresponsive_engines": [
+            ["brave", "Suspended: too many requests"],
+            ["duckduckgo", "CAPTCHA"],
+            ["google", "Suspended: access denied"],
+            [42, null],
+        ]});
+        let mut empty = json!({"status": "ok", "results": []});
+        attach_search_engine_failures(&mut empty, &failures);
+        assert_eq!(empty["status"], "error");
+        assert_eq!(empty["code"], "search_engines_unavailable");
+        assert_eq!(empty["retryable"], false);
+        assert_eq!(empty["engine_failures"].as_array().unwrap().len(), 3);
+
+        let mut usable =
+            json!({"status": "ok", "results": [{"url": "https://example.com/weather"}]});
+        attach_search_engine_failures(&mut usable, &failures);
+        assert_eq!(usable["status"], "ok");
+        assert_eq!(usable["degraded"], true);
+        assert!(usable.get("error").is_none());
+
+        let mut genuine_empty = json!({"status": "ok", "results": []});
+        attach_search_engine_failures(&mut genuine_empty, &json!({"unresponsive_engines": []}));
+        assert_eq!(genuine_empty["status"], "ok");
+        assert!(genuine_empty.get("degraded").is_none());
+    }
+
+    #[test]
+    fn search_engine_diagnostics_are_bounded_and_sanitized() {
+        let reason = format!("CAPTCHA\u{202e}{}", "x".repeat(1000));
+        let mut output = json!({"status": "ok", "results": []});
+        attach_search_engine_failures(
+            &mut output,
+            &json!({"unresponsive_engines": vec![json!(["engine", reason]); 20]}),
+        );
+        let failures = output["engine_failures"].as_array().unwrap();
+        assert_eq!(failures.len(), 8);
+        let reason = failures[0]["reason"].as_str().unwrap();
+        assert!(reason.chars().count() <= 160);
+        assert!(!reason.contains('\u{202e}'));
     }
 
     #[test]

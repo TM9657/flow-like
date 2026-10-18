@@ -1,5 +1,65 @@
 use std::{fs, path::PathBuf};
 
+mod ios_frontend;
+
+fn stage_ios_frontend() -> Result<(), Box<dyn std::error::Error>> {
+    let out = PathBuf::from(std::env::var_os("OUT_DIR").ok_or("OUT_DIR is missing")?);
+    let manifest = out.join("frontend-wasm-manifest.json");
+    fs::write(&manifest, "[]")?;
+    if tauri_build::is_dev() {
+        return Ok(());
+    }
+
+    let package = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let config: serde_json::Value = serde_json::from_slice(&fs::read("tauri.conf.json")?)?;
+    let mut frontend_dist = config.pointer("/build/frontendDist").cloned();
+    if let Ok(platform) = fs::read("tauri.ios.conf.json") {
+        println!("cargo:rerun-if-changed=tauri.ios.conf.json");
+        let platform: serde_json::Value = serde_json::from_slice(&platform)?;
+        if let Some(value) = platform.pointer("/build/frontendDist") {
+            frontend_dist = Some(value.clone());
+        }
+    }
+    let mut overrides: serde_json::Value = serde_json::from_str(
+        &std::env::var("TAURI_CONFIG").unwrap_or_else(|_| "{}".into()),
+    )?;
+    if let Some(value) = overrides.pointer("/build/frontendDist") {
+        frontend_dist = Some(value.clone());
+    }
+    let Some(frontend_dist) = frontend_dist.filter(|value| !value.is_null()) else {
+        return Ok(());
+    };
+    let frontend_dist = frontend_dist
+        .as_str()
+        .ok_or("iOS frontendDist must be a directory or URL")?;
+    if frontend_dist.contains("://") {
+        return Ok(());
+    }
+    let source = package.join(frontend_dist);
+    let embedded = out.join("frontend-embedded");
+    println!("cargo:rerun-if-changed={}", source.display());
+    println!("cargo:rerun-if-env-changed=TAURI_IOS_PROJECT_PATH");
+    let project = std::env::var_os("TAURI_IOS_PROJECT_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| package.join("gen/apple"));
+    let resources = project.join("assets/frontend-wasm");
+
+    // Xcode copies this existing folder resource after its Rust build phase.
+    // Staging here also covers Archive launched directly from Xcode, where
+    // Tauri's CLI does not refresh bundle.resources.
+    let staged = ios_frontend::stage(&source, &embedded, &resources)?;
+    println!("cargo:rerun-if-changed={}", resources.display());
+    fs::write(manifest, serde_json::to_vec(&staged.wasm_paths)?)?;
+    overrides["build"]["frontendDist"] = serde_json::to_value(&embedded)?;
+    println!("cargo:rustc-env=TAURI_CONFIG={overrides}");
+    println!(
+        "cargo:warning=iOS bundles {} WASM payloads ({} bytes) outside the executable",
+        staged.wasm_paths.len(),
+        staged.wasm_bytes
+    );
+    Ok(())
+}
+
 fn ensure_ios_deeplink_scheme(scheme: &str) -> Result<(), String> {
     let mut plist_paths = vec![PathBuf::from("Info.plist")];
 
@@ -388,6 +448,7 @@ fn main() {
     tauri_build::build();
 
     if target_os == "ios" {
+        stage_ios_frontend().expect("failed to stage iOS frontend resources");
         if let Err(err) = ensure_ios_deeplink_scheme("flow-like") {
             println!("cargo:warning=failed to enforce iOS deeplink scheme: {err}");
         }

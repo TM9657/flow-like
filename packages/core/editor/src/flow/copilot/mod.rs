@@ -14,6 +14,7 @@ mod declarations;
 mod draft_test;
 pub mod evaluation;
 mod executability;
+pub mod http_request;
 pub mod ir;
 pub mod ir_tools;
 pub mod manifest;

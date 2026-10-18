@@ -553,8 +553,8 @@ enum TextKind {
 }
 
 #[derive(Debug)]
-struct FetchFailure {
-    code: &'static str,
+pub(super) struct FetchFailure {
+    pub(super) code: &'static str,
     message: String,
     retryable: bool,
     url: Option<String>,
@@ -1675,7 +1675,7 @@ fn success_json(result: FetchSuccess) -> Value {
     })
 }
 
-fn parse_public_url(raw: &str) -> Result<Url, FetchFailure> {
+pub(super) fn parse_public_url(raw: &str) -> Result<Url, FetchFailure> {
     let raw = raw.trim();
     if raw.is_empty() {
         return Err(FetchFailure::new(
@@ -1801,7 +1801,7 @@ fn ensure_public_hostname(host: &str) -> Result<(), FetchFailure> {
     Ok(())
 }
 
-async fn resolve_public_addresses(url: &Url) -> Result<Vec<SocketAddr>, FetchFailure> {
+pub(super) async fn resolve_public_addresses(url: &Url) -> Result<Vec<SocketAddr>, FetchFailure> {
     let port = url.port_or_known_default().ok_or_else(|| {
         FetchFailure::new("invalid_url", "The URL does not have a known network port.").at(url)
     })?;
@@ -1847,6 +1847,18 @@ fn validate_resolved_addresses(
 }
 
 fn client_for_hop(url: &Url, addresses: &[SocketAddr]) -> Result<reqwest::Client, FetchFailure> {
+    public_client_builder(url, addresses)
+        .build()
+        .map_err(|error| {
+            FetchFailure::new(
+                "request_failed",
+                format!("Failed to create the safe URL client: {error}"),
+            )
+            .at(url)
+        })
+}
+
+pub(super) fn public_client_builder(url: &Url, addresses: &[SocketAddr]) -> reqwest::ClientBuilder {
     let mut builder = reqwest::Client::builder()
         .connect_timeout(DNS_TIMEOUT)
         .timeout(REQUEST_TIMEOUT)
@@ -1861,20 +1873,14 @@ fn client_for_hop(url: &Url, addresses: &[SocketAddr]) -> Result<reqwest::Client
     if let Some(Host::Domain(host)) = url.host() {
         builder = builder.resolve_to_addrs(host, addresses);
     }
-    builder.build().map_err(|error| {
-        FetchFailure::new(
-            "request_failed",
-            format!("Failed to create the safe URL client: {error}"),
-        )
-        .at(url)
-    })
+    builder
 }
 
 async fn read_bounded_body(response: reqwest::Response) -> Result<(Vec<u8>, bool), reqwest::Error> {
     read_bounded_body_with_limit(response, MAX_BODY_BYTES).await
 }
 
-async fn read_bounded_body_with_limit(
+pub(super) async fn read_bounded_body_with_limit(
     mut response: reqwest::Response,
     max_bytes: usize,
 ) -> Result<(Vec<u8>, bool), reqwest::Error> {

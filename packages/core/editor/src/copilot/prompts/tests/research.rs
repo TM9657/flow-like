@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn web_research_policy_matches_current_chat_citations_and_stays_out_of_specialists() {
     for required in [
-        "top-level FlowPilot orchestrator",
+        "isolated Research specialist",
         "adaptive research ladder",
         "**Lookup**",
         "**Standard**",
@@ -33,7 +33,9 @@ fn web_research_policy_matches_current_chat_citations_and_stays_out_of_specialis
         "mark estimates and projections as such",
         "Disclose\nnear-miss evidence",
         "keep the phases separated",
-        "never delegate either phase's public-web work to Data Studio",
+        "never delegate public-web work to Data Studio",
+        "You never receive app results, private files, memory",
+        "Return public\nevidence to the orchestrator",
         "Use `archive_lookup` only",
         "official version history",
         "`selection_method`",
@@ -96,7 +98,8 @@ fn web_research_policy_matches_current_chat_citations_and_stays_out_of_specialis
     assert_eq!(research.matches(WEB_RESEARCH_GUIDANCE.trim()).count(), 1);
     assert!(research.contains("`internet_search`, `open_url`, `archive_lookup`"));
     assert!(research.contains("You have NO private data to leak"));
-    assert!(research.contains("has no outbound network"));
+    assert!(research.contains("delegates public discovery to you"));
+    assert!(research.contains("requests use an approval flow"));
 
     let data_studio = data_studio_system_prompt("");
     assert!(data_studio.contains("Public-web research is outside this specialist's scope"));
@@ -209,4 +212,18 @@ fn research_prompt_requires_verified_citations_and_states_its_gaps() {
     let with_context = research_system_prompt("compare pricing tiers");
     assert!(with_context.contains("## RESEARCH BRIEF CONTEXT"));
     assert!(with_context.contains("compare pricing tiers"));
+}
+
+#[test]
+fn research_lookup_uses_its_tools_without_building_an_app() {
+    let prompt = research_system_prompt("");
+
+    assert!(prompt.contains("public research directly with these tools"));
+    assert!(prompt.contains("current weather for a named place"));
+    assert!(prompt.contains("one directly relevant primary source"));
+    assert!(prompt.contains("measurements and observation time"));
+    assert!(prompt.contains("Do not propose building an app to answer a one-off question"));
+    assert!(!prompt.contains("belong only to the top-level FlowPilot orchestrator"));
+    assert!(!prompt.contains("Your tool calls create PROPOSALS"));
+    assert!(!prompt.contains("direct filesystem, shell, network"));
 }

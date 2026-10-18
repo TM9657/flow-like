@@ -70,9 +70,9 @@ use flow_like::flow::copilot::public_web::{
     WebResearchSession, run_archive_lookup_for_session, run_open_url_for_session,
 };
 use flow_like::flow::copilot::tool_spec::{
-    ARCHIVE_LOOKUP_TOOL, INTERNET_SEARCH_TOOL, MEMORY_SEARCH_TOOL, MEMORY_STORE_TOOL,
-    OPEN_URL_TOOL, PlatformToolSpec, READ_ONLY_DATABASE_OPERATIONS, READ_WRITE_DATABASE_OPERATIONS,
-    cross_board_source_tool_specs, data_studio_database_tool_spec,
+    ARCHIVE_LOOKUP_TOOL, HTTP_REQUEST_TOOL, INTERNET_SEARCH_TOOL, MEMORY_SEARCH_TOOL,
+    MEMORY_STORE_TOOL, OPEN_URL_TOOL, PlatformToolSpec, READ_ONLY_DATABASE_OPERATIONS,
+    READ_WRITE_DATABASE_OPERATIONS, cross_board_source_tool_specs, data_studio_database_tool_spec,
     data_studio_specialist_tool_specs, global_assistant_tool_specs, home_specialist_tool_specs,
     interact_app_page_tool_spec, missing_required_args, public_web_tool_specs,
     resolve_tool_approval, runtime_execution_tool_specs, scoped_call_app_chat_spec,
@@ -1157,8 +1157,29 @@ fn frontend_tool_result_with_timeout(
     approval: FrontendToolApproval,
     timeout: Duration,
 ) -> ToolResultObject {
+    let http_arguments = (tool_name == HTTP_REQUEST_TOOL).then(|| args.clone());
+    let http_deadline = std::time::Instant::now().checked_add(timeout);
     let mut result =
         run_blocking_tool(|| bridge.call_with_timeout(tool_name, args, approval, timeout));
+    if let Some(arguments) = http_arguments {
+        let cancelled = super::frontend_tool_bridge::scoped_tool_execution_cancelled();
+        let cancellation = super::frontend_tool_bridge::http_request_cancellation(
+            bridge.channel().clone(),
+            None,
+            http_deadline,
+        );
+        result = block_on_tool(async {
+            use flow_like_types::channel::Channel as _;
+
+            super::frontend_tool_bridge::complete_http_request_approval(
+                &arguments,
+                result,
+                cancelled || bridge.channel().is_cancelled().await,
+                cancellation,
+            )
+            .await
+        });
+    }
     let FrontendToolImageInput {
         field_present,
         images,

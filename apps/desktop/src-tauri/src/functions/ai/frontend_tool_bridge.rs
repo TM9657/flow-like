@@ -8,6 +8,7 @@ use std::{
 use tauri::{AppHandle, Emitter};
 use tokio::sync::oneshot;
 
+use flow_like::flow::copilot::tool_spec::HTTP_REQUEST_TOOL;
 use flow_like_types::channel::{
     Channel, ChannelHandle, ChannelOutcome, ChannelTicket, InProcessChannel, new_request_id,
 };
@@ -99,6 +100,58 @@ pub(super) fn scoped_tool_execution_cancelled() -> bool {
                 .deadline
                 .is_some_and(|deadline| Instant::now() >= deadline)
     })
+}
+
+/// Capture the synchronous handler's owner before entering the async HTTP engine. Cancellation
+/// remains live while the engine waits for a connection slot, resolves DNS, or reads a response.
+pub(super) fn http_request_cancellation(
+    channel: Arc<InProcessChannel>,
+    cancellation: Option<CancellationToken>,
+    deadline: Option<Instant>,
+) -> impl std::future::Future<Output = ()> + Send {
+    let scoped = current_tool_execution();
+    let scoped_deadline = scoped.as_ref().and_then(|scope| scope.deadline);
+    let deadline = match (deadline, scoped_deadline) {
+        (Some(request), Some(owner)) => Some(request.min(owner)),
+        (request, owner) => request.or(owner),
+    };
+    async move {
+        let explicit_cancelled = async {
+            match cancellation {
+                Some(token) => token.cancelled().await,
+                None => std::future::pending::<()>().await,
+            }
+        };
+        let scoped_cancelled = async {
+            match scoped {
+                Some(scope) => scope.cancellation.cancelled().await,
+                None => std::future::pending::<()>().await,
+            }
+        };
+        let expired = async {
+            match deadline {
+                Some(deadline) => {
+                    tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)).await
+                }
+                None => std::future::pending::<()>().await,
+            }
+        };
+        let channel_cancelled = async {
+            loop {
+                if channel.is_cancelled().await {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        };
+        tokio::select! {
+            biased;
+            _ = explicit_cancelled => {},
+            _ = scoped_cancelled => {},
+            _ = expired => {},
+            _ = channel_cancelled => {},
+        }
+    }
 }
 
 /// Drive a bridge future to completion from the synchronous tool-handler world without pinning
@@ -495,6 +548,75 @@ fn parse_frontend_tool_response(value: Value) -> FrontendToolResponse {
     }
 }
 
+/// The HTTP host executes only after the frontend has completed its approval flow.
+/// Unlike ordinary tool results, this acknowledgement must use an explicit approval envelope.
+fn parse_http_request_approval(value: Value) -> FrontendToolResponse {
+    match serde_json::from_value::<FrontendToolResponse>(value) {
+        Ok(mut response) => {
+            if response.approved && response.error.is_none() {
+                let refused = response.result.as_ref().is_some_and(|result| {
+                    matches!(
+                        result.get("status").and_then(Value::as_str),
+                        Some("error" | "denied" | "cancelled" | "timeout")
+                    )
+                });
+                let acknowledged = response.result.as_ref().is_some_and(|result| {
+                    result.get("status").and_then(Value::as_str) == Some("ok")
+                        && result.get("http_request_approved").and_then(Value::as_bool)
+                            == Some(true)
+                        && !result.get("error").is_some_and(|error| !error.is_null())
+                });
+                if !refused && !acknowledged {
+                    response.error = Some(
+                        "The frontend did not acknowledge approval of this HTTP request."
+                            .to_string(),
+                    );
+                }
+            }
+            response
+        }
+        Err(_) => FrontendToolResponse {
+            approved: false,
+            result: None,
+            error: Some("The HTTP request approval response was malformed.".to_string()),
+        },
+    }
+}
+
+pub(super) async fn complete_http_request_approval(
+    arguments: &Value,
+    approval_result: Value,
+    cancelled: bool,
+    cancellation: impl std::future::Future<Output = ()>,
+) -> Value {
+    if approval_result.get("status").and_then(Value::as_str) != Some("ok") {
+        return approval_result;
+    }
+    if approval_result
+        .get("http_request_approved")
+        .and_then(Value::as_bool)
+        != Some(true)
+        || approval_result
+            .get("error")
+            .is_some_and(|error| !error.is_null())
+    {
+        return json!({
+            "status": "error",
+            "tool": HTTP_REQUEST_TOOL,
+            "error": "The frontend did not acknowledge approval of this HTTP request."
+        });
+    }
+    if cancelled {
+        return json!({
+            "status": "cancelled",
+            "tool": HTTP_REQUEST_TOOL,
+            "message": "The owning FlowPilot run ended before the HTTP request could execute."
+        });
+    }
+    flow_like::flow::copilot::http_request::run_http_request_cancellable(arguments, cancellation)
+        .await
+}
+
 fn resolve_wait_outcome(
     tool_name: &str,
     outcome: ChannelOutcome,
@@ -503,7 +625,11 @@ fn resolve_wait_outcome(
 ) -> ResolvedOutcome {
     match outcome {
         ChannelOutcome::Responded(value) => {
-            let response = parse_frontend_tool_response(value);
+            let response = if tool_name == HTTP_REQUEST_TOOL {
+                parse_http_request_approval(value)
+            } else {
+                parse_frontend_tool_response(value)
+            };
             flowpilot_debug_log!(
                 "[frontend-tool-bridge] '{tool_name}' answered (request {}, approved: {})",
                 trace.request_id,
@@ -1579,6 +1705,185 @@ mod tests {
             Some("handler blew up")
         );
         assert_eq!(failed.phase, "frontend_handler");
+    }
+
+    #[test]
+    fn http_requests_require_an_explicit_approved_acknowledgement() {
+        let acknowledgement = json!({ "status": "ok", "http_request_approved": true });
+        let trace = test_trace(HTTP_REQUEST_TOOL);
+        for reply in [
+            acknowledgement.clone(),
+            json!({ "approved": "true", "result": acknowledgement.clone() }),
+            json!({ "approved": true }),
+            json!({ "approved": true, "result": { "status": "ok" } }),
+            json!({ "approved": true, "result": { "http_request_approved": true } }),
+            json!({ "approved": true, "result": { "status": "error", "http_request_approved": true } }),
+            json!({ "approved": true, "result": acknowledgement.clone(), "error": "failed" }),
+        ] {
+            let resolved = resolve_wait_outcome(
+                HTTP_REQUEST_TOOL,
+                ChannelOutcome::Responded(reply.clone()),
+                false,
+                &trace,
+            );
+            assert_ne!(resolved.result["status"], "ok", "accepted {reply}");
+        }
+        let denied = resolve_wait_outcome(
+            HTTP_REQUEST_TOOL,
+            ChannelOutcome::Responded(json!({
+                "approved": false,
+                "result": acknowledgement.clone(),
+            })),
+            false,
+            &trace,
+        );
+        assert_eq!(denied.result["status"], "denied");
+
+        let approved = resolve_wait_outcome(
+            HTTP_REQUEST_TOOL,
+            ChannelOutcome::Responded(json!({
+                "approved": true,
+                "result": acknowledgement.clone(),
+            })),
+            false,
+            &trace,
+        );
+        assert_eq!(approved.result, acknowledgement);
+    }
+
+    #[tokio::test]
+    async fn http_request_approval_failures_and_cancellation_never_reach_the_engine() {
+        // Invalid arguments would produce an engine validation error if execution were reached.
+        let arguments = json!({ "url": "not a URL" });
+        for status in ["denied", "error", "timeout", "cancelled"] {
+            let result = json!({ "status": status });
+            assert_eq!(
+                complete_http_request_approval(
+                    &arguments,
+                    result.clone(),
+                    false,
+                    std::future::pending(),
+                )
+                .await,
+                result
+            );
+        }
+        let missing = complete_http_request_approval(
+            &arguments,
+            json!({ "status": "ok" }),
+            false,
+            std::future::pending(),
+        )
+        .await;
+        assert!(
+            missing["error"]
+                .as_str()
+                .unwrap()
+                .contains("acknowledge approval")
+        );
+        let cancelled = complete_http_request_approval(
+            &arguments,
+            json!({ "status": "ok", "http_request_approved": true }),
+            true,
+            std::future::pending(),
+        )
+        .await;
+        assert_eq!(cancelled["status"], "cancelled");
+    }
+
+    #[tokio::test]
+    async fn http_request_preserves_structured_discovery_refusals_without_execution() {
+        let refusal = json!({
+            "status": "error",
+            "code": "local_app_discovery_required",
+            "retryable": true,
+            "message": "Call list_apps and wait for its result first."
+        });
+        let trace = test_trace(HTTP_REQUEST_TOOL);
+        let resolved = resolve_wait_outcome(
+            HTTP_REQUEST_TOOL,
+            ChannelOutcome::Responded(json!({
+                "approved": true,
+                "result": refusal.clone(),
+            })),
+            false,
+            &trace,
+        );
+        assert_eq!(resolved.result, refusal);
+        assert_eq!(
+            complete_http_request_approval(
+                &json!({ "url": "not a URL" }),
+                resolved.result,
+                false,
+                std::future::pending(),
+            )
+            .await,
+            refusal
+        );
+        let malformed = parse_http_request_approval(json!({
+            "approved": true,
+            "result": { "status": "unrecognized", "http_request_approved": true },
+        }));
+        assert!(malformed.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn http_cancellation_retains_the_scoped_owner_after_approval() {
+        let channel = InProcessChannel::register(new_request_id(), Duration::from_secs(30)).await;
+        let owner = CancellationToken::new();
+        let cancellation = with_frontend_tool_execution_scope(owner.clone(), None, || {
+            http_request_cancellation(channel.clone(), None, None)
+        });
+        tokio::pin!(cancellation);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), &mut cancellation)
+                .await
+                .is_err()
+        );
+        owner.cancel();
+        tokio::time::timeout(Duration::from_secs(1), &mut cancellation)
+            .await
+            .expect("the captured owner must cancel an HTTP request already in progress");
+        channel.close().await;
+    }
+
+    #[tokio::test]
+    async fn http_cancellation_observes_the_owner_deadline_and_channel_stop() {
+        let channel = InProcessChannel::register(new_request_id(), Duration::from_secs(30)).await;
+        let cancellation = with_frontend_tool_execution_scope(
+            CancellationToken::new(),
+            Some(Instant::now() + Duration::from_millis(20)),
+            || {
+                http_request_cancellation(
+                    channel.clone(),
+                    None,
+                    Some(Instant::now() + Duration::from_secs(30)),
+                )
+            },
+        );
+        tokio::time::timeout(Duration::from_secs(1), cancellation)
+            .await
+            .expect("the earlier scoped deadline must remain active after approval");
+
+        let cancellation = http_request_cancellation(channel.clone(), None, None);
+        tokio::pin!(cancellation);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), &mut cancellation)
+                .await
+                .is_err()
+        );
+        channel
+            .push(flow_like_types::channel::ChannelPush {
+                channel_id: channel.channel_id().to_string(),
+                request_id: None,
+                kind: flow_like_types::channel::ChannelPushKind::Cancel,
+                value: Value::Null,
+            })
+            .await;
+        tokio::time::timeout(Duration::from_secs(1), &mut cancellation)
+            .await
+            .expect("a channel stop must cancel a request after approval");
+        channel.close().await;
     }
 
     #[test]

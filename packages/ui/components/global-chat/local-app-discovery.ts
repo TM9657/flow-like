@@ -1,9 +1,9 @@
 /**
- * Whether a `list_apps` result opens FlowPilot's sealed public-web fallback.
+ * Whether a `list_apps` result opens FlowPilot's research and HTTP fallbacks.
  *
  * The question is only whether a local inventory came back, never whether every app in it read
  * cleanly. `list_apps` reports `partial` when an app's Events cannot be loaded, when a current
- * profile app is missing from the backend inventory, or when the listing hits its safety cap — and
+ * profile app is missing from the backend inventory, or when the listing hits its safety cap, and
  * each of those is still evidence about what exists locally. Demanding a clean `ok` sealed the
  * fallback off for the rest of the run, so `research_agent` failed on every attempt no matter how
  * many times discovery succeeded.
@@ -12,7 +12,7 @@
  * stays unproven until a listing actually returns.
  *
  * Mirrors `returned_app_inventory_result` in
- * packages/core/editor/src/flow/copilot/platform.rs — both hosts must open the fallback on the same
+ * packages/core/editor/src/flow/copilot/platform.rs. Both hosts must open the fallback on the same
  * results, or the same run behaves differently depending on which backend serves it.
  */
 export function isReturnedAppInventory(result: unknown): boolean {
@@ -21,55 +21,48 @@ export function isReturnedAppInventory(result: unknown): boolean {
 	return status === "ok" || status === "partial";
 }
 
-/**
- * Tools whose results carry no private or user-controlled data. App inventory is on the list because
- * the sealed researcher accepts no model text, so inventory metadata provably cannot cross the
- * outbound boundary; `research_agent` is on it because it is that boundary.
- *
- * Mirrors the exemptions in `platform_tool_enters_private_context`
- * (packages/core/editor/src/flow/copilot/platform.rs).
- */
-const NON_PRIVATE_TOOLS = new Set(["list_apps", "research_agent"]);
-
-/**
- * Whether dispatching this tool puts private or user-controlled data into the run's working context.
- * Default-deny: an unrecognised tool counts as private, so a newly added tool cannot silently widen
- * what public research may follow.
- */
-export function entersPrivateContext(toolName: string): boolean {
-	return !NON_PRIVATE_TOOLS.has(toolName);
-}
-
 /** Why the sealed public researcher may not run, or `undefined` when it may. */
 export interface SealedResearchRefusal {
 	code: string;
 	message: string;
+	retryable?: boolean;
 }
 
 /** The run-scoped facts the gate decides on. */
 export interface SealedResearchRoutingState {
 	appInventoryReturned: boolean;
-	privateContextEntered: boolean;
 	sealedResearchUsed: boolean;
 }
 
 const FRESH_RUN: SealedResearchRoutingState = {
 	appInventoryReturned: false,
-	privateContextEntered: false,
 	sealedResearchUsed: false,
 };
 
+function localAppDiscoveryRefusal(
+	state: SealedResearchRoutingState | undefined,
+): SealedResearchRefusal | undefined {
+	if (!state?.appInventoryReturned)
+		return {
+			code: "local_app_discovery_required",
+			retryable: true,
+			message:
+				"Call list_apps and wait for its result first. Use an existing app if a configured interface handles the request; otherwise use web research or a direct API request. A partial inventory counts as discovery, but a failed listing does not.",
+		};
+	return undefined;
+}
+
+/** Direct HTTP calls share the app discovery gate and have no one-shot limit. */
+export function httpRequestRefusal(
+	runId: string | undefined,
+	state: SealedResearchRoutingState | undefined,
+): SealedResearchRefusal | undefined {
+	return localAppDiscoveryRefusal(runId?.trim() ? state : undefined);
+}
+
 /**
- * The browser-side half of the sealed-research gate. It must agree with
- * `sealed_research_gate_error` in packages/core/editor/src/flow/copilot/platform.rs: public research
- * is an everyday capability, so a plainly public request runs in the first wave with no inventory
- * round. The host still enforces what the model cannot self-police — once private data is in the
- * run, route locally first — and the one-shot cap.
- *
- * A run that has no id at all is refused. Not because of what it might leak, but because the
- * one-shot cap is recorded against the run id: without one, every dispatch would start another
- * researcher. A run that HAS an id but no state yet is simply a fresh run, and research is its
- * first act — that is the case this whole gate exists to allow.
+ * Match the core sealed-research gate: a returned app inventory must precede research, and
+ * each run can start one sealed researcher. A missing run id cannot establish either condition.
  */
 export function sealedResearchRefusal(
 	runId: string | undefined,
@@ -82,12 +75,8 @@ export function sealedResearchRefusal(
 				"This run has no id, so the one-shot public researcher cannot be tracked. Retry in a new turn.",
 		};
 	const current = state ?? FRESH_RUN;
-	if (current.privateContextEntered && !current.appInventoryReturned)
-		return {
-			code: "local_app_discovery_required",
-			message:
-				"This run already works with local app or user data, so call list_apps and wait for its result before sealed public research.",
-		};
+	const discoveryRefusal = localAppDiscoveryRefusal(current);
+	if (discoveryRefusal) return discoveryRefusal;
 	if (current.sealedResearchUsed)
 		return {
 			code: "sealed_research_already_used",

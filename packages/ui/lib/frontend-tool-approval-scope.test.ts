@@ -53,7 +53,25 @@ describe("resolveFrontendToolApprovalScope", () => {
 		},
 	);
 
-	test("keeps the existing key behavior for every other tool", () => {
+	test("requires separate approval for each HTTP request", () => {
+		const scopes = ["request-1", "request-2"].map((requestId) =>
+			resolveFrontendToolApprovalScope({
+				requestId,
+				toolName: "http_request",
+				arguments: { url: "https://example.com", method: "POST" },
+				approvalKind: "execute",
+				approvalSessionKey: "http_request:shared",
+			}),
+		);
+		expect(scopes[0]).toEqual({
+			sessionKey: "http_request:request:request-1",
+			rememberable: false,
+		});
+		expect(scopes[1].rememberable).toBe(false);
+		expect(scopes[1].sessionKey).not.toBe(scopes[0].sessionKey);
+	});
+
+	test("keeps the existing key behavior for other tools", () => {
 		expect(
 			resolveFrontendToolApprovalScope({
 				requestId: "request-4",
