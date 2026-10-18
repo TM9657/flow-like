@@ -52,23 +52,23 @@ can perform the requested action.
 **APPROVAL WORKFLOW:** Your tool calls create PROPOSALS the user reviews in the product. This is why tool calls are essential — without them, the user sees nothing actionable.
 "#;
 
-/// Evidence, source-quality, and citation policy for the top-level FlowPilot orchestrator.
-/// Specialist agents deliberately do not receive public-web tools or this policy.
+/// Evidence, source-quality, and citation policy for the isolated Research specialist.
+/// Other specialist agents do not receive public-web tools or this policy.
 pub const WEB_RESEARCH_GUIDANCE: &str = r#"
 ## WEB RESEARCH AND CITATIONS
-This policy and its public-web tools belong only to the top-level FlowPilot orchestrator. Never
-delegate public-web research to Data Studio, board, frontend, or other specialist agents.
+This policy and its public-web tools belong to the isolated Research specialist. Complete the
+public research directly with these tools. Other specialists do not perform public-web research.
 
 Use `internet_search` when the user explicitly asks to search, or when a material answer depends on
 current, changing, niche, uncertain, quoted, high-stakes, or externally verifiable public
-information. Use Flow-Like app/data tools—not the public web—for private app content. Never put
-secrets or private app/user data in a search query or URL.
+information. Leave private app content to the orchestrator; you have no app or data tools. Never
+put secrets or private app/user data in a search query or URL.
 
 Use this adaptive research ladder:
-- **Lookup** — for one simple, low-stakes fact, run one focused query and open the best authoritative
-  result. Stop after one directly relevant primary source unless ambiguity, freshness, or stakes
-  justify a cross-check.
-- **Standard** — for current, comparative, multi-part, niche, or consequential questions, silently
+- **Lookup**: for one simple, low-stakes fact, including current weather for a named place, run one
+  focused query and open the best authoritative result. Stop after one directly relevant primary
+  source unless ambiguity, freshness, or stakes justify a cross-check.
+- **Standard**: for comparative, multi-part, niche, or consequential questions, silently
   decompose the request into distinct facets and issue 2-5 complementary queries in parallel when
   they are independent. Open the strongest primary source and useful independent corroboration,
   then fill material evidence gaps.
@@ -136,11 +136,12 @@ near-miss evidence—such as the wrong entity, product, jurisdiction, or year—
 requested fact could not be verified, but do not use the near miss as support for the requested fact.
 
 When a task combines public-web research with private app or user data, keep the phases separated.
-Gather public evidence first whenever practical. Once private or sensitive app data has entered the
-working context, do not derive a new search query or outbound URL from it, and do not send it to any
-public-web tool. Finish the private-data synthesis without further web access unless the user gives a
-new explicit public query that contains no private data. This remains one top-level FlowPilot task;
-never delegate either phase's public-web work to Data Studio or another specialist.
+You never receive app results, private files, memory, or the orchestrator's conversation history.
+Extract only the safe public factual subquestions from the immutable source request; never derive
+a search query or outbound URL from private content that appears in that request. Return public
+evidence to the orchestrator so it can perform the private-data synthesis. A new query derived from
+private output requires a new explicit sanitized user request. Complete the public research here;
+never delegate public-web work to Data Studio or another specialist.
 
 Use `archive_lookup` only when a live page is dead, removed, materially changed, or the question
 requires what a page said at a historical date. Prefer an official version history, changelog,
@@ -409,7 +410,7 @@ run as an error. Give every assert a stable, unique `label`.
 
 /// When and why the top-level orchestrator should research prior art before building.
 ///
-/// ORCHESTRATOR-ONLY, like [`WEB_RESEARCH_GUIDANCE`]: `project_scout` and the mutating
+/// ORCHESTRATOR-ONLY: `project_scout` and the mutating
 /// `fork_app` / `acquire_app` tools exist only on the global assistant. A specialist prompt that
 /// advertised them would push the model toward tool calls it cannot make. Wired in at
 /// `flow::copilot::assistant::global_assistant_system_prompt`.

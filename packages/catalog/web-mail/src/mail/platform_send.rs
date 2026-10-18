@@ -109,6 +109,16 @@ fn validate_session(session: &MailSession, app_id: &str) -> flow_like_types::Res
     Ok(())
 }
 
+fn mail_request_id(run_id: &str, node_id: &str, trace_id: &str) -> flow_like_types::Result<String> {
+    if run_id.is_empty() {
+        return Err(anyhow!("Platform email requires an execution run ID"));
+    }
+    // Trace counters restart in each executor process. Include the run so a new
+    // execution cannot replay another run's successful submission.
+    let identity = json!([run_id, node_id, trace_id]).to_string();
+    Ok(flow_like::utils::hash::hash_string(&identity))
+}
+
 /// The executor's execution route and credential on server runs; the user
 /// route on the profile hub otherwise.
 fn mail_endpoint<'a>(
@@ -189,7 +199,11 @@ pub(super) async fn submit(
     }
     validate_session(session, &cache.app_id)?;
     let (url, bearer) = mail_endpoint(context, &cache.app_id, action)?;
-    body["request_id"] = json!(format!("{}:{}", context.id, context.trace.id));
+    body["request_id"] = json!(mail_request_id(
+        context.run_id(),
+        &context.id,
+        &context.trace.id,
+    )?);
     let response = post_mail(context, &url, bearer, &body).await?;
     if !response.status().is_success() {
         return Err(hub_response_error("Platform email", response).await);
@@ -339,6 +353,32 @@ mod tests {
         }
         assert_eq!(MAIL_RETRY.retries, 3);
         assert!(MAIL_RETRY.max_wait <= Duration::from_secs(60));
+    }
+
+    #[test]
+    fn mail_idempotency_separates_runs_and_preserves_retries() {
+        let first = mail_request_id("run-1", "reply-node", "t4").unwrap();
+        let retry = mail_request_id("run-1", "reply-node", "t4").unwrap();
+        let next_run = mail_request_id("run-2", "reply-node", "t4").unwrap();
+        let next_iteration = mail_request_id("run-1", "reply-node", "t5").unwrap();
+        let other_node = mail_request_id("run-1", "send-node", "t4").unwrap();
+
+        assert_eq!(first, retry, "HTTP retries must replay the same submission");
+        assert_ne!(first, next_run, "new executors may reuse trace counters");
+        assert_ne!(first, next_iteration, "loop iterations may send new mail");
+        assert_ne!(first, other_node, "separate mail nodes may send new mail");
+        assert!(mail_request_id("", "reply-node", "t4").is_err());
+    }
+
+    #[test]
+    fn mail_idempotency_accepts_long_ids_without_ambiguous_boundaries() {
+        let request_id = mail_request_id(&"run".repeat(100), "node/with spaces", "t4").unwrap();
+        assert!(request_id.len() <= 128);
+        assert!(request_id.bytes().all(|byte| byte.is_ascii_alphanumeric()));
+        assert_ne!(
+            mail_request_id("run:node", "part", "t4").unwrap(),
+            mail_request_id("run", "node:part", "t4").unwrap(),
+        );
     }
 
     #[test]

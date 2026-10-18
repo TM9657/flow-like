@@ -638,7 +638,15 @@ fn external_global_prompt_keeps_the_platform_orchestrator_role() {
         true,
     );
     assert!(prompt.contains("You are the PLATFORM orchestrator"));
-    assert!(prompt.contains("coordinate every required specialist"));
+    assert!(prompt.contains("coordinate only the specialists needed to complete the request"));
+    assert!(prompt.contains("current weather stay DIRECT: check existing app capabilities"));
+    assert!(prompt.contains("through list_apps first"));
+    assert!(prompt.contains(
+        "fallbacks only when no suitable app/interface or usable local research answer remains"
+    ));
+    assert!(prompt.contains("Missing apps or failed research do not authorize BUILD"));
+    assert!(prompt.contains("For requested BUILD work"));
+    assert!(prompt.contains("Use http_request under its approval flow"));
     assert!(prompt.contains("only when the user explicitly requests Home work"));
     assert!(prompt.contains("Keep Home out of ordinary app builds"));
     assert!(!prompt.contains("You are the UI specialist"));
@@ -686,6 +694,13 @@ fn mcp_server_instructions_are_derived_from_specialist_tools() {
     assert!(global.contains("only when the user explicitly requests"));
     assert!(global.contains("Keep it out of ordinary app builds"));
     assert!(global.contains("sealed no-argument research_agent"));
+    assert!(global.contains("current weather stay DIRECT"));
+    assert!(global.contains("missing apps or failed lookup never authorize BUILD"));
+    assert!(global.contains("check existing app capabilities before research or HTTP fallback"));
+    assert!(global.contains("Use http_request under the same local-first fallback rules"));
+    assert!(global.contains("only after list_apps returns"));
+    assert!(!global.contains("in the first wave"));
+    assert!(global.contains("Never retry uncertain writes"));
     assert!(global.len() < 2_000);
 
     let native_web_global = flowpilot_mcp_server_instructions(
@@ -694,7 +709,11 @@ fn mcp_server_instructions_are_derived_from_specialist_tools() {
     );
     assert!(native_web_global.contains("platform orchestrator"));
     assert!(native_web_global.contains("built-in web search"));
-    assert!(native_web_global.contains("one that errors never blocks web research"));
+    assert!(native_web_global.contains("only after list_apps returns"));
+    assert!(
+        native_web_global
+            .contains("no suitable app/interface or usable local research answer remains")
+    );
     assert!(native_web_global.contains("Specialists have no web access"));
     assert!(!native_web_global.contains("research_agent"));
     assert!(native_web_global.len() < 2_000);

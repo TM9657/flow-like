@@ -216,7 +216,7 @@ import {
 	presentInlineAppPage,
 } from "./inline-app-page-runtime";
 import {
-	entersPrivateContext,
+	httpRequestRefusal,
 	isReturnedAppInventory,
 	sealedResearchRefusal,
 } from "./local-app-discovery";
@@ -635,17 +635,12 @@ export interface RunScope {
 
 interface SolveRoutingState {
 	appInventoryReturned: boolean;
-	/** Set once a tool carrying private or user-controlled data has been dispatched in this run. */
-	privateContextEntered: boolean;
 	sealedResearchUsed: boolean;
 }
 
-// Routing state is host-owned, not model-authored. Public research is an everyday capability: a
-// plainly public request may run it in the first wave. What stays enforced is that a run already
-// holding private data routes locally first, and that the researcher runs once. The inventory gate
-// is "an inventory came back", never "every app in it read cleanly" — one app whose Events cannot
-// be loaded makes the listing partial, not absent, and must not seal off public research. Keep it
-// bounded so abandoned run ids cannot accumulate for the lifetime of the desktop process.
+// Host-owned state requires an app inventory before research or HTTP fallback. A partial listing
+// counts as returned inventory, while failed or pending discovery keeps both fallbacks closed.
+// Bound the map so abandoned run ids cannot accumulate for the lifetime of the desktop process.
 const solveRoutingStateByRun = new Map<string, SolveRoutingState>();
 const MAX_SOLVE_ROUTING_STATES = 256;
 
@@ -2350,6 +2345,9 @@ export function GlobalToolBridge() {
 				};
 			};
 			switch (request.toolName) {
+				case "http_request":
+					// The host retains the original request and sends it after this approval reply.
+					return { status: "ok", http_request_approved: true };
 				case "search_workspace":
 				case "read_symbol": {
 					const workspaceScope = {
@@ -4267,9 +4265,8 @@ export function GlobalToolBridge() {
 					// This boundary is deliberately sealed. The root model may have seen local app
 					// metadata (and may have recalled memory), so accepting a model-authored question or
 					// context here would let it encode private text into an outbound query. Bind the
-					// researcher only to the immutable top-level user request carried by the host. That
-					// seal, not the ordering gate below, is what keeps private data out of the query —
-					// which is why research may run before any local discovery.
+					// researcher only to the immutable top-level user request carried by the host.
+					// The inventory gate separately ensures existing apps are considered first.
 					const routingState = scope.runId
 						? solveRoutingStateByRun.get(scope.runId)
 						: undefined;
@@ -4286,7 +4283,6 @@ export function GlobalToolBridge() {
 						};
 					setSolveRoutingState(scope.runId, {
 						appInventoryReturned: routingState?.appInventoryReturned ?? false,
-						privateContextEntered: routingState?.privateContextEntered ?? false,
 						sealedResearchUsed: true,
 					});
 					const instruction = owningUserPrompt;
@@ -7733,6 +7729,19 @@ Completion contract: build complete helper logic first and add the Event entry l
 					};
 				}
 
+				if (request.toolName === "http_request") {
+					const refusal = httpRequestRefusal(
+						scope.runId,
+						scope.runId ? solveRoutingStateByRun.get(scope.runId) : undefined,
+					);
+					if (refusal)
+						return {
+							requestId: request.requestId,
+							approved: true,
+							result: { status: "error", ...refusal },
+						};
+				}
+
 				const approval = request.approval;
 				const approvalScope = resolveFrontendToolApprovalScope({
 					requestId: request.requestId,
@@ -7826,17 +7835,6 @@ Completion contract: build complete helper logic first and add the Event entry l
 					? "Nested frontend tool request received."
 					: "Frontend tool request received.",
 			});
-
-			// Marked before dispatch, not after: a private tool that is still in flight has already
-			// committed this run to private data, and sealed research must not slip in alongside it.
-			if (scope.runId && entersPrivateContext(request.toolName)) {
-				const previous = solveRoutingStateByRun.get(scope.runId);
-				setSolveRoutingState(scope.runId, {
-					appInventoryReturned: previous?.appInventoryReturned ?? false,
-					privateContextEntered: true,
-					sealedResearchUsed: previous?.sealedResearchUsed ?? false,
-				});
-			}
 
 			const deadline = requestDeadline(request);
 			const executionLease = requestExecutionFenceRef.current.begin({
@@ -7991,8 +7989,6 @@ Completion contract: build complete helper logic first and add the Event entry l
 					appInventoryReturned:
 						(previousRoutingState?.appInventoryReturned ?? false) ||
 						isReturnedAppInventory(inventory),
-					privateContextEntered:
-						previousRoutingState?.privateContextEntered ?? false,
 					sealedResearchUsed: previousRoutingState?.sealedResearchUsed ?? false,
 				});
 			}

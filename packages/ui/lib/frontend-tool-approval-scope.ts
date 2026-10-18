@@ -31,8 +31,8 @@ function scopePart(value: string): string {
 
 /**
  * Resolve the frontend session allowlist key for one tool request. Page interaction approvals are
- * reusable only when both the app and exact Event/page target are known. Every other tool retains
- * its existing backend-provided key (or tool/kind fallback).
+ * reusable only when both the app and exact Event/page target are known. HTTP requests require
+ * their own approval because their destinations, credentials, and bodies may differ.
  */
 export function resolveFrontendToolApprovalScope({
 	requestId,
@@ -42,6 +42,12 @@ export function resolveFrontendToolApprovalScope({
 	approvalSessionKey,
 	contextAppId,
 }: FrontendToolApprovalScopeInput): FrontendToolApprovalScope {
+	if (toolName === "http_request") {
+		return {
+			sessionKey: `http_request:request:${scopePart(requestId)}`,
+			rememberable: false,
+		};
+	}
 	if (toolName !== "interact_app_page") {
 		return {
 			sessionKey: approvalSessionKey || `${toolName}:${approvalKind ?? "none"}`,

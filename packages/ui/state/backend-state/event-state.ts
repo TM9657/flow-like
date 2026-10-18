@@ -743,12 +743,13 @@ export interface IEventState {
 
 	/**
 	 * One recorded run's full (redacted) input payload plus the node it was
-	 * dispatched into (cloud only).
+	 * dispatched into. Desktop callers identify remote runs to read from the hub.
 	 */
 	getCorpusPayload?(
 		appId: string,
 		eventId: string,
 		runId: string,
+		source?: "local" | "remote",
 	): Promise<IRegressionCorpusPayload>;
 
 	/**

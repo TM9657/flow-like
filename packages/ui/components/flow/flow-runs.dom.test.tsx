@@ -1,8 +1,17 @@
-import { afterAll, afterEach, beforeEach, expect, mock, test } from "bun:test";
+import {
+	afterAll,
+	afterEach,
+	beforeEach,
+	expect,
+	mock,
+	spyOn,
+	test,
+} from "bun:test";
 import { Window } from "happy-dom";
 import { createInstance } from "i18next";
 import { act } from "react";
 import { I18nextProvider } from "react-i18next";
+import type { INode } from "../../lib/schema/flow/board";
 import type { ILogMetadata } from "../../lib/schema/flow/log-metadata";
 import type { IBackendState } from "../../state/backend-state";
 
@@ -78,6 +87,7 @@ const { createRoot } = await import("react-dom/client");
 const { BackendContext } = await import("../../state/backend-state");
 const { useLogAggregation } = await import("../../state/log-aggregation-state");
 const { FlowRuns } = await import("./flow-runs");
+const { toast } = await import("sonner");
 const initialState = useLogAggregation.getInitialState();
 const i18n = createInstance();
 await i18n.init({ lng: "en", resources: {}, initAsync: false });
@@ -123,8 +133,18 @@ function runAt(index: number): ILogMetadata {
 	};
 }
 
-async function render(listRuns: IBackendState["boardState"]["listRuns"]) {
-	const backend = { boardState: { listRuns }, eventState: {} } as IBackendState;
+async function render(
+	listRuns: IBackendState["boardState"]["listRuns"],
+	options: {
+		getCorpusPayload?: IBackendState["eventState"]["getCorpusPayload"];
+		executeBoard?: (node: INode, payload?: object) => Promise<void>;
+		nodes?: Record<string, INode>;
+	} = {},
+) {
+	const backend = {
+		boardState: { listRuns },
+		eventState: { getCorpusPayload: options.getCorpusPayload },
+	} as IBackendState;
 	await act(async () => {
 		root.render(
 			<I18nextProvider i18n={i18n}>
@@ -132,9 +152,9 @@ async function render(listRuns: IBackendState["boardState"]["listRuns"]) {
 					<FlowRuns
 						appId="app"
 						boardId="board"
-						nodes={{}}
+						nodes={options.nodes ?? {}}
 						version={[1, 0, 0]}
-						executeBoard={async () => {}}
+						executeBoard={options.executeBoard ?? (async () => {})}
 						onVersionChange={() => {}}
 						onFocusNode={() => {}}
 					/>
@@ -143,6 +163,74 @@ async function render(listRuns: IBackendState["boardState"]["listRuns"]) {
 		);
 	});
 }
+
+async function rerunFirst() {
+	const actions = container.querySelector<HTMLButtonElement>(
+		'button[aria-label="Log Actions"]',
+	);
+	expect(actions).not.toBeNull();
+	await act(async () => {
+		actions?.dispatchEvent(
+			new PointerEvent("pointerdown", {
+				bubbles: true,
+				pointerType: "mouse",
+				button: 0,
+			}),
+		);
+	});
+	const rerun = Array.from(
+		document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+	).find((item) => item.textContent === "Re-Run");
+	expect(rerun).toBeDefined();
+	await act(async () => rerun?.click());
+}
+
+test("rerunning a remote event reads its hub payload and resolved start node", async () => {
+	const run = { ...runAt(0), is_remote: true };
+	const node = { id: "resolved-node", friendly_name: "Inbound email" } as INode;
+	const payload = { subject: "Jenny Test" };
+	const getCorpusPayload = mock(async () => ({
+		run_id: run.run_id,
+		board_id: "board",
+		node_id: node.id,
+		payload,
+	}));
+	const executeBoard = mock(async (_node: INode, _payload?: object) => {});
+	await render(async () => [run], {
+		getCorpusPayload,
+		executeBoard,
+		nodes: { [node.id]: node },
+	});
+
+	await rerunFirst();
+
+	expect(getCorpusPayload).toHaveBeenCalledWith(
+		"app",
+		"event",
+		run.run_id,
+		"remote",
+	);
+	expect(executeBoard).toHaveBeenCalledWith(node, payload);
+});
+
+test("rerun displays a structured native error without starting another run", async () => {
+	const run = { ...runAt(0), is_remote: true };
+	const errorToast = spyOn(toast, "error").mockImplementation(() => "error");
+	try {
+		const getCorpusPayload = mock(async () => {
+			throw { error: "Run not found for this event" };
+		});
+		const executeBoard = mock(async (_node: INode, _payload?: object) => {});
+		await render(async () => [run], { getCorpusPayload, executeBoard });
+
+		await rerunFirst();
+
+		expect(errorToast).toHaveBeenCalledWith("Run not found for this event");
+		expect(executeBoard).not.toHaveBeenCalled();
+	} finally {
+		errorToast.mockRestore();
+	}
+});
 
 function activeObserver() {
 	const observer = TestIntersectionObserver.instances.find(

@@ -60,6 +60,9 @@ The global FlowPilot can also:
 - Call chat and headless app interfaces on your behalf
 - Pass relevant attached files to an app chat
 - Search and read public web sources when your request needs current external information
+- Call a public API directly with a method, custom headers, and a raw or JSON body through the tool's approval flow
+
+For a one-off lookup, such as current weather, FlowPilot first checks whether an existing app and its configured interfaces can handle the request. Public research or a direct API call is the fallback when no suitable interface or usable local research answer is available. The Research specialist searches through `search.flow-like.com` and reads public pages; a separate API request tool handles custom HTTP requests. If sources cannot establish the answer, FlowPilot reports the gap. It creates an app or recurring automation only when you request that behavior.
 
 In normal request-and-answer use, configured app Events are the primary interface. Direct datasource queries remain available as a deliberate fallback; app-building data work can still go directly to the Data Studio specialist.
 

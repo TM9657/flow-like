@@ -131,6 +131,66 @@ const emptyRunRequirements = () => ({
 	instantiates_widgets: false,
 });
 
+describe("recorded Event payloads", () => {
+	const payload = {
+		run_id: "run-1",
+		node_id: "node-1",
+		board_id: BOARD,
+		payload: { subject: "Jenny Test" },
+	};
+
+	test("reads a remote run from the hub even when the device has no local app", async () => {
+		const backend = fakeBackend();
+		const state = new EventState(backend as never);
+		mocks.invoke.mockRejectedValue({ error: "App not found" });
+		mocks.fetcher.mockResolvedValue(payload);
+
+		await expect(
+			state.getCorpusPayload(APP, EVENT, "run-1", "remote"),
+		).resolves.toEqual(payload);
+
+		expect(mocks.fetcher).toHaveBeenCalledWith(
+			backend.profile,
+			`apps/${APP}/events/${EVENT}/corpus/run-1/payload`,
+			{ method: "GET" },
+			backend.auth,
+		);
+		expect(mocks.invoke).not.toHaveBeenCalled();
+		expect(backend.isOffline).not.toHaveBeenCalled();
+	});
+
+	test("keeps local regression payload reads on the device", async () => {
+		const state = new EventState(fakeBackend() as never);
+		mocks.invoke.mockResolvedValue(payload);
+
+		await expect(state.getCorpusPayload(APP, EVENT, "run-1")).resolves.toEqual(
+			payload,
+		);
+
+		expect(mocks.invoke).toHaveBeenCalledWith("get_regression_corpus_payload", {
+			appId: APP,
+			eventId: EVENT,
+			runId: "run-1",
+		});
+		expect(mocks.fetcher).not.toHaveBeenCalled();
+	});
+
+	test("preserves a hub failure without trying the local run store", async () => {
+		const state = new EventState(fakeBackend() as never);
+		const error = new ApiResponseError({
+			status: 403,
+			message: "You do not have permission to read logs",
+			code: "FORBIDDEN",
+		});
+		mocks.fetcher.mockRejectedValue(error);
+
+		await expect(
+			state.getCorpusPayload(APP, EVENT, "run-1", "remote"),
+		).rejects.toBe(error);
+		expect(mocks.invoke).not.toHaveBeenCalled();
+	});
+});
+
 beforeEach(() => {
 	mocks.invoke.mockReset();
 	mocks.fetcher.mockReset();
