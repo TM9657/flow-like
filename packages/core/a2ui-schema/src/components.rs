@@ -58,6 +58,7 @@ pub enum A2UIComponentType {
     AppLink(AppLinkProps),
     TextField(TextFieldProps),
     RichText(RichTextProps),
+    Excalidraw(ExcalidrawProps),
     Select(SelectProps),
     Slider(SliderProps),
     Checkbox(CheckboxProps),
@@ -1863,8 +1864,86 @@ pub struct BoundingBoxOverlayProps {
 }
 
 // =============================================================================
+// Excalidraw
+// =============================================================================
+
+/// Direct action context emitted by Excalidraw. Shared with the frontend event manifest.
+pub fn excalidraw_event_context_schema(event_name: &str) -> Option<Value> {
+    static CONTRACT: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
+        serde_json::from_str(include_str!("excalidraw-event-schemas.json"))
+            .expect("the bundled Excalidraw event contract must be valid JSON")
+    });
+    let definition = CONTRACT["events"].get(event_name)?.as_str()?;
+    let mut schema = CONTRACT["$defs"].get(definition)?.as_object()?.clone();
+    schema.insert("$schema".into(), CONTRACT["$schema"].clone());
+    schema.insert("$defs".into(), CONTRACT["$defs"].clone());
+    Some(Value::Object(schema))
+}
+
+/// Format marker for an exported Excalidraw scene.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub enum ExcalidrawSceneType {
+    #[serde(rename = "excalidraw")]
+    Excalidraw,
+}
+
+/// A portable drawing, including the image files needed to restore it.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExcalidrawScene {
+    #[serde(rename = "type")]
+    pub scene_type: ExcalidrawSceneType,
+    pub version: f64,
+    pub source: String,
+    pub elements: Vec<serde_json::Map<String, Value>>,
+    pub app_state: serde_json::Map<String, Value>,
+    pub files: HashMap<String, serde_json::Map<String, Value>>,
+}
+
+/// Drawing editor with exact load, save, autoSave, dirtyChange and error event handlers.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExcalidrawProps {
+    /// Scene object or serialized Excalidraw JSON. Replacing it loads a drawing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+    /// Disable editing. Defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<BoundValue>,
+    /// Editor theme: "light" or "dark".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<BoundValue>,
+    /// Dispatch autoSave after edits settle. Requires an exact handler; defaults to true.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_save: Option<BoundValue>,
+    /// Inactivity interval before autoSave, in milliseconds. Defaults to 1500.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_save_delay_ms: Option<BoundValue>,
+    /// Minimum meaningful scene changes before autoSave. Defaults to 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_save_min_changes: Option<BoundValue>,
+}
+
+// =============================================================================
 // File Preview
 // =============================================================================
+
+/// Direct action context emitted by File Preview. Shared with the frontend event manifest.
+pub fn file_preview_event_context_schema(event_name: &str) -> Option<Value> {
+    static CONTRACT: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
+        serde_json::from_str(include_str!("file-preview-event-schemas.json"))
+            .expect("the bundled File Preview event contract must be valid JSON")
+    });
+    let definition = CONTRACT["events"].get(event_name)?.as_str()?;
+    let mut schema = CONTRACT["$defs"].get(definition)?.as_object()?.clone();
+    schema.insert("$schema".into(), CONTRACT["$schema"].clone());
+    schema.insert("$defs".into(), CONTRACT["$defs"].clone());
+    Some(Value::Object(schema))
+}
 
 /// File Preview component for displaying various file types
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -1882,9 +1961,19 @@ pub struct FilePreviewProps {
     /// MIME type used for preview selection when available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<BoundValue>,
-    /// File type override: "pdf", "image", "video", "audio", "code", "text"
+    /// File type override: "pdf", "image", "video", "audio", "code", "text", "document".
+    /// "document" selects the matching WASM viewer from the filename or MIME type.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_type: Option<BoundValue>,
+    /// Enable the matching WASM editor. Requires an exact save workflow handler. Defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub editable: Option<BoundValue>,
+    /// Start in edit mode when editable is enabled. Defaults to false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub initial_editing: Option<BoundValue>,
+    /// Last exported temporary file metadata, written before the save workflow runs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<BoundValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_controls: Option<BoundValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2198,6 +2287,96 @@ mod tests {
     }
 
     #[test]
+    fn excalidraw_preserves_scene_bindings_and_autosave_options() {
+        let input = json!({
+            "type": "excalidraw",
+            "value": { "path": "drawing.scene" },
+            "width": { "literalString": "100%" },
+            "height": { "literalString": "600px" },
+            "readOnly": { "literalBool": false },
+            "theme": { "literalString": "dark" },
+            "autoSave": { "literalBool": true },
+            "autoSaveDelayMs": { "literalNumber": 1500.0 },
+            "autoSaveMinChanges": { "literalNumber": 3.0 }
+        });
+        let component: A2UIComponentType = serde_json::from_value(input.clone())
+            .expect("Excalidraw should accept bound scene and autosave options");
+        assert_eq!(serde_json::to_value(component).unwrap(), input);
+        serde_json::from_value::<A2UIComponentType>(json!({ "type": "excalidraw" }))
+            .expect("an omitted scene starts a blank drawing");
+        let schema = serde_json::to_value(schemars::schema_for!(ExcalidrawProps)).unwrap();
+        for property in input
+            .as_object()
+            .unwrap()
+            .keys()
+            .filter(|key| *key != "type")
+        {
+            assert!(schema["properties"].get(property).is_some());
+        }
+    }
+
+    #[test]
+    fn excalidraw_event_contexts_share_the_frontend_contract() {
+        let save = excalidraw_event_context_schema("save").unwrap();
+        assert_eq!(
+            excalidraw_event_context_schema("autoSave"),
+            Some(save.clone())
+        );
+        assert_eq!(
+            save["properties"]["value"]["$ref"],
+            "#/$defs/ExcalidrawScene"
+        );
+        assert_eq!(save["properties"]["scene"], save["properties"]["value"]);
+        assert_eq!(save["properties"]["changeCount"]["type"], "integer");
+        assert_eq!(
+            save["$defs"]["ExcalidrawScene"]["properties"]["files"]["additionalProperties"]["type"],
+            "object"
+        );
+        for event in ["load", "save", "autoSave", "dirtyChange", "error"] {
+            let schema = excalidraw_event_context_schema(event).unwrap();
+            assert!(
+                schema["required"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("actionId"))
+            );
+            assert!(schema["properties"].get("payload").is_none());
+        }
+        for event in ["*", "change", "saved", "constructor", ""] {
+            assert!(excalidraw_event_context_schema(event).is_none());
+        }
+        assert!(
+            excalidraw_event_context_schema("load").unwrap()["properties"]
+                .get("changeCount")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn excalidraw_scene_preserves_element_and_image_data() {
+        let input = json!({
+            "type": "excalidraw", "version": 2.0, "source": "flow-like",
+            "elements": [{ "id": "image-1", "type": "image", "fileId": "file-1", "customData": { "label": "Screenshot" } }],
+            "appState": { "viewBackgroundColor": "#fff" },
+            "files": { "file-1": { "id": "file-1", "mimeType": "image/png", "dataURL": "data:image/png;base64,...", "created": 1 } }
+        });
+        let scene: ExcalidrawScene = serde_json::from_value(input.clone()).unwrap();
+        assert_eq!(serde_json::to_value(scene).unwrap(), input);
+        for invalid in [
+            json!({ "type": "unknown" }),
+            json!({ "elements": ["invalid"] }),
+            json!({ "files": { "file-1": "invalid" } }),
+        ] {
+            let mut modified = input.clone();
+            modified
+                .as_object_mut()
+                .unwrap()
+                .extend(invalid.as_object().unwrap().clone());
+            assert!(serde_json::from_value::<ExcalidrawScene>(modified).is_err());
+        }
+    }
+
+    #[test]
     fn file_preview_sources_are_optional_but_nivo_chart_type_is_required() {
         serde_json::from_value::<A2UIComponentType>(json!({
             "type": "filePreview",
@@ -2214,6 +2393,58 @@ mod tests {
             "chartType": { "literalString": "bar" }
         }))
         .expect("nivoChart should accept a required chartType");
+    }
+
+    #[test]
+    fn file_preview_preserves_editor_bindings() {
+        let input = json!({
+            "type": "filePreview",
+            "url": { "path": "document.url" },
+            "filename": { "literalString": "presentation.pptx" },
+            "fileType": { "literalString": "document" },
+            "editable": { "literalBool": true },
+            "initialEditing": { "path": "document.editing" },
+            "value": { "path": "document.exportedFile" }
+        });
+        let component: A2UIComponentType = serde_json::from_value(input.clone())
+            .expect("filePreview should accept editor bindings");
+
+        assert_eq!(
+            serde_json::to_value(component).expect("filePreview should serialize"),
+            input
+        );
+    }
+
+    #[test]
+    fn file_preview_event_contexts_share_the_frontend_contract() {
+        let save = file_preview_event_context_schema("save").expect("save context");
+        assert_eq!(
+            file_preview_event_context_schema("saved"),
+            Some(save.clone())
+        );
+        assert_eq!(save["properties"]["signedUrls"]["type"], "string");
+        assert_eq!(
+            save["properties"]["file"]["$ref"],
+            "#/$defs/FilePreviewFile"
+        );
+        assert_eq!(save["properties"]["value"], save["properties"]["file"]);
+        assert_eq!(
+            save["$defs"]["FilePreviewFile"]["properties"]["backendUrl"]["type"],
+            "string"
+        );
+        assert!(save["properties"].get("payload").is_none());
+        for event in ["save", "saved", "dirtyChange", "error"] {
+            let schema = file_preview_event_context_schema(event).expect("known event");
+            let required = schema["required"]
+                .as_array()
+                .expect("required context fields");
+            for field in ["actionId", "src", "filename"] {
+                assert!(required.contains(&serde_json::json!(field)));
+            }
+        }
+        for event in ["*", "load", "ready", "constructor", ""] {
+            assert!(file_preview_event_context_schema(event).is_none());
+        }
     }
 
     #[test]
@@ -2252,7 +2483,16 @@ mod tests {
         let file_properties = file_preview["properties"]
             .as_object()
             .expect("filePreview schema should expose properties");
-        for property in ["src", "url", "mimeType", "showControls", "fallbackText"] {
+        for property in [
+            "src",
+            "url",
+            "mimeType",
+            "showControls",
+            "fallbackText",
+            "editable",
+            "initialEditing",
+            "value",
+        ] {
             assert!(file_properties.contains_key(property));
         }
         assert!(

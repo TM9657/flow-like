@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { prepareLiveMcp } from "../live-mcp.mjs";
 
 export function assertReviewedModules(source, expected, label) {
 	const modules = [
@@ -13,7 +14,13 @@ export function assertReviewedModules(source, expected, label) {
 		);
 }
 
-export default function prepare({ directory, original, write, replaceOnce }) {
+export default function prepare({
+	source,
+	directory,
+	original,
+	write,
+	replaceOnce,
+}) {
 	const audio = original("crates/audio-io/src/lib.rs");
 	assertReviewedModules(
 		audio,
@@ -180,4 +187,5 @@ pub fn open_session_bytes_with_audio(e: &mut Engine, name: &str, bytes: &[u8], d
 				'"Audio editing in Flow-Like, powered by SoundCraft."',
 			),
 	);
+	prepareLiveMcp({ id: "soundcraft", source, write, original, replaceOnce });
 }

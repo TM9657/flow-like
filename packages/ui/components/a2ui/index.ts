@@ -121,6 +121,7 @@ export type {
 	SkeletonComponent,
 	ButtonComponent,
 	TextFieldComponent,
+	ExcalidrawComponent,
 	SelectComponent,
 	SliderComponent,
 	CheckboxComponent,
@@ -180,6 +181,12 @@ export type {
 	GanttTask,
 	GanttView,
 } from "./types";
+
+export type {
+	ExcalidrawScene,
+	ExcalidrawEventName,
+	ExcalidrawEventDetails,
+} from "./excalidraw-events";
 
 // Layout components
 export { A2UIRow } from "./layout/Row";

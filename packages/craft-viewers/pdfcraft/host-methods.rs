@@ -50,3 +50,30 @@ impl PdfCraftApp {
         Ok(true)
     }
 }
+
+impl PdfCraftApp {
+    pub fn host_mcp(&mut self, message: &serde_json::Value, read_only: bool) -> serde_json::Value {
+        let mutating = message["method"] == "tools/call"
+            && message["params"]["name"].as_str().is_some_and(|name| {
+                pdfcraft_automation::tools().iter().any(|tool| tool.name == name && !tool.read_only)
+            });
+        if mutating && !read_only {
+            if let Some((_, id)) = self.active_ids() {
+                if !self.commit_typing_in(id) {
+                    return serde_json::json!({"jsonrpc":"2.0","id":message["id"],"result":{"isError":true,"content":[{"type":"text","text":"Finish the current text edit before using editor tools."}]}});
+                }
+            }
+        }
+        let before = self.host_revision();
+        let reply =
+            pdfcraft_automation::mcp::McpServer::handle_live(&mut self.session, message, read_only);
+        if self.host_revision() != before {
+            for view in &mut self.views {
+                if let Some(doc) = self.session.get(view.id) {
+                    view.document_changed(&doc.info);
+                }
+            }
+        }
+        reply
+    }
+}

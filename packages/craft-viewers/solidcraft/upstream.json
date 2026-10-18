@@ -1,0 +1,22 @@
+{
+	"repository": "https://github.com/tangency-labs/solidcraft.git",
+	"revision": "72b7fc385b6fda5cc97f711e14624d8e4ce95810",
+	"version": "0.15.0",
+	"wasmBindgen": "0.2.129",
+	"cargoPackage": "solidcraft-web",
+	"label": "Flows CAD",
+	"canvasId": "craft_canvas",
+	"maxBytes": 104857600,
+	"extensions": [
+		"solidcraft",
+		"step",
+		"stp",
+		"iges",
+		"igs",
+		"stl",
+		"obj",
+		"3mf",
+		"glb",
+		"gltf"
+	]
+}

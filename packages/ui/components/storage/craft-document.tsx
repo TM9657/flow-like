@@ -10,6 +10,8 @@ import {
 } from "react";
 import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
 import { Button } from "../ui/button";
+import type { CraftToolTarget } from "./craft-mcp-session";
+import { CraftMcpTargetButton } from "./craft-mcp-target-button";
 import { type CraftViewer, craftSaveLabel } from "./craft-viewers";
 import {
 	FileSaveProgress,
@@ -17,10 +19,12 @@ import {
 	fileSaveError,
 	storageSaveProgress,
 } from "./file-save-progress";
+import { useCraftMcpSession } from "./use-craft-mcp-session";
 import { ViewerAbout } from "./viewer-about";
 import { readWordcraftMessage } from "./wordcraft-protocol";
 
 interface CraftDocumentProps {
+	toolTarget?: CraftToolTarget;
 	viewer: CraftViewer;
 	url: string;
 	filename: string;
@@ -28,12 +32,15 @@ interface CraftDocumentProps {
 	title?: ReactNode;
 	editable: boolean;
 	initialEditing?: boolean;
+	showDownload?: boolean;
 	onSave: (
 		file: File,
 		onProgress?: BulkUploadProgressCallback,
 	) => Promise<void>;
 	onDirtyChange?: (dirty: boolean) => void;
 	onBusyChange?: (busy: boolean) => void;
+	onError?: (message: string) => void;
+	onReady?: () => void;
 }
 
 export function CraftDocument(props: CraftDocumentProps) {
@@ -48,6 +55,7 @@ export function CraftDocument(props: CraftDocumentProps) {
 }
 
 function CraftSession({
+	toolTarget,
 	viewer,
 	url,
 	filename,
@@ -55,9 +63,12 @@ function CraftSession({
 	title,
 	editable,
 	initialEditing = false,
+	showDownload = true,
 	onSave,
 	onDirtyChange,
 	onBusyChange,
+	onError,
+	onReady,
 	onRetry,
 }: CraftDocumentProps & { onRetry: () => void }) {
 	const channel = "flow-like-craft";
@@ -86,6 +97,7 @@ function CraftSession({
 	const [saveProgress, setSaveProgress] = useState<FileSaveStatus | null>(null);
 	const [saveFailed, setSaveFailed] = useState(false);
 	const [error, setError] = useState("");
+	const reportedError = useRef<string | null>(null);
 	const [warnings, setWarnings] = useState<string[]>([]);
 	const [saved, setSaved] = useState(false);
 	const [download, setDownload] = useState<Blob | null>(null);
@@ -99,8 +111,30 @@ function CraftSession({
 		persisting: boolean;
 		onTimeout: () => void;
 	} | null>(null);
-	const latest = useRef({ editable, onSave, onDirtyChange, onBusyChange });
-	latest.current = { editable, onSave, onDirtyChange, onBusyChange };
+	const latest = useRef({
+		editable,
+		editing,
+		onSave,
+		onDirtyChange,
+		onBusyChange,
+		onError,
+		onReady,
+	});
+	latest.current = {
+		editable,
+		editing,
+		onSave,
+		onDirtyChange,
+		onBusyChange,
+		onError,
+		onReady,
+	};
+	const reportError = useCallback((message: string) => {
+		setError(message);
+		if (reportedError.current === message) return;
+		reportedError.current = message;
+		latest.current.onError?.(message);
+	}, []);
 
 	useEffect(() => {
 		if (!download) return;
@@ -153,6 +187,18 @@ function CraftSession({
 		setSaveProgress(null);
 		latest.current.onBusyChange?.(false);
 	}, []);
+	useCraftMcpSession({
+		target: toolTarget,
+		sessionId: session,
+		editor: viewer.id,
+		channel,
+		frame: () => frame.current?.contentWindow ?? null,
+		post,
+		ready: status === "ready" && runtimeRequested && runtimeAvailable,
+		editable,
+		editing,
+		busy: saving,
+	});
 
 	useEffect(() => {
 		active.current = true;
@@ -164,7 +210,7 @@ function CraftSession({
 			if (runtimeRequested && runtimeAvailable && !opened) {
 				controller.abort();
 				setStatus("failed");
-				setError(
+				reportError(
 					"The document viewer did not start. Try opening the file again.",
 				);
 			}
@@ -176,7 +222,7 @@ function CraftSession({
 					type: "open",
 					name: filename,
 					bytes,
-					readOnly: !viewer.nativePreview || !latest.current.editable,
+					readOnly: !latest.current.editable || !latest.current.editing,
 				},
 				[bytes],
 			);
@@ -198,6 +244,7 @@ function CraftSession({
 					open();
 					break;
 				case "opened":
+					if (opened) break;
 					setWarnings([
 						...(message.previewOnly
 							? [
@@ -209,6 +256,7 @@ function CraftSession({
 					opened = true;
 					clearTimeout(timeout);
 					setStatus("ready");
+					latest.current.onReady?.();
 					break;
 				case "dirty":
 					if (!opened) break;
@@ -243,7 +291,7 @@ function CraftSession({
 				case "error":
 					if (message.requestId && message.requestId !== pending.current?.id)
 						break;
-					setError(message.error || "The document could not be processed.");
+					reportError(message.error || "The document could not be processed.");
 					setSaveFailed(!!pending.current && !pending.current.persisting);
 					if (!opened) {
 						clearTimeout(timeout);
@@ -262,9 +310,7 @@ function CraftSession({
 					clearTimeout(request.timer);
 					if (!latest.current.editable) {
 						setSaveFailed(true);
-						setError(
-							"You do not have permission to save files in this storage.",
-						);
+						reportError("You do not have permission to save this file.");
 						finishSave();
 						break;
 					}
@@ -288,7 +334,7 @@ function CraftSession({
 						} catch (cause) {
 							if (!active.current || pending.current !== request) return;
 							setSaveFailed(true);
-							setError(fileSaveError(cause));
+							reportError(fileSaveError(cause));
 						} finally {
 							if (active.current && pending.current === request) finishSave();
 						}
@@ -327,6 +373,7 @@ function CraftSession({
 				if (!runtimeRequested) {
 					clearTimeout(timeout);
 					setStatus("ready");
+					latest.current.onReady?.();
 					return;
 				}
 				bytes = await blob.arrayBuffer();
@@ -335,7 +382,7 @@ function CraftSession({
 				if (controller.signal.aborted) return;
 				clearTimeout(timeout);
 				setStatus("failed");
-				setError(
+				reportError(
 					cause instanceof Error ? cause.message : "Could not load document.",
 				);
 			}
@@ -356,6 +403,7 @@ function CraftSession({
 		session,
 		post,
 		finishSave,
+		reportError,
 		viewer,
 		outputName,
 		runtimeRequested,
@@ -372,6 +420,7 @@ function CraftSession({
 		if (!editable || !editing || pending.current || status !== "ready") return;
 		const id = crypto.randomUUID();
 		setError("");
+		reportedError.current = null;
 		setSaveFailed(false);
 		setSaved(false);
 		setSaving(true);
@@ -380,7 +429,7 @@ function CraftSession({
 		const onTimeout = () => {
 			if (pending.current?.id !== id) return;
 			setSaveFailed(true);
-			setError("Preparing the file took too long.");
+			reportError("Preparing the file took too long.");
 			finishSave();
 		};
 		pending.current = {
@@ -423,21 +472,30 @@ function CraftSession({
 							{viewer.label} editing is experimental. Formatting and unsupported
 							features may change when saved.
 							{viewer.extension !== viewer.outputExtension &&
-								` This format is imported; saving creates a .${viewer.outputExtension} file in the same folder.`}
+								` This format is imported; saving creates a .${viewer.outputExtension} file.`}
 						</>
 					) : undefined}
 				</ViewerAbout>
-				<Button asChild variant="ghost" size="sm" className="shrink-0">
-					<a
-						href={downloadUrl}
-						download={downloadName}
-						target="_blank"
-						rel="noopener noreferrer"
-						aria-label={`Download ${downloadName}`}
-					>
-						<DownloadIcon /> <span className="hidden sm:inline">Download</span>
-					</a>
-				</Button>
+				{toolTarget &&
+					status === "ready" &&
+					runtimeRequested &&
+					runtimeAvailable && (
+						<CraftMcpTargetButton target={toolTarget} onError={reportError} />
+					)}
+				{showDownload && (
+					<Button asChild variant="ghost" size="sm" className="shrink-0">
+						<a
+							href={downloadUrl}
+							download={downloadName}
+							target="_blank"
+							rel="noopener noreferrer"
+							aria-label={`Download ${downloadName}`}
+						>
+							<DownloadIcon />{" "}
+							<span className="hidden sm:inline">Download</span>
+						</a>
+					</Button>
+				)}
 				{editable && !editing && (
 					<Button
 						variant="outline"

@@ -18,6 +18,92 @@ const geoMapComponent = (): SurfaceComponent =>
 		component: { type: "geoMap" },
 	}) as unknown as SurfaceComponent;
 
+describe("applyElementUpdate setMediaSource", () => {
+	test.each([
+		["report.pdf", "pdf"],
+		["picture.png", "image"],
+		["drawing.svg", "image"],
+		["recording.wav", "audio"],
+		["clip.mp4", "video"],
+		["script.ts", "code"],
+		["notes.txt", "text"],
+	])("keeps the native or text hint for %s", (filename, mediaKind) => {
+		const updated = applyElementUpdate(
+			{
+				id: "preview",
+				component: {
+					id: "preview",
+					type: "filePreview",
+					showControls: { literalBool: false },
+				},
+			},
+			{ type: "setMediaSource", src: "/signed-file", filename, mediaKind },
+		);
+		expect(updated.component).toMatchObject({
+			src: { literalString: "/signed-file" },
+			url: { literalString: "/signed-file" },
+			fileType: { literalString: mediaKind },
+			showControls: { literalBool: false },
+		});
+	});
+
+	test("keeps editing actions and value bindings when selecting a document", () => {
+		const eventHandlers = {
+			save: [{ name: "workflow_event", context: { nodeId: "save-event" } }],
+		};
+		const updated = applyElementUpdate(
+			{
+				id: "preview",
+				component: {
+					id: "preview",
+					type: "filePreview",
+					editable: { literalBool: true },
+					initialEditing: { literalBool: true },
+					value: { path: "$.data.exportedFile" },
+					eventHandlers,
+				},
+			},
+			{
+				type: "setMediaSource",
+				src: "/signed-file",
+				filename: "presentation.pptx",
+				mimeType: "application/octet-stream",
+				mediaKind: "file",
+			},
+		);
+		expect(updated.component).toMatchObject({
+			fileType: { literalString: "unknown" },
+			filename: { literalString: "presentation.pptx" },
+			editable: { literalBool: true },
+			initialEditing: { literalBool: true },
+			value: { path: "$.data.exportedFile" },
+			eventHandlers,
+		});
+	});
+
+	test("leaves image-component source semantics unchanged", () => {
+		const updated = applyElementUpdate(
+			{
+				id: "picture",
+				component: { id: "picture", type: "image", src: { literalString: "" } },
+			},
+			{
+				type: "setMediaSource",
+				src: "/signed-file",
+				filename: "drawing.emf",
+				mediaKind: "file",
+			},
+		);
+		expect(updated.component).toEqual({
+			id: "picture",
+			type: "image",
+			src: { literalString: "/signed-file" },
+			url: "/signed-file",
+			alt: { literalString: "drawing.emf" },
+		});
+	});
+});
+
 describe("normalizeGeoMapViewport", () => {
 	test("wraps the node's legacy flat shape into a nested-center literalJson", () => {
 		const result = normalizeGeoMapViewport({

@@ -27,6 +27,10 @@ export interface PropSchema {
 export type ComponentSchema = Record<string, PropSchema>;
 
 const COMMON_COMPONENT_SCHEMA: ComponentSchema = {
+	eventHandlers: {
+		type: "json",
+		description: "Named event handlers with ordered action lists",
+	},
 	hidden: {
 		type: "boundValue",
 		description: "Hide this component in the rendered UI",
@@ -325,13 +329,34 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 	},
 	filePreview: {
 		type: { type: "string", required: true },
-		src: { type: "boundValue", required: true },
+		src: { type: "boundValue" },
 		url: { type: "boundValue" },
 		filename: { type: "boundValue" },
 		mimeType: { type: "boundValue" },
 		fileType: {
 			type: "boundValue",
-			enum: ["pdf", "image", "video", "audio", "code", "text", "unknown"],
+			enum: [
+				"pdf",
+				"image",
+				"video",
+				"audio",
+				"code",
+				"text",
+				"document",
+				"unknown",
+			],
+		},
+		editable: {
+			type: "boundValue",
+			description: "Enable the WASM editor with an exact save workflow handler",
+		},
+		initialEditing: {
+			type: "boundValue",
+			description: "Start in edit mode when editable is enabled",
+		},
+		value: {
+			type: "boundValue",
+			description: "Last exported temporary file metadata, set before saving",
 		},
 		showControls: { type: "boundValue" },
 		fit: {
@@ -493,6 +518,34 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 			type: "boundValue",
 			description:
 				"Pause in ms before the 'input' event fires (default 400, min 100)",
+		},
+		actions: { type: "actions" },
+	},
+	excalidraw: {
+		type: { type: "string", required: true },
+		value: {
+			type: "boundValue",
+			description:
+				"Excalidraw scene object or JSON string; a path binding receives edits",
+		},
+		width: { type: "boundValue" },
+		height: { type: "boundValue" },
+		readOnly: { type: "boundValue" },
+		theme: { type: "boundValue", enum: ["light", "dark"] },
+		autoSave: {
+			type: "boundValue",
+			description:
+				"Enable the exact autoSave event after content edits (default true)",
+		},
+		autoSaveDelayMs: {
+			type: "boundValue",
+			description:
+				"Idle time in milliseconds after the last content edit before autosave (default 1500)",
+		},
+		autoSaveMinChanges: {
+			type: "boundValue",
+			description:
+				"Minimum content changes since loading or a successful save before autosave (default 1)",
 		},
 		actions: { type: "actions" },
 	},

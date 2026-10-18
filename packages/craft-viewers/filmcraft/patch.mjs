@@ -1,8 +1,15 @@
+import { prepareRmcpLive } from "../rmcp-live.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import prepareBrowserCodecs from "./codec-patch.mjs";
 
-export default function prepare({ directory, original, write, replaceOnce }) {
+export default function prepare({
+	directory,
+	source,
+	original,
+	write,
+	replaceOnce,
+}) {
 	prepareBrowserCodecs({ directory, original, write, replaceOnce });
 	let lib = original("apps/filmcraft-web/src/lib.rs");
 	lib = replaceOnce(
@@ -115,6 +122,7 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		"header external link",
 	);
 	write("crates/ui-egui/src/header.rs", header);
+	prepareRmcpLive({ id: "filmcraft", source, write, original, replaceOnce });
 	return {
 		reconcileLock: true,
 		assets: [

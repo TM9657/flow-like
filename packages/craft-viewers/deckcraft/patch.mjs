@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { prepareLiveMcp } from "../live-mcp.mjs";
 import { prepareBrowserMedia } from "./media-patch.mjs";
 
 export function patchThumbnailVisibility(source, replaceOnce) {
@@ -26,7 +27,13 @@ export function patchThumbnailVisibility(source, replaceOnce) {
 	);
 }
 
-export default function prepare({ directory, original, write, replaceOnce }) {
+export default function prepare({
+	source,
+	directory,
+	original,
+	write,
+	replaceOnce,
+}) {
 	const thumbsPath = "crates/ui-egui/src/thumbs.rs";
 	write(
 		thumbsPath,
@@ -172,4 +179,5 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		"apps/deckcraft-web/src/main.rs",
 		'#[cfg(target_arch = "wasm32")]\nmod web;\n#[cfg(target_arch = "wasm32")]\nfn main() { web::start(); }\n#[cfg(not(target_arch = "wasm32"))]\nfn main() {}\n',
 	);
+	prepareLiveMcp({ id: "deckcraft", source, write, original, replaceOnce });
 }

@@ -129,6 +129,22 @@ CLI. This is a substantial build. Later runs reuse verified assets from
 `target/wordcraft` and `target/craft-viewers`. Generated files in each app's
 `public/wordcraft` and `public/craft` directories are excluded from Git.
 
+The suite builds up to four editors in parallel, allowing one build per four
+available CPU threads and 4 GiB of memory, with a minimum of one build. Each build
+uses up to four Cargo jobs by default. Set `CRAFT_BUILD_CONCURRENCY` to choose
+the number of simultaneous editors, or `CARGO_BUILD_JOBS` to override the jobs
+per editor. For example, `CRAFT_BUILD_CONCURRENCY=2 bun run build:craft-viewers`
+builds two at a time; use `1` for sequential builds. These settings also apply
+to web and desktop builds and background development builds. Automatic
+concurrency accounts for a positive `CARGO_BUILD_JOBS` override; a relative
+negative job count keeps automatic concurrency at one.
+
+Concurrent editors share a versioned `wasm-bindgen` installation and use separate
+Cargo build directories so Cargo's build lock does not serialize them. The first
+parallel run recompiles dependencies and uses more disk space than the former
+shared directory. Sequential suites reuse that shared directory. A failed editor
+stops the remaining queue; active builds finish before the suite reports failure.
+
 The browser loads only the selected viewer. PDFs and common media files use
 native previews and load their editing runtime after **Edit**. The
 container builds prepare these same assets before building the Next.js export.
@@ -164,7 +180,27 @@ bun tests/craft-browser/verify.ts
 bun tests/craft-office-browser/verify.ts
 bun tests/craft-media-browser/verify.ts
 bun tests/craft-image-browser/verify.ts
+bun tests/craft-solid-browser/verify.ts
+
+# Discover live MCP tools and verify document edits and undo.
+bun tests/craft-mcp-browser/verify.ts
 ```
+
+The live editor MCP adapters reuse each pin's tool definitions and handlers.
+WordCraft, DeckCraft, GridCraft, VectorCraft, DesignCraft, SolidCraft, CADCraft
+and SoundCraft link their upstream MCP crates through `live-mcp.mjs`. PDFCraft
+runs its upstream automation server against the UI's engine session. PhotoCraft
+and FilmCraft couple their servers to native transports; `rmcp-live.mjs` takes
+the parameter types, tool attributes and bridge handlers from the pinned source
+and supplies an in-process browser bridge. No tool catalog is maintained in the
+agent node.
+
+When upgrading, check changes to MCP schemas, control methods and undo behavior
+alongside the readers and writers. The shared `mcp-policy.rs` limits operations
+to the hosted document. File lifecycle operations stay with Flow-Like, and native
+screenshots and window operations are not exposed. New upstream tools and control
+methods may need an adapter review before they can be used in the browser. Run
+the MCP tests and browser checks after each upgrade.
 
 The adapters apply checked patches to known integration points. Builds fail if
 those points have changed, so upgrades require review. `CRAFT_SOURCE_GRIDCRAFT`

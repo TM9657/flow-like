@@ -601,6 +601,21 @@ export interface TextFieldComponent extends ComponentBase {
 	debounceMs?: BoundValue; // pause before the "input" event fires (default 400, min 100)
 }
 
+export interface ExcalidrawComponent extends ComponentBase {
+	type: "excalidraw";
+	/** An Excalidraw scene object or its JSON representation. */
+	value?: BoundValue;
+	width?: BoundValue;
+	height?: BoundValue;
+	readOnly?: BoundValue;
+	theme?: BoundValue;
+	autoSave?: BoundValue;
+	/** Idle time after the last content change; defaults to 1500 ms. */
+	autoSaveDelayMs?: BoundValue;
+	/** Content updates required before autosave; defaults to 1. */
+	autoSaveMinChanges?: BoundValue;
+}
+
 export interface RichTextComponent extends ComponentBase {
 	type: "richText";
 	/** The editor document, a `plate_json::`-prefixed string. */
@@ -1185,7 +1200,13 @@ export interface FilePreviewComponent extends ComponentBase {
 	url?: BoundValue;
 	filename?: BoundValue;
 	mimeType?: BoundValue;
-	fileType?: BoundValue; // "pdf" | "image" | "video" | "audio" | "code" | "text"
+	fileType?: BoundValue; // "pdf" | "image" | "video" | "audio" | "code" | "text" | "document"
+	/** Enable the matching WASM editor. Requires an exact save workflow handler. Default false. */
+	editable?: BoundValue;
+	/** Start in edit mode when editable is enabled. Default false. */
+	initialEditing?: BoundValue;
+	/** Last exported temporary file metadata. A path binding is updated before the save workflow runs. */
+	value?: BoundValue;
 	showControls?: BoundValue;
 	fit?: BoundValue; // "contain" | "cover" | "fill" | "none" | "scaleDown"
 	fallbackText?: BoundValue;
@@ -1846,6 +1867,7 @@ export type A2UIComponent =
 	| AppLinkComponent
 	| TextFieldComponent
 	| RichTextComponent
+	| ExcalidrawComponent
 	| SelectComponent
 	| SliderComponent
 	| CheckboxComponent

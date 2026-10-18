@@ -1,7 +1,14 @@
+import { prepareRmcpLive } from "../rmcp-live.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-export default function prepare({ directory, original, write, replaceOnce }) {
+export default function prepare({
+	directory,
+	source,
+	original,
+	write,
+	replaceOnce,
+}) {
 	const uiPath = "crates/ui-egui/src/lib.rs";
 	let ui = original(uiPath);
 	ui = replaceOnce(
@@ -86,4 +93,6 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		"apps/photocraft-web/src/main.rs",
 		'#[cfg(target_arch = "wasm32")]\nmod web;\n#[cfg(target_arch = "wasm32")]\nfn main() { web::start(); }\n#[cfg(not(target_arch = "wasm32"))]\nfn main() {}\n',
 	);
+	prepareRmcpLive({ id: "photocraft", source, write, original, replaceOnce });
+	return { reconcileLock: true };
 }

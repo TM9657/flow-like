@@ -1,0 +1,66 @@
+import { craftViewer } from "../../storage/craft-viewers";
+import { inferFileName } from "../media-source";
+
+const DOCUMENT_EXTENSIONS: Record<string, string> = {
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+		"docx",
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation":
+		"pptx",
+	"application/vnd.openxmlformats-officedocument.presentationml.template":
+		"potx",
+	"application/vnd.openxmlformats-officedocument.presentationml.slideshow":
+		"ppsx",
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+	"application/vnd.ms-excel.sheet.macroenabled.12": "xlsm",
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.template":
+		"xltx",
+	"application/vnd.ms-excel.template.macroenabled.12": "xltm",
+	"application/vnd.ms-excel.sheet.binary.macroenabled.12": "xlsb",
+	"application/vnd.ms-excel": "xls",
+	"application/vnd.oasis.opendocument.spreadsheet": "ods",
+	"application/pdf": "pdf",
+	"text/csv": "csv",
+	"text/tab-separated-values": "tsv",
+	"model/step": "step",
+	"application/step": "step",
+	"model/iges": "iges",
+	"application/iges": "iges",
+	"model/stl": "stl",
+	"application/sla": "stl",
+	"model/obj": "obj",
+	"model/3mf": "3mf",
+	"model/gltf-binary": "glb",
+	"model/gltf+json": "gltf",
+};
+
+/** Downloads can have an opaque URL and only a MIME type. */
+export function resolveCraftPreview(
+	source: string,
+	filename?: string,
+	mimeType?: string,
+) {
+	const name = inferFileName(source, filename);
+	const viewer = craftViewer(name);
+	if (viewer) return { viewer, filename: name };
+	// An explicit extension remains authoritative, including unsupported .ppt/.doc.
+	if ((filename || !source.startsWith("data:")) && /\.[a-z0-9]+$/i.test(name))
+		return undefined;
+	const extension =
+		DOCUMENT_EXTENSIONS[
+			(
+				mimeType ??
+				(source.startsWith("data:") ? source.slice(5).split(/[;,]/)[0] : "")
+			)
+				.split(";")[0]
+				.trim()
+				.toLowerCase()
+		];
+	if (!extension) return undefined;
+	const inferredViewer = craftViewer(`file.${extension}`);
+	return inferredViewer
+		? {
+				viewer: inferredViewer,
+				filename: `${filename || (name === "file" || source.startsWith("data:") ? "document" : name)}.${extension}`,
+			}
+		: undefined;
+}

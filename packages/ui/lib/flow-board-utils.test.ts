@@ -639,6 +639,33 @@ const structPin = (name: string, overrides: Partial<IPin> = {}): IPin =>
 		...overrides,
 	}) as IPin;
 
+describe("editor element input connections", () => {
+	const editorElement = structPin("element_ref", {
+		pin_type: IPinType.Input,
+		data_type: IVariableType.Generic,
+		options: { enforce_generic_value_type: true, enforce_schema: false },
+	});
+
+	test.each([IVariableType.Struct, IVariableType.String])(
+		"accepts a normal %s output in either connection direction",
+		(dataType) => {
+			const output = structPin("element", { data_type: dataType });
+			expect(doPinsMatch(output, editorElement, {})).toBe(true);
+			expect(doPinsMatch(editorElement, output, {})).toBe(true);
+		},
+	);
+
+	test("rejects arrays and execution outputs", () => {
+		for (const output of [
+			structPin("elements", { value_type: IValueType.Array }),
+			structPin("exec", { data_type: IVariableType.Execution }),
+		]) {
+			expect(doPinsMatch(output, editorElement, {})).toBe(false);
+			expect(doPinsMatch(editorElement, output, {})).toBe(false);
+		}
+	});
+});
+
 describe("stationary connection dashes", () => {
 	function connectedBoard() {
 		const from = getNode("from", "v1");

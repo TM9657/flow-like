@@ -172,6 +172,19 @@ test("dependency parsing handles repeated, path, Git, prerelease, and proc-macro
 	);
 });
 
+test("local proc-macro dependencies retain their source directory", () => {
+	for (const identity of [
+		"solidcraft-derive v0.15.0 (proc-macro) (/tmp/editor workspace/crates/derive)",
+		"solidcraft-derive v0.15.0 (/tmp/editor workspace/crates/derive) (proc-macro)",
+	]) {
+		const [dependency] = parseDependencyTree(
+			`${identity}\tMIT OR Apache-2.0\thttps://github.com/tangency-labs/solidcraft`,
+		);
+		assert.equal(dependency.location, "/tmp/editor workspace/crates/derive");
+		assert.equal(dependency.selectedLicense, "MIT");
+	}
+});
+
 test("dependency parsing rejects unrecognized lines and conflicting package identities", () => {
 	assert.throws(
 		() => parseDependencyTree("unexpected Cargo output"),

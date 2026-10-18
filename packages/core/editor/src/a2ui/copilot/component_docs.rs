@@ -40,6 +40,7 @@ pub const COMPONENT_CATALOG: &str = r##"
 - `button` - Clickable button (variants, sizes, loading state, icon)
 - `textField` - Plain text input; set `multiline` (+ `rows`) for textarea-style long text; `debounceMs` tunes the pause before the "input" event fires
 - `richText` - Formatted document editor (headings, lists, tables, code, images). `value` is the editor's `plate_json::` string, NOT markdown - convert it with the Rich Text to Markdown (`utils_md_plate_to_md`) or Rich Text to HTML (`utils_md_plate_to_html`) node before using it elsewhere. Pasted and dropped images upload into app storage under `uploadPrefix`
+- `excalidraw` - Drawing editor. Load an Excalidraw scene object or JSON string through `value`; exported scenes include elements, appState and image files. Exact typed events: `load`, `save`, `autoSave`, `dirtyChange`, `error`. Autosave waits for `autoSaveMinChanges` meaningful changes (default 1) and `autoSaveDelayMs` of inactivity (default 1500); it requires an `autoSave` handler. Use `readOnly` to disable editing and `theme` for light/dark mode.
 - `select` - Dropdown selection (single value from `options`)
 - `slider` - Numeric range slider (min/max/step)
 - `checkbox` - Boolean checkbox
@@ -75,7 +76,7 @@ pub const COMPONENT_CATALOG: &str = r##"
 
 ### Media Components
 - `iframe` - Embedded external content or HTML preview (supports src URL and srcdoc HTML)
-- `filePreview` - Generic file preview
+- `filePreview` - Preview files, including DOCX, PPTX/POTX/PPSX and spreadsheets with WASM viewers. Set editable=true to enable a supported WASM editor; initialEditing=true starts in edit mode. Requires an exact eventHandlers.save workflow_event or widget_event action. Saving uploads a new temporary backend file and passes its URL as url, file.url, value.url, and signedUrls (a string for this single-file event); the workflow decides how to use or persist it. The component never overwrites the original. value holds exported file metadata before saving; saved fires only after workflow success, dirtyChange carries dirty, and error carries message. Legacy PPT/DOC are unsupported; plain text/code remains preview-only.
 - `geoMap` - Interactive map with markers, routes and viewport control
 
 ### Computer Vision / ML
@@ -218,6 +219,9 @@ the action alone leaves a dead button.
   - `richText`: "change" (the author paused for `debounceMs`, 600 ms default; context carries the
     `plate_json::` value), "blur", "imageUploaded" (context carries `path`, `url`, `name`, `size`,
     `type`), "imageUploadError" (context carries `name`, `message`).
+  - `excalidraw`: "load" carries `value` and `scene`, both complete Excalidraw scene objects;
+    "save" and "autoSave" add `changeCount`. "dirtyChange" carries `dirty`; "error" carries
+    `message` and `operation` ("load", "save" or "autoSave"). Save workflows persist the scene.
   - `table`: "rowClick", "cellClick" (both carry the source row and its index in the unsorted
     data), "selectionChange" (needs `selectable`), "sortChange".
   - `nivoChart` / `plotlyChart`: "pointClick".
@@ -231,6 +235,8 @@ When a workflow must change what a component SHOWS, target the element directly:
 - text / badge / markdown: Set Element Text (`a2uiSetElementText`), Set Badge Content
   (`a2uiSetBadgeContent`), Set Markdown Content (`a2uiSetMarkdownContent`)
 - inputs: Set Element Value (`a2uiSetElementValue`)
+- excalidraw: Set Excalidraw Scene (`a2uiSetExcalidrawScene`) loads a typed scene object;
+  Set Element Value accepts its serialized JSON string
 - table: Push CSV to Table (`a2uiWriteCsvToTable`) for full loads, Update Table
   (`a2uiUpdateTable`) for incremental row edits
 - chart: Push Data to Chart (`a2uiPushCsvToChart`), styled via `a2uiSetNivoConfig` /

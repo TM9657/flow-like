@@ -1,16 +1,23 @@
 "use client";
 
 import { useTranslation } from "@flow-like/locales";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../../lib/utils";
 import { AudioPreview } from "../../ui/audio-preview";
 import { PdfFrame } from "../../ui/file-previewer";
 import { AudioPlayback, type VoiceVariant } from "../../voice";
+import { useActionContext } from "../ActionHandler";
 import type { ComponentProps } from "../ComponentRegistry";
 import { useData } from "../DataContext";
 import { resolveInlineStyle, resolveStyle } from "../StyleResolver";
 import { useAssetUrl } from "../hooks/use-asset-url";
+import { inferFileName } from "../media-source";
 import type { BoundValue, FilePreviewComponent } from "../types";
+import {
+	FilePreviewDocument,
+	filePreviewSaveActions,
+} from "./FilePreviewDocument";
+import { resolveCraftPreview } from "./file-preview-source";
 
 function useResolved<T>(boundValue: BoundValue | undefined): T | undefined {
 	const { resolve } = useData();
@@ -19,23 +26,7 @@ function useResolved<T>(boundValue: BoundValue | undefined): T | undefined {
 }
 
 function rawFileName(url: string, filename?: string): string {
-	if (filename) return filename;
-
-	try {
-		const parsed = new URL(url, window.location.href);
-		const queryFilename = parsed.searchParams.get("filename");
-		if (queryFilename) return queryFilename;
-	} catch {}
-
-	if (url.startsWith("data:")) {
-		const mediaType = url.split(";")[0].split(":")[1];
-		if (mediaType) {
-			const extension = mediaType.split("/")[1];
-			if (extension) return `file.${extension}`;
-		}
-		return "file";
-	}
-	return url.split("?")[0].split("/").pop() ?? "";
+	return inferFileName(url, filename);
 }
 
 function getFileType(
@@ -92,14 +83,44 @@ export function A2UIFilePreview({
 	elementRef,
 	component,
 	style,
+	componentId,
+	surfaceId,
 }: ComponentProps<FilePreviewComponent>) {
 	const { t } = useTranslation("common");
-	const { url: src, isLoading } = useAssetUrl(
-		useResolved<string>(component.src ?? component.url),
-	);
-	const filename = useResolved<string>(component.filename);
-	const mimeType = useResolved<string>(component.mimeType);
-	const fileTypeOverride = useResolved<string>(component.fileType);
+	const requested = {
+		source: useResolved<string>(component.src ?? component.url),
+		filename: useResolved<string>(component.filename),
+		mimeType: useResolved<string>(component.mimeType),
+		fileTypeOverride: useResolved<string>(component.fileType),
+	};
+	const requestedKey = JSON.stringify(requested);
+	const requestedRef = useRef(requested);
+	requestedRef.current = requested;
+	const [selected, setSelected] = useState(requested);
+	const selectedComponent = useRef(component);
+	// A declined source switch must retain that file's save destination and binding.
+	if (requestedKey === JSON.stringify(selected))
+		selectedComponent.current = component;
+	const activeComponent = selectedComponent.current;
+	const dirty = useRef(false);
+	const [busy, setBusy] = useState(false);
+	const onDirtyChange = useCallback((value: boolean) => {
+		dirty.current = value;
+	}, []);
+	useEffect(() => {
+		if (requestedKey === JSON.stringify(selected) || busy) return;
+		if (dirty.current && !window.confirm("Discard unsaved document changes?"))
+			return;
+		dirty.current = false;
+		setSelected(requestedRef.current);
+	}, [requestedKey, selected, busy]);
+	const { source, filename, mimeType, fileTypeOverride } = selected;
+	const { url: src, isLoading } = useAssetUrl(source);
+	const { isPreviewMode, appId } = useActionContext();
+	const editableRequested =
+		useResolved<boolean>(activeComponent.editable) ?? false;
+	const initialEditing =
+		useResolved<boolean>(activeComponent.initialEditing) ?? false;
 	const showControls = useResolved<boolean>(component.showControls) ?? true;
 	const showDownload = useResolved<boolean>(component.showDownload) ?? false;
 	const audioVariant = useResolved<string>(component.variant);
@@ -114,35 +135,63 @@ export function A2UIFilePreview({
 	const [loadingText, setLoadingText] = useState(false);
 	const [error, setError] = useState(false);
 
-	const fileType = src
-		? getFileType(src, mimeType, filename, fileTypeOverride)
+	const fileType = source
+		? getFileType(source, mimeType, filename, fileTypeOverride)
 		: "unknown";
-
-	const loadTextContent = useCallback(async () => {
-		if (!src) return;
-		setLoadingText(true);
-		setError(false);
-		setContent("");
-		try {
-			const response = await fetch(src);
-			if (!response.ok) throw new Error("Failed to fetch");
-			setContent(await response.text());
-		} catch {
-			setError(true);
-		} finally {
-			setLoadingText(false);
-		}
-	}, [src]);
+	const craft = source
+		? resolveCraftPreview(source, filename, mimeType)
+		: undefined;
+	const editable =
+		editableRequested &&
+		isPreviewMode &&
+		filePreviewSaveActions(activeComponent).length > 0;
+	const automatic = !fileTypeOverride || fileTypeOverride === "unknown";
+	const documentKey = JSON.stringify([
+		appId,
+		surfaceId,
+		componentId,
+		source,
+		craft?.filename,
+		craft?.viewer.id,
+	]);
+	const [openedDocumentKey, setOpenedDocumentKey] = useState<string>();
+	const wantsDocument =
+		!!craft &&
+		(fileTypeOverride === "document" ||
+			editable ||
+			(automatic &&
+				!craft.viewer.nativePreview &&
+				craft.viewer.extension !== "svg"));
+	// Revoking editing hides its controls without discarding the open document.
+	const useDocument =
+		wantsDocument || (!!craft && openedDocumentKey === documentKey);
+	useEffect(() => {
+		if (wantsDocument) setOpenedDocumentKey(documentKey);
+	}, [wantsDocument, documentKey]);
 
 	useEffect(() => {
-		if (fileType === "code" || fileType === "text") {
-			loadTextContent();
-		} else {
-			setContent("");
-			setLoadingText(false);
-			setError(false);
+		const controller = new AbortController();
+		setError(false);
+		setContent("");
+		const loadText =
+			!!src && !useDocument && (fileType === "code" || fileType === "text");
+		setLoadingText(loadText);
+		if (src && loadText) {
+			void (async () => {
+				try {
+					const response = await fetch(src, { signal: controller.signal });
+					if (!response.ok) throw new Error("Failed to fetch");
+					const text = await response.text();
+					if (!controller.signal.aborted) setContent(text);
+				} catch {
+					if (!controller.signal.aborted) setError(true);
+				} finally {
+					if (!controller.signal.aborted) setLoadingText(false);
+				}
+			})();
 		}
-	}, [fileType, loadTextContent]);
+		return () => controller.abort();
+	}, [fileType, src, useDocument]);
 
 	const fitClass =
 		{
@@ -166,6 +215,35 @@ export function A2UIFilePreview({
 				{/* Nothing is wrong yet while the storage path is being signed, so
 				    hold the frame rather than declaring the file unavailable. */}
 				{isLoading && !error ? null : fallbackText}
+			</div>
+		);
+	}
+
+	if (useDocument && craft && source) {
+		return (
+			<div
+				ref={elementRef}
+				className={cn(
+					"w-full h-full min-h-0 flex flex-col",
+					resolveStyle(style),
+				)}
+				style={resolveInlineStyle(style)}
+			>
+				<FilePreviewDocument
+					key={documentKey}
+					component={activeComponent}
+					componentId={componentId}
+					surfaceId={surfaceId}
+					source={source}
+					url={src}
+					filename={craft.filename}
+					viewer={craft.viewer}
+					editable={editable}
+					initialEditing={initialEditing}
+					showDownload={showDownload}
+					onDirtyChange={onDirtyChange}
+					onBusyChange={setBusy}
+				/>
 			</div>
 		);
 	}

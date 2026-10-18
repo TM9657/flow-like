@@ -8,19 +8,16 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[path = "widget_action_schema.rs"]
 mod widget_action_schema;
-use widget_action_schema::{EventInference, PageTarget, action_context_schema, infer_page};
+use widget_action_schema::{
+    EventInference, PageTarget, declarative_action_contexts, infer_page,
+    is_pending_component_context,
+};
 
-/// Widget Action Event - Entry point for widget action triggers.
-///
-/// This node acts as an entry point when a widget action is triggered in the UI.
-/// The action context (data provided by the widget) is passed through the payload
-/// and can be accessed via output pins.
-///
-/// Use this instead of Simple Event when you need context from widget actions.
+/// Entry point for component events and widget actions with context output pins.
 #[crate::register_node]
 #[derive(Default)]
 pub struct WidgetActionEvent;
@@ -37,7 +34,7 @@ impl NodeLogic for WidgetActionEvent {
         let mut node = Node::new(
             "events_widget_action",
             "Widget Action Event",
-            "Entry point triggered when a widget action is invoked. Provides action context data.",
+            "Entry point for component events and widget actions. Provides action context data.",
             "Events",
         );
         node.set_flowscript_name("events", "widgetAction");
@@ -48,7 +45,7 @@ impl NodeLogic for WidgetActionEvent {
         node.add_input_pin(
             "action_id",
             "Action ID",
-            "The action identifier that triggers this event (e.g., 'clicked_delete', 'clicked_open')",
+            "The component event or widget action identifier (e.g., 'save', 'clicked_delete')",
             VariableType::String,
         )
         .set_default_value(Some(json!("")));
@@ -56,7 +53,7 @@ impl NodeLogic for WidgetActionEvent {
         node.add_output_pin(
             "exec_out",
             "Output",
-            "Triggered when the widget action is invoked",
+            "Triggered when the component event or widget action is invoked",
             VariableType::Execution,
         );
 
@@ -77,7 +74,7 @@ impl NodeLogic for WidgetActionEvent {
         node.add_output_pin(
             "action_context",
             "Action Context",
-            "The context data passed from the widget action (JSON object with field values)",
+            "The context data passed from the component event or widget action",
             VariableType::Struct,
         )
         .set_schema::<ActionContextPayload>();
@@ -96,7 +93,7 @@ impl NodeLogic for WidgetActionEvent {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let payload = context.get_payload().await?;
 
-        // Extract widget action context from payload
+        // Read component event or widget action context from the payload.
         let widget_instance_id = payload
             .payload
             .as_ref()
@@ -210,12 +207,13 @@ impl NodeLogic for WidgetActionEvent {
                     Err(_) => inference.unknown_source(),
                 },
                 Some(ResolvedWidget::Declarative(widget)) => {
-                    let events = widget
-                        .actions
-                        .iter()
-                        .map(|action| (action.id.clone(), None))
-                        .collect();
-                    inference.instantiated_events(&events, &selected);
+                    match flow_like_types::json::to_value(widget) {
+                        Ok(definition) => {
+                            let events = declarative_action_contexts(&definition, 0, &mut 10_000);
+                            inference.instantiated_contexts(&events, &selected);
+                        }
+                        Err(_) => inference.unknown_source(),
+                    }
                 }
                 None => inference.unknown_source(),
             }
@@ -264,12 +262,33 @@ impl NodeLogic for WidgetActionEvent {
                 Err(_) => inference.unknown_source(),
             }
         }
-        apply_inference(node, &selected, inference);
+        apply_inference(node, &selected, inference, &board.refs);
     }
 }
 
-fn apply_inference(node: &mut Node, selected: &str, inference: EventInference) {
+fn apply_inference(
+    node: &mut Node,
+    selected: &str,
+    inference: EventInference,
+    refs: &HashMap<String, String>,
+) {
     node.error = None;
+    if inference.is_complete() && !inference.has_sources() && inference.action_ids.is_empty() {
+        let pending = node
+            .get_pin_by_name("action_context")
+            .and_then(|pin| pin.schema.as_deref())
+            .and_then(|schema| flow_like::flow::pin::resolve_schema(schema, refs).ok())
+            .and_then(|schema| flow_like_types::json::from_str::<Value>(schema).ok())
+            .is_some_and(|schema| is_pending_component_context(&schema, selected));
+        if pending {
+            if let Some(pin) = node.get_pin_mut_by_name("action_id") {
+                let mut options = pin.options.clone().unwrap_or_else(PinOptions::new);
+                options.valid_values = Some(vec![selected.to_string()]);
+                pin.set_options(options);
+            }
+            return;
+        }
+    }
     let action_ids: Vec<String> = inference.action_ids.iter().cloned().collect();
     if inference.is_complete()
         && !selected.is_empty()
@@ -277,7 +296,7 @@ fn apply_inference(node: &mut Node, selected: &str, inference: EventInference) {
         && !inference.action_ids.contains(selected)
     {
         node.error = Some(format!(
-            "Event '{selected}' is not defined by the widgets bound to this node"
+            "Event '{selected}' is not defined by the components or widgets bound to this node"
         ));
     }
     if let Some(pin) = node.get_pin_mut_by_name("action_id") {
@@ -286,10 +305,8 @@ fn apply_inference(node: &mut Node, selected: &str, inference: EventInference) {
         pin.set_options(options);
     }
     if let Some(pin) = node.get_pin_mut_by_name("action_context") {
-        match inference.payload_schema() {
-            Some(schema) => {
-                pin.schema = flow_like_types::json::to_string(&action_context_schema(schema)).ok()
-            }
+        match inference.context_schema() {
+            Some(schema) => pin.schema = flow_like_types::json::to_string(schema).ok(),
             None => {
                 pin.set_schema::<ActionContextPayload>();
             }
@@ -299,7 +316,103 @@ fn apply_inference(node: &mut Node, selected: &str, inference: EventInference) {
 
 #[cfg(test)]
 mod tests {
+    use super::widget_action_schema::action_context_schema;
     use super::*;
+    use flow_like::a2ui::components::file_preview_event_context_schema;
+
+    fn seeded_file_event() -> (Node, Value) {
+        let mut node = WidgetActionEvent::new().get_node();
+        let mut seed = file_preview_event_context_schema("save").unwrap();
+        seed["x-flow-like-pending-component-event"] =
+            json!({"componentType":"filePreview","eventName":"save"});
+        node.get_pin_mut_by_name("action_context").unwrap().schema = Some(seed.to_string());
+        (node, seed)
+    }
+
+    #[test]
+    fn pending_file_context_survives_creation_then_loses_its_marker_when_bound() {
+        let (mut node, seed) = seeded_file_event();
+        apply_inference(
+            &mut node,
+            "save",
+            EventInference::default(),
+            &HashMap::new(),
+        );
+        assert_eq!(
+            node.get_pin_by_name("action_context").unwrap().schema,
+            Some(seed.to_string())
+        );
+        let canonical = file_preview_event_context_schema("save").unwrap();
+        let mut bound = EventInference::default();
+        bound.add_context("save", canonical.clone());
+        bound.add_context("saved", file_preview_event_context_schema("saved").unwrap());
+        apply_inference(&mut node, "save", bound, &HashMap::new());
+        assert_eq!(
+            node.get_pin_by_name("action_context").unwrap().schema,
+            Some(canonical.to_string())
+        );
+        assert!(node.error.is_none());
+        apply_inference(
+            &mut node,
+            "save",
+            EventInference::default(),
+            &HashMap::new(),
+        );
+        let generic = WidgetActionEvent::new().get_node();
+        assert_eq!(
+            node.get_pin_by_name("action_context").unwrap().schema,
+            generic.get_pin_by_name("action_context").unwrap().schema
+        );
+    }
+
+    #[test]
+    fn pending_file_context_resolves_compacted_schema_refs_without_trusting_cycles() {
+        let (mut node, seed) = seeded_file_event();
+        node.get_pin_mut_by_name("action_context").unwrap().schema = Some("seed-ref".into());
+        let refs = HashMap::from([("seed-ref".into(), seed.to_string())]);
+        apply_inference(&mut node, "save", EventInference::default(), &refs);
+        assert_eq!(
+            node.get_pin_by_name("action_context").unwrap().schema,
+            Some("seed-ref".into())
+        );
+        let cycle = HashMap::from([("seed-ref".into(), "seed-ref".into())]);
+        apply_inference(&mut node, "save", EventInference::default(), &cycle);
+        assert_ne!(
+            node.get_pin_by_name("action_context").unwrap().schema,
+            Some("seed-ref".into())
+        );
+    }
+
+    #[test]
+    fn pending_context_does_not_mask_an_untyped_or_unreadable_source() {
+        for unresolved in [false, true] {
+            let (mut node, seed) = seeded_file_event();
+            let mut inference = EventInference::default();
+            if unresolved {
+                inference.unknown_source();
+            } else {
+                inference.untyped_source();
+            }
+            apply_inference(&mut node, "save", inference, &HashMap::new());
+            assert_ne!(
+                node.get_pin_by_name("action_context").unwrap().schema,
+                Some(seed.to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn pending_context_does_not_mask_a_different_instantiated_event() {
+        let (mut node, seed) = seeded_file_event();
+        let mut inference = EventInference::default();
+        inference.instantiated_events(&BTreeMap::from([("clicked".into(), None)]), "save");
+        apply_inference(&mut node, "save", inference, &HashMap::new());
+        assert_ne!(
+            node.get_pin_by_name("action_context").unwrap().schema,
+            Some(seed.to_string())
+        );
+        assert!(node.error.is_some());
+    }
 
     #[test]
     fn removing_the_last_binding_clears_previous_schema_options_and_error() {
@@ -312,7 +425,7 @@ mod tests {
         let schema = json!({"type":"object","properties":{"entityId":{"type":"string"}},"required":["entityId"]});
         let mut bound = EventInference::default();
         bound.add("entityClicked", Some(&schema));
-        apply_inference(&mut node, "entityClicked", bound);
+        apply_inference(&mut node, "entityClicked", bound, &HashMap::new());
         assert_eq!(
             node.get_pin_by_name("action_id")
                 .unwrap()
@@ -336,7 +449,12 @@ mod tests {
             action_context_schema(&schema)
         );
         node.error = Some("stale binding error".into());
-        apply_inference(&mut node, "entityClicked", EventInference::default());
+        apply_inference(
+            &mut node,
+            "entityClicked",
+            EventInference::default(),
+            &HashMap::new(),
+        );
         assert_eq!(
             node.get_pin_by_name("action_context").unwrap().schema,
             generic
@@ -358,12 +476,12 @@ mod tests {
         let mut node = WidgetActionEvent::new().get_node();
         let mut known = EventInference::default();
         known.add("clicked", None);
-        apply_inference(&mut node, "unresolved-event", known);
+        apply_inference(&mut node, "unresolved-event", known, &HashMap::new());
         assert!(node.error.is_some());
         let mut partial = EventInference::default();
         partial.add("clicked", None);
         partial.unknown_source();
-        apply_inference(&mut node, "unresolved-event", partial);
+        apply_inference(&mut node, "unresolved-event", partial, &HashMap::new());
         assert!(node.error.is_none());
     }
 
@@ -468,6 +586,21 @@ mod tests {
         assert_eq!(options(&board), vec!["moved"]);
         board.nodes.remove(&referrer.id);
 
+        page.components[0].component["eventHandlers"] = json!({});
+        board.save_page(&page, None).await.unwrap();
+        assert_eq!(schema(&board), generic);
+        assert!(options(&board).is_empty());
+
+        page.components[0].component = json!({
+            "type":"filePreview", "src":{"literalString":"deck.pptx"},
+            "eventHandlers":{"save":[route], "saved":[route]}
+        });
+        board.save_page(&page, None).await.unwrap();
+        assert_eq!(
+            schema(&board),
+            file_preview_event_context_schema("save").unwrap()
+        );
+        assert_eq!(options(&board), vec!["save", "saved"]);
         page.components[0].component["eventHandlers"] = json!({});
         board.save_page(&page, None).await.unwrap();
         assert_eq!(schema(&board), generic);

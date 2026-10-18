@@ -62,6 +62,7 @@ import {
 	type LivePageRunRecord,
 	notifyLivePageRun,
 } from "./live-page-registry";
+import { canLeaveA2UISurface } from "./navigation-guard";
 import {
 	type A2UINavigationMessageInterceptor,
 	createNavigateToMessage,
@@ -95,6 +96,10 @@ export {
 type ActionHandler = (message: A2UIClientMessage) => void;
 type A2UIMessageHandler = (message: A2UIServerMessage) => void;
 export interface ExecuteActionOptions {
+	/** Semantic event name supplied by a built-in renderer, never by event data. */
+	componentEventName?: string;
+	/** Reject unless a workflow ran without a reported error. Used before acknowledging a file save. */
+	requireSuccess?: boolean;
 	/**
 	 * Where the event came from. A micro widget iframe payload is data: the
 	 * targets of the actions it starts are read from the page-authored
@@ -808,6 +813,8 @@ export interface ComponentEventSource {
 }
 
 export interface ComponentEventTriggerOptions {
+	/** Reject missing handlers and unsuccessful workflow execution. */
+	requireSuccess?: boolean;
 	/** Some newly exposed events had no legacy configured-action behavior. */
 	legacyFallback?: boolean;
 	/** Events added after a component shipped do not inherit its `*` handler. */
@@ -834,8 +841,16 @@ export function useComponentEventTrigger(componentId: string | undefined) {
 				component.actions,
 				options,
 			);
+			if (options.requireSuccess && resolution.actions.length === 0) {
+				throw new Error(
+					`The ${eventName} event has no configured workflow action.`,
+				);
+			}
 			for (const action of resolution.actions) {
-				await executeAction(action, componentId, context);
+				await executeAction(action, componentId, context, {
+					requireSuccess: options.requireSuccess,
+					componentEventName: eventName,
+				});
 			}
 		},
 		[componentId, executeAction],
@@ -926,6 +941,12 @@ export function useExecuteAction() {
 						continue;
 					}
 
+					if (
+						message.type === "navigateTo" &&
+						!canLeaveA2UISurface(appId, surfaceId)
+					) {
+						continue;
+					}
 					if (interceptA2UINavigationMessage(message, onNavigationMessage)) {
 						continue;
 					}
@@ -1077,6 +1098,7 @@ export function useExecuteAction() {
 			onA2UIMessage,
 			onNavigationMessage,
 			appId,
+			surfaceId,
 			openDialog,
 			closeDialog,
 			elementSource,
@@ -1091,9 +1113,89 @@ export function useExecuteAction() {
 			options: ExecuteActionOptions = {},
 		) => {
 			// Only execute actions in preview mode
-			if (!isPreviewMode || !action) return;
+			if (!isPreviewMode || !action) {
+				if (options.requireSuccess) {
+					throw new Error(
+						action
+							? "This workflow action is unavailable outside the running page."
+							: "No workflow action is configured.",
+					);
+				}
+				return;
+			}
 
 			const { name } = action;
+			if (
+				options.requireSuccess &&
+				name !== "workflow_event" &&
+				name !== "widget_event"
+			) {
+				throw new Error(
+					"Saving requires a workflow action or a widget workflow action.",
+				);
+			}
+			let executionError: Error | undefined;
+			let executionCompleted = false;
+			const receiveExecutionEvents = options.requireSuccess
+				? (events: IIntercomEvent[]) => {
+						for (const event of events) {
+							if (event.event_type === "error") {
+								executionError ??= new Error(
+									failureDescription(
+										event.payload,
+										"The workflow could not be completed.",
+									),
+								);
+							}
+							if (
+								event.event_type === "completed" ||
+								event.event_type === "execution_complete"
+							) {
+								const status =
+									typeof event.payload?.status === "string"
+										? event.payload.status.trim().toLowerCase()
+										: "unknown";
+								if (!["completed", "success", "succeeded"].includes(status)) {
+									executionError ??= new Error(
+										`The workflow finished with status: ${status}.`,
+									);
+								} else if (
+									typeof event.payload?.log_level === "number" &&
+									event.payload.log_level >= 3
+								) {
+									executionError ??= new Error(
+										"The workflow failed. The file has not been marked as saved.",
+									);
+								} else {
+									executionCompleted = true;
+								}
+							}
+						}
+						handleA2UIEvents(events);
+					}
+				: handleA2UIEvents;
+			const verifyExecution = (
+				runMeta: ILogMetadata | undefined,
+				capturedRunId: string | undefined,
+			) => {
+				if (!options.requireSuccess) return;
+				if (executionError) throw executionError;
+				if (!runMeta && !capturedRunId) {
+					throw new Error(
+						"The workflow run did not start (execution was declined or unavailable).",
+					);
+				}
+				if (!runMeta && !executionCompleted) {
+					throw new Error(
+						"The workflow did not confirm completion. The file has not been marked as saved.",
+					);
+				}
+				if ((runMeta?.log_level ?? 0) >= 3) {
+					throw new Error(
+						"The workflow failed. The file has not been marked as saved.",
+					);
+				}
+			};
 			const context = { ...(action.context ?? {}), ...additionalContext };
 			// A micro widget payload is data. The route, URL, app, event and feedback record of the actions it starts stay page-authored.
 			const targetContext: Record<string, unknown> =
@@ -1138,6 +1240,7 @@ export function useExecuteAction() {
 							queryParamKeys: Object.keys(extraParams ?? {}),
 						});
 						if (route) {
+							if (!canLeaveA2UISurface(appId, surfaceId)) break;
 							if (
 								interceptA2UINavigationMessage(
 									createNavigateToMessage(route, extraParams),
@@ -1320,6 +1423,8 @@ export function useExecuteAction() {
 
 						if (!pageAction && action.pendingPageAction) {
 							notifyPendingPageAction();
+							if (options.requireSuccess)
+								throw new Error("This Page action is still loading.");
 							break;
 						}
 
@@ -1330,6 +1435,10 @@ export function useExecuteAction() {
 							toast.error(
 								"This Page action is missing its execution authorization. Reload the Page.",
 							);
+							if (options.requireSuccess)
+								throw new Error(
+									"This Page action is missing its execution authorization.",
+								);
 							break;
 						}
 
@@ -1358,6 +1467,10 @@ export function useExecuteAction() {
 							toast.error(
 								"This Page action is not attached to an executable Event.",
 							);
+							if (options.requireSuccess)
+								throw new Error(
+									"This Page action is not attached to an executable Event.",
+								);
 							break;
 						}
 
@@ -1439,6 +1552,11 @@ export function useExecuteAction() {
 									),
 								);
 
+								const actionId =
+									options.componentEventName ??
+									(widgetScope && typeof context.actionId === "string"
+										? context.actionId
+										: undefined);
 								const basePayload = compactWorkflowPayload({
 									id: invocationId,
 									payload: {
@@ -1446,9 +1564,7 @@ export function useExecuteAction() {
 										_elements_mode: "demand",
 										_input_values: inputValues,
 										_widget_instance_id: widgetScope?.instanceId ?? "",
-										...(widgetScope && typeof context.actionId === "string"
-											? { _action_id: context.actionId }
-											: {}),
+										...(actionId !== undefined ? { _action_id: actionId } : {}),
 										_action_context: context,
 										_triggering_component_id: triggeringComponentId ?? "",
 										...(await buildWorkflowFrontendContext(
@@ -1484,7 +1600,7 @@ export function useExecuteAction() {
 										payload,
 										false,
 										captureRunId,
-										handleA2UIEvents,
+										receiveExecutionEvents,
 										undefined,
 										pageTrigger,
 									);
@@ -1501,9 +1617,10 @@ export function useExecuteAction() {
 										payload,
 										false,
 										captureRunId,
-										handleA2UIEvents,
+										receiveExecutionEvents,
 									);
 								}
+								verifyExecution(runMeta, capturedRunId);
 								notifyLivePageRun(
 									surfaceId,
 									settledRunRecord(runMeta, capturedRunId, {
@@ -1552,6 +1669,7 @@ export function useExecuteAction() {
 										{ description },
 									);
 								}
+								if (options.requireSuccess) throw error;
 							}
 						} else {
 							console.warn("Missing required context for workflow_event", {
@@ -1559,6 +1677,10 @@ export function useExecuteAction() {
 								hasBoardContext: Boolean(effectiveBoardId),
 								hasAppContext: Boolean(effectiveAppId),
 							});
+							if (options.requireSuccess)
+								throw new Error(
+									"The workflow action is missing its app, board, or handler.",
+								);
 						}
 						break;
 					}
@@ -1570,10 +1692,15 @@ export function useExecuteAction() {
 							hasBoardContext: Boolean(boardId),
 						});
 						// A micro widget host sets `actionId` after spreading the payload, so a payload key never picks the binding. The binding supplies node and Page action; app, board and event come from the provider.
-						const actionId = context.actionId as string | undefined;
-						if (!actionId) {
+						// Built-in event data can carry its own actionId; its widget route is authored.
+						const actionId = options.componentEventName
+							? action.context?.actionId
+							: context.actionId;
+						if (typeof actionId !== "string" || !actionId) {
 							console.warn("[A2UI] widget_event missing actionId");
 							toast.warning("Widget action has no action id configured.");
+							if (options.requireSuccess)
+								throw new Error("Widget action has no action id configured.");
 							break;
 						}
 
@@ -1583,13 +1710,21 @@ export function useExecuteAction() {
 						);
 						if (route.kind === "actions") {
 							const executeNestedAction = executeActionRef.current;
+							if (
+								options.requireSuccess &&
+								(!executeNestedAction || route.actions.length === 0)
+							) {
+								throw new Error(
+									"The widget event has no configured workflow action.",
+								);
+							}
 							if (executeNestedAction) {
 								for (const routedAction of route.actions) {
 									await executeNestedAction(
 										routedAction,
 										widgetInstance?.componentId ?? triggeringComponentId,
-										context,
-										options,
+										{ ...context, actionId },
+										{ ...options, componentEventName: actionId },
 									);
 								}
 							}
@@ -1598,6 +1733,10 @@ export function useExecuteAction() {
 
 						// Leaving a widget action unbound is a valid authoring choice, so it is a no-op.
 						if (route.kind === "unbound") {
+							if (options.requireSuccess)
+								throw new Error(
+									"The widget event has no configured workflow action.",
+								);
 							console.debug("[A2UI] widget_event has no binding", {
 								actionId,
 								boundActionIds: Object.keys(
@@ -1622,6 +1761,10 @@ export function useExecuteAction() {
 									{ actionId },
 								),
 							);
+							if (options.requireSuccess)
+								throw new Error(
+									"The widget event requires a workflow binding.",
+								);
 							break;
 						}
 
@@ -1635,6 +1778,8 @@ export function useExecuteAction() {
 
 						if (!pageAction && binding.pendingPageAction) {
 							notifyPendingPageAction();
+							if (options.requireSuccess)
+								throw new Error("This widget action is still loading.");
 							break;
 						}
 
@@ -1645,6 +1790,10 @@ export function useExecuteAction() {
 							toast.error(
 								"This widget action is missing its execution authorization. Reload the Page.",
 							);
+							if (options.requireSuccess)
+								throw new Error(
+									"This widget action is missing its execution authorization.",
+								);
 							break;
 						}
 
@@ -1668,7 +1817,16 @@ export function useExecuteAction() {
 							toast.error(
 								"This widget action is not attached to an executable Event.",
 							);
+							if (options.requireSuccess)
+								throw new Error(
+									"This widget action is not attached to an executable Event.",
+								);
 							break;
+						}
+						if (options.requireSuccess && !invocationId) {
+							throw new Error(
+								"The widget workflow action is missing its handler.",
+							);
 						}
 
 						if (effectiveAppId && (pageAction || effectiveBoardId)) {
@@ -1725,7 +1883,7 @@ export function useExecuteAction() {
 										_input_values: inputValues,
 										_widget_instance_id: widgetInstance?.instanceId ?? "",
 										_action_id: actionId,
-										_action_context: context,
+										_action_context: { ...context, actionId },
 										_triggering_component_id: triggeringComponentId ?? "",
 										...(await buildWorkflowFrontendContext(
 											appId,
@@ -1757,7 +1915,7 @@ export function useExecuteAction() {
 										payload,
 										false,
 										captureRunId,
-										handleA2UIEvents,
+										receiveExecutionEvents,
 										undefined,
 										pageTrigger,
 									);
@@ -1774,9 +1932,10 @@ export function useExecuteAction() {
 										payload,
 										false,
 										captureRunId,
-										handleA2UIEvents,
+										receiveExecutionEvents,
 									);
 								}
+								verifyExecution(runMeta, capturedRunId);
 								notifyLivePageRun(
 									surfaceId,
 									settledRunRecord(runMeta, capturedRunId, {
@@ -1818,6 +1977,7 @@ export function useExecuteAction() {
 										{ description },
 									);
 								}
+								if (options.requireSuccess) throw error;
 							}
 						} else {
 							console.warn(
@@ -1833,6 +1993,10 @@ export function useExecuteAction() {
 									"Widget action cannot run: missing app or board context.",
 								),
 							);
+							if (options.requireSuccess)
+								throw new Error(
+									"Widget action cannot run: missing app or board context.",
+								);
 						}
 						break;
 					}

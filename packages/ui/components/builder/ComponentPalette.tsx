@@ -26,6 +26,7 @@ import {
 	Network,
 	Package,
 	PanelLeft,
+	PenTool,
 	Rows3,
 	Search,
 	Settings,
@@ -346,6 +347,13 @@ const COMPONENT_DEFINITIONS: ComponentDefinition[] = [
 		icon: Type,
 		category: "Interactive",
 		description: "Formatted document editor with image uploads",
+	},
+	{
+		type: "excalidraw",
+		label: "Excalidraw",
+		icon: PenTool,
+		category: "Interactive",
+		description: "Drawing editor with scene loading, save, and idle autosave",
 	},
 	{
 		type: "select",

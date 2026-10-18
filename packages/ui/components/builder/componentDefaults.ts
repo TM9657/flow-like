@@ -20,6 +20,7 @@ export const COMPONENT_STYLE_DEFAULTS: Record<string, Partial<Style>> = {
 	scrollArea: { className: "h-[300px]" },
 	graph: { className: "min-h-[320px] w-full" },
 	ontologyGraph: { className: "min-h-[320px] w-full" },
+	excalidraw: { className: "w-full" },
 	modal: { className: "" },
 	drawer: { className: "" },
 };
@@ -251,6 +252,25 @@ export const COMPONENT_DEFAULT_PROPS: Record<
 		multiline: bool(false),
 		disabled: bool(false),
 		required: bool(false),
+	},
+	excalidraw: {
+		value: {
+			literalJson: JSON.stringify({
+				type: "excalidraw",
+				version: 2,
+				source: "flow-like",
+				elements: [],
+				appState: { viewBackgroundColor: "#ffffff" },
+				files: {},
+			}),
+		},
+		width: str("100%"),
+		height: str("600px"),
+		readOnly: bool(false),
+		theme: str("light"),
+		autoSave: bool(true),
+		autoSaveDelayMs: num(1500),
+		autoSaveMinChanges: num(1),
 	},
 	richText: {
 		value: str(""),
@@ -695,6 +715,9 @@ export const COMPONENT_DEFAULT_PROPS: Record<
 		filename: str("document"),
 		mimeType: str(""),
 		fileType: str("unknown"),
+		editable: bool(false),
+		initialEditing: bool(false),
+		value: { literalJson: "null" },
 		showControls: bool(true),
 		fit: str("contain"),
 		fallbackText: str("Cannot preview this file"),
