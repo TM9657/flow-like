@@ -9,6 +9,7 @@ import {
 } from "../../lib/schema/flow/board/commands/generic-command";
 import type { INode } from "../../lib/schema/flow/node";
 import type { IPage, PageContent } from "../../state/backend-state/page-state";
+import { getComponentEventDefinitions } from "../a2ui/component-event-manifest";
 import type { SurfaceComponent } from "../a2ui/types";
 import type { BuilderContextType } from "./BuilderContext";
 import type { WidgetBuilderProps } from "./WidgetBuilder";
@@ -113,6 +114,20 @@ const page: IPage = {
 				actions: unboundWorkflowEvent(),
 			} as unknown as SurfaceComponent["component"],
 		},
+		{
+			id: "document",
+			component: {
+				id: "document",
+				type: "filePreview",
+				src: { literalString: "https://files.example/deck.pptx" },
+				eventHandlers: {
+					save: unboundWorkflowEvent(),
+					saved: unboundWorkflowEvent(),
+					dirtyChange: unboundWorkflowEvent(),
+					error: unboundWorkflowEvent(),
+				},
+			},
+		},
 	],
 	createdAt: "2026-09-01T00:00:00Z",
 	updatedAt: "2026-09-01T00:00:00Z",
@@ -126,6 +141,26 @@ const catalogTemplate = (name: string, friendlyName: string) =>
 		description: friendlyName,
 		coordinates: [0, 0, 0],
 		pins: {
+			...(name === "events_widget_action"
+				? {
+						"template-action-id": {
+							id: "template-action-id",
+							name: "action_id",
+							friendly_name: "Action ID",
+							default_value: Array.from(new TextEncoder().encode('""')),
+							connected_to: [],
+							depends_on: [],
+						},
+						"template-action-context": {
+							id: "template-action-context",
+							name: "action_context",
+							friendly_name: "Action Context",
+							schema: '{"type":"object"}',
+							connected_to: [],
+							depends_on: [],
+						},
+					}
+				: {}),
 			"template-exec-out": {
 				id: "template-exec-out",
 				name: "exec_out",
@@ -152,6 +187,7 @@ let builderProps: WidgetBuilderProps | undefined;
 let builder: BuilderContextType | undefined;
 
 const backend = {
+	storageState: { listStorageItems: async () => [] },
 	pageState: {
 		getPages: async () => [{ pageId: page.id, name: page.name }],
 		getPage: async () =>
@@ -749,6 +785,107 @@ test("a named handler creates a Simple Event, binds it like a manual pick, and r
 			},
 		},
 	]);
+});
+
+test("file preview events create context-capable nodes with typed schemas and persist their exact bindings", async () => {
+	await mount();
+	await openActionsFor("document");
+	const component = page.components?.find((entry) => entry.id === "document");
+	if (!component) throw new Error("The file preview fixture is missing");
+	const definitions = getComponentEventDefinitions(component.component);
+	expect(definitions.map((event) => event.id)).toEqual([
+		"save",
+		"saved",
+		"dirtyChange",
+		"error",
+	]);
+	expect(createEventButtons()).toHaveLength(4);
+
+	for (const [index, definition] of definitions.entries()) {
+		await click(createEventButtons()[index]);
+		await settle(
+			() =>
+				liveActions("document").eventHandlers?.[definition.id]?.[0]?.context
+					?.nodeId === `server-node-${index + 1}`,
+		);
+		const node = sentCommands[index].node;
+		expect(node?.name).toBe("events_widget_action");
+		expect(node?.friendly_name).toBe(definition.label);
+		const pins = Object.values(node?.pins ?? {});
+		const actionId = pins.find((pin) => pin.name === "action_id");
+		expect(
+			JSON.parse(
+				new TextDecoder().decode(new Uint8Array(actionId?.default_value ?? [])),
+			),
+		).toBe(definition.id);
+		const context = pins.find((pin) => pin.name === "action_context");
+		const schema = JSON.parse(context?.schema ?? "null");
+		expect(schema).toEqual({
+			...definition.contextSchema,
+			"x-flow-like-pending-component-event": {
+				componentType: "filePreview",
+				eventName: definition.id,
+			},
+		});
+		expect(schema.properties.actionId).toEqual({ type: "string" });
+		expect(
+			schema.properties[
+				definition.id === "dirtyChange"
+					? "dirty"
+					: definition.id === "error"
+						? "message"
+						: "url"
+			].type,
+		).toBe(definition.id === "dirtyChange" ? "boolean" : "string");
+	}
+
+	expect(catalog).toEqual(catalogSnapshot);
+	await act(async () => {
+		await currentBuilder().onSave?.(
+			Array.from(builder?.components.values() ?? []),
+			{},
+		);
+	});
+	const saved = savedPages
+		.at(-1)
+		?.components?.find((entry) => entry.id === "document");
+	expect(saved?.component.eventHandlers).toEqual(
+		Object.fromEntries(
+			definitions.map((definition, index) => [
+				definition.id,
+				[
+					{
+						name: "workflow_event",
+						context: {
+							nodeId: `server-node-${index + 1}`,
+							appId: "app",
+							boardId: "saved-board",
+						},
+					},
+				],
+			]),
+		),
+	);
+});
+
+test("a catalog event without context pins cannot create an untyped file preview handler", async () => {
+	const oldCatalog = structuredClone(catalog);
+	oldCatalog[1].pins = Object.fromEntries(
+		Object.entries(oldCatalog[1].pins).filter(
+			([id]) => id !== "template-action-context",
+		),
+	);
+	await mount({ catalog: oldCatalog });
+	await openActionsFor("document");
+	await click(createEventButtons()[0]);
+	await settle(
+		() =>
+			catalogReads === 1 && !createEventButtons()[0]?.hasAttribute("disabled"),
+	);
+	expect(sentCommands).toHaveLength(0);
+	expect(liveActions("document").eventHandlers?.save).toEqual(
+		unboundWorkflowEvent(),
+	);
 });
 
 test("overlapping creates keep each other's bindings and the legacy default is named after the component", async () => {

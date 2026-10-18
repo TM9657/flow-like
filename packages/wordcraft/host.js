@@ -1,9 +1,11 @@
+import { handleMcpControl, mcpError } from "./mcp.mjs";
 import { CHANNEL, MAX_DOCUMENT_BYTES, validateCommand } from "./protocol.js";
 
 const session = new URLSearchParams(location.search).get("session");
 const origin = location.origin;
 const queue = [];
 let runtime;
+let manifest;
 
 async function verify(bytes, expected) {
 	const hash = await crypto.subtle.digest("SHA-256", bytes);
@@ -20,7 +22,8 @@ async function loadWasm() {
 	const response = await fetch("./runtime.json");
 	if (!response.ok)
 		throw new Error("The document editor runtime is unavailable.");
-	const { wasm } = await response.json();
+	manifest = await response.json();
+	const { wasm } = manifest;
 	if (
 		wasm?.compression !== "gzip" ||
 		!Array.isArray(wasm.parts) ||
@@ -88,20 +91,75 @@ window.flowLikeWordcraftEmit = (type, detail, bytes) => {
 	}
 	send(type, parsed, bytes.length ? bytes : undefined);
 };
-window.flowLikeWordcraftTake = () => queue.shift() ?? null;
+window.flowLikeWordcraftTake = () => {
+	while (queue.length) {
+		const command = queue.shift();
+		if (command.type === "mcp-request" && command.deadlineAtMs <= Date.now()) {
+			send(
+				"mcp-response",
+				mcpError(command, "The editor MCP request expired.", -32000),
+			);
+			continue;
+		}
+		return command;
+	}
+	return null;
+};
 
 window.addEventListener("message", (event) => {
 	if (event.source !== window.parent || event.origin !== origin) return;
 	try {
 		const command = validateCommand(event.data, session);
 		if (!command) return;
+		if (command.type === "mcp-cancel") {
+			const index = queue.findIndex(
+				(item) =>
+					item.type === "mcp-request" && item.requestId === command.requestId,
+			);
+			if (index !== -1) queue.splice(index, 1);
+			return;
+		}
+		if (command.type === "mcp-request") {
+			if (command.message.method === "notifications/cancelled") {
+				const index = queue.findIndex(
+					(item) =>
+						item.type === "mcp-request" &&
+						item.message.id === command.message.params?.requestId,
+				);
+				if (index !== -1) queue.splice(index, 1);
+			}
+			const reply = handleMcpControl(command, {
+				name: "wordcraft",
+				version: manifest?.version || "1",
+			});
+			if (reply !== undefined) {
+				send("mcp-response", reply);
+				return;
+			}
+		}
 		// The host sends one document per iframe. Never queue replacement documents or
 		// an unbounded number of exports while a large file is being laid out.
-		if (queue.length >= 8)
+		if (queue.length >= 8 && command.type !== "set-read-only")
 			throw new Error("The document editor is busy. Try again.");
-		queue.push(command);
+		if (command.type === "set-read-only") {
+			for (let index = queue.length - 1; index >= 0; index--) {
+				if (queue[index].type === "set-read-only") queue.splice(index, 1);
+				else if (command.readOnly && queue[index].type === "open")
+					queue[index].readOnly = true;
+			}
+			if (command.readOnly && !queue.some((item) => item.type === "open"))
+				queue.unshift(command);
+			else queue.push(command);
+		} else queue.push(command);
 		runtime?.request_repaint();
 	} catch (error) {
+		if (event.data?.type === "mcp-request") {
+			send(
+				"mcp-response",
+				mcpError(event.data, String(error.message ?? error)),
+			);
+			return;
+		}
 		send("error", {
 			requestId: event.data?.requestId,
 			error: String(error.message ?? error),

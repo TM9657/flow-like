@@ -1,0 +1,63 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"events": {
+		"save": "FilePreviewSaveContext",
+		"saved": "FilePreviewSaveContext",
+		"dirtyChange": "FilePreviewDirtyChangeContext",
+		"error": "FilePreviewErrorContext"
+	},
+	"$defs": {
+		"FilePreviewFile": {
+			"type": "object",
+			"properties": {
+				"name": { "type": "string" },
+				"size": { "type": "integer", "minimum": 0 },
+				"type": { "type": "string" },
+				"url": { "type": "string" },
+				"backendUrl": { "type": "string" }
+			},
+			"required": ["name", "size", "type", "url", "backendUrl"]
+		},
+		"FilePreviewSaveContext": {
+			"type": "object",
+			"properties": {
+				"actionId": { "type": "string" },
+				"src": { "type": "string" },
+				"filename": { "type": "string" },
+				"url": { "type": "string" },
+				"signedUrls": { "type": "string" },
+				"file": { "$ref": "#/$defs/FilePreviewFile" },
+				"value": { "$ref": "#/$defs/FilePreviewFile" }
+			},
+			"required": [
+				"actionId",
+				"src",
+				"filename",
+				"url",
+				"signedUrls",
+				"file",
+				"value"
+			]
+		},
+		"FilePreviewDirtyChangeContext": {
+			"type": "object",
+			"properties": {
+				"actionId": { "type": "string" },
+				"src": { "type": "string" },
+				"filename": { "type": "string" },
+				"dirty": { "type": "boolean" }
+			},
+			"required": ["actionId", "src", "filename", "dirty"]
+		},
+		"FilePreviewErrorContext": {
+			"type": "object",
+			"properties": {
+				"actionId": { "type": "string" },
+				"src": { "type": "string" },
+				"filename": { "type": "string" },
+				"message": { "type": "string" }
+			},
+			"required": ["actionId", "src", "filename", "message"]
+		}
+	}
+}

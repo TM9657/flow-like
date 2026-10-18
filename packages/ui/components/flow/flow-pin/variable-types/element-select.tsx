@@ -1,4 +1,5 @@
 import { useTranslation } from "@flow-like/locales";
+import { defaultFilter } from "cmdk";
 import { CheckIcon, ChevronDown, Layers } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -41,6 +42,17 @@ function getRawElementId(value?: string): string | undefined {
 	return slashIndex >= 0 ? value.slice(slashIndex + 1) : value;
 }
 
+function isFullElementReference(value: string): boolean {
+	const slashIndex = value.indexOf("/");
+	return (
+		slashIndex > 0 &&
+		slashIndex < value.length - 1 &&
+		value.length <= 1024 &&
+		new TextEncoder().encode(value).byteLength <= 1024 &&
+		!/\p{Cc}/u.test(value)
+	);
+}
+
 export function ElementSelect({
 	pin,
 	value,
@@ -49,6 +61,7 @@ export function ElementSelect({
 }: ElementSelectProps) {
 	const { t } = useTranslation("flow");
 	const [open, setOpen] = useState(false);
+	const [search, setSearch] = useState("");
 	const [, refreshSnapshot] = useState(0);
 
 	const handleOpenChange = useCallback(
@@ -56,6 +69,7 @@ export function ElementSelect({
 			setOpen(isOpen);
 			if (!isOpen) return;
 
+			setSearch("");
 			refreshSnapshot((version) => version + 1);
 			const loadPromise = selectorDataRef?.current.loadElements(true);
 			loadPromise?.finally(() => refreshSnapshot((version) => version + 1));
@@ -69,6 +83,9 @@ export function ElementSelect({
 		(el) => el.id === currentValue || el.rawId === currentValue,
 	);
 	const loading = open && (selectorDataRef?.current.elementsLoading ?? false);
+	const canUseReference =
+		isFullElementReference(search) &&
+		!elements.some((element) => element.id === search);
 
 	const triggerLabel = useMemo(() => {
 		if (loading && !currentValue) return "Loading...";
@@ -93,9 +110,20 @@ export function ElementSelect({
 					</button>
 				</PopoverTrigger>
 				<PopoverContent className="w-60 p-0" align="start">
-					<Command>
+					<Command
+						filter={(value, query, keywords) =>
+							value === "__manual_element_reference__"
+								? 1
+								: defaultFilter(value, query, keywords)
+						}
+					>
 						<CommandInput
-							placeholder={t("searchElements", "Search elements...")}
+							value={search}
+							onValueChange={setSearch}
+							placeholder={t(
+								"searchElementsOrPasteReference",
+								"Search or paste a reference...",
+							)}
 						/>
 						<CommandList>
 							<CommandEmpty>
@@ -105,7 +133,7 @@ export function ElementSelect({
 								{elements.map((element) => (
 									<CommandItem
 										key={element.id}
-										value={`${element.pageName ?? ""} ${element.rawId} ${element.type}`}
+										value={`${element.id} ${element.pageName ?? ""} ${element.rawId} ${element.type}`}
 										onSelect={() => {
 											setValue(convertJsonToUint8Array(element.id));
 											setOpen(false);
@@ -131,6 +159,24 @@ export function ElementSelect({
 										)}
 									</CommandItem>
 								))}
+								{canUseReference && (
+									<CommandItem
+										value="__manual_element_reference__"
+										onSelect={() => {
+											setValue(convertJsonToUint8Array(search));
+											setOpen(false);
+										}}
+									>
+										<div className="flex min-w-0 flex-col gap-0.5">
+											<span className="text-xs">
+												{t("useElementReference", "Use reference")}
+											</span>
+											<span className="truncate text-[10px] text-muted-foreground">
+												{search}
+											</span>
+										</div>
+									</CommandItem>
+								)}
 							</CommandGroup>
 						</CommandList>
 					</Command>

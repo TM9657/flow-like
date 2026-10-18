@@ -212,6 +212,12 @@ export async function executeDeviceCommand(
 	context: DeviceContext,
 ): Promise<unknown> {
 	assertLive(context);
+	if (command === "craft.session" || command === "craft.mcp") {
+		const { executeCraftCommand } = await import(
+			"../components/storage/craft-mcp-session"
+		);
+		return executeCraftCommand(command, args, context);
+	}
 	if (command === "audio.play") {
 		const { playFrontendAudio } = await import("./frontend-audio");
 		return playFrontendAudio(args, context);

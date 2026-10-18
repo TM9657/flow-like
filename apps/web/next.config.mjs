@@ -1,8 +1,9 @@
-import { prepareMapLibreAssets } from "../../packages/ui/scripts/prepare-maplibre.mjs";
 import {
 	PHASE_DEVELOPMENT_SERVER,
 	PHASE_PRODUCTION_BUILD,
 } from "next/constants.js";
+import { prepareExcalidrawAssets } from "../../packages/ui/scripts/prepare-excalidraw.mjs";
+import { prepareMapLibreAssets } from "../../packages/ui/scripts/prepare-maplibre.mjs";
 import { prepareMonacoAssets } from "./scripts/prepare-monaco.mjs";
 
 /** @type {import('next').NextConfig} */
@@ -11,6 +12,9 @@ const nextConfig = {
 	poweredByHeader: false,
 	output: "export",
 	env: {
+		NEXT_PUBLIC_EXCALIDRAW_ASSET_PATH: prepareExcalidrawAssets(
+			new URL("./public/", import.meta.url),
+		),
 		NEXT_PUBLIC_MAPLIBRE_WORKER_URL: prepareMapLibreAssets(
 			new URL("./public/", import.meta.url),
 		),

@@ -38,17 +38,19 @@ describe("page workflow event options", () => {
 		]);
 	});
 
-	test.each(["microWidgetInstance", "widgetInstance"])(
-		"allows widget context events on %s",
-		(type) => {
-			expect(
-				workflowEventsForComponent(
-					getPageWorkflowEvents(nodes, "Unnamed"),
-					type,
-				).map((event) => event.nodeId),
-			).toEqual(["simple-node", "widget-node"]);
-		},
-	);
+	test.each([
+		"microWidgetInstance",
+		"widgetInstance",
+		"filePreview",
+		"excalidraw",
+	])("allows context events on %s", (type) => {
+		expect(
+			workflowEventsForComponent(
+				getPageWorkflowEvents(nodes, "Unnamed"),
+				type,
+			).map((event) => event.nodeId),
+		).toEqual(["simple-node", "widget-node"]);
+	});
 
 	test.each([undefined, "button", "text"])(
 		"keeps widget-only entries out of %s actions and page lifecycle hooks",
@@ -92,6 +94,8 @@ describe("creating a workflow event", () => {
 	test.each([
 		["microWidgetInstance", ["widget_action", "simple"]],
 		["widgetInstance", ["widget_action", "simple"]],
+		["filePreview", ["widget_action"]],
+		["excalidraw", ["widget_action"]],
 		["button", ["simple"]],
 		[undefined, ["simple"]],
 	] as const)("offers %s the event kinds it can receive", (type, kinds) => {
@@ -174,6 +178,22 @@ describe("page board resolution", () => {
 });
 
 describe("page widget event rows", () => {
+	test("exposes Excalidraw's typed events before any handler is bound", () => {
+		const events = getPageComponentEvents({ type: "excalidraw" });
+		expect(events.map((event) => event.id)).toEqual([
+			"load",
+			"save",
+			"autoSave",
+			"dirtyChange",
+			"error",
+		]);
+		for (const event of events) {
+			expect(event.contextSchema).toBeDefined();
+			expect(event.legacyFallback).toBe(false);
+			expect(event.wildcardFallback).toBe(false);
+		}
+	});
+
 	const inline = {
 		id: "inline-1",
 		type: "widgetInstance",

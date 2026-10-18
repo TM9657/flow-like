@@ -66,13 +66,20 @@ while the editor stays open.
 | Flows Photo | PNG, JPEG, TIFF, BMP, PSD, PSB, OpenRaster, PhotoCraft and other supported raster formats; imports RAW, KRA and PDN | Saves matching raster formats; import-only files and animated formats save as PhotoCraft projects |
 | Flows Audio | WAV, AIFF, FLAC, MIDI, SoundCraft; imports MP3, OGG, M4A, AAC and other supported audio | Saves WAV, AIFF, FLAC, MIDI or bundled SoundCraft sessions; compressed audio converts to WAV |
 | Flows Video | MP4, MOV, WebM, MKV, AVI and other supported video containers | Saves MP4 |
-| Flows CAD | DXF | Saves DXF |
+| Flows CAD | SolidCraft projects; imports STEP, STP, IGES, IGS, STL, OBJ, 3MF, GLB and glTF; DXF through CADCraft | Saves SolidCraft projects; DXF saves DXF |
 | Flows Design | IDML, DesignCraft | Saves the selected layout format |
 
 These editors are available in the shared **Storage** configuration tab on web
 and desktop. They run in the browser and send saved bytes through the existing
 storage connection. File contents are not sent to Storytold. Browser codec
 availability can limit video imports and exports.
+
+Flows CAD uses [SolidCraft](https://github.com/tangency-labs/solidcraft) for
+3D models and 2D sketches. Saving an imported model creates a `.solidcraft`
+project that retains modeling edits and leaves the original file available.
+GLB and glTF files must embed their geometry buffers; the viewer cannot load
+separate `.bin` files beside the selected file. Textures are not rendered.
+Existing DXF drawings continue to open in CADCraft and save as DXF.
 
 Editing is experimental. Unsupported formatting, layers, animation or document
 features may change when saved. Import warnings appear above the editor. Some
@@ -86,10 +93,34 @@ important files in their original application after saving.
 Word, presentation, spreadsheet, vector, photo and layout editors accept files
 up to 50 MiB. Audio and CAD accept 100 MiB; PDF and video accept 200 MiB.
 Legacy `.doc` and `.ppt`, OpenDocument presentations, InDesign `.indd` and
-After Effects `.aep` files are not supported. CADCraft's DWG support is desktop-only
-upstream and is unavailable in these browser-based editors. TypeScript `.ts` files retain their
+After Effects `.aep` files are not supported. Native FreeCAD `.FCStd`, Rhino
+`.3dm` and DWG files are not supported by these browser editors. Export models
+to STEP or another supported format before uploading. TypeScript `.ts` files retain their
 code preview. LightCraft catalogs and EffectCraft projects depend on separate
 media libraries, so they do not open as standalone storage files.
+
+## Control an open editor with an agent
+
+Open the document's editor. For PDFs, common images, audio and video, choose
+**Edit** from the native preview first; **Agent target** appears only after the
+editor loads. For other supported files, choose **Edit** if the agent should
+change them. Select **Agent target** in the editor toolbar to copy its reference.
+Add **Register Editor MCP Tools** before the agent runs and connect the Agent
+input. Open its **Editor Element** picker, paste the copied reference into the
+search field, and choose **Use reference**. Leave **Tools** empty to expose the
+tools provided by that editor, or enter the exact tool names the agent should use.
+
+For an editor on an app page, select its `filePreview` component directly in
+**Editor Element**, or connect the **Element** output of **Get Element** to that
+input. **Get Element** must target the `filePreview` component containing the
+open editor. It passes the resolved element reference to the registration node.
+
+The agent works on the open document, including unsaved changes. Choose **Save**
+to persist those changes through the editor's existing save path. Read-only
+documents allow tools identified as read-only by the editor. Run the flow in
+the same window and keep the editor tab visible while the agent uses it.
+Closing, reloading or replacing the document requires running the registration
+node again.
 
 ## Models and training history
 

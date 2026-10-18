@@ -157,6 +157,10 @@ pub fn set_component_schema_by_type(pin: &mut Pin, component_type: &str) -> bool
             pin.set_schema::<TextFieldProps>();
             true
         }
+        "excalidraw" => {
+            pin.set_schema::<ExcalidrawProps>();
+            true
+        }
         "select" => {
             pin.set_schema::<SelectProps>();
             true
@@ -373,6 +377,7 @@ pub fn valid_component_types() -> &'static [&'static str] {
         "appLink",
         "textField",
         "richText",
+        "excalidraw",
         "select",
         "slider",
         "checkbox",

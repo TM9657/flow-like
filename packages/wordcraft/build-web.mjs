@@ -14,11 +14,13 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
+import { ensureWasmBindgen } from "../craft-viewers/build-tools.mjs";
 import {
 	assertNoBrandArtwork,
 	bundleLicenses,
 	hashLicenseInputs,
 } from "../craft-viewers/licenses.mjs";
+import { prepareLiveMcp } from "../craft-viewers/live-mcp.mjs";
 import { wasmLinkerEnvironment } from "../device-crypto/build-web.mjs";
 
 const directory = dirname(fileURLToPath(import.meta.url));
@@ -37,11 +39,14 @@ if (!/^[a-f0-9]{40}$/.test(pin.revision))
 const cache = join(root, "target/wordcraft");
 const source =
 	process.env.WORDCRAFT_SOURCE || join(cache, "source", pin.revision);
-const tools = join(cache, "tools", pin.wasmBindgen);
 const output = join(cache, "runtime");
 const inputs = [
 	"upstream.json",
 	"host.rs",
+	"../craft-viewers/live-mcp.mjs",
+	"../craft-viewers/live-mcp.rs",
+	"../craft-viewers/mcp-policy.rs",
+	"../craft-viewers/mcp.mjs",
 	"host.js",
 	"protocol.mjs",
 	"index.html",
@@ -52,6 +57,8 @@ hash.update(toolchain);
 for (const name of inputs)
 	hash.update(name).update(readFileSync(join(directory, name)));
 for (const name of [
+	"packages/craft-viewers/build-tools.mjs",
+	"packages/craft-viewers/build-lock.mjs",
 	"packages/device-crypto/build-web.mjs",
 	"rust-toolchain.toml",
 ])
@@ -320,41 +327,27 @@ if (!cached()) {
 		'#[cfg(target_arch = "wasm32")]\nmod web;\n#[cfg(target_arch = "wasm32")]\nfn main() { web::start(); }\n#[cfg(not(target_arch = "wasm32"))]\nfn main() {}\n',
 	);
 
-	const executable =
-		process.env.WASM_BINDGEN ||
-		join(
-			tools,
-			"bin",
-			process.platform === "win32" ? "wasm-bindgen.exe" : "wasm-bindgen",
-		);
-	let installed = "";
-	try {
-		installed = run(executable, ["--version"], {
-			encoding: "utf8",
-			stdio: "pipe",
-		}).trim();
-	} catch {}
-	if (installed !== `wasm-bindgen ${pin.wasmBindgen}`) {
-		if (process.env.WASM_BINDGEN)
-			throw new Error(
-				`WASM_BINDGEN must point to wasm-bindgen ${pin.wasmBindgen}.`,
-			);
-		run("cargo", [
-			"install",
-			"wasm-bindgen-cli",
-			"--version",
-			pin.wasmBindgen,
-			"--locked",
-			"--root",
-			tools,
-			"--target-dir",
-			join(tools, "target"),
-		]);
-	}
+	prepareLiveMcp({
+		id: "wordcraft",
+		source,
+		original,
+		replaceOnce,
+		write: (path, text) => writeFileSync(join(source, path), text),
+	});
+
+	const executable = ensureWasmBindgen({
+		root,
+		version: pin.wasmBindgen,
+		env: buildEnvironment,
+		run,
+	});
 	const cargoTarget = process.env.WORDCRAFT_TARGET_DIR || join(cache, "cargo");
 	const env = {
 		...buildEnvironment,
-		...wasmLinkerEnvironment({ directory: tools, env: buildEnvironment }),
+		...wasmLinkerEnvironment({
+			directory: join(cache, "linker"),
+			env: buildEnvironment,
+		}),
 		CARGO_TARGET_DIR: cargoTarget,
 		// Release jobs pass native linker shims through these. They cannot be linked
 		// into WebAssembly; the explicit --target below also overrides CARGO_BUILD_TARGET.
@@ -422,6 +415,7 @@ if (!cached()) {
 	for (const name of ["host.js", "index.html"])
 		cpSync(join(directory, name), join(output, name));
 	cpSync(join(directory, "protocol.mjs"), join(output, "protocol.js"));
+	cpSync(join(directory, "../craft-viewers/mcp.mjs"), join(output, "mcp.mjs"));
 	const licenses = join(output, "licenses");
 	mkdirSync(licenses, { recursive: true });
 	for (const name of [

@@ -2,6 +2,7 @@ export { A2UIButton } from "./Button";
 export { A2UIFeedback } from "./Feedback";
 export { A2UIAppLink } from "./AppLink";
 export { A2UIRichText } from "./RichText";
+export { A2UIExcalidraw } from "./Excalidraw";
 export { A2UITextField } from "./TextField";
 export { A2UISelect } from "./Select";
 export { A2UISlider } from "./Slider";

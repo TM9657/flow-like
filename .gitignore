@@ -127,6 +127,9 @@ output
 
 # Generated MapLibre workers, paired with the installed package version.
 **/public/maplibre/
+
+# Generated Excalidraw fonts, paired with the installed package version.
+**/public/excalidraw/
 :memory:.ses
 
 # Generated local production-component browser fixture

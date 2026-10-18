@@ -35,6 +35,7 @@ const COMPONENT_ICONS: Record<string, string> = {
 	button: "◯",
 	textField: "▢",
 	richText: "¶",
+	excalidraw: "✎",
 	select: "▾",
 	slider: "━",
 	checkbox: "☑",
@@ -177,6 +178,11 @@ const COMPONENT_COLORS: Record<
 		text: "text-purple-600",
 	},
 	richText: {
+		bg: "bg-purple-50",
+		border: "border-purple-200",
+		text: "text-purple-600",
+	},
+	excalidraw: {
 		bg: "bg-purple-50",
 		border: "border-purple-200",
 		text: "text-purple-600",

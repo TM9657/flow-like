@@ -14,6 +14,16 @@ describe("storage editor routing and save targets", () => {
 		["table.xlsm", "gridcraft", "xlsm"],
 		["shape.svg", "vectorcraft", "svg"],
 		["drawing.dxf", "cadcraft", "dxf"],
+		["part.solidcraft", "solidcraft", "solidcraft"],
+		["part.STEP", "solidcraft", "solidcraft"],
+		["part.stp", "solidcraft", "solidcraft"],
+		["part.iges", "solidcraft", "solidcraft"],
+		["part.igs", "solidcraft", "solidcraft"],
+		["part.stl", "solidcraft", "solidcraft"],
+		["part.obj", "solidcraft", "solidcraft"],
+		["part.3mf", "solidcraft", "solidcraft"],
+		["part.glb", "solidcraft", "solidcraft"],
+		["part.gltf", "solidcraft", "solidcraft"],
 		["sound.mp3", "soundcraft", "wav"],
 		["sound.flac", "soundcraft", "flac"],
 		["movie.mov", "filmcraft", "mp4"],
@@ -25,6 +35,8 @@ describe("storage editor routing and save targets", () => {
 	it.each([
 		"legacy.ppt",
 		"drawing.dwg",
+		"part.FCStd",
+		"part.3dm",
 		"slides.odp",
 		"old.doc",
 		"file.aep",
@@ -58,6 +70,26 @@ describe("storage editor routing and save targets", () => {
 		expect(file.name).toBe("a%2Fb-converted-unique.xlsx");
 		expect(craftSaveLabel(requireViewer(location))).toBe("Save as .xlsx");
 	});
+	it("saves imported CAD as a separate project while preserving native project names", () => {
+		const imported = "parts/bracket%2Fleft.step";
+		const converted = createStorageCraftFile(
+			new File(["project"], "forged.step"),
+			imported,
+			requireViewer(imported),
+			"unique",
+		);
+		expect(converted.name).toBe("bracket%2Fleft-converted-unique.solidcraft");
+		expect(craftSaveLabel(requireViewer(imported))).toBe("Save as .solidcraft");
+		const native = `parts/${converted.name}`;
+		const saved = createStorageCraftFile(
+			new File(["updated project"], "forged.step"),
+			native,
+			requireViewer(native),
+			"another-id",
+		);
+		expect(saved.name).toBe(converted.name);
+		expect(craftSaveLabel(requireViewer(native))).toBe("Save");
+	});
 });
 
 function requireViewer(name: string) {
@@ -76,6 +108,16 @@ it("keeps runtime limits and advertised imports aligned with storage routing", (
 		"file.wav",
 		"file.mp4",
 		"file.dxf",
+		"file.solidcraft",
+		"file.step",
+		"file.stp",
+		"file.iges",
+		"file.igs",
+		"file.stl",
+		"file.obj",
+		"file.3mf",
+		"file.glb",
+		"file.gltf",
 		"file.idml",
 	]) {
 		const viewer = requireViewer(filename);

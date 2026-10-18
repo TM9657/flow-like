@@ -202,7 +202,7 @@ The tables below group runtime components by purpose.
 | `table` | Data table | `columns`, `data`, sorting, search, pagination, and selection flags |
 | `tableRow` | Explicit table row | `cells`, `selected`, `disabled` |
 | `tableCell` | Explicit table cell | `content`, `isHeader`, spans, `align` |
-| `filePreview` | Preview a PDF, image, media, code, or text file | `src`, `filename`, `mimeType`, `fileType`, `showControls` |
+| `filePreview` | Preview files and edit supported formats with WASM editors | `src`, `filename`, `mimeType`, `fileType`, `editable`, `initialEditing`, `value` |
 | `diffView` | Compare text, code, Markdown, JSON, or documents | `original`, `modified`, `mode`, `kind`, `language` |
 | `boundingBoxOverlay` | Display boxes over an image | image source, boxes, labels, and display options |
 
@@ -215,6 +215,7 @@ The tables below group runtime components by purpose.
 | `appLink` | Link to an app surface | `target`, `label`, `appId`, `eventId`, `variant`, `disabled` |
 | `textField` | Single- or multi-line text input | `value`, `placeholder`, `label`, `inputType`, `multiline`, `required` |
 | `richText` | Plate document editor with media and editorial review | `value`, `documentId`, `documentRevision`, `currentUser`, `reviewEnabled`, `readOnly`, `uploadScope` |
+| `excalidraw` | Drawing editor with scene loading and typed save events | `value`, `width`, `height`, `readOnly`, `theme`, `autoSave`, `autoSaveDelayMs`, `autoSaveMinChanges` |
 | `select` | Single or multiple selection | `value`, `options`, `placeholder`, `multiple`, `searchable` |
 | `slider` | Numeric range input | `value`, `min`, `max`, `step`, `showValue`, `label` |
 | `checkbox` | Boolean or indeterminate input | `checked`, `label`, `disabled`, `indeterminate` |
@@ -274,6 +275,102 @@ for static design-time content.
 | `healthBar` | Health or resource meter |
 | `miniMap` | Compact map with markers |
 
+## File preview and editing
+
+Use `filePreview` to open a file from `src` or its alias `url`. The component
+selects a viewer from the filename, MIME type, or URL extension. Office files
+use the same WebAssembly (WASM) viewers as Storage. PDFs, images, audio, and
+video keep their usual preview until editing is enabled. Plain text and code
+remain preview-only.
+
+The Office viewers support `.docx`, `.pptx`, `.potx`, `.ppsx`, and spreadsheet
+formats including `.xlsx`, `.xls`, `.xlsb`, `.ods`, `.csv`, and `.tsv`. Legacy
+`.ppt` and `.doc` are unsupported. Other formats follow the Storage editor
+registry. These editors are experimental: importing and exporting a file may
+change formatting or omit unsupported features.
+
+All properties below use `BoundValue`:
+
+| Property | Contract |
+| --- | --- |
+| `src`, `url` | Source URL. `url` is an alias for `src`. |
+| `filename`, `mimeType` | File metadata used to choose the viewer. Supply a filename when a signed URL has no useful extension. |
+| `fileType` | Optional override: `pdf`, `image`, `video`, `audio`, `code`, `text`, or `document`. `document` asks the WASM registry to select a viewer from the metadata. |
+| `editable` | Enable the matching WASM editor. Defaults to `false`. Requires an exact `save` event handler containing `workflow_event` or `widget_event` actions. |
+| `initialEditing` | Start in edit mode when `editable` is enabled. Defaults to `false`. |
+| `value` | Last exported file metadata. A path binding is updated before the save workflow runs. It does not change the source URL. |
+
+```json
+{
+  "type": "filePreview",
+  "src": { "path": "$.data.presentation.url" },
+  "filename": { "literalString": "presentation.pptx" },
+  "editable": { "literalBool": true },
+  "initialEditing": { "literalBool": false },
+  "value": { "path": "$.data.presentation.exportedFile" },
+  "eventHandlers": {
+    "save": [
+      {
+        "name": "workflow_event",
+        "context": { "nodeId": "save-presentation-event-node-id" }
+      }
+    ]
+  }
+}
+```
+
+Saving exports the edited file and uploads it to backend temporary storage,
+using the same upload path as chat attachments. This always creates a new
+temporary file, even when the save workflow runs locally. The component never
+overwrites the original file.
+
+The `save` event carries the new URL as `url` and `signedUrls`. Both are
+strings, following the single-file input convention.
+It also carries exported metadata as both `file` and `value`, plus `src` for
+the original source. File metadata contains `name`, `size`, `type`, `url`,
+and `backendUrl`. The workflow decides how to use `file.url` or copy its
+contents to permanent storage. The workflow can also read the metadata with
+**Get Element Value**. A temporary upload alone does not persist the document
+at a permanent destination.
+
+Some editors convert formats: `.potx` and `.ppsx` export as `.pptx`,
+while `.xls`, `.xlsb`, and `.ods` export as `.xlsx`. Use the exported filename
+and MIME type when choosing the destination.
+
+To let an agent use the open editor, target this `filePreview` with **Get Element**
+and connect its **Element** output to **Editor Element** on **Register Editor MCP
+Tools**. You can also select the component directly in the **Editor Element**
+picker, or copy **Agent target** from the editor toolbar, paste it into the
+picker's search field, and choose the matching element or **Use reference**.
+Run the flow in the same window as the editor. The agent uses the open draft;
+**Save** still runs the configured `save` workflow. See
+[Control an open editor with an agent](/apps/storage/#control-an-open-editor-with-an-agent)
+for setup and editor-loading requirements.
+
+| Event | Payload and timing |
+| --- | --- |
+| `save` | `url`, `signedUrls`, `file`, `value`, and original `src`. Runs after export and temporary backend upload. All configured save workflows must succeed before the editor clears its unsaved state. |
+| `saved` | The same file metadata and source, after the save workflows succeed. |
+| `dirtyChange` | `{ "dirty": true }` or `{ "dirty": false }` when the unsaved state changes. |
+| `error` | `{ "message": "..." }` when preview, export, upload, or saving fails. A failed save preserves the draft for retry. |
+
+Bind these exact names in `eventHandlers` or the builder's Actions tab. They
+do not inherit `*` or the older `actions` array. `saved`, `dirtyChange`, and
+`error` are optional notifications.
+
+In the Actions tab, **Create event in flow** creates a **Widget Action Event**
+for these file events. Its **Action Context** output has the event's schema:
+`save` and `saved` expose file metadata and URLs, `dirtyChange` exposes a
+boolean `dirty`, and `error` exposes a string `message`. Every context also
+includes `actionId`, `src`, and `filename`. **Event Name** identifies the
+event that ran. File events put these fields directly in Action Context.
+
+The workflow schema follows the saved page bindings. Removing a binding
+clears its inferred schema; sharing a handler between incompatible or unknown
+event shapes gives it a generic context. Existing Simple Event bindings keep
+working. Select or create a Widget Action Event to access typed context
+fields in the workflow.
+
 ## Rich text documents
 
 Use `richText` to edit and display a Plate document. Its `value` is a string
@@ -318,6 +415,95 @@ document identity, with media metadata or an error. A server save should compare
 the submitted revision before accepting an update. Supplying a new authoritative
 revision to the component resets its local draft; it does not merge simultaneous
 edits.
+
+## Excalidraw drawings
+
+Use `excalidraw` to load and edit a drawing, then persist its scene through a
+workflow. A scene is the Excalidraw JSON representation, including `elements`,
+`appState`, and `files`. Keeping all three preserves the drawing's content,
+canvas settings, and embedded images.
+
+All properties below use `BoundValue`:
+
+| Property | Contract |
+| --- | --- |
+| `value` | Scene object or its JSON string. Bind it to surface data to receive edits. Changing the supplied scene replaces the current drawing. |
+| `width`, `height` | Canvas dimensions as CSS values. Defaults to `100%` wide and `600px` high. Give the drawing a visible height. |
+| `readOnly` | Show the drawing without editing. Defaults to `false`. |
+| `theme` | Editor appearance: `light` or `dark`. |
+| `autoSave` | Enable autosave when an exact `autoSave` handler is configured. Defaults to `true`. |
+| `autoSaveDelayMs` | Idle time after the last content edit before autosave. Defaults to 1500 milliseconds, with a minimum of 100. Each new content edit restarts the timer. |
+| `autoSaveMinChanges` | Minimum content changes since loading or the last successful save before autosave can run. Defaults to `1`. |
+
+```json
+{
+  "type": "excalidraw",
+  "value": { "path": "$.data.drawing" },
+  "width": { "literalString": "100%" },
+  "height": { "literalString": "600px" },
+  "autoSave": { "literalBool": true },
+  "autoSaveDelayMs": { "literalNumber": 2000 },
+  "autoSaveMinChanges": { "literalNumber": 2 },
+  "eventHandlers": {
+    "load": [
+      {
+        "name": "workflow_event",
+        "context": { "nodeId": "drawing-loaded-event-node-id" }
+      }
+    ],
+    "save": [
+      {
+        "name": "workflow_event",
+        "context": { "nodeId": "save-drawing-event-node-id" }
+      }
+    ],
+    "autoSave": [
+      {
+        "name": "workflow_event",
+        "context": { "nodeId": "autosave-drawing-event-node-id" }
+      }
+    ]
+  }
+}
+```
+
+Set `$.data.drawing` to a loaded scene before opening the editor, or update it
+from a workflow to replace the drawing later. A new empty scene can be
+`{ "type": "excalidraw", "version": 2, "source": "flow-like", "elements": [], "appState": {}, "files": {} }`.
+The `load` event reports an applied scene; the `value` property supplies it.
+The **Set Excalidraw Scene** node (`ui.setExcalidrawScene`) accepts a typed scene
+and replaces the drawing, including when reloading the original scene after local edits.
+
+The editor updates a path-bound `value` as content changes. These updates alone
+do not persist the drawing outside surface data. Configure `save` and
+`autoSave` workflows to store the scene at the destination your app uses.
+
+| Event | Typed Action Context and timing |
+| --- | --- |
+| `load` | `actionId`, `value`, and `scene` after a supplied scene is loaded. `value` and `scene` contain the same scene object. |
+| `save` | `actionId`, `value`, `scene`, and `changeCount` when the user selects Save or presses Ctrl/Cmd+S in the editor. |
+| `autoSave` | The same fields as `save`, after the minimum change count and idle delay are both satisfied. |
+| `dirtyChange` | `actionId` and boolean `dirty` when unsaved content appears or clears. |
+| `error` | `actionId`, string `message`, and `operation` when loading or saving fails. |
+
+Scene loading, selection, panning, and zooming do not count toward autosave.
+`changeCount` counts content changes, which may include several updates during
+one drawing gesture. Set the threshold to `1` to save even a single edit after
+the user pauses. A higher threshold leaves smaller edits pending until the
+user makes enough changes or saves manually.
+
+Saving clears the submitted changes only after every configured save action
+succeeds. New edits made while saving remain pending. A failed save keeps the
+drawing dirty and reports an error; the user can retry with Save. Manual saving
+without a `save` handler also reports an error.
+
+Bind these exact event names in `eventHandlers` or the builder's Actions tab.
+They do not inherit `*` or the older `actions` array. In the Actions tab,
+**Create event in flow** creates a **Widget Action Event** with the selected
+event's schema on its **Action Context** output. Read the scene fields directly
+from that context. **Event Name** identifies which event ran. A workflow shared
+by incompatible event schemas receives a generic context, so use separate
+events when you need each event's typed fields.
 
 ## Styling
 

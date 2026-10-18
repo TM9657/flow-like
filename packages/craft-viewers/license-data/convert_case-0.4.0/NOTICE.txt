@@ -1,0 +1,19 @@
+convert_case 0.4.0
+
+The published crate declares the MIT license and the following package metadata.
+Its pinned repository revision contains no separate license or copyright file.
+The accompanying spdx/MIT.txt contains the MIT license text.
+
+Source: https://github.com/rutrum/convert-case/blob/300d9eef9e8c970e15f324afbc3df8b6a4ebbf71/Cargo.toml
+
+[package]
+name = "convert_case"
+version = "0.4.0"
+authors = ["David Purdum <purdum41@gmail.com>"]
+edition = "2018"
+description = "Convert strings into any case"
+license = "MIT"
+keywords = [ "casing", "case", "string" ]
+categories = [ "text-processing" ]
+readme = "README.md"
+repository = "https://github.com/rutrum/convert-case"

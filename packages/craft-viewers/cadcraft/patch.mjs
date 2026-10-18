@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { prepareLiveMcp } from "../live-mcp.mjs";
 
-export default function prepare({ directory, original, write, replaceOnce }) {
+export default function prepare({
+	source,
+	directory,
+	original,
+	write,
+	replaceOnce,
+}) {
 	write(
 		"apps/cadcraft-web/src/main.rs",
 		'#[cfg(target_arch = "wasm32")]\nmod host;\n#[cfg(target_arch = "wasm32")]\nfn main() { host::start(); }\n#[cfg(not(target_arch = "wasm32"))]\nfn main() {}\n',
@@ -54,4 +61,5 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 			"Flows CAD",
 		),
 	);
+	prepareLiveMcp({ id: "cadcraft", source, write, original, replaceOnce });
 }

@@ -101,6 +101,17 @@
     ],
     "revision": "337a3668a0dc86dd401ea20906e782249a64a228"
   },
+  "convert_case@0.4.0": {
+    "files": [
+      "convert_case-0.4.0/NOTICE.txt",
+      "spdx/MIT.txt"
+    ],
+    "sources": [
+      "https://github.com/rutrum/convert-case/blob/300d9eef9e8c970e15f324afbc3df8b6a4ebbf71/Cargo.toml",
+      "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/text/MIT.txt"
+    ],
+    "revision": "300d9eef9e8c970e15f324afbc3df8b6a4ebbf71"
+  },
   "dasp_sample@0.11.0": {
     "files": [
       "sample/LICENSE-APACHE",
@@ -288,6 +299,17 @@
     ],
     "revision": "26782e3b93f9b7d2516e7653f3d56eebc31af798"
   },
+  "katexit@0.1.5": {
+    "files": [
+      "katexit-763213e70762/LICENSE-MIT",
+      "katexit-763213e70762/LICENSE-APACHE"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/termoshtt/katexit/763213e707629412fb0fc2ac91c2c391faf713cb/LICENSE-MIT",
+      "https://raw.githubusercontent.com/termoshtt/katexit/763213e707629412fb0fc2ac91c2c391faf713cb/LICENSE-APACHE"
+    ],
+    "revision": "763213e707629412fb0fc2ac91c2c391faf713cb"
+  },
   "krilla-svg@0.8.1": {
     "files": [
       "krilla-3ffdf0588cf9/LICENSE_APACHE",
@@ -398,6 +420,32 @@
       "https://github.com/nayuki/QR-Code-generator/blob/720f62bddb7226106071d4728c292cb1df519ceb/rust/src/lib.rs"
     ],
     "revision": "720f62bddb7226106071d4728c292cb1df519ceb"
+  },
+  "rmcp-macros@3.5.0": {
+    "files": [
+      "rmcp-0cde3c5cf3e6/LICENSE"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/modelcontextprotocol/rust-sdk/0cde3c5cf3e6aff0cc852ce6045f107e95991f48/LICENSE"
+    ],
+    "revision": "0cde3c5cf3e6aff0cc852ce6045f107e95991f48",
+    "additionalLicenses": [
+      "MIT"
+    ],
+    "obligations": "The pinned upstream license retains MIT terms for contributions without relicensing consent. Preserve both the Apache-2.0 and MIT notices."
+  },
+  "rmcp@3.5.0": {
+    "files": [
+      "rmcp-0cde3c5cf3e6/LICENSE"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/modelcontextprotocol/rust-sdk/0cde3c5cf3e6aff0cc852ce6045f107e95991f48/LICENSE"
+    ],
+    "revision": "0cde3c5cf3e6aff0cc852ce6045f107e95991f48",
+    "additionalLicenses": [
+      "MIT"
+    ],
+    "obligations": "The pinned upstream license retains MIT terms for contributions without relicensing consent. Preserve both the Apache-2.0 and MIT notices."
   },
   "rstar@0.12.2": {
     "files": [
@@ -862,6 +910,60 @@
       "https://raw.githubusercontent.com/boa-dev/boa/ad8739f5e0b51d20faf7a2cce98afa5c40121438/LICENSE-UNLICENSE"
     ],
     "revision": "ad8739f5e0b51d20faf7a2cce98afa5c40121438"
+  },
+  "truck-base@0.5.0": {
+    "files": [
+      "truck-487292c3686c/LICENSE"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/ricosjp/truck/487292c3686c4efd4b4c01acef9ff86136f6f630/LICENSE"
+    ],
+    "revision": "487292c3686c4efd4b4c01acef9ff86136f6f630"
+  },
+  "truck-derivers@0.1.0": {
+    "files": [
+      "truck-487292c3686c/LICENSE"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/ricosjp/truck/487292c3686c4efd4b4c01acef9ff86136f6f630/LICENSE"
+    ],
+    "revision": "487292c3686c4efd4b4c01acef9ff86136f6f630"
+  },
+  "truck-geotrait@0.4.0": {
+    "files": [
+      "truck-487292c3686c/LICENSE"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/ricosjp/truck/487292c3686c4efd4b4c01acef9ff86136f6f630/LICENSE"
+    ],
+    "revision": "487292c3686c4efd4b4c01acef9ff86136f6f630"
+  },
+  "truck-modeling@0.6.0": {
+    "files": [
+      "truck-487292c3686c/LICENSE"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/ricosjp/truck/487292c3686c4efd4b4c01acef9ff86136f6f630/LICENSE"
+    ],
+    "revision": "487292c3686c4efd4b4c01acef9ff86136f6f630"
+  },
+  "truck-polymesh@0.6.0": {
+    "files": [
+      "truck-487292c3686c/LICENSE"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/ricosjp/truck/487292c3686c4efd4b4c01acef9ff86136f6f630/LICENSE"
+    ],
+    "revision": "487292c3686c4efd4b4c01acef9ff86136f6f630"
+  },
+  "truck-topology@0.6.0": {
+    "files": [
+      "truck-487292c3686c/LICENSE"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/ricosjp/truck/487292c3686c4efd4b4c01acef9ff86136f6f630/LICENSE"
+    ],
+    "revision": "487292c3686c4efd4b4c01acef9ff86136f6f630"
   },
   "wasmi@2.0.0": {
     "files": [

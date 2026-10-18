@@ -1,3 +1,5 @@
+#[path = "live_mcp.rs"]
+mod live_mcp;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -146,6 +148,28 @@ struct Host {
 impl Host {
     fn receive(&mut self, message: JsValue) -> Result<(), String> {
         match field(&message, "type").as_string().as_deref() {
+            Some("mcp-request") => {
+                let ctx = CONTEXT
+                    .with(|context| context.borrow().clone())
+                    .ok_or("The editor is not ready.")?;
+                let read_only = self.read_only || !self.opened;
+                if let Some(response) =
+                    live_mcp::receive(&message, read_only, &mut |method, params| {
+                        let (request, _reply) =
+                            vectorcraft_ui_egui::ControlRequest::new(method, params);
+                        match vectorcraft_ui_egui::control::handle(&mut self.app, &ctx, &request) {
+                            vectorcraft_ui_egui::control::Outcome::Done(reply) => {
+                                live_mcp::unwrap_control(reply)
+                            }
+                            _ => Err("This operation requires a later editor frame.".into()),
+                        }
+                    })
+                {
+                    event("mcp-response", response);
+                }
+                ctx.request_repaint();
+            }
+
             Some("open") => {
                 if self.opened {
                     return Err("This editor already has a file open.".into());
@@ -346,6 +370,9 @@ impl eframe::App for Host {
     }
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
         raw.dropped_files.clear();
+        if self.read_only {
+            self.app.host_cancel_synthetic();
+        }
         if !self.read_only {
             self.app.raw_input_hook(raw);
         }

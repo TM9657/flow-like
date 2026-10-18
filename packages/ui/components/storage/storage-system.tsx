@@ -90,7 +90,13 @@ const WordcraftDocument = lazy(() =>
 	})),
 );
 
-const EMPTY_PREVIEW = { url: "", file: "", folder: "" };
+const EMPTY_PREVIEW = {
+	url: "",
+	file: "",
+	folder: "",
+	appId: "",
+	storageScopeKey: "",
+};
 
 function hasInlineMediaPreview(file: string) {
 	const filename = storageDisplayName(file);
@@ -306,6 +312,14 @@ export function StorageSystem({
 		[backend.storageState, operations],
 	);
 	const [preview, setPreview] = useState(EMPTY_PREVIEW);
+	const previewToolTarget =
+		preview.appId === appId && preview.storageScopeKey === storageScopeKey
+			? {
+					appId: preview.appId,
+					surfaceId: `storage:${preview.storageScopeKey}`,
+					componentId: preview.file,
+				}
+			: undefined;
 	const [inlineEditorOpen, setInlineEditorOpen] = useState(false);
 	const editorFor = useCallback(
 		(file: string) =>
@@ -924,6 +938,8 @@ export function StorageSystem({
 				url: fileUrl,
 				file,
 				folder: prefix,
+				appId,
+				storageScopeKey,
 			});
 		},
 		[
@@ -936,6 +952,7 @@ export function StorageSystem({
 			prefix,
 			preview.file,
 			storageApi,
+			storageScopeKey,
 		],
 	);
 
@@ -1647,6 +1664,7 @@ export function StorageSystem({
 										{previewViewer?.id === "wordcraft" ? (
 											<WordcraftDocument
 												key={preview.file}
+												toolTarget={previewToolTarget}
 												url={preview.url}
 												filename={previewName}
 												title={
@@ -1662,6 +1680,7 @@ export function StorageSystem({
 										) : previewViewer ? (
 											<CraftDocument
 												key={preview.file}
+												toolTarget={previewToolTarget}
 												viewer={previewViewer}
 												initialEditing={inlineEditorOpen}
 												outputFilename={storageDisplayName(

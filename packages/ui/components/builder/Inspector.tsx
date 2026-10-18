@@ -405,9 +405,16 @@ function PropertyEditor({ component, onUpdate }: PropertyEditorProps) {
 	>;
 	const componentType = component.component?.type;
 	const props =
-		componentType === "model3d"
-			? { ...getDefaultProps("model3d"), ...rawProps }
-			: rawProps;
+		componentType === "model3d" || componentType === "excalidraw"
+			? { ...getDefaultProps(componentType), ...rawProps }
+			: componentType === "filePreview"
+				? {
+						editable: { literalBool: false },
+						initialEditing: { literalBool: false },
+						value: { literalJson: "null" },
+						...rawProps,
+					}
+				: rawProps;
 	const schema = componentType ? getComponentSchema(componentType) : undefined;
 
 	const updateProp = useCallback(
@@ -5570,12 +5577,14 @@ function HandlerStatus({
 interface OrderedActionsEditorProps {
 	actions: ActionValue[];
 	eventName?: string;
+	eventDefinition?: ComponentEventDefinition;
 	onChange: (actions: ActionValue[]) => void;
 }
 
 function OrderedActionsEditor({
 	actions,
 	eventName,
+	eventDefinition,
 	onChange,
 }: OrderedActionsEditorProps) {
 	const { t } = useTranslation("flow");
@@ -5668,6 +5677,7 @@ function OrderedActionsEditor({
 					<ActionValueEditor
 						action={action}
 						eventName={eventName}
+						eventDefinition={eventDefinition}
 						onChange={(nextAction) => updateAction(index, nextAction)}
 					/>
 				</div>
@@ -5689,10 +5699,12 @@ function OrderedActionsEditor({
 function ActionValueEditor({
 	action,
 	eventName,
+	eventDefinition,
 	onChange,
 }: {
 	action: ActionValue;
 	eventName?: string;
+	eventDefinition?: ComponentEventDefinition;
 	onChange: (action: ActionValue | null) => void;
 }) {
 	const { t } = useTranslation("flow");
@@ -5938,6 +5950,7 @@ function ActionValueEditor({
 						</Select>
 						<CreateWorkflowEventButton
 							eventName={eventName}
+							eventDefinition={eventDefinition}
 							componentId={selectedId}
 							componentType={selectedType}
 							onCreated={selectWorkflowEvent}
@@ -5951,6 +5964,14 @@ function ActionValueEditor({
 							)}
 						</p>
 					)}
+					{eventDefinition?.contextSchema && (
+						<p className="text-xs text-muted-foreground">
+							{t(
+								"bindComponentContextEvent",
+								"Create a Widget Action Event to receive this event's typed fields in Action Context.",
+							)}
+						</p>
+					)}
 				</div>
 			)}
 		</div>
@@ -5959,11 +5980,13 @@ function ActionValueEditor({
 
 function CreateWorkflowEventButton({
 	eventName,
+	eventDefinition,
 	componentId,
 	componentType,
 	onCreated,
 }: {
 	eventName?: string;
+	eventDefinition?: ComponentEventDefinition;
 	componentId?: string;
 	componentType?: string;
 	onCreated: (nodeId: string) => void;
@@ -6005,6 +6028,13 @@ function CreateWorkflowEventButton({
 					actionContext?.workflowEvents,
 				),
 				kind,
+				...(kind === "widget_action" && eventDefinition?.contextSchema
+					? {
+							eventName: eventDefinition.id,
+							contextSchema: eventDefinition.contextSchema,
+							componentType,
+						}
+					: {}),
 			});
 			if (mountedRef.current) onCreatedRef.current(created.nodeId);
 		} catch (error) {
@@ -6122,6 +6152,7 @@ function NamedEventHandlerEditor({
 					<>
 						<OrderedActionsEditor
 							actions={actions}
+							eventDefinition={definition}
 							eventName={
 								definition.id === WILDCARD_EVENT
 									? undefined

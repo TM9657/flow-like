@@ -154,7 +154,12 @@ export function applyElementUpdate(
 						? { literalNumber: raw }
 						: typeof raw === "boolean"
 							? { literalBool: raw }
-							: raw;
+							: data.type === "excalidraw" &&
+									raw !== null &&
+									typeof raw === "object" &&
+									"elements" in raw
+								? { literalJson: JSON.stringify(raw) }
+								: raw;
 			return withComponentData(component, {
 				...data,
 				value: bound,

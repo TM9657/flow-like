@@ -12,8 +12,8 @@ use std::time::Duration;
 /// Sets a media component source from a FlowPath.
 ///
 /// The node signs the FlowPath internally and lets the frontend update the target element
-/// according to its component type. `filePreview` can then render image, video, audio, PDF,
-/// text, and code files from the same source pin.
+/// according to its component type. `filePreview` selects native previews or a matching
+/// WASM document viewer from the supplied filename, including Office and spreadsheet files.
 #[crate::register_node]
 #[derive(Default)]
 pub struct SetMediaSource;

@@ -1,3 +1,6 @@
+use flow_like::a2ui::components::{
+    excalidraw_event_context_schema, file_preview_event_context_schema,
+};
 use flow_like::a2ui::micro_widget::{MICRO_WIDGET_COMPONENT_TYPE, encode_package_widget_ref};
 use flow_like_types::{
     Value,
@@ -5,7 +8,7 @@ use flow_like_types::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Sources are merged by agreement. Different contracts, or an untyped route,
+/// Final action contexts are merged by agreement. Different contracts, or an untyped route,
 /// require an open payload so the output never promises fields a source omits.
 #[derive(Default)]
 pub(super) struct EventInference {
@@ -21,7 +24,16 @@ impl EventInference {
         self.schemas.push(
             schema
                 .filter(|value| jsonschema::meta::try_is_valid(value).unwrap_or(false))
-                .cloned(),
+                .map(action_context_schema),
+        );
+    }
+
+    pub fn add_context(&mut self, name: &str, schema: Value) {
+        self.action_ids.insert(name.to_string());
+        self.schemas.push(
+            jsonschema::meta::try_is_valid(&schema)
+                .unwrap_or(false)
+                .then_some(schema),
         );
     }
 
@@ -38,7 +50,11 @@ impl EventInference {
         !self.incomplete
     }
 
-    pub fn payload_schema(&self) -> Option<&Value> {
+    pub fn has_sources(&self) -> bool {
+        !self.schemas.is_empty()
+    }
+
+    pub fn context_schema(&self) -> Option<&Value> {
         let first = self.schemas.first()?.as_ref()?;
         self.schemas
             .iter()
@@ -58,11 +74,49 @@ impl EventInference {
             }
         }
     }
+
+    pub fn instantiated_contexts(
+        &mut self,
+        events: &BTreeMap<String, Option<Value>>,
+        selected: &str,
+    ) {
+        self.action_ids.extend(events.keys().cloned());
+        for (name, schema) in events {
+            if selected.is_empty() || name == selected {
+                match schema {
+                    Some(schema) => self.add_context(name, schema.clone()),
+                    None => self.add(name, None),
+                }
+            }
+        }
+    }
 }
 
 const ROUTE_CONTEXT_KEYS: [&str; 6] = [
     "nodeId", "node_id", "appId", "app_id", "boardId", "board_id",
 ];
+
+/// A newly created Event can arrive before its Page binding is persisted. Only
+/// the explicit, canonical builder seed may survive this temporary empty scan.
+pub(super) fn is_pending_component_context(schema: &Value, selected: &str) -> bool {
+    let marker = &schema["x-flow-like-pending-component-event"];
+    if marker["eventName"] != selected {
+        return false;
+    }
+    let expected = match marker["componentType"].as_str() {
+        Some("filePreview") => file_preview_event_context_schema(selected),
+        Some("excalidraw") => excalidraw_event_context_schema(selected),
+        _ => None,
+    };
+    let Some(expected) = expected else {
+        return false;
+    };
+    let mut seeded = schema.clone();
+    if let Some(object) = seeded.as_object_mut() {
+        object.remove("x-flow-like-pending-component-event");
+    }
+    seeded == expected
+}
 
 /// The pin receives the renderer's action context, not the raw payload: an
 /// object payload is spread beside `actionId` and the untouched `payload`, and
@@ -177,6 +231,129 @@ fn binding_targets(binding: &Value, target: &PageTarget<'_>) -> bool {
         )
 }
 
+/// An exposed declarative action keeps the inner component's context. Infer it
+/// only when every known emitter agrees; package payload schemas use another path.
+pub(super) fn declarative_action_contexts(
+    definition: &Value,
+    depth: usize,
+    remaining: &mut usize,
+) -> BTreeMap<String, Option<Value>> {
+    let mut contexts: BTreeMap<String, EventInference> = definition["actions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|action| {
+            action["id"]
+                .as_str()
+                .map(|id| (id.into(), EventInference::default()))
+        })
+        .collect();
+    if contexts.is_empty() {
+        return BTreeMap::new();
+    }
+    for component in definition["components"].as_array().into_iter().flatten() {
+        infer_exposed_component(
+            component.get("component").unwrap_or(component),
+            depth,
+            remaining,
+            &mut contexts,
+        );
+    }
+    contexts
+        .into_iter()
+        .map(|(name, inference)| (name, inference.context_schema().cloned()))
+        .collect()
+}
+
+fn infer_exposed_component(
+    component: &Value,
+    depth: usize,
+    remaining: &mut usize,
+    contexts: &mut BTreeMap<String, EventInference>,
+) {
+    // Nested instances introduce another action scope. Until that scope can be
+    // proven, its emitters cannot establish an outer action's field contract.
+    if depth >= 32
+        || *remaining == 0
+        || matches!(
+            component["type"].as_str(),
+            Some("widgetInstance" | MICRO_WIDGET_COMPONENT_TYPE)
+        )
+    {
+        for inference in contexts.values_mut() {
+            inference.unknown_source();
+        }
+        return;
+    }
+    *remaining -= 1;
+    let mut add_route = |action: &Value, schema: Option<Value>| {
+        if action["name"] != "widget_event" {
+            return;
+        }
+        let Some(name) = action["context"]["actionId"].as_str() else {
+            for inference in contexts.values_mut() {
+                inference.unknown_source();
+            }
+            return;
+        };
+        if let Some(inference) = contexts.get_mut(name) {
+            match schema {
+                Some(schema) => inference.add_context(name, schema),
+                None => inference.add(name, None),
+            }
+        }
+    };
+    let typed_events: Option<(&[&str], fn(&str) -> Option<Value>)> =
+        match component["type"].as_str() {
+            Some("filePreview") => Some((
+                &["save", "saved", "dirtyChange", "error"],
+                file_preview_event_context_schema,
+            )),
+            Some("excalidraw") => Some((
+                &["load", "save", "autoSave", "dirtyChange", "error"],
+                excalidraw_event_context_schema,
+            )),
+            _ => None,
+        };
+    if let Some((events, context_schema)) = typed_events {
+        for &event in events {
+            for action in component["eventHandlers"][event]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
+                add_route(action, context_schema(event));
+            }
+        }
+    } else {
+        for action in component["actions"]
+            .as_array()
+            .and_then(|actions| actions.first())
+            .into_iter()
+            .chain(
+                component["eventHandlers"]
+                    .as_object()
+                    .into_iter()
+                    .flat_map(|handlers| handlers.values())
+                    .filter_map(Value::as_array)
+                    .flatten(),
+            )
+        {
+            add_route(action, None);
+        }
+    }
+    if let Some(children) = component["children"].as_array() {
+        for child in children.iter().filter(|child| child.is_object()) {
+            infer_exposed_component(
+                child.get("component").unwrap_or(child),
+                depth + 1,
+                remaining,
+                contexts,
+            );
+        }
+    }
+}
+
 /// Inspect component locations only. A widget's props and schema examples are
 /// data, even when they happen to contain objects that look like components.
 pub(super) fn infer_page(
@@ -243,12 +420,15 @@ impl PageWalker<'_, '_> {
                     component,
                     contract.and_then(|contract| contract.get("events")),
                     contract.is_some(),
+                    None,
                 );
                 if contract.is_none() && self.inference.schemas.len() > before {
                     self.inference.unknown_source();
                 }
             }
             Some("widgetInstance") => self.widget_instance(component, depth + 1),
+            Some("filePreview") => self.file_preview(component),
+            Some("excalidraw") => self.excalidraw(component),
             // Ordinary components send their route context without a widget payload.
             _ if self.routes_directly(component) => self.inference.untyped_source(),
             _ => {}
@@ -257,6 +437,44 @@ impl PageWalker<'_, '_> {
         if let Some(children) = component.get("children").and_then(Value::as_array) {
             for child in children.iter().filter(|value| value.is_object()) {
                 self.component(child.get("component").unwrap_or(child), depth + 1);
+            }
+        }
+    }
+
+    fn file_preview(&mut self, component: &Value) {
+        self.exact_component_events(
+            component,
+            &["save", "saved", "dirtyChange", "error"],
+            file_preview_event_context_schema,
+        );
+    }
+
+    fn excalidraw(&mut self, component: &Value) {
+        self.exact_component_events(
+            component,
+            &["load", "save", "autoSave", "dirtyChange", "error"],
+            excalidraw_event_context_schema,
+        );
+    }
+
+    fn exact_component_events(
+        &mut self,
+        component: &Value,
+        event_names: &[&str],
+        context_schema: fn(&str) -> Option<Value>,
+    ) {
+        // These events require exact handlers. Neither wildcard nor historical
+        // component actions can cause the renderer to dispatch them.
+        for &name in event_names {
+            let targets = component["eventHandlers"][name]
+                .as_array()
+                .is_some_and(|actions| {
+                    actions
+                        .iter()
+                        .any(|action| action_targets(action, self.target))
+                });
+            if targets && let Some(schema) = context_schema(name) {
+                self.inference.add_context(name, schema);
             }
         }
     }
@@ -277,7 +495,13 @@ impl PageWalker<'_, '_> {
             .any(|action| action_targets(action, self.target))
     }
 
-    fn routes(&mut self, instance: &Value, events: Option<&Value>, declared_only: bool) {
+    fn routes(
+        &mut self,
+        instance: &Value,
+        events: Option<&Value>,
+        declared_only: bool,
+        direct_contexts: Option<&BTreeMap<String, Option<Value>>>,
+    ) {
         let mut names = BTreeSet::new();
         for map in [
             events,
@@ -328,6 +552,13 @@ impl PageWalker<'_, '_> {
                     .is_some_and(|action| action_targets(action, self.target))
             };
             if targets {
+                if let Some(contexts) = direct_contexts {
+                    match contexts.get(&name).and_then(Option::as_ref) {
+                        Some(schema) => self.inference.add_context(&name, schema.clone()),
+                        None => self.inference.add(&name, None),
+                    }
+                    continue;
+                }
                 self.inference.add(
                     &name,
                     events
@@ -371,7 +602,9 @@ impl PageWalker<'_, '_> {
                     .collect(),
             )
         });
-        self.routes(instance, actions.as_ref(), false);
+        let contexts = definition
+            .map(|definition| declarative_action_contexts(definition, depth, &mut self.remaining));
+        self.routes(instance, actions.as_ref(), false, contexts.as_ref());
         if let Some(definition) = definition {
             for component in definition["components"].as_array().into_iter().flatten() {
                 self.component(component.get("component").unwrap_or(component), depth + 1);
@@ -427,11 +660,391 @@ mod tests {
         root
     }
 
+    fn file_preview(event: &str) -> Value {
+        json!({"type":"filePreview","eventHandlers":{event:[route()]}})
+    }
+
+    fn excalidraw(event: &str) -> Value {
+        json!({"type":"excalidraw","eventHandlers":{event:[route()]}})
+    }
+
+    #[test]
+    fn excalidraw_events_infer_exact_typed_contexts() {
+        for event in ["load", "save", "autoSave", "dirtyChange", "error"] {
+            let result = infer(&page(excalidraw(event)));
+            let expected = excalidraw_event_context_schema(event).unwrap();
+            assert_eq!(result.action_ids, BTreeSet::from([event.to_string()]));
+            assert_eq!(result.context_schema(), Some(&expected));
+            assert!(jsonschema::meta::is_valid(&expected));
+        }
+        let mut component = excalidraw("save");
+        component["eventHandlers"]["autoSave"] = json!([route()]);
+        assert_eq!(
+            infer(&page(component.clone())).context_schema(),
+            excalidraw_event_context_schema("save").as_ref()
+        );
+        component["eventHandlers"]["load"] = json!([route()]);
+        assert!(infer(&page(component)).context_schema().is_none());
+        for component in [
+            json!({"type":"excalidraw","actions":[route()]}),
+            json!({"type":"excalidraw","eventHandlers":{"*":[route()],"save":[]}}),
+            excalidraw("change"),
+            excalidraw("saved"),
+        ] {
+            assert!(!infer(&page(component)).has_sources());
+        }
+    }
+
+    #[test]
+    fn excalidraw_scene_contexts_validate_nested_scene_and_operation_fields() {
+        let scene = json!({"type":"excalidraw","version":2,"source":"flow-like",
+            "elements":[{"id":"shape-1","type":"rectangle"}],"appState":{},
+            "files":{"image-1":{"id":"image-1","dataURL":"data:image/png;base64,..."}}});
+        for event in ["load", "save", "autoSave"] {
+            let schema = excalidraw_event_context_schema(event).unwrap();
+            let mut context =
+                json!({"actionId":event,"value":scene,"scene":scene,"nodeId":"handler"});
+            if event != "load" {
+                assert!(!jsonschema::is_valid(&schema, &context));
+                context["changeCount"] = json!(3);
+            }
+            assert!(jsonschema::is_valid(&schema, &context));
+            for invalid in [
+                json!({"type":"invalid"}),
+                json!({"elements":["invalid"]}),
+                json!({"appState":[]}),
+                json!({"files":{"image-1":"invalid"}}),
+            ] {
+                let mut malformed = context.clone();
+                malformed["scene"]
+                    .as_object_mut()
+                    .unwrap()
+                    .extend(invalid.as_object().unwrap().clone());
+                assert!(!jsonschema::is_valid(&schema, &malformed));
+            }
+        }
+        let error = excalidraw_event_context_schema("error").unwrap();
+        for operation in ["load", "save", "autoSave"] {
+            assert!(jsonschema::is_valid(
+                &error,
+                &json!({"actionId":"error","operation":operation,"message":"Failed"})
+            ));
+        }
+        assert!(!jsonschema::is_valid(
+            &error,
+            &json!({"actionId":"error","operation":"change","message":"Failed"})
+        ));
+        let dirty = excalidraw_event_context_schema("dirtyChange").unwrap();
+        assert!(jsonschema::is_valid(
+            &dirty,
+            &json!({"actionId":"dirtyChange","dirty":true})
+        ));
+        assert!(!jsonschema::is_valid(
+            &dirty,
+            &json!({"actionId":"dirtyChange","dirty":"true"})
+        ));
+    }
+
+    #[test]
+    fn excalidraw_bindings_respect_widget_nesting_and_target_scope() {
+        let definition = json!({"components":[{"component":excalidraw("save")}]});
+        for root in [
+            page(
+                json!({"type":"widgetInstance","instanceId":"outer","widgetId":"wrapper","inlineWidgetDef":definition}),
+            ),
+            json!({"content":[{"widget":{"instanceId":"outer","widgetId":"wrapper"}}],"widgetRefs":{"outer":definition}}),
+        ] {
+            assert_eq!(
+                infer(&root).context_schema(),
+                excalidraw_event_context_schema("save").as_ref()
+            );
+        }
+        let mut component = excalidraw("save");
+        component["eventHandlers"]["save"][0]["context"]["appId"] = json!("foreign");
+        assert!(!infer(&page(component)).has_sources());
+        assert!(
+            infer(&with_component(excalidraw("save")))
+                .context_schema()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn exposed_excalidraw_actions_preserve_the_scene_context() {
+        let mut instance = json!({"type":"widgetInstance","instanceId":"outer","widgetId":"drawing",
+        "eventHandlers":{"persistDrawing":[route()]},
+        "inlineWidgetDef":{"actions":[{"id":"persistDrawing"}],"components":[{"component":{
+            "type":"excalidraw","eventHandlers":{
+                "save":[{"name":"widget_event","context":{"actionId":"persistDrawing"}}],
+                "autoSave":[{"name":"widget_event","context":{"actionId":"persistDrawing"}}]
+            }
+        }}]}});
+        let expected = excalidraw_event_context_schema("save").unwrap();
+        let result = infer(&page(instance.clone()));
+        assert_eq!(result.action_ids, BTreeSet::from(["persistDrawing".into()]));
+        assert_eq!(result.context_schema(), Some(&expected));
+        let contexts = declarative_action_contexts(&instance["inlineWidgetDef"], 0, &mut 10_000);
+        let mut instantiated = EventInference::default();
+        instantiated.instantiated_contexts(&contexts, "persistDrawing");
+        assert_eq!(instantiated.context_schema(), Some(&expected));
+        instance["inlineWidgetDef"]["components"][0]["component"]["eventHandlers"]["load"] =
+            json!([{"name":"widget_event","context":{"actionId":"persistDrawing"}}]);
+        assert!(infer(&page(instance)).context_schema().is_none());
+    }
+
+    #[test]
+    fn excalidraw_pending_component_seed_requires_the_exact_contract() {
+        let mut seed = excalidraw_event_context_schema("autoSave").unwrap();
+        assert!(!is_pending_component_context(&seed, "autoSave"));
+        seed["x-flow-like-pending-component-event"] =
+            json!({"componentType":"excalidraw","eventName":"autoSave"});
+        assert!(is_pending_component_context(&seed, "autoSave"));
+        assert!(!is_pending_component_context(&seed, "save"));
+        seed["x-flow-like-pending-component-event"]["componentType"] = json!("filePreview");
+        assert!(!is_pending_component_context(&seed, "autoSave"));
+        seed["x-flow-like-pending-component-event"]["componentType"] = json!("excalidraw");
+        seed["properties"]["changeCount"] = json!({"type":"string"});
+        assert!(!is_pending_component_context(&seed, "autoSave"));
+    }
+
+    #[test]
+    fn file_preview_events_infer_direct_contexts_without_a_widget_payload_wrapper() {
+        for event in ["save", "saved", "dirtyChange", "error"] {
+            let result = infer(&page(file_preview(event)));
+            assert_eq!(result.action_ids, BTreeSet::from([event.to_string()]));
+            let expected = file_preview_event_context_schema(event).unwrap();
+            assert_eq!(result.context_schema(), Some(&expected));
+            assert!(expected["properties"].get("payload").is_none());
+            assert!(jsonschema::meta::is_valid(&expected));
+        }
+    }
+
+    #[test]
+    fn file_preview_context_refs_validate_the_actual_export_and_notification_shapes() {
+        let file = json!({"name":"deck.pptx","size":123,"type":"application/octet-stream",
+            "url":"https://temporary.example/deck.pptx","backendUrl":"https://temporary.example/deck.pptx"});
+        let mut context = json!({"actionId":"save","src":"files/original.pptx","filename":"deck.pptx",
+            "url":"https://temporary.example/deck.pptx","signedUrls":"https://temporary.example/deck.pptx",
+            "file":file,"value":file,"nodeId":"handler"});
+        let save = file_preview_event_context_schema("save").unwrap();
+        assert!(jsonschema::is_valid(&save, &context));
+        context["signedUrls"] = json!(["https://temporary.example/deck.pptx"]);
+        assert!(!jsonschema::is_valid(&save, &context));
+        context["signedUrls"] = json!("https://temporary.example/deck.pptx");
+        context["file"]["size"] = json!("123");
+        assert!(!jsonschema::is_valid(&save, &context));
+        for (event, value) in [
+            (
+                "dirtyChange",
+                json!({"actionId":"dirtyChange","src":"files/a.pptx","filename":"a.pptx","dirty":true}),
+            ),
+            (
+                "error",
+                json!({"actionId":"error","src":"files/a.pptx","filename":"a.pptx","message":"Upload failed"}),
+            ),
+        ] {
+            let schema = file_preview_event_context_schema(event).unwrap();
+            assert!(jsonschema::is_valid(&schema, &value));
+            let mut missing = value;
+            missing.as_object_mut().unwrap().remove("actionId");
+            assert!(!jsonschema::is_valid(&schema, &missing));
+        }
+    }
+
+    #[test]
+    fn file_preview_save_and_saved_agree_but_mixed_contexts_remain_generic() {
+        let mut component = file_preview("save");
+        component["eventHandlers"]["saved"] = json!([route()]);
+        let result = infer(&page(component.clone()));
+        assert_eq!(
+            result.action_ids,
+            BTreeSet::from(["save".into(), "saved".into()])
+        );
+        assert_eq!(
+            result.context_schema(),
+            file_preview_event_context_schema("save").as_ref()
+        );
+        component["eventHandlers"]["error"] = json!([route()]);
+        assert!(infer(&page(component)).context_schema().is_none());
+        assert!(
+            infer(&with_component(file_preview("save")))
+                .context_schema()
+                .is_none()
+        );
+        let root = json!({"components":[{"component":file_preview("save")},
+            {"component":{"type":"button","eventHandlers":{"click":[route()]}}}]});
+        assert!(infer(&root).context_schema().is_none());
+    }
+
+    #[test]
+    fn file_preview_only_uses_its_four_exact_event_handlers() {
+        for component in [
+            json!({"type":"filePreview","actions":[route()]}),
+            json!({"type":"filePreview","eventHandlers":{"*":[route()]}}),
+            json!({"type":"filePreview","eventHandlers":{"*":[route()],"save":[]}}),
+            json!({"type":"filePreview","eventHandlers":{"ready":[route()],"load":[route()]}}),
+        ] {
+            let result = infer(&page(component.clone()));
+            assert!(!result.has_sources() && result.action_ids.is_empty());
+            assert_eq!(
+                infer(&with_component(component)).context_schema(),
+                Some(&action_context_schema(&payload()))
+            );
+        }
+    }
+
+    #[test]
+    fn file_preview_respects_target_scope_and_component_locations() {
+        let mut component = file_preview("save");
+        component["eventHandlers"]["save"][0]["context"]["appId"] = json!("foreign");
+        assert!(!infer(&page(component)).has_sources());
+        let root = json!({"components":[{"component":{"type":"text","props":{"example":file_preview("save")}}}],
+            "widgetRefs":{"unplaced":{"components":[{"component":file_preview("save")}]}}});
+        assert!(!infer(&root).has_sources());
+    }
+
+    #[test]
+    fn file_preview_bindings_are_found_in_saved_and_inline_widget_definitions() {
+        let definition = json!({"components":[{"component":file_preview("save")}]});
+        for root in [
+            page(
+                json!({"type":"widgetInstance","instanceId":"outer","widgetId":"wrapper","inlineWidgetDef":definition}),
+            ),
+            json!({"content":[{"widget":{"instanceId":"outer","widgetId":"wrapper"}}],"widgetRefs":{"outer":definition}}),
+            json!({"components":[{"component":{"type":"column","children":[file_preview("save")]}}]}),
+        ] {
+            assert_eq!(
+                infer(&root).context_schema(),
+                file_preview_event_context_schema("save").as_ref()
+            );
+        }
+        let unresolved = json!({"components":[{"component":file_preview("save")},
+            {"component":{"type":"widgetInstance","instanceId":"missing","widgetId":"unavailable"}}]});
+        let result = infer(&unresolved);
+        assert!(!result.is_complete() && result.context_schema().is_none());
+    }
+
+    fn exposed_file_widget() -> Value {
+        json!({"type":"widgetInstance","instanceId":"outer","widgetId":"document",
+        "eventHandlers":{"persistDocument":[route()]},
+        "inlineWidgetDef":{"actions":[{"id":"persistDocument"}],"components":[{"component":{
+            "type":"filePreview","eventHandlers":{
+                "save":[{"name":"widget_event","context":{"actionId":"persistDocument"}}],
+                "saved":[{"name":"widget_event","context":{"actionId":"persistDocument"}}]
+            }
+        }}]}})
+    }
+
+    #[test]
+    fn exposed_file_events_keep_direct_context_through_named_and_legacy_alias_bindings() {
+        let expected = file_preview_event_context_schema("save").unwrap();
+        let mut instance = exposed_file_widget();
+        for legacy in [false, true] {
+            if legacy {
+                instance.as_object_mut().unwrap().remove("eventHandlers");
+                instance["actionBindings"] =
+                    json!({"persistDocument":{"workflow":{"flowId":"handler"}}});
+            }
+            let result = infer(&page(instance.clone()));
+            assert_eq!(
+                result.action_ids,
+                BTreeSet::from(["persistDocument".into()])
+            );
+            assert_eq!(result.context_schema(), Some(&expected));
+        }
+        let definition = instance
+            .as_object_mut()
+            .unwrap()
+            .remove("inlineWidgetDef")
+            .unwrap();
+        let saved = json!({"content":[{"widget":instance}],"widgetRefs":{"outer":definition}});
+        assert_eq!(infer(&saved).context_schema(), Some(&expected));
+    }
+
+    #[test]
+    fn exposed_file_events_do_not_overpromise_with_mixed_or_unknown_emitters() {
+        for emitter in [
+            json!({"type":"button","actions":[{"name":"widget_event","context":{"actionId":"persistDocument"}}]}),
+            json!({"type":"filePreview","eventHandlers":{"error":[{"name":"widget_event","context":{"actionId":"persistDocument"}}]}}),
+            json!({"type":"button","actions":[{"name":"widget_event","context":{"actionId":{"path":"/action"}}}]}),
+            json!({"type":"widgetInstance","instanceId":"missing","widgetId":"missing"}),
+            json!({"type":"microWidgetInstance","packageId":"geo","widgetId":"map",
+                "contract":{"events":{"persistDocument":{"contextSchema":file_preview_event_context_schema("save").unwrap()}}}}),
+        ] {
+            let mut instance = exposed_file_widget();
+            instance["inlineWidgetDef"]["components"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({"component":emitter}));
+            assert!(infer(&page(instance)).context_schema().is_none());
+        }
+    }
+
+    #[test]
+    fn exposed_file_events_require_declared_aliases_and_exact_inner_handlers() {
+        let mut instance = exposed_file_widget();
+        instance["inlineWidgetDef"]["components"][0]["component"]["eventHandlers"] = json!({
+            "*":[{"name":"widget_event","context":{"actionId":"persistDocument"}}],
+            "load":[{"name":"widget_event","context":{"actionId":"persistDocument"}}]
+        });
+        assert!(infer(&page(instance)).context_schema().is_none());
+        let mut instance = exposed_file_widget();
+        instance["inlineWidgetDef"]["actions"] = json!([]);
+        assert!(infer(&page(instance)).context_schema().is_none());
+        let mut instance = exposed_file_widget();
+        instance["eventHandlers"]["persistDocument"] = json!([]);
+        instance["actionBindings"] = json!({"persistDocument":{"workflow":{"flowId":"handler"}}});
+        assert!(!infer(&page(instance)).has_sources());
+    }
+
+    #[test]
+    fn instantiated_declarative_file_events_use_final_contexts_and_keep_selection() {
+        let instance = exposed_file_widget();
+        let mut definition = instance["inlineWidgetDef"].clone();
+        definition["actions"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"id":"cancel"}));
+        let contexts = declarative_action_contexts(&definition, 0, &mut 10_000);
+        let mut selected = EventInference::default();
+        selected.instantiated_contexts(&contexts, "persistDocument");
+        assert_eq!(
+            selected.action_ids,
+            BTreeSet::from(["cancel".into(), "persistDocument".into()])
+        );
+        assert_eq!(
+            selected.context_schema(),
+            file_preview_event_context_schema("save").as_ref()
+        );
+        let mut all = EventInference::default();
+        all.instantiated_contexts(&contexts, "");
+        assert!(all.context_schema().is_none());
+        for (depth, mut remaining) in [(32, 10_000), (0, 0)] {
+            let contexts = declarative_action_contexts(&definition, depth, &mut remaining);
+            assert!(contexts["persistDocument"].is_none());
+        }
+    }
+
+    #[test]
+    fn pending_component_seed_must_match_the_canonical_selected_context() {
+        let mut seed = file_preview_event_context_schema("save").unwrap();
+        assert!(!is_pending_component_context(&seed, "save"));
+        seed["x-flow-like-pending-component-event"] =
+            json!({"componentType":"filePreview","eventName":"save"});
+        assert!(is_pending_component_context(&seed, "save"));
+        assert!(!is_pending_component_context(&seed, "saved"));
+        seed["required"] = json!([]);
+        assert!(!is_pending_component_context(&seed, "save"));
+    }
+
     #[test]
     fn page_placed_package_event_infers_its_saved_payload_without_instantiation() {
         let result = infer(&page(micro()));
         assert_eq!(result.action_ids, BTreeSet::from(["selected".into()]));
-        assert_eq!(result.payload_schema(), Some(&payload()));
+        assert_eq!(
+            result.context_schema(),
+            Some(&action_context_schema(&payload()))
+        );
     }
 
     #[test]
@@ -442,10 +1055,13 @@ mod tests {
             .as_array_mut()
             .unwrap()
             .push(json!({"component":second}));
-        assert_eq!(infer(&root).payload_schema(), Some(&payload()));
+        assert_eq!(
+            infer(&root).context_schema(),
+            Some(&action_context_schema(&payload()))
+        );
         second["contract"]["events"]["selected"]["payloadSchema"] = json!({"type":"string"});
         root["components"][1]["component"] = second;
-        assert!(infer(&root).payload_schema().is_none());
+        assert!(infer(&root).context_schema().is_none());
         root["components"].as_array_mut().unwrap().pop();
         root["components"][0]["component"]["eventHandlers"]["moved"] = json!([route()]);
         let result = infer(&root);
@@ -453,7 +1069,7 @@ mod tests {
             result.action_ids,
             BTreeSet::from(["moved".into(), "selected".into()])
         );
-        assert!(result.payload_schema().is_none());
+        assert!(result.context_schema().is_none());
     }
 
     #[test]
@@ -465,12 +1081,15 @@ mod tests {
         let mut selected = EventInference::default();
         selected.instantiated_events(&events, "selected");
         assert_eq!(selected.action_ids.len(), 2);
-        assert_eq!(selected.payload_schema(), Some(&payload()));
+        assert_eq!(
+            selected.context_schema(),
+            Some(&action_context_schema(&payload()))
+        );
         let mut catch_all = EventInference::default();
         catch_all.instantiated_events(&events, "");
-        assert!(catch_all.payload_schema().is_none());
+        assert!(catch_all.context_schema().is_none());
         selected.add("untyped-page-route", None);
-        assert!(selected.payload_schema().is_none());
+        assert!(selected.context_schema().is_none());
     }
 
     #[test]
@@ -489,7 +1108,10 @@ mod tests {
         let mut component = micro();
         component["eventHandlers"]["selected"][0]["context"] =
             json!({"node_id":"handler","app_id":{"literalString":"app"},"board_id":"board"});
-        assert_eq!(infer(&page(component)).payload_schema(), Some(&payload()));
+        assert_eq!(
+            infer(&page(component)).context_schema(),
+            Some(&action_context_schema(&payload()))
+        );
     }
 
     #[test]
@@ -502,8 +1124,8 @@ mod tests {
         assert!(infer(&page(component.clone())).action_ids.is_empty());
         component.as_object_mut().unwrap().remove("eventHandlers");
         assert_eq!(
-            infer(&page(component.clone())).payload_schema(),
-            Some(&payload())
+            infer(&page(component.clone())).context_schema(),
+            Some(&action_context_schema(&payload()))
         );
         component["actionBindings"]["selected"]["workflow"]["boardId"] = json!("foreign");
         assert!(infer(&page(component)).action_ids.is_empty());
@@ -516,9 +1138,12 @@ mod tests {
         component["actions"] = json!([route()]);
         let result = infer(&page(component.clone()));
         assert_eq!(result.action_ids.len(), 2);
-        assert!(result.payload_schema().is_none());
+        assert!(result.context_schema().is_none());
         component["actionBindings"] = json!({"moved":{"workflow":{"flowId":"other"}}});
-        assert_eq!(infer(&page(component)).payload_schema(), Some(&payload()));
+        assert_eq!(
+            infer(&page(component)).context_schema(),
+            Some(&action_context_schema(&payload()))
+        );
     }
 
     #[test]
@@ -531,12 +1156,15 @@ mod tests {
             ),
             json!({"content":[{"widget":{"instanceId":"outer","widgetId":"wrapper"}}],"widgetRefs":{"outer":definition}}),
         ] {
-            assert_eq!(infer(&root).payload_schema(), Some(&payload()));
+            assert_eq!(
+                infer(&root).context_schema(),
+                Some(&action_context_schema(&payload()))
+            );
         }
         let typed = json!({"content":[{"widget":{"instanceId":"outer","widgetId":"wrapper","actionBindings":{"clicked":{"workflowEvent":{"event_id":"handler","context_mapping":{}}}}}}]});
         let result = infer(&typed);
         assert_eq!(result.action_ids, BTreeSet::from(["clicked".into()]));
-        assert!(result.payload_schema().is_none());
+        assert!(result.context_schema().is_none());
     }
 
     #[test]
@@ -556,7 +1184,10 @@ mod tests {
             page(json!({"type":"widgetInstance","instanceId":"outer","widgetId":"wrapper"}));
         let mut result = EventInference::default();
         infer_page(&root, &target(), &definitions, &contracts, &mut result);
-        assert_eq!(result.payload_schema(), Some(&payload()));
+        assert_eq!(
+            result.context_schema(),
+            Some(&action_context_schema(&payload()))
+        );
         root["components"][0]["component"]["appId"] = json!("foreign");
         let mut result = EventInference::default();
         infer_page(&root, &target(), &definitions, &contracts, &mut result);
@@ -573,19 +1204,21 @@ mod tests {
     fn rebind_and_unbind_drop_the_previous_event_and_payload() {
         let mut component = micro();
         assert_eq!(
-            infer(&page(component.clone())).payload_schema(),
-            Some(&payload())
+            infer(&page(component.clone())).context_schema(),
+            Some(&action_context_schema(&payload()))
         );
         component["eventHandlers"] = json!({"moved":[route()]});
         let rebound = infer(&page(component.clone()));
         assert_eq!(rebound.action_ids, BTreeSet::from(["moved".into()]));
         assert_eq!(
-            rebound.payload_schema(),
-            Some(&component["contract"]["events"]["moved"]["payloadSchema"])
+            rebound.context_schema(),
+            Some(&action_context_schema(
+                &component["contract"]["events"]["moved"]["payloadSchema"]
+            ))
         );
         component["eventHandlers"] = json!({});
         let unbound = infer(&page(component));
-        assert!(unbound.action_ids.is_empty() && unbound.payload_schema().is_none());
+        assert!(unbound.action_ids.is_empty() && unbound.context_schema().is_none());
     }
 
     #[test]
@@ -605,7 +1238,7 @@ mod tests {
             &BTreeMap::new(),
             &mut result,
         );
-        assert!(result.action_ids.is_empty() && result.payload_schema().is_none());
+        assert!(result.action_ids.is_empty() && result.context_schema().is_none());
     }
 
     #[test]
@@ -615,7 +1248,10 @@ mod tests {
         component["actionBindings"] = json!({"selected":{"workflow":{"flowId":"other"}},"moved":{"workflow":{"flowId":"handler"}}});
         let result = infer(&page(component.clone()));
         assert_eq!(result.action_ids, BTreeSet::from(["selected".into()]));
-        assert_eq!(result.payload_schema(), Some(&payload()));
+        assert_eq!(
+            result.context_schema(),
+            Some(&action_context_schema(&payload()))
+        );
         component["eventHandlers"] = json!({"*":[]});
         assert!(infer(&page(component)).action_ids.is_empty());
     }
@@ -633,11 +1269,11 @@ mod tests {
             component["contract"]["events"]["selected"]["payloadSchema"] = schema;
             let result = infer(&page(component));
             assert_eq!(result.action_ids, BTreeSet::from(["selected".into()]));
-            assert!(result.payload_schema().is_none());
+            assert!(result.context_schema().is_none());
         }
         let mut component = micro();
         component["contract"]["events"]["selected"] = json!({});
-        assert!(infer(&page(component)).payload_schema().is_none());
+        assert!(infer(&page(component)).context_schema().is_none());
     }
 
     #[test]
@@ -647,10 +1283,13 @@ mod tests {
         component["actionBindings"] = json!({"alsoUndeclared":{"workflow":{"flowId":"handler"}}});
         let result = infer(&page(component.clone()));
         assert_eq!(result.action_ids, BTreeSet::from(["selected".into()]));
-        assert_eq!(result.payload_schema(), Some(&payload()));
+        assert_eq!(
+            result.context_schema(),
+            Some(&action_context_schema(&payload()))
+        );
         component.as_object_mut().unwrap().remove("contract");
         let result = infer(&page(component));
-        assert!(result.action_ids.contains("undeclared") && result.payload_schema().is_none());
+        assert!(result.action_ids.contains("undeclared") && result.context_schema().is_none());
         assert!(!result.action_ids.contains("*"));
     }
 
@@ -671,7 +1310,7 @@ mod tests {
                 BTreeSet::from(["cancel".into(), "save".into()])
             };
             assert_eq!(result.action_ids, expected);
-            assert!(result.payload_schema().is_none());
+            assert!(result.context_schema().is_none());
             let mut mixed = EventInference::default();
             mixed.add("selected", Some(&payload()));
             infer_page(
@@ -681,7 +1320,7 @@ mod tests {
                 &BTreeMap::new(),
                 &mut mixed,
             );
-            assert!(mixed.payload_schema().is_none());
+            assert!(mixed.context_schema().is_none());
         }
     }
 
@@ -695,7 +1334,7 @@ mod tests {
         ] {
             let result = infer(&with_component(component));
             assert_eq!(result.action_ids, BTreeSet::from(["selected".into()]));
-            assert!(result.is_complete() && result.payload_schema().is_none());
+            assert!(result.is_complete() && result.context_schema().is_none());
         }
         for component in [
             json!({"type":"button","actions":[{"name":"workflow_event","context":{"nodeId":"other"}},route()]}),
@@ -703,8 +1342,8 @@ mod tests {
             json!({"type":"button","eventHandlers":{"click":[{"name":"workflow_event","context":{"nodeId":"handler","appId":"foreign"}}]}}),
         ] {
             assert_eq!(
-                infer(&with_component(component)).payload_schema(),
-                Some(&payload())
+                infer(&with_component(component)).context_schema(),
+                Some(&action_context_schema(&payload()))
             );
         }
     }
@@ -714,13 +1353,16 @@ mod tests {
         for hook in ["onLoadEventId", "onUnloadEventId", "onIntervalEventId"] {
             let mut root = page(micro());
             root[hook] = json!("other");
-            assert_eq!(infer(&root).payload_schema(), Some(&payload()));
+            assert_eq!(
+                infer(&root).context_schema(),
+                Some(&action_context_schema(&payload()))
+            );
             root[hook] = json!("handler");
             let result = infer(&root);
             assert_eq!(result.action_ids, BTreeSet::from(["selected".into()]));
-            assert!(result.is_complete() && result.payload_schema().is_none());
+            assert!(result.is_complete() && result.context_schema().is_none());
             let hook_only = infer(&json!({ hook: "handler", "components": [] }));
-            assert!(hook_only.action_ids.is_empty() && hook_only.payload_schema().is_none());
+            assert!(hook_only.action_ids.is_empty() && hook_only.context_schema().is_none());
         }
     }
 
@@ -743,14 +1385,17 @@ mod tests {
         };
         let result = infer_installed(&root);
         assert!(result.is_complete());
-        assert_eq!(result.payload_schema(), Some(&payload()));
+        assert_eq!(
+            result.context_schema(),
+            Some(&action_context_schema(&payload()))
+        );
         root["components"][1]["component"]["eventHandlers"]["moved"] = json!([route()]);
         let result = infer_installed(&root);
         assert_eq!(
             result.action_ids,
             BTreeSet::from(["moved".into(), "selected".into()])
         );
-        assert!(result.payload_schema().is_none());
+        assert!(result.context_schema().is_none());
     }
 
     #[test]
@@ -876,7 +1521,7 @@ mod tests {
         inference.add("moved", Some(&json!({"type":"object"})));
         assert_eq!(
             inference.schemas,
-            vec![None, Some(json!({"type":"object"}))]
+            vec![None, Some(action_context_schema(&json!({"type":"object"})))]
         );
     }
 }

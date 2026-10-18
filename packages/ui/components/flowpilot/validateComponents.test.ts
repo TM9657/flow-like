@@ -62,6 +62,39 @@ describe("camera audio configuration", () => {
 	});
 });
 
+describe("Excalidraw generated components", () => {
+	test("preserves scene bindings, autosave settings, and exact handlers through both validators", () => {
+		const props = {
+			value: { path: "$.data.drawing" },
+			width: { literalString: "100%" },
+			height: { literalString: "600px" },
+			readOnly: { literalBool: false },
+			theme: { literalString: "dark" },
+			autoSave: { literalBool: true },
+			autoSaveDelayMs: { literalNumber: 2000 },
+			autoSaveMinChanges: { literalNumber: 3 },
+			eventHandlers: {
+				save: [{ name: "workflow_event", context: { nodeId: "save-drawing" } }],
+				autoSave: [
+					{ name: "workflow_event", context: { nodeId: "autosave-drawing" } },
+				],
+			},
+		};
+		const component = normalizeComponent({
+			id: "drawing",
+			type: "excalidraw",
+			...props,
+		});
+		expect(component).toMatchObject({ type: "excalidraw", ...props });
+		const validated = validateComponents([{ id: "drawing", component }]);
+		expect(validated.components[0]?.component).toMatchObject({
+			type: "excalidraw",
+			...props,
+		});
+		expect(validated.warnings).toEqual([]);
+	});
+});
+
 describe("KNOWN_PROPS drift protection", () => {
 	test("has an entry for every component type in the A2UIComponent union", () => {
 		const manifestTypes = Object.keys(COMPONENT_PROPS).sort();

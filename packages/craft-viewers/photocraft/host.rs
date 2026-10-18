@@ -1,3 +1,5 @@
+#[path = "live_mcp.rs"]
+mod live_mcp;
 use std::cell::RefCell;
 
 use photocraft_engine::Session;
@@ -90,6 +92,13 @@ async fn start_app() -> Result<(), String> {
                 PhotocraftApp::setup_context(&cc.egui_ctx, ThemeKind::Pro);
                 let services = Services {
                     host_command: Some(Box::new(host_command)),
+                    automation_command: Some(Box::new(|id, params| {
+                        live_mcp::authorize_command(id, params, false)
+                    })),
+                    automation_authorize: Some(|id, params| {
+                        live_mcp::authorize_command(id, params, false)
+                            .map_err(photocraft_engine::EngineError::Other)
+                    }),
                     ..Default::default()
                 };
                 let mut app = PhotocraftApp::new(Session::new(), services);
@@ -135,6 +144,26 @@ impl Host {
 
     fn receive(&mut self, message: JsValue) -> Result<(), String> {
         match field(&message, "type").as_string().as_deref() {
+            Some("mcp-request") => {
+                if !self.opened {
+                    return Err("Open a document first.".into());
+                }
+                let ctx = CONTEXT
+                    .with(|context| context.borrow().clone())
+                    .ok_or("The editor is unavailable.")?;
+                let detail = live_mcp::receive(&message, self.read_only, &mut |method, params| {
+                    let (request, _) =
+                        photocraft_ui_egui::control::ControlRequest::new(method, params);
+                    match photocraft_ui_egui::control::handle(&mut self.app, &ctx, &request) {
+                        photocraft_ui_egui::control::Outcome::Done(reply) => {
+                            live_mcp::unwrap_control(reply)
+                        }
+                        _ => Err("This operation needs a native editor window.".into()),
+                    }
+                })
+                .ok_or("Invalid MCP request.")?;
+                event("mcp-response", detail);
+            }
             Some("open") => {
                 if self.opened {
                     return Err("This editor already has a file open.".into());
