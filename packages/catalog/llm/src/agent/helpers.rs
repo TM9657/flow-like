@@ -1259,43 +1259,91 @@ pub async fn execute_agent_streaming(
     implementation.website_url = Some("https://flow-like.com".to_string());
     let client_info = ClientInfo::new(ClientCapabilities::default(), implementation);
 
-    for (server_index, mcp_config) in agent.mcp_servers.iter().enumerate() {
-        let transport_config =
-            match crate::agent::mcp_transport_config_for_execution(mcp_config, context).await {
-                Ok(config) => config,
-                Err(error) => {
-                    context.log_message(
-                        &format!(
-                            "Failed to authorize MCP server {}: {}",
-                            mcp_config.uri, error
-                        ),
-                        LogLevel::Error,
-                    );
-                    continue;
-                }
-            };
-        let transport =
-            rmcp::transport::StreamableHttpClientTransport::from_config(transport_config);
-        let client =
-            match tokio::time::timeout(MCP_CONNECT_TIMEOUT, client_info.clone().serve(transport))
-                .await
-            {
-                Ok(Ok(c)) => c,
-                Ok(Err(e)) => {
-                    let error =
-                        format!("Failed to connect to MCP server {}: {}", mcp_config.uri, e);
-                    context.log_message(&error, LogLevel::Error);
-                    continue;
-                }
-                Err(_) => {
-                    let error = format!(
+    #[derive(Clone, Copy)]
+    enum ServerRegistration<'a> {
+        Http(&'a crate::agent::McpServerConfig),
+        Editor(&'a crate::agent::EditorMcpConfig),
+    }
+    let registrations = agent
+        .mcp_servers
+        .iter()
+        .map(ServerRegistration::Http)
+        .chain(
+            agent
+                .editor_mcp_servers
+                .iter()
+                .map(ServerRegistration::Editor),
+        );
+    for (server_index, registration) in registrations.enumerate() {
+        let (server_label, tool_filter) = match registration {
+            ServerRegistration::Http(config) => (config.uri.clone(), &config.tool_filter),
+            ServerRegistration::Editor(config) => (
+                format!("{} ({})", config.editor, config.element_ref),
+                &config.tool_filter,
+            ),
+        };
+        let connection = match registration {
+            ServerRegistration::Http(mcp_config) => {
+                let transport_config =
+                    match crate::agent::mcp_transport_config_for_execution(mcp_config, context)
+                        .await
+                    {
+                        Ok(config) => config,
+                        Err(error) => {
+                            context.log_message(
+                                &format!(
+                                    "Failed to authorize MCP server {}: {}",
+                                    server_label, error
+                                ),
+                                LogLevel::Error,
+                            );
+                            continue;
+                        }
+                    };
+                let transport =
+                    rmcp::transport::StreamableHttpClientTransport::from_config(transport_config);
+                tokio::time::timeout(MCP_CONNECT_TIMEOUT, client_info.clone().serve(transport))
+                    .await
+            }
+            ServerRegistration::Editor(config) => {
+                let transport =
+                    match crate::agent::editor_mcp::EditorMcpTransport::new(context, config) {
+                        Ok(transport) => transport,
+                        Err(error) => {
+                            context.log_message(
+                                &format!("Failed to connect to editor {}: {}", server_label, error),
+                                LogLevel::Error,
+                            );
+                            continue;
+                        }
+                    };
+                tokio::time::timeout(MCP_CONNECT_TIMEOUT, client_info.clone().serve(transport))
+                    .await
+            }
+        };
+        let client = match connection {
+            Ok(Ok(client)) => client,
+            Ok(Err(error)) => {
+                context.log_message(
+                    &format!(
+                        "Failed to connect to MCP server {}: {}",
+                        server_label, error
+                    ),
+                    LogLevel::Error,
+                );
+                continue;
+            }
+            Err(_) => {
+                context.log_message(
+                    &format!(
                         "Timed out connecting to MCP server {} after {:?}",
-                        mcp_config.uri, MCP_CONNECT_TIMEOUT
-                    );
-                    context.log_message(&error, LogLevel::Error);
-                    continue;
-                }
-            };
+                        server_label, MCP_CONNECT_TIMEOUT
+                    ),
+                    LogLevel::Error,
+                );
+                continue;
+            }
+        };
 
         // Fetch all tools with pagination support
         let mut all_tools = Vec::new();
@@ -1312,7 +1360,7 @@ pub async fn execute_agent_streaming(
                 Err(_) => {
                     let error = format!(
                         "Timed out fetching tools from MCP server {} after {:?}",
-                        mcp_config.uri, MCP_LIST_TOOLS_TIMEOUT
+                        server_label, MCP_LIST_TOOLS_TIMEOUT
                     );
                     context.log_message(&error, LogLevel::Error);
                     break;
@@ -1324,7 +1372,7 @@ pub async fn execute_agent_streaming(
                 Err(e) => {
                     let error = format!(
                         "Failed to fetch tools from MCP server {}: {}",
-                        mcp_config.uri, e
+                        server_label, e
                     );
                     context.log_message(&error, LogLevel::Error);
                     break;
@@ -1338,7 +1386,7 @@ pub async fn execute_agent_streaming(
                 context.log_message(
                     &format!(
                         "MCP server {} exposed more than {} tools; truncating the tool list",
-                        mcp_config.uri, MCP_MAX_TOOLS_PER_SERVER
+                        server_label, MCP_MAX_TOOLS_PER_SERVER
                     ),
                     LogLevel::Warn,
                 );
@@ -1355,13 +1403,13 @@ pub async fn execute_agent_streaming(
 
         if all_tools.is_empty() {
             context.log_message(
-                &format!("No tools available from MCP server {}", mcp_config.uri),
+                &format!("No tools available from MCP server {}", server_label),
                 LogLevel::Warn,
             );
             continue;
         }
 
-        let mut filtered_tools = if let Some(filter) = &mcp_config.tool_filter {
+        let mut filtered_tools = if let Some(filter) = tool_filter {
             all_tools
                 .into_iter()
                 .filter(|t| filter.contains(&*t.name))
@@ -1374,7 +1422,7 @@ pub async fn execute_agent_streaming(
             context.log_message(
                 &format!(
                     "No matching tools after filtering for MCP server {}",
-                    mcp_config.uri
+                    server_label
                 ),
                 LogLevel::Warn,
             );
@@ -1398,7 +1446,7 @@ pub async fn execute_agent_streaming(
                     context.log_message(
                         &format!(
                             "Skipping MCP tool '{}' from server {}: name collides even after namespacing",
-                            server_tool_name, mcp_config.uri
+                            server_tool_name, server_label
                         ),
                         LogLevel::Warn,
                     );
@@ -1407,7 +1455,7 @@ pub async fn execute_agent_streaming(
                 context.log_message(
                     &format!(
                         "Namespacing colliding MCP tool '{}' from server {} as '{}'",
-                        server_tool_name, mcp_config.uri, namespaced
+                        server_tool_name, server_label, namespaced
                     ),
                     LogLevel::Warn,
                 );

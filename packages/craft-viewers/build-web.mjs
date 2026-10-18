@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
 	closeSync,
 	existsSync,
@@ -9,6 +9,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acquireBuildLock } from "./build-lock.mjs";
+import { buildConfiguration, runBuilds } from "./build-pool.mjs";
 
 const script = fileURLToPath(import.meta.url);
 const directory = dirname(script);
@@ -36,19 +37,27 @@ if (process.argv.includes("--dev")) {
 		: undefined;
 	if (release === null) process.exit(0);
 	try {
-		execFileSync(
-			process.execPath,
-			[join(root, "packages/wordcraft/build-web.mjs")],
-			{ cwd: root, stdio: "inherit" },
-		);
+		const tasks = [
+			{
+				label: "wordcraft",
+				args: [join(root, "packages/wordcraft/build-web.mjs")],
+			},
+		];
 		for (const id of readdirSync(directory).sort()) {
 			if (!existsSync(join(directory, id, "upstream.json"))) continue;
-			execFileSync(
-				process.execPath,
-				[join(directory, "build-runtime.mjs"), id],
-				{ cwd: root, stdio: "inherit" },
-			);
+			tasks.push({
+				label: id,
+				args: [join(directory, "build-runtime.mjs"), id],
+			});
 		}
+		const configuration = buildConfiguration();
+		console.log(
+			`Preparing ${tasks.length} file editors with up to ${configuration.concurrency} parallel builds (${configuration.env.CARGO_BUILD_JOBS} Cargo jobs each).`,
+		);
+		await runBuilds(tasks, { ...configuration, cwd: root });
+	} catch (error) {
+		console.error(error.message);
+		process.exitCode = 1;
 	} finally {
 		release?.();
 	}

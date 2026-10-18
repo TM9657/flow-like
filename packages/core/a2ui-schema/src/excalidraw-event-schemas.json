@@ -1,0 +1,60 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"events": {
+		"load": "ExcalidrawLoadContext",
+		"save": "ExcalidrawSaveContext",
+		"autoSave": "ExcalidrawSaveContext",
+		"dirtyChange": "ExcalidrawDirtyChangeContext",
+		"error": "ExcalidrawErrorContext"
+	},
+	"$defs": {
+		"ExcalidrawScene": {
+			"type": "object",
+			"properties": {
+				"type": { "type": "string", "const": "excalidraw" },
+				"version": { "type": "number" },
+				"source": { "type": "string" },
+				"elements": { "type": "array", "items": { "type": "object" } },
+				"appState": { "type": "object" },
+				"files": { "type": "object", "additionalProperties": { "type": "object" } }
+			},
+			"required": ["type", "version", "source", "elements", "appState", "files"]
+		},
+		"ExcalidrawLoadContext": {
+			"type": "object",
+			"properties": {
+				"actionId": { "type": "string" },
+				"value": { "$ref": "#/$defs/ExcalidrawScene" },
+				"scene": { "$ref": "#/$defs/ExcalidrawScene" }
+			},
+			"required": ["actionId", "value", "scene"]
+		},
+		"ExcalidrawSaveContext": {
+			"type": "object",
+			"properties": {
+				"actionId": { "type": "string" },
+				"value": { "$ref": "#/$defs/ExcalidrawScene" },
+				"scene": { "$ref": "#/$defs/ExcalidrawScene" },
+				"changeCount": { "type": "integer", "minimum": 0 }
+			},
+			"required": ["actionId", "value", "scene", "changeCount"]
+		},
+		"ExcalidrawDirtyChangeContext": {
+			"type": "object",
+			"properties": {
+				"actionId": { "type": "string" },
+				"dirty": { "type": "boolean" }
+			},
+			"required": ["actionId", "dirty"]
+		},
+		"ExcalidrawErrorContext": {
+			"type": "object",
+			"properties": {
+				"actionId": { "type": "string" },
+				"message": { "type": "string" },
+				"operation": { "type": "string", "enum": ["load", "save", "autoSave"] }
+			},
+			"required": ["actionId", "message", "operation"]
+		}
+	}
+}

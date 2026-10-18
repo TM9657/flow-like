@@ -77,6 +77,20 @@ describe("resolvePinEditorKind", () => {
 			resolvePinEditorKind(pin("flag", { data_type: IVariableType.Boolean })),
 		).toBe("boolean");
 	});
+
+	test("generic editor element inputs retain the element picker until connected", () => {
+		const editorElement = pin("element_ref", {
+			data_type: IVariableType.Generic,
+			options: { enforce_generic_value_type: true, enforce_schema: false },
+		});
+		expect(resolvePinEditorKind(editorElement)).toBe("element");
+		expect(
+			resolvePinEditorKind({ ...editorElement, depends_on: ["get-element"] }),
+		).toBe("label");
+		expect(
+			resolvePinEditorKind({ ...editorElement, value_type: IValueType.Array }),
+		).toBe("plain");
+	});
 });
 
 test.each([

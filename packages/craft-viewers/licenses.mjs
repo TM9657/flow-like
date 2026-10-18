@@ -115,7 +115,7 @@ export function parseDependencyTree(tree) {
 			.replace(/ \(\*\)$/, "")
 			.split("\t");
 		const match = identity.match(
-			/^([\w-]+) v([\w.+-]+)(?: \((.*?)\))?(?: \(proc-macro\))?$/,
+			/^([\w-]+) v([\w.+-]+)(?: \(proc-macro\))?(?: \((.*?)\))?(?: \(proc-macro\))?$/,
 		);
 		if (!match)
 			throw new Error(`Cannot identify editor dependency: ${identity}`);

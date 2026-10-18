@@ -1,3 +1,5 @@
+import { getExcalidrawEventContextSchema } from "./excalidraw-events";
+import { getFilePreviewEventContextSchema } from "./file-preview-events";
 import type { A2UIComponent, Hotspot } from "./types";
 
 /**
@@ -12,6 +14,8 @@ export interface ComponentEventDefinition {
 	description: string;
 	legacyFallback: boolean;
 	wildcardFallback: boolean;
+	/** Complete workflow Action Context schema for components with typed events. */
+	contextSchema?: Record<string, unknown>;
 }
 
 type ComponentType = A2UIComponent["type"];
@@ -39,8 +43,43 @@ const event = (
 const exactEvent = (id: string, label: string, description: string) =>
 	event(id, label, description, false, false);
 
+const filePreviewEvent = (id: string, label: string, description: string) => ({
+	...exactEvent(id, label, description),
+	contextSchema: getFilePreviewEventContextSchema(id),
+});
+
 /** Static interaction contracts implemented by the built-in renderers. */
 export const COMPONENT_EVENT_MANIFEST = {
+	excalidraw: [
+		[
+			"load",
+			"Scene loaded",
+			"The initial or externally supplied drawing finished loading.",
+		],
+		[
+			"save",
+			"Save drawing",
+			"Save was requested with the Save button or Ctrl/Cmd+S. Carries the complete scene and content change count.",
+		],
+		[
+			"autoSave",
+			"Autosave drawing",
+			"Content changed and the configured idle delay and minimum change count were reached. Carries the complete scene.",
+		],
+		[
+			"dirtyChange",
+			"Unsaved changes changed",
+			"The drawing's unsaved state changed. Includes dirty.",
+		],
+		[
+			"error",
+			"Drawing error",
+			"Loading or a save workflow failed. Includes message and operation.",
+		],
+	].map(([id, label, description]) => ({
+		...exactEvent(id, label, description),
+		contextSchema: getExcalidrawEventContextSchema(id),
+	})),
 	cameraView: [
 		exactEvent(
 			"ready",
@@ -72,6 +111,28 @@ export const COMPONENT_EVENT_MANIFEST = {
 		event("boxClick", "Box clicked", "A bounding box was clicked."),
 	],
 	button: [event("click", "Click", "The button was clicked.")],
+	filePreview: [
+		filePreviewEvent(
+			"save",
+			"Save file",
+			"The editor uploaded a new temporary file to the backend. Requires a workflow action to handle its URL; includes url, signedUrls, file, value, and the original src.",
+		),
+		filePreviewEvent(
+			"saved",
+			"File saved",
+			"Every save workflow completed successfully. Includes url, signedUrls, file, value, and the original src.",
+		),
+		filePreviewEvent(
+			"dirtyChange",
+			"Unsaved changes changed",
+			"The editor's unsaved state changed. Includes dirty.",
+		),
+		filePreviewEvent(
+			"error",
+			"File error",
+			"Preview, export, upload, or saving failed. Includes message.",
+		),
+	],
 	feedback: [event("submit", "Submit", "The user submitted their feedback.")],
 	textField: [
 		event(

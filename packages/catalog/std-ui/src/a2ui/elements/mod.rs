@@ -45,6 +45,7 @@ pub mod set_element_style;
 pub mod set_element_text;
 pub mod set_element_value;
 pub mod set_element_visibility;
+pub mod set_excalidraw_scene;
 pub mod set_icon;
 pub mod set_iframe_src;
 pub mod set_iframe_srcdoc;

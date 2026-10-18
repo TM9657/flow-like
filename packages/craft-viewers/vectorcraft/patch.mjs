@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { prepareLiveMcp } from "../live-mcp.mjs";
 
-export default function prepare({ directory, original, write, replaceOnce }) {
+export default function prepare({
+	source,
+	directory,
+	original,
+	write,
+	replaceOnce,
+}) {
 	const uiPath = "crates/ui-egui/src/lib.rs";
 	let ui = original(uiPath);
 	ui = replaceOnce(
@@ -93,4 +100,5 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		"apps/vectorcraft-web/src/main.rs",
 		'#[cfg(target_arch = "wasm32")]\nmod web;\n#[cfg(target_arch = "wasm32")]\nfn main() { web::start(); }\n#[cfg(not(target_arch = "wasm32"))]\nfn main() {}\n',
 	);
+	prepareLiveMcp({ id: "vectorcraft", source, write, original, replaceOnce });
 }

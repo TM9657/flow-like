@@ -191,6 +191,9 @@ const builtInRenderers = {
 	feedback: A2UIFeedback as ComponentRenderer,
 	appLink: A2UIAppLink as ComponentRenderer,
 	textField: A2UITextField as ComponentRenderer,
+	excalidraw: lazyRenderer(() =>
+		import("./interactive/Excalidraw").then(named("A2UIExcalidraw")),
+	),
 	richText: lazyRenderer(() =>
 		import("./interactive/RichText").then((m) => ({
 			default: m.A2UIRichText as ComponentRenderer,

@@ -11,6 +11,7 @@ import {
 	vi,
 } from "vitest";
 import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
+import { executeCraftCommand } from "./craft-mcp-session";
 import { WordcraftDocument } from "./wordcraft-document";
 import { DOCX_MIME, WORDCRAFT_CHANNEL } from "./wordcraft-protocol";
 
@@ -58,6 +59,7 @@ let saveDocument: Mock<
 >;
 let dirtyChange: Mock<(dirty: boolean) => void>;
 let busyChange: Mock<(busy: boolean) => void>;
+let reportError: Mock<(message: string) => void>;
 let iframeLoadingDisabled: boolean;
 
 beforeEach(() => {
@@ -75,6 +77,7 @@ beforeEach(() => {
 	saveDocument = vi.fn().mockResolvedValue(undefined);
 	dirtyChange = vi.fn();
 	busyChange = vi.fn();
+	reportError = vi.fn();
 	container = document.createElement("div");
 	document.body.append(container);
 	root = createRoot(container);
@@ -90,7 +93,11 @@ afterEach(async () => {
 	vi.unstubAllGlobals();
 });
 
-async function render(editable = true, url = "/files/report.docx") {
+async function render(
+	editable = true,
+	url = "/files/report.docx",
+	props: Partial<ComponentProps<typeof WordcraftDocument>> = {},
+) {
 	await act(async () => {
 		root?.render(
 			<WordcraftDocument
@@ -100,6 +107,8 @@ async function render(editable = true, url = "/files/report.docx") {
 				onSave={saveDocument}
 				onDirtyChange={dirtyChange}
 				onBusyChange={busyChange}
+				onError={reportError}
+				{...props}
 			/>,
 		);
 	});
@@ -132,6 +141,39 @@ function messages(type: string) {
 		.map(([message]) => message as Record<string, unknown>)
 		.filter((message) => message.type === type);
 }
+
+it("exposes the same open Wordcraft document through the scoped MCP bridge", async () => {
+	const toolTarget = {
+		appId: "app",
+		surfaceId: "page",
+		componentId: "preview",
+	};
+	const context = { appId: "app" };
+	const elementRef = "page/preview";
+	await render(true, "/files/report.docx", { toolTarget });
+	await receive({ type: "ready" });
+	await receive({ type: "opened" });
+	const pin = (await executeCraftCommand(
+		"craft.session",
+		{ elementRef },
+		context,
+	)) as { sessionId: string; editor: string };
+	expect(pin).toEqual({ sessionId: session(), editor: "wordcraft" });
+	const message = { jsonrpc: "2.0", id: 4, method: "tools/list" };
+	const result = executeCraftCommand(
+		"craft.mcp",
+		{ elementRef, ...pin, message },
+		context,
+	);
+	const request = messages("mcp-request").at(-1);
+	expect(request?.channel).toBe(WORDCRAFT_CHANNEL);
+	await receive({
+		type: "mcp-response",
+		requestId: request?.requestId,
+		response: { jsonrpc: "2.0", id: 4, result: { tools: [] } },
+	});
+	await expect(result).resolves.toMatchObject({ id: 4 });
+});
 
 function button(label: string) {
 	const match = [...container.querySelectorAll("button")].find((item) =>
@@ -167,6 +209,95 @@ async function exportDocument(revision = 4) {
 }
 
 describe("Flows Word document host", () => {
+	it("reports readiness once to the latest callback after the document opens", async () => {
+		const ready = vi.fn();
+		const latestReady = vi.fn();
+		await render(true, undefined, { onReady: ready });
+		await receive({ type: "ready" });
+		expect(ready).not.toHaveBeenCalled();
+		await render(true, undefined, { onReady: latestReady });
+		await receive({ type: "opened" });
+		expect(ready).not.toHaveBeenCalled();
+		expect(latestReady).toHaveBeenCalledOnce();
+		await receive({ type: "opened" });
+		await render(true, undefined, { onReady: ready });
+		expect(latestReady).toHaveBeenCalledOnce();
+		expect(ready).not.toHaveBeenCalled();
+		expect(fetchDocument).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([true, false])(
+		"opens in initial edit mode only with permission: %s",
+		async (editable) => {
+			await render(editable, undefined, { initialEditing: true });
+			await receive({ type: "ready" });
+			expect(messages("open").at(-1)).toMatchObject({ readOnly: !editable });
+			await receive({ type: "opened" });
+			expect(messages("set-read-only").at(-1)).toMatchObject({
+				readOnly: !editable,
+			});
+			expect(!!container.querySelector('[aria-label="Save"]')).toBe(editable);
+		},
+	);
+
+	it("revokes initial editing while the file is still loading", async () => {
+		const download = deferred<Response>();
+		fetchDocument.mockReturnValue(download.promise);
+		await render(true, undefined, { initialEditing: true });
+		await receive({ type: "ready" });
+		await render(false, undefined, { initialEditing: true });
+		await act(async () => download.resolve(new Response(originalBytes)));
+		expect(messages("open").at(-1)).toMatchObject({ readOnly: true });
+		await receive({ type: "opened" });
+		await render(true, undefined, { initialEditing: true });
+		expect(messages("set-read-only").at(-1)).toMatchObject({ readOnly: true });
+		expect(container.querySelector('[aria-label="Save"]')).toBeNull();
+	});
+
+	it("can hide the download control without hiding editing controls", async () => {
+		await render(true, undefined, { showDownload: false });
+		await receive({ type: "ready" });
+		await receive({ type: "opened" });
+		expect(container.querySelector("a[download]")).toBeNull();
+		expect(button("Edit document").disabled).toBe(false);
+		await render();
+		expect(container.querySelector("a[download]")).not.toBeNull();
+	});
+
+	it("reports a load error to the latest callback without repeating it on render", async () => {
+		const download = deferred<Response>();
+		fetchDocument.mockReturnValue(download.promise);
+		await render();
+		const latestError = vi.fn();
+		await render(true, undefined, { onError: latestError });
+		expect(fetchDocument).toHaveBeenCalledTimes(1);
+		await act(async () =>
+			download.resolve(new Response(null, { status: 503 })),
+		);
+		expect(reportError).not.toHaveBeenCalled();
+		expect(latestError).toHaveBeenCalledExactlyOnceWith(
+			"The document could not be downloaded.",
+		);
+		await render();
+		expect(reportError).not.toHaveBeenCalled();
+		expect(latestError).toHaveBeenCalledTimes(1);
+	});
+
+	it("reports export and persistence errors once while retaining edits", async () => {
+		await openForEditing();
+		await click("Save");
+		await receive({ type: "error", error: "Export failed." });
+		await receive({ type: "error", error: "Export failed." });
+		expect(reportError).toHaveBeenCalledExactlyOnceWith("Export failed.");
+		expect(messages("saved")).toHaveLength(0);
+		saveDocument.mockRejectedValueOnce(new Error("Upload failed."));
+		await exportDocument();
+		expect(reportError).toHaveBeenCalledTimes(2);
+		expect(reportError).toHaveBeenLastCalledWith("Upload failed.");
+		expect(messages("saved")).toHaveLength(0);
+		expect(container.textContent).toContain("Unsaved changes");
+	});
+
 	it("waits for both viewer readiness and downloaded bytes before opening", async () => {
 		const download = deferred<Response>();
 		fetchDocument.mockReturnValue(download.promise);

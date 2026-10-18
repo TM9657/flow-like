@@ -7,11 +7,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 pub mod add_datafusion;
+pub mod editor_mcp;
 pub mod from_model;
 pub mod helpers;
 pub mod invoke;
 pub mod lazy_register_tools;
 pub mod memory;
+pub mod register_editor_mcp_tools;
 pub mod register_mcp_tools;
 pub mod register_remote_mcp_tools;
 pub mod register_thinking;
@@ -20,6 +22,8 @@ pub mod register_work_iq_tools;
 pub mod set_system_prompt;
 pub mod simple;
 pub mod stream_invoke;
+
+pub use editor_mcp::EditorMcpConfig;
 
 /// MCP server registration with optional tool filtering
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -346,6 +350,10 @@ pub struct Agent {
     #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
 
+    /// Live editor documents selected in the invoking page.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub editor_mcp_servers: Vec<EditorMcpConfig>,
+
     /// Whether the thinking tool is enabled
     #[serde(default)]
     pub thinking_enabled: bool,
@@ -405,6 +413,7 @@ impl Agent {
             tools: Vec::new(),
             function_refs: HashMap::new(),
             mcp_servers: Vec::new(),
+            editor_mcp_servers: Vec::new(),
             thinking_enabled: false,
             history: None,
             datafusion_contexts: Vec::new(),
@@ -594,6 +603,22 @@ mod tests {
         let agent = Agent::new(Bit::default(), 4);
 
         assert!(agent.get_system_prompt().is_none());
+    }
+
+    #[test]
+    fn existing_agents_deserialize_without_editor_registrations() {
+        let serialized = flow_like_types::json::to_value(Agent::new(Bit::default(), 4)).unwrap();
+        assert!(serialized.get("editor_mcp_servers").is_none());
+        let agent: Agent = flow_like_types::json::from_value(serialized).unwrap();
+        assert!(agent.editor_mcp_servers.is_empty());
+        let schema = flow_like_types::json::to_value(schemars::schema_for!(Agent)).unwrap();
+        assert!(
+            !schema["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|field| field == "editor_mcp_servers")
+        );
     }
 
     #[test]

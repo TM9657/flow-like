@@ -84,6 +84,26 @@ struct Host {
 impl Host {
     fn receive(&mut self, message: JsValue) -> Result<(), String> {
         match field(&message, "type").as_string().as_deref() {
+            Some("mcp-request") => {
+                let request_id = field(&message, "requestId")
+                    .as_string()
+                    .ok_or("Missing MCP request ID.")?;
+                let text = js_sys::JSON::stringify(&field(&message, "message"))
+                    .map_err(|_| "Invalid MCP message.")?
+                    .as_string()
+                    .ok_or("Invalid MCP message.")?;
+                let request: serde_json::Value =
+                    serde_json::from_str(&text).map_err(|e| e.to_string())?;
+                let response = if self.opened {
+                    self.app.host_mcp(&request, self.read_only)
+                } else {
+                    json!({"jsonrpc":"2.0","id":request["id"],"error":{"code":-32000,"message":"Open a PDF first."}})
+                };
+                event(
+                    "mcp-response",
+                    json!({"requestId":request_id,"response":response}),
+                );
+            }
             Some("open") => {
                 if self.opened {
                     return Err("This editor already has a document open.".into());

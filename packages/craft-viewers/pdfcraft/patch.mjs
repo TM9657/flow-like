@@ -99,7 +99,9 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		/^\/\/\/ The ArtCraft wordmark[^\n]*\n[\s\S]*?(?=^\/\/\/ Buttons for every community link)/m,
 	)?.[0];
 	if (!brandWidgets?.includes("pub fn artcraft_mark("))
-		throw new Error("The PdfCraft brand widgets changed; review artwork removal.");
+		throw new Error(
+			"The PdfCraft brand widgets changed; review artwork removal.",
+		);
 	// Remove the asset loaders too, so hidden UI cannot keep restricted logos in WASM.
 	write(
 		widgetsPath,
@@ -139,4 +141,58 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		"apps/pdfcraft-web/src/main.rs",
 		'#[cfg(target_arch = "wasm32")]\nmod web;\n#[cfg(target_arch = "wasm32")]\nfn main() { web::start(); }\n#[cfg(not(target_arch = "wasm32"))]\nfn main() {}\n',
 	);
+	const automationPath = "crates/automation/src/lib.rs";
+	let automation = original(automationPath);
+	automation = replaceOnce(
+		automation,
+		"pub struct Automation {",
+		"pub struct Automation {\n    live_read_only: Option<bool>,",
+		"live MCP scope",
+	);
+	automation = replaceOnce(
+		automation,
+		"Self { session: Session::new(),",
+		"Self { live_read_only: None, session: Session::new(),",
+		"live MCP initialization",
+	);
+	const call =
+		"pub fn call(&mut self, name: &str, args: &Value) -> Result<Vec<Content>> {";
+	automation = replaceOnce(
+		automation,
+		call,
+		`${call}
+        if let Some(read_only) = self.live_read_only {
+            if !live_tool_allowed(name) { return Err(failed("Use the document controls above the editor for file operations.")); }
+            if read_only && !tools::find(name).is_some_and(|tool| tool.read_only) { return Err(failed("Enable editing before changing the document.")); }
+        }`,
+		"live MCP tool guard",
+	);
+	const resolve =
+		"fn resolve(&self, path: &str, for_write: bool) -> Result<PathBuf> {";
+	automation = replaceOnce(
+		automation,
+		resolve,
+		`${resolve}
+        if self.live_read_only.is_some() { return Err(failed("File paths are unavailable in the live editor.")); }`,
+		"live MCP file guard",
+	);
+	write(
+		automationPath,
+		`${automation}\n${readFileSync(join(directory, "mcp-policy.rs"), "utf8")}`,
+	);
+	write(
+		"crates/automation/src/mcp.rs",
+		`${original("crates/automation/src/mcp.rs")}\n${readFileSync(join(directory, "mcp.rs"), "utf8")}`,
+	);
+	const uiCargo = "crates/ui-egui/Cargo.toml";
+	write(
+		uiCargo,
+		replaceOnce(
+			original(uiCargo),
+			"[dependencies]",
+			'[dependencies]\npdfcraft-automation = { path = "../automation" }',
+			"live MCP dependency",
+		),
+	);
+	return { reconcileLock: true };
 }

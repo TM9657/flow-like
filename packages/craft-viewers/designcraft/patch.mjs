@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { prepareLiveMcp } from "../live-mcp.mjs";
 
-export default function prepare({ directory, original, write, replaceOnce }) {
+export default function prepare({
+	source,
+	directory,
+	original,
+	write,
+	replaceOnce,
+}) {
 	const uiPath = "crates/ui-egui/src/lib.rs";
 	let ui = original(uiPath);
 	ui = replaceOnce(
@@ -68,7 +75,9 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		/^\/\/\/ Paint the ArtCraft mark[^\n]*\npub fn paint_mark\([\s\S]*?(?=^\/\/\/ A speech-bubble glyph)/m,
 	)?.[0];
 	if (!markPath || !markPainter)
-		throw new Error("The DesignCraft brand artwork changed; review its removal.");
+		throw new Error(
+			"The DesignCraft brand artwork changed; review its removal.",
+		);
 	// Hidden dialogs are still compiled; remove both the geometry and its painter.
 	about = replaceOnce(about, markPath, "", "brand artwork geometry");
 	about = replaceOnce(about, markPainter, "", "brand artwork painter");
@@ -120,4 +129,5 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		"apps/designcraft-web/src/main.rs",
 		'#[cfg(target_arch = "wasm32")]\nmod web;\n#[cfg(target_arch = "wasm32")]\nfn main() { web::start(); }\n#[cfg(not(target_arch = "wasm32"))]\nfn main() {}\n',
 	);
+	prepareLiveMcp({ id: "designcraft", source, write, original, replaceOnce });
 }

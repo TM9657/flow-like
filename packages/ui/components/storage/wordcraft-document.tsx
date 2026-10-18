@@ -10,12 +10,15 @@ import {
 } from "react";
 import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
 import { Button } from "../ui/button";
+import type { CraftToolTarget } from "./craft-mcp-session";
+import { CraftMcpTargetButton } from "./craft-mcp-target-button";
 import {
 	FileSaveProgress,
 	type FileSaveStatus,
 	fileSaveError,
 	storageSaveProgress,
 } from "./file-save-progress";
+import { useCraftMcpSession } from "./use-craft-mcp-session";
 import { ViewerAbout } from "./viewer-about";
 import {
 	DOCX_MIME,
@@ -25,16 +28,21 @@ import {
 } from "./wordcraft-protocol";
 
 interface WordcraftDocumentProps {
+	toolTarget?: CraftToolTarget;
 	url: string;
 	filename: string;
 	title?: ReactNode;
 	editable: boolean;
+	initialEditing?: boolean;
+	showDownload?: boolean;
 	onSave: (
 		file: File,
 		onProgress?: BulkUploadProgressCallback,
 	) => Promise<void>;
 	onDirtyChange?: (dirty: boolean) => void;
 	onBusyChange?: (busy: boolean) => void;
+	onError?: (message: string) => void;
+	onReady?: () => void;
 }
 
 export function WordcraftDocument(props: WordcraftDocumentProps) {
@@ -49,13 +57,18 @@ export function WordcraftDocument(props: WordcraftDocumentProps) {
 }
 
 function WordcraftSession({
+	toolTarget,
 	url,
 	filename,
 	title,
 	editable,
+	initialEditing = false,
+	showDownload = true,
 	onSave,
 	onDirtyChange,
 	onBusyChange,
+	onError,
+	onReady,
 	onRetry,
 }: WordcraftDocumentProps & { onRetry: () => void }) {
 	const frame = useRef<HTMLIFrameElement>(null);
@@ -63,11 +76,12 @@ function WordcraftSession({
 	const [status, setStatus] = useState<"loading" | "ready" | "failed">(
 		"loading",
 	);
-	const [editing, setEditing] = useState(false);
+	const [editing, setEditing] = useState(initialEditing && editable);
 	const [dirty, setDirty] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [saveProgress, setSaveProgress] = useState<FileSaveStatus | null>(null);
 	const [error, setError] = useState("");
+	const reportedError = useRef<string | null>(null);
 	const [saveError, setSaveError] = useState(false);
 	const [saved, setSaved] = useState(false);
 	const [download, setDownload] = useState<Blob | null>(null);
@@ -79,8 +93,30 @@ function WordcraftSession({
 		timer: ReturnType<typeof setTimeout>;
 		persisting: boolean;
 	} | null>(null);
-	const latest = useRef({ editable, onSave, onDirtyChange, onBusyChange });
-	latest.current = { editable, onSave, onDirtyChange, onBusyChange };
+	const latest = useRef({
+		editable,
+		editing,
+		onSave,
+		onDirtyChange,
+		onBusyChange,
+		onError,
+		onReady,
+	});
+	latest.current = {
+		editable,
+		editing,
+		onSave,
+		onDirtyChange,
+		onBusyChange,
+		onError,
+		onReady,
+	};
+	const reportError = useCallback((message: string) => {
+		setError(message);
+		if (reportedError.current === message) return;
+		reportedError.current = message;
+		latest.current.onError?.(message);
+	}, []);
 
 	useEffect(() => {
 		if (!download) return;
@@ -107,6 +143,18 @@ function WordcraftSession({
 		setSaveProgress(null);
 		latest.current.onBusyChange?.(false);
 	}, []);
+	useCraftMcpSession({
+		target: toolTarget,
+		sessionId: session,
+		editor: "wordcraft",
+		channel: WORDCRAFT_CHANNEL,
+		frame: () => frame.current?.contentWindow ?? null,
+		post,
+		ready: status === "ready",
+		editable,
+		editing,
+		busy: saving,
+	});
 
 	useEffect(() => {
 		active.current = true;
@@ -118,14 +166,22 @@ function WordcraftSession({
 			if (!opened) {
 				controller.abort();
 				setStatus("failed");
-				setError(
+				reportError(
 					"The document viewer did not start. Try opening the file again.",
 				);
 			}
 		}, 90_000);
 		const open = () => {
 			if (!ready || !bytes || controller.signal.aborted) return;
-			post({ type: "open", name: filename, bytes, readOnly: true }, [bytes]);
+			post(
+				{
+					type: "open",
+					name: filename,
+					bytes,
+					readOnly: !latest.current.editable || !latest.current.editing,
+				},
+				[bytes],
+			);
 			bytes = undefined;
 		};
 		const receive = (event: MessageEvent) => {
@@ -142,9 +198,11 @@ function WordcraftSession({
 					open();
 					break;
 				case "opened":
+					if (opened) break;
 					opened = true;
 					clearTimeout(timeout);
 					setStatus("ready");
+					latest.current.onReady?.();
 					break;
 				case "dirty":
 					if (!opened) break;
@@ -159,7 +217,7 @@ function WordcraftSession({
 					if (message.requestId && message.requestId !== pending.current?.id)
 						break;
 					setSaveError(!!pending.current && !pending.current.persisting);
-					setError(message.error || "The document could not be processed.");
+					reportError(message.error || "The document could not be processed.");
 					if (!opened) {
 						clearTimeout(timeout);
 						setStatus("failed");
@@ -177,9 +235,7 @@ function WordcraftSession({
 					clearTimeout(request.timer);
 					if (!latest.current.editable) {
 						setSaveError(true);
-						setError(
-							"You do not have permission to save files in this storage.",
-						);
+						reportError("You do not have permission to save this file.");
 						finishSave();
 						break;
 					}
@@ -199,7 +255,7 @@ function WordcraftSession({
 						} catch (cause) {
 							if (!active.current || pending.current !== request) return;
 							setSaveError(true);
-							setError(fileSaveError(cause));
+							reportError(fileSaveError(cause));
 						} finally {
 							if (active.current && pending.current === request) finishSave();
 						}
@@ -231,7 +287,7 @@ function WordcraftSession({
 				if (controller.signal.aborted) return;
 				clearTimeout(timeout);
 				setStatus("failed");
-				setError(
+				reportError(
 					cause instanceof Error ? cause.message : "Could not load document.",
 				);
 			}
@@ -246,7 +302,7 @@ function WordcraftSession({
 			latest.current.onDirtyChange?.(false);
 			latest.current.onBusyChange?.(false);
 		};
-	}, [url, filename, session, post, finishSave]);
+	}, [url, filename, session, post, finishSave, reportError]);
 
 	useEffect(() => {
 		if (!editable) setEditing(false);
@@ -258,6 +314,7 @@ function WordcraftSession({
 		if (!editable || !editing || pending.current || status !== "ready") return;
 		const id = crypto.randomUUID();
 		setError("");
+		reportedError.current = null;
 		setSaveError(false);
 		setSaved(false);
 		setSaving(true);
@@ -268,7 +325,7 @@ function WordcraftSession({
 			persisting: false,
 			timer: setTimeout(() => {
 				setSaveError(true);
-				setError("Preparing the document took too long.");
+				reportError("Preparing the document took too long.");
 				finishSave();
 			}, 30_000),
 		};
@@ -305,17 +362,23 @@ function WordcraftSession({
 						</>
 					) : undefined}
 				</ViewerAbout>
-				<Button asChild variant="ghost" size="sm" className="shrink-0">
-					<a
-						href={downloadUrl}
-						download={filename}
-						target="_blank"
-						rel="noopener noreferrer"
-						aria-label={`Download ${filename}`}
-					>
-						<DownloadIcon /> <span className="hidden sm:inline">Download</span>
-					</a>
-				</Button>
+				{toolTarget && status === "ready" && (
+					<CraftMcpTargetButton target={toolTarget} onError={reportError} />
+				)}
+				{showDownload && (
+					<Button asChild variant="ghost" size="sm" className="shrink-0">
+						<a
+							href={downloadUrl}
+							download={filename}
+							target="_blank"
+							rel="noopener noreferrer"
+							aria-label={`Download ${filename}`}
+						>
+							<DownloadIcon />{" "}
+							<span className="hidden sm:inline">Download</span>
+						</a>
+					</Button>
+				)}
 				{editable && !editing && (
 					<Button
 						variant="outline"

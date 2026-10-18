@@ -55,6 +55,15 @@ const MIME: Record<string, string> = {
 	webm: "video/webm",
 	mkv: "video/x-matroska",
 	avi: "video/x-msvideo",
+	step: "model/step",
+	stp: "model/step",
+	iges: "model/iges",
+	igs: "model/iges",
+	stl: "model/stl",
+	obj: "model/obj",
+	"3mf": "model/3mf",
+	glb: "model/gltf-binary",
+	gltf: "model/gltf+json",
 };
 
 const viewers = new Map<string, CraftViewer>();
@@ -141,6 +150,14 @@ register("filmcraft", "Flows Video", "m4v mov webm", "mp4", 200, "video");
 register("filmcraft", "Flows Video", "mkv avi mxf mts m2ts", "mp4", 200);
 register("designcraft", "Flows Design", "idml designcraft");
 register("cadcraft", "Flows CAD", "dxf", undefined, 100);
+// A SolidCraft project keeps modeling edits without replacing an imported model.
+register(
+	"solidcraft",
+	"Flows CAD",
+	"solidcraft step stp iges igs stl obj 3mf glb gltf",
+	"solidcraft",
+	100,
+);
 
 export function craftViewer(filename: string): CraftViewer | undefined {
 	return viewers.get(

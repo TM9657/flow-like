@@ -1,3 +1,4 @@
+import { craftViewer } from "../storage/craft-viewers";
 import type { BoundValue, SurfaceComponent } from "./types";
 
 function literalString(value: string): BoundValue {
@@ -249,19 +250,28 @@ export function applyMediaSourceUpdate(
 				...(componentType === "iframe" ? { srcdoc: undefined } : {}),
 			};
 			break;
-		case "filePreview":
+		case "filePreview": {
+			const viewer = craftViewer(inferFileName(src, filename));
+			// Node media kinds are broad hints. Let the registry select Office,
+			// spreadsheet, and other non-native viewers from the supplied filename.
+			const previewType =
+				mediaKind === "file" ||
+				(viewer && !viewer.nativePreview && viewer.extension !== "svg")
+					? literalString("unknown")
+					: fileTypeValue;
 			nextComponentData = {
 				...componentData,
 				src: srcValue,
 				url: srcValue,
 				...(filenameValue ? { filename: filenameValue } : {}),
 				...(mimeTypeValue ? { mimeType: mimeTypeValue } : {}),
-				...(fileTypeValue ? { fileType: fileTypeValue } : {}),
+				...(previewType ? { fileType: previewType } : {}),
 				...(mediaKind === "video" || mediaKind === "audio"
 					? { showControls: componentData.showControls ?? literalBool(true) }
 					: {}),
 			};
 			break;
+		}
 		default:
 			nextComponentData = {
 				...componentData,

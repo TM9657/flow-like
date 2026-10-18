@@ -158,7 +158,13 @@ export function PageBuilderSurface({
 	}, [hasBoard, refetchBoard]);
 
 	const createWorkflowEvent = useCallback(
-		async ({ name, kind }: CreateWorkflowEventRequest) => {
+		async ({
+			name,
+			kind,
+			eventName,
+			contextSchema,
+			componentType,
+		}: CreateWorkflowEventRequest) => {
 			if (!effectiveBoardId) {
 				throw new Error(
 					`Cannot create a workflow event: page "${pageId}" is not linked to a board.`,
@@ -177,9 +183,37 @@ export function PageBuilderSurface({
 					),
 				);
 			}
+			const eventNode = structuredClone(template);
+			if (kind === "widget_action" && eventName && contextSchema) {
+				const pins = Object.values(eventNode.pins);
+				const actionId = pins.find((pin) => pin.name === "action_id");
+				const actionContext = pins.find((pin) => pin.name === "action_context");
+				if (!actionId || !actionContext) {
+					throw new Error(
+						t(
+							"workflowEventContextPinsMissing",
+							"The event node in this app's catalog is missing its Action ID or Action Context pin.",
+						),
+					);
+				}
+				actionId.default_value = Array.from(
+					new TextEncoder().encode(JSON.stringify(eventName)),
+				);
+				actionContext.schema = JSON.stringify({
+					...contextSchema,
+					...(componentType
+						? {
+								"x-flow-like-pending-component-event": {
+									componentType,
+									eventName,
+								},
+							}
+						: {}),
+				});
+			}
 			const { command, node } = addNodeCommand({
 				node: {
-					...structuredClone(template),
+					...eventNode,
 					friendly_name: name,
 					coordinates: nextWorkflowEventCoordinates(boardNodes),
 				},

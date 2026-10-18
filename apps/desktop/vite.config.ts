@@ -1,5 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { prepareExcalidrawAssets } from "../../packages/ui/scripts/prepare-excalidraw.mjs";
 import { prepareMapLibreAssets } from "../../packages/ui/scripts/prepare-maplibre.mjs";
 
 // @ts-expect-error process is a nodejs global
@@ -9,6 +10,9 @@ const host = process.env.TAURI_DEV_HOST;
 // @ts-ignore
 export default defineConfig(async () => ({
 	define: {
+		"process.env.NEXT_PUBLIC_EXCALIDRAW_ASSET_PATH": JSON.stringify(
+			prepareExcalidrawAssets(new URL("./public/", import.meta.url)),
+		),
 		"process.env.NEXT_PUBLIC_MAPLIBRE_WORKER_URL": JSON.stringify(
 			prepareMapLibreAssets(new URL("./public/", import.meta.url)),
 		),

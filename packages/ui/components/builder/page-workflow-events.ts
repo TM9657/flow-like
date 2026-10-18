@@ -1,5 +1,6 @@
 import type { INode } from "../../lib/schema/flow/node";
 import {
+	COMPONENT_EVENT_MANIFEST,
 	type ComponentEventDefinition,
 	getComponentEventDefinitions,
 } from "../a2ui/component-event-manifest";
@@ -16,6 +17,9 @@ export interface WorkflowEventInfo {
 export interface CreateWorkflowEventRequest {
 	name: string;
 	kind: WorkflowEventKind;
+	eventName?: string;
+	contextSchema?: Record<string, unknown>;
+	componentType?: string;
 }
 
 export const WORKFLOW_EVENT_NODE_NAMES: Readonly<
@@ -69,24 +73,36 @@ export function getPageWorkflowEvents(
 	});
 }
 
-/** Page lifecycle hooks and ordinary components have no widget instance context. */
+function supportsActionContext(componentType?: string): boolean {
+	if (isWidgetInstanceType(componentType)) return true;
+	const definitions = (
+		COMPONENT_EVENT_MANIFEST as Record<
+			string,
+			readonly ComponentEventDefinition[] | undefined
+		>
+	)[componentType ?? ""];
+	return (
+		definitions?.some((event) => event.contextSchema !== undefined) ?? false
+	);
+}
+
+/** Only components with a context contract offer context-carrying entry points. */
 export function workflowEventsForComponent(
 	events: readonly WorkflowEventInfo[] | undefined,
 	componentType?: string,
 ): WorkflowEventInfo[] {
-	const isWidget = isWidgetInstanceType(componentType);
+	const hasContext = supportsActionContext(componentType);
 	return (events ?? []).filter(
-		(event) => isWidget || event.kind !== "widget_action",
+		(event) => hasContext || event.kind !== "widget_action",
 	);
 }
 
-/** Widget instances offer the event that carries the widget payload and instance ID first. */
+/** Typed built-in events always create an entry point with an Action Context output. */
 export function workflowEventKindsForComponent(
 	componentType?: string,
 ): WorkflowEventKind[] {
-	return isWidgetInstanceType(componentType)
-		? ["widget_action", "simple"]
-		: ["simple"];
+	if (isWidgetInstanceType(componentType)) return ["widget_action", "simple"];
+	return supportsActionContext(componentType) ? ["widget_action"] : ["simple"];
 }
 
 /** Names a new event after the handler it is created for without reusing a board event name. */

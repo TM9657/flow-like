@@ -1,3 +1,5 @@
+#[path = "live_mcp.rs"]
+mod live_mcp;
 use filmcraft_engine::Session;
 use filmcraft_ui_egui::FilmcraftApp;
 use serde_json::{Value, json};
@@ -160,6 +162,26 @@ impl Host {
 
     fn receive(&mut self, message: JsValue) -> Result<(), String> {
         match field(&message, "type").as_string().as_deref() {
+            Some("mcp-request") => {
+                if !self.opened {
+                    return Err("Open a document first.".into());
+                }
+                let ctx = crate::CTX
+                    .with(|context| context.borrow().clone())
+                    .ok_or("The editor is unavailable.")?;
+                let detail = live_mcp::receive(&message, self.read_only, &mut |method, params| {
+                    let (request, _) =
+                        filmcraft_ui_egui::control::ControlRequest::new(method, params);
+                    match filmcraft_ui_egui::control::handle(&mut self.web.app, &ctx, &request) {
+                        filmcraft_ui_egui::control::Outcome::Done(reply) => {
+                            live_mcp::unwrap_control(reply)
+                        }
+                        _ => Err("This operation needs a native editor window.".into()),
+                    }
+                })
+                .ok_or("Invalid MCP request.")?;
+                event("mcp-response", detail);
+            }
             Some("open") => {
                 if self.opened || self.opening.is_some() {
                     return Err("A video file is already open.".into());

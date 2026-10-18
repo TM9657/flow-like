@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 import { wasmLinkerEnvironment } from "../device-crypto/build-web.mjs";
 import { acquireBuildLock } from "./build-lock.mjs";
+import { ensureWasmBindgen } from "./build-tools.mjs";
 import {
 	assertPinnedLockPackages,
 	assertPlatformMediaDependencies,
@@ -53,22 +54,6 @@ if (!/^[a-f0-9]{40}$/.test(pin.revision))
 const source =
 	process.env[`CRAFT_SOURCE_${id.toUpperCase()}`] ||
 	join(cache, "source", pin.revision);
-const toolCandidates = [
-	join(root, "target/wordcraft/tools", pin.wasmBindgen),
-	...readdirSync(suiteDirectory).map((name) =>
-		join(root, "target/craft-viewers", name, "tools", pin.wasmBindgen),
-	),
-];
-const tools =
-	toolCandidates.find((path) =>
-		existsSync(
-			join(
-				path,
-				"bin",
-				process.platform === "win32" ? "wasm-bindgen.exe" : "wasm-bindgen",
-			),
-		),
-	) ?? join(cache, "tools", pin.wasmBindgen);
 const output = join(cache, "runtime");
 const hash = createHash("sha256").update(toolchain);
 for (const base of [directory, suiteDirectory]) {
@@ -207,43 +192,23 @@ if (!cached()) {
 			root,
 		})) || {};
 
-	const executable =
-		process.env.WASM_BINDGEN ||
-		join(
-			tools,
-			"bin",
-			process.platform === "win32" ? "wasm-bindgen.exe" : "wasm-bindgen",
-		);
-	let installed = "";
-	try {
-		installed = run(executable, ["--version"], {
-			encoding: "utf8",
-			stdio: "pipe",
-		}).trim();
-	} catch {}
-	if (installed !== `wasm-bindgen ${pin.wasmBindgen}`) {
-		if (process.env.WASM_BINDGEN)
-			throw new Error(
-				`WASM_BINDGEN must point to wasm-bindgen ${pin.wasmBindgen}.`,
-			);
-		run("cargo", [
-			"install",
-			"wasm-bindgen-cli",
-			"--version",
-			pin.wasmBindgen,
-			"--locked",
-			"--root",
-			tools,
-			"--target-dir",
-			join(tools, "target"),
-		]);
-	}
+	const executable = ensureWasmBindgen({
+		root,
+		version: pin.wasmBindgen,
+		env: buildEnvironment,
+		run,
+	});
 	const cargoTarget =
 		process.env[`CRAFT_TARGET_${id.toUpperCase()}`] ||
-		join(root, "target/craft-viewers/cargo");
+		(process.env.CRAFT_BUILD_CONCURRENCY === "1"
+			? join(root, "target/craft-viewers/cargo")
+			: join(cache, "cargo"));
 	const env = {
 		...buildEnvironment,
-		...wasmLinkerEnvironment({ directory: tools, env: buildEnvironment }),
+		...wasmLinkerEnvironment({
+			directory: join(cache, "linker"),
+			env: buildEnvironment,
+		}),
 		CARGO_TARGET_DIR: cargoTarget,
 		CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS || "4",
 		// Release jobs pass native linker shims through these. They cannot be linked
@@ -361,6 +326,7 @@ if (!cached()) {
 	for (const name of ["host.js", "index.html"])
 		cpSync(join(suiteDirectory, name), join(output, name));
 	cpSync(join(suiteDirectory, "protocol.mjs"), join(output, "protocol.js"));
+	cpSync(join(suiteDirectory, "mcp.mjs"), join(output, "mcp.mjs"));
 	for (const asset of prepared.assets || []) {
 		mkdirSync(dirname(join(output, asset.to)), { recursive: true });
 		cpSync(join(source, asset.from), join(output, asset.to), {

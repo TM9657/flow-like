@@ -1117,6 +1117,28 @@ describe("Storage folder placeholders", () => {
 
 describe("Storage Craft editors", () => {
 	it.each([
+		["user", "app-a"],
+		["shared", "app-b"],
+	])(
+		"removes the agent target when scope changes to %s/%s",
+		async (scope, appId) => {
+			const location = "docs/part.solidcraft";
+			fixture.items = [item(location, false)];
+			await renderStorage("shared", "docs", { enableCraftEditors: true });
+			await act(async () => {
+				await fixture.loadFile?.(location);
+			});
+			expect(fixture.craftProps?.toolTarget).toEqual({
+				appId: "app-a",
+				surfaceId: "storage:shared",
+				componentId: location,
+			});
+			await renderStorage(scope, "docs", { enableCraftEditors: true, appId });
+			expect(fixture.craftProps?.toolTarget).toBeUndefined();
+		},
+	);
+
+	it.each([
 		["pdf", "pdfcraft"],
 		["pptx", "deckcraft"],
 		["xlsx", "gridcraft"],
@@ -1125,6 +1147,7 @@ describe("Storage Craft editors", () => {
 		["wav", "soundcraft"],
 		["mp4", "filmcraft"],
 		["dxf", "cadcraft"],
+		["solidcraft", "solidcraft"],
 	])(
 		"lazily opens .%s using %s and saves the exact selected object",
 		async (extension, id) => {
@@ -1146,6 +1169,11 @@ describe("Storage Craft editors", () => {
 				expect(fixture.craftProps?.initialEditing).toBe(true);
 			}
 			expect(fixture.craftProps?.viewer.id).toBe(id);
+			expect(fixture.craftProps?.toolTarget).toEqual({
+				appId: "app-a",
+				surfaceId: "storage:shared",
+				componentId: location,
+			});
 			const onProgress = vi.fn();
 			await act(async () => {
 				await fixture.craftProps?.onSave(
@@ -1203,22 +1231,36 @@ describe("Storage Craft editors", () => {
 			expect(!!container.querySelector('[aria-label^="Edit "]')).toBe(canWrite);
 		},
 	);
-	it("uses one distinct conversion target without replacing a legacy source", async () => {
-		fixture.items = [item("docs/legacy.xls", false)];
-		await renderStorage("shared", "docs", { enableCraftEditors: true });
-		await act(async () => {
-			await fixture.loadFile?.("docs/legacy.xls");
-		});
-		const outputName = fixture.craftProps?.outputFilename;
-		await act(async () => {
-			await fixture.craftProps?.onSave(new File(["bytes"], "untrusted.xls"));
-			await fixture.craftProps?.onSave(new File(["bytes"], "untrusted.xls"));
-		});
-		const uploads = fixture.backend.storageState.uploadStorageItems.mock.calls;
-		expect(uploads[0][2][0].name).toMatch(/^legacy-converted-.+\.xlsx$/);
-		expect(uploads[1][2][0].name).toBe(uploads[0][2][0].name);
-		expect(uploads[0][2][0].name).toBe(outputName);
-	});
+	it.each([
+		["xls", "gridcraft", "xlsx"],
+		["step", "solidcraft", "solidcraft"],
+		["glb", "solidcraft", "solidcraft"],
+	])(
+		"uses one distinct conversion target without replacing the .%s source",
+		async (extension, id, outputExtension) => {
+			const location = `docs/source.${extension}`;
+			fixture.items = [item(location, false)];
+			await renderStorage("shared", "docs", { enableCraftEditors: true });
+			expect(fixture.previewable.get(location)).toBe(true);
+			await act(async () => {
+				await fixture.loadFile?.(location);
+			});
+			expect(fixture.craftProps?.viewer.id).toBe(id);
+			const outputName = fixture.craftProps?.outputFilename;
+			await act(async () => {
+				await fixture.craftProps?.onSave(new File(["bytes"], "untrusted.bin"));
+				await fixture.craftProps?.onSave(new File(["bytes"], "untrusted.bin"));
+			});
+			const uploads =
+				fixture.backend.storageState.uploadStorageItems.mock.calls;
+			expect(uploads[0][1]).toBe("docs");
+			expect(uploads[0][2][0].name).toMatch(
+				new RegExp(`^source-converted-.+\\.${outputExtension}$`),
+			);
+			expect(uploads[1][2][0].name).toBe(uploads[0][2][0].name);
+			expect(uploads[0][2][0].name).toBe(outputName);
+		},
+	);
 	it("enforces write permissions and dirty navigation for all editors", async () => {
 		fixture.items = [item("drawing.vectorcraft", false)];
 		await renderStorage("shared", "", {

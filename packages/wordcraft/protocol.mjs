@@ -1,9 +1,18 @@
+import { validateMcpRequest } from "./mcp.mjs";
+
 export const CHANNEL = "flow-like-wordcraft";
 export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 
 export function validateCommand(data, session) {
 	if (!data || data.channel !== CHANNEL || data.session !== session)
 		return null;
+	if (
+		data.type === "mcp-cancel" &&
+		typeof data.requestId === "string" &&
+		data.requestId.length <= 128
+	)
+		return { type: data.type, requestId: data.requestId };
+	if (data.type === "mcp-request") return validateMcpRequest(data);
 	if (data.type === "open") {
 		if (typeof data.name !== "string" || !/\.docx$/i.test(data.name)) {
 			throw new Error("Only DOCX documents are supported.");
