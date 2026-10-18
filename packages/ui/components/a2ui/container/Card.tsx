@@ -81,7 +81,7 @@ export function A2UICard({
 				</CardHeader>
 			)}
 			{children.length > 0 && (
-				<CardContent>
+				<CardContent className="min-h-0 flex-1">
 					{children.map((child) => (
 						<Fragment key={child.key}>
 							{renderChild(child.id, child.scope)}

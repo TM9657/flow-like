@@ -38,7 +38,8 @@ const bridgeEntry = join(directory, "mcp-bridge.ts");
 await writeFile(
 	bridgeEntry,
 	`
-import { CraftMcpSession, executeCraftCommand } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/ui/components/storage/craft-mcp-session.ts"))};
+import { CraftMcpSession } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/ui/components/storage/craft-mcp-session.ts"))};
+import { executeDeviceCommand } from ${JSON.stringify(resolve(import.meta.dir, "../../packages/ui/lib/device-bridge.ts"))};
 let session;
 let editing = true;
 const post = message => document.querySelector("iframe")?.contentWindow?.postMessage({ ...message, channel: "flow-like-craft", session: window.runtimeSession }, location.origin);
@@ -54,7 +55,7 @@ window.craftBridge = {
     });
   },
   setReadOnly(readOnly) { editing = !readOnly; post({ type: "set-read-only", readOnly }); },
-  invoke(command, args) { return executeCraftCommand(command, args, { appId: "mcp-app", deadline: Date.now() + 30000 }); }
+  invoke(command, args) { return executeDeviceCommand(command, args, { appId: "mcp-app", deadline: Date.now() + 30000 }); }
 };
 `,
 );
@@ -262,7 +263,7 @@ const waitEvent = async (type: string, requestId?: string, after = 0) => {
 							type !== "error" &&
 							(!event.requestId || event.requestId === requestId)),
 				),
-		{ timeout: 180_000 },
+		{ timeout: 180_000, polling: 100 },
 		type,
 		requestId,
 		after,
@@ -331,9 +332,9 @@ const open = async (name: string, bytes: Uint8Array, readOnly = true) => {
 	);
 	return after;
 };
-const exportDesign = async (requestId: string) => {
+const exportDesign = async (requestId: string, purpose?: "download") => {
 	const after = await cursor();
-	await send({ type: "export", requestId, format: "solidcraft" });
+	await send({ type: "export", requestId, format: "solidcraft", purpose });
 	const exported = await waitEvent("exported", requestId, after);
 	assert.ok(exported.bytes && exported.bytes.length > 100);
 	assert.ok(Number.isSafeInteger(exported.revision));
@@ -390,19 +391,26 @@ try {
 	const beforeNavigation = await cursor();
 	const initialView = await viewportPixels();
 	await page.mouse.move(650, 450);
-	await page.mouse.down();
+	await page.mouse.down({ button: "right" });
 	for (let step = 1; step <= 5; step++) {
 		await page.mouse.move(650 + step * 20, 450 + step * 8);
 		await settle();
 	}
-	await page.mouse.up();
+	await page.mouse.up({ button: "right" });
 	await page.mouse.move(1100, 800);
 	await settle();
 	const orbitedView = await viewportPixels();
 	assertViewChanged(initialView, orbitedView, "Readonly orbit");
 	await page.mouse.wheel({ deltaY: -220 });
 	await settle();
-	assertViewChanged(orbitedView, await viewportPixels(), "Readonly zoom");
+	const zoomedView = await viewportPixels();
+	assertViewChanged(orbitedView, zoomedView, "Readonly zoom");
+	await page.mouse.click(623, 878);
+	await new Promise((resolve) => setTimeout(resolve, 700));
+	assertViewChanged(zoomedView, await viewportPixels(), "Native preview Fit");
+	await page.screenshot({
+		path: join(directory, "solidcraft-preview-fit.png"),
+	});
 	assert.equal(
 		await page.evaluate(
 			(after) =>
@@ -541,6 +549,110 @@ try {
 	await settle();
 	await page.screenshot({ path: join(directory, "solidcraft-sketch.png") });
 	console.log("solidcraft: native 2D sketch geometry survives save and reopen");
+	await load("new-model");
+	const beforeCreate = await cursor();
+	await send({ type: "create", name: "New model.solidcraft", readOnly: false });
+	assert.equal(
+		(await waitEvent("opened", undefined, beforeCreate)).readOnly,
+		false,
+	);
+	assert.equal((await waitEvent("dirty", undefined, beforeCreate)).dirty, true);
+	await settle();
+	await page.screenshot({
+		path: join(directory, "solidcraft-blank-editor.png"),
+	});
+	const blankDownload = await exportDesign("blank-download", "download");
+	assert.equal(blankDownload.document.name, "New model");
+	assert.deepEqual(blankDownload.document.features, []);
+	const beforeDownloadAck = await cursor();
+	await send({ type: "saved", revision: blankDownload.revision });
+	await settle();
+	assert.equal(
+		await page.evaluate(
+			(after) =>
+				window.events
+					.slice(after)
+					.some((event) => event.type === "dirty" && event.dirty === false),
+			beforeDownloadAck,
+		),
+		false,
+		"A download cannot acknowledge a new model as saved",
+	);
+	// The pinned native Create Sketch button opens its plane-selection dialog.
+	await page.mouse.click(134, 82);
+	await settle();
+	const beforeSketchDialog = await cursor();
+	await send({
+		type: "export",
+		requestId: "active-sketch-dialog",
+		format: "solidcraft",
+	});
+	assert.match(
+		(await waitEvent("error", "active-sketch-dialog", beforeSketchDialog))
+			.error ?? "",
+		/finish or cancel/i,
+	);
+	await page.keyboard.press("Escape");
+	await settle();
+	await command('solid.box {"length":20,"width":12,"height":8}');
+	const freshBox = await exportDesign("created-box");
+	assert.equal(freshBox.document.features.length, 1);
+	assert.equal(freshBox.document.features[0].type, "box");
+	// Native app-bar Undo and Redo operate on the newly created live document.
+	await page.mouse.click(168, 17);
+	await settle();
+	assert.deepEqual((await exportDesign("created-undo")).document.features, []);
+	await page.mouse.click(198, 17);
+	await settle();
+	const freshRedo = await exportDesign("created-redo");
+	assert.deepEqual(freshRedo.document.features, freshBox.document.features);
+	await page.keyboard.press("F6");
+	await new Promise((resolve) => setTimeout(resolve, 700));
+	await page.screenshot({
+		path: join(directory, "solidcraft-created-editing.png"),
+	});
+	await send({ type: "set-read-only", readOnly: true });
+	await settle();
+	await page.screenshot({
+		path: join(directory, "solidcraft-created-preview.png"),
+	});
+	const freshPreview = await exportDesign(
+		"created-preview-download",
+		"download",
+	);
+	assert.deepEqual(freshPreview.document.features, freshRedo.document.features);
+	assert.equal(freshPreview.revision, freshRedo.revision);
+	const beforePreviewAck = await cursor();
+	await send({ type: "saved", revision: freshRedo.revision });
+	assert.equal(
+		(await waitEvent("dirty", undefined, beforePreviewAck)).dirty,
+		false,
+	);
+	await send({ type: "set-read-only", readOnly: false });
+	await settle();
+	// Change theme through the native Preferences dialog, then inspect the preview.
+	await page.mouse.click(1210, 17);
+	await settle();
+	await page.mouse.click(620, 254);
+	await settle();
+	await page.mouse.click(889, 615);
+	await settle();
+	await page.screenshot({
+		path: join(directory, "solidcraft-editing-light.png"),
+	});
+	await send({ type: "set-read-only", readOnly: true });
+	await settle();
+	await page.mouse.click(623, 878);
+	await new Promise((resolve) => setTimeout(resolve, 700));
+	await page.screenshot({
+		path: join(directory, "solidcraft-preview-light.png"),
+	});
+	const lightPreview = await exportDesign("light-preview-download", "download");
+	assert.deepEqual(lightPreview.document.features, freshRedo.document.features);
+	assert.equal(lightPreview.revision, freshRedo.revision);
+	console.log(
+		"solidcraft: blank creation, native sketch dialog/undo/redo, download and save acknowledgement verified",
+	);
 	for (const [format, bytes] of [
 		["gltf", embeddedGltf],
 		["glb", embeddedGlb],
@@ -571,6 +683,14 @@ try {
 	);
 	await page.waitForFunction(() => !!window.craftBridge);
 	await page.evaluate(() => window.craftBridge.mount());
+	const beforeMcp = await exportDesign("before-mcp");
+	const foregroundPage = await browser.newPage();
+	await foregroundPage.bringToFront();
+	assert.equal(
+		await page.evaluate(() => document.visibilityState),
+		"hidden",
+		"The editor must be hidden while an external MCP client works",
+	);
 	const elementRef = "model/preview";
 	const pin = (await page.evaluate(
 		(elementRef) => window.craftBridge.invoke("craft.session", { elementRef }),
@@ -621,7 +741,13 @@ try {
 		assert.notEqual(result.isError, true, JSON.stringify(result));
 		return result;
 	};
-	const beforeMcp = await exportDesign("before-mcp");
+	const initialInspection = await tool("inspect_design");
+	assert.ok(Array.isArray(initialInspection.content));
+	const initialInspectedText = initialInspection.content.find(
+		(content) => content.type === "text",
+	)?.text;
+	assert.equal(typeof initialInspectedText, "string");
+	assert.equal(JSON.parse(initialInspectedText).revision, beforeMcp.revision);
 	const beforeMcpEdit = await cursor();
 	await tool("execute", {
 		command: "solid.box",
@@ -631,6 +757,27 @@ try {
 		(await waitEvent("dirty", undefined, beforeMcpEdit)).dirty,
 		true,
 	);
+	const inspected = await tool("inspect_design");
+	assert.ok(Array.isArray(inspected.content));
+	const inspectedText = inspected.content.find(
+		(content) => content.type === "text",
+	)?.text;
+	assert.equal(typeof inspectedText, "string");
+	const inspectedDesign = JSON.parse(inspectedText);
+	assert.ok(inspectedDesign.revision > (beforeMcp.revision ?? 0));
+	assert.ok(
+		inspectedDesign.timeline.some(
+			(feature: { type: string }) => feature.type === "BoxFeature",
+		),
+	);
+	assert.equal(
+		await page.evaluate(() => document.visibilityState),
+		"hidden",
+		"MCP discovery, inspection, and mutation must keep the editor hidden",
+	);
+	await page.bringToFront();
+	await foregroundPage.close();
+	assert.equal(await page.evaluate(() => document.visibilityState), "visible");
 	const afterMcp = await exportDesign("after-mcp");
 	const agentBox = afterMcp.document.features.find(
 		(feature: { type: string }) => feature.type === "box",
@@ -645,19 +792,7 @@ try {
 	);
 	assert.deepEqual(agentBox.corner, [30, 0, 0]);
 	assert.ok((afterMcp.revision ?? 0) > (beforeMcp.revision ?? 0));
-	const inspected = await tool("inspect_design");
-	assert.ok(Array.isArray(inspected.content));
-	const inspectedText = inspected.content.find(
-		(content) => content.type === "text",
-	)?.text;
-	assert.equal(typeof inspectedText, "string");
-	const inspectedDesign = JSON.parse(inspectedText);
 	assert.equal(inspectedDesign.revision, afterMcp.revision);
-	assert.ok(
-		inspectedDesign.timeline.some(
-			(feature: { type: string }) => feature.type === "BoxFeature",
-		),
-	);
 	await tool("undo");
 	const afterUndo = await exportDesign("after-mcp-undo");
 	assert.deepEqual(
@@ -756,7 +891,7 @@ try {
 	await page.evaluate(() => window.craftBridge.mount());
 	await assert.rejects(() => rpc("tools/list"), /document changed/i);
 	console.log(
-		"solidcraft: original MCP tool discovery, same-document edit and undo, read-only checks, and stale-session rejection verified",
+		"solidcraft: background MCP discovery, inspection and edit, same-document undo, read-only checks, and stale-session rejection verified",
 	);
 
 	for (const [name, contents, expected] of [

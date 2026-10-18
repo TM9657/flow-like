@@ -3,6 +3,24 @@ export const DOCX_MIME =
 	"application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 export const MAX_DOCX_BYTES = 50 * 1024 * 1024;
 
+const arrayBufferByteLength = Object.getOwnPropertyDescriptor(
+	ArrayBuffer.prototype,
+	"byteLength",
+)?.get;
+
+function validExportBytes(
+	value: unknown,
+	maxBytes: number,
+): value is ArrayBuffer {
+	try {
+		// A responsive preview receives cloned buffers in its own window realm.
+		const length = arrayBufferByteLength?.call(value);
+		return typeof length === "number" && length > 0 && length <= maxBytes;
+	} catch {
+		return false;
+	}
+}
+
 export type WordcraftMessage =
 	| { type: "ready" }
 	| { type: "opened"; warnings?: string[]; previewOnly?: boolean }
@@ -89,9 +107,7 @@ export function readWordcraftMessage(
 		case "exported":
 			if (
 				typeof data.requestId !== "string" ||
-				!(data.bytes instanceof ArrayBuffer) ||
-				data.bytes.byteLength === 0 ||
-				data.bytes.byteLength > maxBytes ||
+				!validExportBytes(data.bytes, maxBytes) ||
 				!Number.isSafeInteger(data.revision) ||
 				data.revision < 0
 			)

@@ -1,14 +1,14 @@
 "use client";
 
 import { type ComponentType, Suspense, lazy } from "react";
+import type { A2UIComponentType } from "./component-prop-manifest";
+import { registerComponentType } from "./component-type-registry";
 import type {
 	A2UIClientMessage,
 	A2UIComponent,
 	DataScope,
 	Style,
 } from "./types";
-import { registerComponentType } from "./component-type-registry";
-import type { A2UIComponentType } from "./component-prop-manifest";
 
 export { getRegisteredTypes } from "./component-type-registry";
 
@@ -33,6 +33,7 @@ import { A2UIAvatar } from "./display/Avatar";
 import { A2UIBadge } from "./display/Badge";
 import { A2UIBoundingBoxOverlay } from "./display/BoundingBoxOverlay";
 import { A2UIDivider } from "./display/Divider";
+import { A2UIFileEditor } from "./display/FileEditor";
 import { A2UIFilePreview } from "./display/FilePreview";
 import { A2UIIcon } from "./display/Icon";
 import { A2UIIframe } from "./display/Iframe";
@@ -49,13 +50,13 @@ import { A2UIVideo } from "./display/Video";
 
 import { A2UIAppLink } from "./interactive/AppLink";
 import { A2UIButton } from "./interactive/Button";
+import { A2UICameraView } from "./interactive/CameraView";
 import { A2UICheckbox } from "./interactive/Checkbox";
 import { A2UIDateTimeInput } from "./interactive/DateTimeInput";
 import { A2UIFeedback } from "./interactive/Feedback";
 import { A2UIFileInput } from "./interactive/FileInput";
 import { A2UIImageHotspot } from "./interactive/ImageHotspot";
 import { A2UIImageInput } from "./interactive/ImageInput";
-import { A2UICameraView } from "./interactive/CameraView";
 import { A2UIImageLabeler } from "./interactive/ImageLabeler";
 import { A2UILink } from "./interactive/Link";
 import { A2UIRadioGroup } from "./interactive/RadioGroup";
@@ -164,6 +165,7 @@ const builtInRenderers = {
 	tableRow: A2UITableRow as ComponentRenderer,
 	tableCell: A2UITableCell as ComponentRenderer,
 	filePreview: A2UIFilePreview as ComponentRenderer,
+	fileEditor: A2UIFileEditor as ComponentRenderer,
 	diffView: lazyRenderer(() =>
 		import("./display/DiffView").then(named("A2UIDiffView")),
 	),

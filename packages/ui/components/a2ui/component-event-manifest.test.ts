@@ -12,28 +12,35 @@ function component(type: A2UIComponent["type"]): A2UIComponent {
 }
 
 describe("component event manifest", () => {
-	test("declares typed file contexts without a package-widget payload envelope", () => {
-		const definitions = getComponentEventDefinitions(component("filePreview"));
-		for (const definition of definitions) {
-			expect(definition.contextSchema).toEqual(
-				getFilePreviewEventContextSchema(definition.id),
+	test.each(["filePreview", "fileEditor"] as const)(
+		"declares typed %s contexts without a package-widget payload envelope",
+		(type) => {
+			const definitions = getComponentEventDefinitions(component(type));
+			for (const definition of definitions) {
+				expect(definition.contextSchema).toEqual(
+					getFilePreviewEventContextSchema(definition.id),
+				);
+				expect(definition.contextSchema?.required).toContain("actionId");
+				expect(definition.contextSchema?.required).not.toContain("payload");
+			}
+			expect(definitions[0].contextSchema).toEqual(
+				definitions[1].contextSchema,
 			);
-			expect(definition.contextSchema?.required).toContain("actionId");
-			expect(definition.contextSchema?.required).not.toContain("payload");
-		}
-		expect(definitions[0].contextSchema).toEqual(definitions[1].contextSchema);
-		expect(getFilePreviewEventContextSchema("toString")).toBeUndefined();
-		expect(getFilePreviewEventContextSchema("load")).toBeUndefined();
-		const base = {
-			actionId: "dirtyChange",
-			src: "/file.pptx",
-			filename: "file.pptx",
-		};
-		const dirty = getFilePreviewEventContextSchema("dirtyChange");
-		expect(validateSchema(dirty, { ...base, dirty: true }).valid).toBe(true);
-		expect(validateSchema(dirty, { ...base, dirty: "true" }).valid).toBe(false);
-		expect(validateSchema(dirty, base).valid).toBe(false);
-	});
+			expect(getFilePreviewEventContextSchema("toString")).toBeUndefined();
+			expect(getFilePreviewEventContextSchema("load")).toBeUndefined();
+			const base = {
+				actionId: "dirtyChange",
+				src: "/file.pptx",
+				filename: "file.pptx",
+			};
+			const dirty = getFilePreviewEventContextSchema("dirtyChange");
+			expect(validateSchema(dirty, { ...base, dirty: true }).valid).toBe(true);
+			expect(validateSchema(dirty, { ...base, dirty: "true" }).valid).toBe(
+				false,
+			);
+			expect(validateSchema(dirty, base).valid).toBe(false);
+		},
+	);
 	test("covers every built-in component that currently dispatches configured actions", () => {
 		const expected: Record<string, string[]> = {
 			excalidraw: ["load", "save", "autoSave", "dirtyChange", "error"],
@@ -41,6 +48,7 @@ describe("component event manifest", () => {
 			boundingBoxOverlay: ["boxClick"],
 			button: ["click"],
 			filePreview: ["save", "saved", "dirtyChange", "error"],
+			fileEditor: ["save", "saved", "dirtyChange", "error"],
 			feedback: ["submit"],
 			textField: ["change", "input", "submit", "focus", "blur"],
 			richText: ["change", "blur", "imageUploaded", "imageUploadError"],
@@ -139,6 +147,7 @@ describe("component event manifest", () => {
 
 		for (const type of [
 			"filePreview",
+			"fileEditor",
 			"table",
 			"nivoChart",
 			"plotlyChart",

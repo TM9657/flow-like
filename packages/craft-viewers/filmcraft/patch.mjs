@@ -1,6 +1,6 @@
-import { prepareRmcpLive } from "../rmcp-live.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { prepareRmcpLive } from "../rmcp-live.mjs";
 import prepareBrowserCodecs from "./codec-patch.mjs";
 
 export default function prepare({
@@ -67,9 +67,9 @@ export default function prepare({
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         child.vertical_centered(|ui| {
             ui.add_space(32.0);
-            ui.heading("Save video");
-            ui.label("Save the edited timeline as MP4 using your browser's H.264 and AAC encoders.");
-            if ui.button("Save MP4").clicked() {
+            ui.heading("Save document");
+            ui.label("Use Save above the editor to export this video or project and run its save workflow.");
+            if ui.button("Save").clicked() {
                 if let Err(error) = app.session.execute("file.save", json!({})) {
                     app.ui.status = error.to_string();
                 }

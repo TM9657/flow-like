@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
 import { Button } from "../ui/button";
+import { downloadCraftFile } from "./craft-download";
 import type { CraftToolTarget } from "./craft-mcp-session";
 import { CraftMcpTargetButton } from "./craft-mcp-target-button";
 import {
@@ -29,13 +30,14 @@ import {
 
 interface WordcraftDocumentProps {
 	toolTarget?: CraftToolTarget;
-	url: string;
+	url?: string;
+	create?: boolean;
 	filename: string;
 	title?: ReactNode;
 	editable: boolean;
 	initialEditing?: boolean;
 	showDownload?: boolean;
-	onSave: (
+	onSave?: (
 		file: File,
 		onProgress?: BulkUploadProgressCallback,
 	) => Promise<void>;
@@ -49,7 +51,7 @@ export function WordcraftDocument(props: WordcraftDocumentProps) {
 	const [attempt, setAttempt] = useState(0);
 	return (
 		<WordcraftSession
-			key={`${props.url}\n${props.filename}\n${attempt}`}
+			key={`${props.url}\n${props.create}\n${props.filename}\n${attempt}`}
 			{...props}
 			onRetry={() => setAttempt((value) => value + 1)}
 		/>
@@ -59,9 +61,10 @@ export function WordcraftDocument(props: WordcraftDocumentProps) {
 function WordcraftSession({
 	toolTarget,
 	url,
+	create = false,
 	filename,
 	title,
-	editable,
+	editable: requestedEditable,
 	initialEditing = false,
 	showDownload = true,
 	onSave,
@@ -71,6 +74,7 @@ function WordcraftSession({
 	onReady,
 	onRetry,
 }: WordcraftDocumentProps & { onRetry: () => void }) {
+	const editable = requestedEditable && !!onSave;
 	const frame = useRef<HTMLIFrameElement>(null);
 	const [session] = useState(() => crypto.randomUUID());
 	const [status, setStatus] = useState<"loading" | "ready" | "failed">(
@@ -85,13 +89,14 @@ function WordcraftSession({
 	const [saveError, setSaveError] = useState(false);
 	const [saved, setSaved] = useState(false);
 	const [download, setDownload] = useState<Blob | null>(null);
-	const [downloadUrl, setDownloadUrl] = useState(url);
+	const [downloadUrl, setDownloadUrl] = useState(url ?? "");
 	const active = useRef(true);
 	const saveAction = useRef<() => void>(() => {});
 	const pending = useRef<{
 		id: string;
 		timer: ReturnType<typeof setTimeout>;
 		persisting: boolean;
+		purpose: "save" | "download";
 	} | null>(null);
 	const latest = useRef({
 		editable,
@@ -127,9 +132,11 @@ function WordcraftSession({
 
 	const post = useCallback(
 		(data: Record<string, unknown>, transfer: Transferable[] = []) => {
-			frame.current?.contentWindow?.postMessage(
+			const runtimeFrame = frame.current;
+			if (!runtimeFrame?.contentWindow) return;
+			runtimeFrame.contentWindow.postMessage(
 				{ channel: WORDCRAFT_CHANNEL, session, ...data },
-				window.location.origin,
+				new URL(runtimeFrame.src, runtimeFrame.ownerDocument.baseURI).origin,
 				transfer,
 			);
 		},
@@ -148,7 +155,7 @@ function WordcraftSession({
 		sessionId: session,
 		editor: "wordcraft",
 		channel: WORDCRAFT_CHANNEL,
-		frame: () => frame.current?.contentWindow ?? null,
+		frame: () => frame.current,
 		post,
 		ready: status === "ready",
 		editable,
@@ -158,9 +165,15 @@ function WordcraftSession({
 
 	useEffect(() => {
 		active.current = true;
+		const runtimeFrame = frame.current;
+		const ownerWindow = runtimeFrame?.ownerDocument.defaultView ?? window;
+		const origin = runtimeFrame
+			? new URL(runtimeFrame.src, runtimeFrame.ownerDocument.baseURI).origin
+			: window.location.origin;
 		const controller = new AbortController();
 		let ready = false;
 		let opened = false;
+		let sent = false;
 		let bytes: ArrayBuffer | undefined;
 		const timeout = setTimeout(() => {
 			if (!opened) {
@@ -172,7 +185,18 @@ function WordcraftSession({
 			}
 		}, 90_000);
 		const open = () => {
-			if (!ready || !bytes || controller.signal.aborted) return;
+			if (!ready || sent || (!create && !bytes) || controller.signal.aborted)
+				return;
+			sent = true;
+			if (create) {
+				post({
+					type: "create",
+					name: filename,
+					readOnly: !latest.current.editable || !latest.current.editing,
+				});
+				return;
+			}
+			if (!bytes) return;
 			post(
 				{
 					type: "open",
@@ -188,7 +212,7 @@ function WordcraftSession({
 			const message = readWordcraftMessage(
 				event,
 				frame.current?.contentWindow ?? null,
-				window.location.origin,
+				origin,
 				session,
 			);
 			if (!message || controller.signal.aborted) return;
@@ -233,7 +257,10 @@ function WordcraftSession({
 					)
 						break;
 					clearTimeout(request.timer);
-					if (!latest.current.editable) {
+					if (
+						request.purpose === "save" &&
+						(!latest.current.editable || !latest.current.onSave)
+					) {
 						setSaveError(true);
 						reportError("You do not have permission to save this file.");
 						finishSave();
@@ -242,9 +269,24 @@ function WordcraftSession({
 					request.persisting = true;
 					setSaveProgress({ stage: "Saving file", progress: null });
 					const file = new File([message.bytes], filename, { type: DOCX_MIME });
+					if (request.purpose === "download") {
+						try {
+							downloadCraftFile(file);
+						} catch (cause) {
+							reportError(fileSaveError(cause));
+						} finally {
+							finishSave();
+						}
+						break;
+					}
+					const onSave = latest.current.onSave;
+					if (!onSave) {
+						finishSave();
+						break;
+					}
 					void (async () => {
 						try {
-							await latest.current.onSave(file, (percent, detail) => {
+							await onSave(file, (percent, detail) => {
 								if (!active.current || pending.current !== request) return;
 								setSaveProgress(storageSaveProgress(percent, detail));
 							});
@@ -264,9 +306,17 @@ function WordcraftSession({
 				}
 			}
 		};
-		window.addEventListener("message", receive);
+		ownerWindow.addEventListener("message", receive);
 		void (async () => {
 			try {
+				if (create) {
+					open();
+					return;
+				}
+				if (!url)
+					throw new Error(
+						"Choose a document to open or create a new document.",
+					);
 				const response = await fetch(url, {
 					signal: controller.signal,
 					cache: "no-store",
@@ -298,11 +348,11 @@ function WordcraftSession({
 			clearTimeout(timeout);
 			if (pending.current) clearTimeout(pending.current.timer);
 			pending.current = null;
-			window.removeEventListener("message", receive);
+			ownerWindow.removeEventListener("message", receive);
 			latest.current.onDirtyChange?.(false);
 			latest.current.onBusyChange?.(false);
 		};
-	}, [url, filename, session, post, finishSave, reportError]);
+	}, [url, create, filename, session, post, finishSave, reportError]);
 
 	useEffect(() => {
 		if (!editable) setEditing(false);
@@ -310,28 +360,37 @@ function WordcraftSession({
 			post({ type: "set-read-only", readOnly: !editable || !editing });
 	}, [editable, editing, status, post]);
 
-	function saveDocument() {
-		if (!editable || !editing || pending.current || status !== "ready") return;
+	function exportDocument(purpose: "save" | "download") {
+		if (pending.current || status !== "ready") return;
+		if (purpose === "save" && (!editable || !editing || !onSave)) return;
 		const id = crypto.randomUUID();
 		setError("");
 		reportedError.current = null;
 		setSaveError(false);
-		setSaved(false);
+		if (purpose === "save") setSaved(false);
 		setSaving(true);
 		setSaveProgress({ stage: "Preparing file", progress: null });
 		latest.current.onBusyChange?.(true);
 		pending.current = {
 			id,
 			persisting: false,
+			purpose,
 			timer: setTimeout(() => {
 				setSaveError(true);
 				reportError("Preparing the document took too long.");
 				finishSave();
 			}, 30_000),
 		};
-		post({ type: "export", requestId: id });
+		post({
+			type: "export",
+			requestId: id,
+			...(purpose === "download" ? { purpose } : {}),
+		});
 	}
-	saveAction.current = saveDocument;
+	function saveDocument() {
+		exportDocument("save");
+	}
+	saveAction.current = onSave ? saveDocument : () => exportDocument("download");
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background">
@@ -344,7 +403,9 @@ function WordcraftSession({
 					aria-live="polite"
 				>
 					{saving
-						? "Saving..."
+						? pending.current?.purpose === "download"
+							? "Preparing download..."
+							: "Saving..."
 						: dirty
 							? "Unsaved changes"
 							: saved
@@ -368,7 +429,18 @@ function WordcraftSession({
 				{showDownload && (
 					<Button asChild variant="ghost" size="sm" className="shrink-0">
 						<a
-							href={downloadUrl}
+							href={downloadUrl || undefined}
+							aria-disabled={status !== "ready" || saving}
+							onClick={(event) => {
+								if (status !== "ready" || saving) {
+									event.preventDefault();
+									return;
+								}
+								if (editing || dirty || create) {
+									event.preventDefault();
+									exportDocument("download");
+								}
+							}}
 							download={filename}
 							target="_blank"
 							rel="noopener noreferrer"

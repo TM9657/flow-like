@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslation } from "@flow-like/locales";
+import { FilePlus2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../../lib/utils";
 import { AudioPreview } from "../../ui/audio-preview";
@@ -12,12 +13,16 @@ import { useData } from "../DataContext";
 import { resolveInlineStyle, resolveStyle } from "../StyleResolver";
 import { useAssetUrl } from "../hooks/use-asset-url";
 import { inferFileName } from "../media-source";
-import type { BoundValue, FilePreviewComponent } from "../types";
+import type {
+	BoundValue,
+	FileEditorComponent,
+	FilePreviewComponent,
+} from "../types";
 import {
 	FilePreviewDocument,
 	filePreviewSaveActions,
 } from "./FilePreviewDocument";
-import { resolveCraftPreview } from "./file-preview-source";
+import { resolveCraftEditor, resolveCraftPreview } from "./file-preview-source";
 
 function useResolved<T>(boundValue: BoundValue | undefined): T | undefined {
 	const { resolve } = useData();
@@ -85,13 +90,18 @@ export function A2UIFilePreview({
 	style,
 	componentId,
 	surfaceId,
-}: ComponentProps<FilePreviewComponent>) {
+}: ComponentProps<FilePreviewComponent | FileEditorComponent>) {
 	const { t } = useTranslation("common");
+	const preview = component.type === "filePreview" ? component : undefined;
 	const requested = {
+		type: component.type,
+		editor: useResolved<string>(
+			component.type === "fileEditor" ? component.editor : undefined,
+		),
 		source: useResolved<string>(component.src ?? component.url),
 		filename: useResolved<string>(component.filename),
 		mimeType: useResolved<string>(component.mimeType),
-		fileTypeOverride: useResolved<string>(component.fileType),
+		fileTypeOverride: useResolved<string>(preview?.fileType),
 	};
 	const requestedKey = JSON.stringify(requested);
 	const requestedRef = useRef(requested);
@@ -114,19 +124,22 @@ export function A2UIFilePreview({
 		dirty.current = false;
 		setSelected(requestedRef.current);
 	}, [requestedKey, selected, busy]);
-	const { source, filename, mimeType, fileTypeOverride } = selected;
+	const { source, filename, mimeType, fileTypeOverride, editor } = selected;
+	const creationFocused = selected.type === "fileEditor";
 	const { url: src, isLoading } = useAssetUrl(source);
 	const { isPreviewMode, appId } = useActionContext();
 	const editableRequested =
-		useResolved<boolean>(activeComponent.editable) ?? false;
+		useResolved<boolean>(activeComponent.editable) ?? creationFocused;
 	const initialEditing =
-		useResolved<boolean>(activeComponent.initialEditing) ?? false;
-	const showControls = useResolved<boolean>(component.showControls) ?? true;
-	const showDownload = useResolved<boolean>(component.showDownload) ?? false;
-	const audioVariant = useResolved<string>(component.variant);
-	const audioAutoPlay = useResolved<boolean>(component.autoPlay) ?? false;
-	const fit = useResolved<string>(component.fit) ?? "contain";
-	const loading = useResolved<"lazy" | "eager">(component.loading);
+		useResolved<boolean>(activeComponent.initialEditing) ?? creationFocused;
+	const showControls = useResolved<boolean>(preview?.showControls) ?? true;
+	const showDownload =
+		useResolved<boolean>(activeComponent.showDownload) ?? creationFocused;
+	const height = useResolved<string | number>(activeComponent.height);
+	const audioVariant = useResolved<string>(preview?.variant);
+	const audioAutoPlay = useResolved<boolean>(preview?.autoPlay) ?? false;
+	const fit = useResolved<string>(preview?.fit) ?? "contain";
+	const loading = useResolved<"lazy" | "eager">(preview?.loading);
 	const fallbackText =
 		useResolved<string>(component.fallbackText) ??
 		t("cannotPreviewThisFile", "Cannot preview this file");
@@ -138,26 +151,34 @@ export function A2UIFilePreview({
 	const fileType = source
 		? getFileType(source, mimeType, filename, fileTypeOverride)
 		: "unknown";
-	const craft = source
-		? resolveCraftPreview(source, filename, mimeType)
-		: undefined;
-	const editable =
-		editableRequested &&
-		isPreviewMode &&
-		filePreviewSaveActions(activeComponent).length > 0;
+	const craft = editor
+		? resolveCraftEditor(editor, source, filename, mimeType)
+		: !creationFocused && source
+			? resolveCraftPreview(source, filename, mimeType)
+			: undefined;
 	const automatic = !fileTypeOverride || fileTypeOverride === "unknown";
 	const documentKey = JSON.stringify([
 		appId,
 		surfaceId,
 		componentId,
+		selected.type,
 		source,
 		craft?.filename,
 		craft?.viewer.id,
 	]);
 	const [openedDocumentKey, setOpenedDocumentKey] = useState<string>();
+	const hasSaveWorkflow = filePreviewSaveActions(activeComponent).length > 0;
+	const create =
+		creationFocused &&
+		!source &&
+		!!craft &&
+		(hasSaveWorkflow || openedDocumentKey === documentKey);
+	const editable = editableRequested && isPreviewMode && hasSaveWorkflow;
 	const wantsDocument =
 		!!craft &&
-		(fileTypeOverride === "document" ||
+		(!!source || create) &&
+		(create ||
+			fileTypeOverride === "document" ||
 			editable ||
 			(automatic &&
 				!craft.viewer.nativePreview &&
@@ -202,7 +223,41 @@ export function A2UIFilePreview({
 			scaleDown: "object-scale-down",
 		}[fit] ?? "object-contain";
 
-	if (!src || error) {
+	if (creationFocused && !source && !create) {
+		return (
+			<div
+				ref={elementRef}
+				className={cn(
+					"flex min-h-48 items-center justify-center rounded-xl border border-dashed bg-muted/20 p-6",
+					resolveStyle(style),
+				)}
+				style={resolveInlineStyle(style)}
+			>
+				<div className="flex max-w-sm flex-col items-center gap-3 text-center">
+					<div className="rounded-xl border bg-background p-3 text-muted-foreground">
+						<FilePlus2 className="size-6" />
+					</div>
+					<div className="space-y-1">
+						<p className="text-sm font-medium">
+							{craft?.viewer.label ?? "File editor"}
+						</p>
+						<p className="text-sm text-muted-foreground">
+							{!craft
+								? "Choose an editor in the component's properties."
+								: "Connect a Save workflow in Actions to start a new document."}
+						</p>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	if (
+		(!src && !create) ||
+		error ||
+		(editor && !craft) ||
+		(creationFocused && !craft)
+	) {
 		return (
 			<div
 				ref={elementRef}
@@ -219,7 +274,7 @@ export function A2UIFilePreview({
 		);
 	}
 
-	if (useDocument && craft && source) {
+	if (useDocument && craft) {
 		return (
 			<div
 				ref={elementRef}
@@ -227,15 +282,16 @@ export function A2UIFilePreview({
 					"w-full h-full min-h-0 flex flex-col",
 					resolveStyle(style),
 				)}
-				style={resolveInlineStyle(style)}
+				style={{ ...(height ? { height } : {}), ...resolveInlineStyle(style) }}
 			>
 				<FilePreviewDocument
 					key={documentKey}
 					component={activeComponent}
 					componentId={componentId}
 					surfaceId={surfaceId}
-					source={source}
+					source={source ?? ""}
 					url={src}
+					create={create}
 					filename={craft.filename}
 					viewer={craft.viewer}
 					editable={editable}
@@ -247,6 +303,7 @@ export function A2UIFilePreview({
 			</div>
 		);
 	}
+	if (!src) return null;
 
 	if (fileType === "pdf") {
 		return (

@@ -1,4 +1,4 @@
-import { handleMcpControl, mcpError } from "./mcp.mjs";
+import { handleMcpControl, isCraftHostSender, mcpError } from "./mcp.mjs";
 import { CHANNEL, MAX_DOCUMENT_BYTES, validateCommand } from "./protocol.js";
 
 const session = new URLSearchParams(location.search).get("session");
@@ -114,7 +114,8 @@ window.flowLikeCraftTake = () => {
 };
 
 window.addEventListener("message", (event) => {
-	if (event.source !== window.parent || event.origin !== origin) return;
+	if (event.origin !== origin || !isCraftHostSender(event.source, window))
+		return;
 	try {
 		const command = validateCommand(event.data, session, manifest);
 		if (!command) return;
@@ -151,10 +152,16 @@ window.addEventListener("message", (event) => {
 		if (command.type === "set-read-only") {
 			for (let index = queue.length - 1; index >= 0; index--) {
 				if (queue[index].type === "set-read-only") queue.splice(index, 1);
-				else if (command.readOnly && queue[index].type === "open")
+				else if (
+					command.readOnly &&
+					["open", "create"].includes(queue[index].type)
+				)
 					queue[index].readOnly = true;
 			}
-			if (command.readOnly && !queue.some((item) => item.type === "open"))
+			if (
+				command.readOnly &&
+				!queue.some((item) => ["open", "create"].includes(item.type))
+			)
 				queue.unshift(command);
 			else queue.push(command);
 		} else queue.push(command);

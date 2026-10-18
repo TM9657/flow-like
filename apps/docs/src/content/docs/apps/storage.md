@@ -110,15 +110,16 @@ input. Open its **Editor Element** picker, paste the copied reference into the
 search field, and choose **Use reference**. Leave **Tools** empty to expose the
 tools provided by that editor, or enter the exact tool names the agent should use.
 
-For an editor on an app page, select its `filePreview` component directly in
-**Editor Element**, or connect the **Element** output of **Get Element** to that
-input. **Get Element** must target the `filePreview` component containing the
-open editor. It passes the resolved element reference to the registration node.
+For an editor on an app page, select its `filePreview` or `fileEditor` component
+directly in **Editor Element**, or connect the **Element** output of **Get Element**
+to that input. **Get Element** must target the component containing the open
+editor. It passes the resolved element reference to the registration node.
 
 The agent works on the open document, including unsaved changes. Choose **Save**
 to persist those changes through the editor's existing save path. Read-only
 documents allow tools identified as read-only by the editor. Run the flow in
-the same window and keep the editor tab visible while the agent uses it.
+the same window and keep the document open while the agent uses it. Editor tools
+can run while the Flow-Like window or browser tab is in the background.
 Closing, reloading or replacing the document requires running the registration
 node again.
 

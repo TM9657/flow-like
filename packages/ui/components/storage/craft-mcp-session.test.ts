@@ -68,6 +68,7 @@ beforeEach(() => {
 afterEach(() => {
 	session.dispose();
 	vi.useRealTimers();
+	vi.restoreAllMocks();
 });
 
 describe("live Craft MCP sessions", () => {
@@ -102,27 +103,81 @@ describe("live Craft MCP sessions", () => {
 		expect(post).not.toHaveBeenCalled();
 	});
 
-	it("forwards the original JSON-RPC message and response through the device bridge", async () => {
-		const deadline = Date.now() + 10_000;
-		const reply = executeDeviceCommand("craft.mcp", args(), {
-			...context,
-			deadline,
-		});
-		await vi.dynamicImportSettled();
-		expect(post).toHaveBeenCalledWith({
-			type: "mcp-request",
-			requestId: expect.any(String),
-			message,
-			deadlineAtMs: deadline,
-		});
-		const response = {
-			jsonrpc: "2.0",
-			id: 1,
-			result: { tools: [], nextCursor: "next" },
-		};
-		receive(response);
-		await expect(reply).resolves.toBe(response);
-	});
+	it.each([
+		{ visibility: "visible", method: "tools/list", params: {} },
+		{ visibility: "hidden", method: "tools/list", params: {} },
+		{
+			visibility: "hidden",
+			method: "tools/call",
+			params: { name: "execute", arguments: { command: "solid.box" } },
+		},
+	] as const)(
+		"forwards $method through the device bridge while $visibility",
+		async ({ visibility, method, params }) => {
+			vi.spyOn(document, "visibilityState", "get").mockReturnValue(visibility);
+			await expect(
+				executeDeviceCommand("craft.session", { elementRef }, context),
+			).resolves.toEqual({ sessionId: "session-a", editor: "solidcraft" });
+			const request = { ...message, method, params };
+			const deadline = Date.now() + 10_000;
+			const reply = executeDeviceCommand("craft.mcp", args(request), {
+				...context,
+				deadline,
+			});
+			await vi.dynamicImportSettled();
+			expect(post).toHaveBeenCalledWith({
+				type: "mcp-request",
+				requestId: expect.any(String),
+				message: request,
+				deadlineAtMs: deadline,
+			});
+			const response = {
+				jsonrpc: "2.0",
+				id: 1,
+				result: { tools: [], nextCursor: "next" },
+			};
+			receive(response);
+			await expect(reply).resolves.toBe(response);
+		},
+	);
+
+	it.each(["craft.session", "craft.mcp"])(
+		"rejects aborted and expired %s requests through the background device bridge",
+		async (command) => {
+			vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+			const controller = new AbortController();
+			controller.abort();
+			await expect(
+				executeDeviceCommand(command, args(), {
+					...context,
+					signal: controller.signal,
+				}),
+			).rejects.toMatchObject({ code: "cancelled" });
+			await expect(
+				executeDeviceCommand(command, args(), {
+					...context,
+					deadline: Date.now() - 1,
+				}),
+			).rejects.toMatchObject({ code: "expired" });
+			expect(post).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each(["craft.session", "craft.mcp"])(
+		"requires an open document for %s while the app is hidden",
+		async (command) => {
+			vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+			state.ready = false;
+			await expect(
+				executeDeviceCommand(command, args(), context),
+			).rejects.toMatchObject({ code: "session_closed" });
+			session.dispose();
+			await expect(
+				executeDeviceCommand(command, args(), context),
+			).rejects.toMatchObject({ code: "session_unavailable" });
+			expect(post).not.toHaveBeenCalled();
+		},
+	);
 
 	it("allows discovered read-only tools while refusing mutation until editing is enabled", async () => {
 		state.editing = false;
@@ -405,21 +460,28 @@ describe("live Craft MCP sessions", () => {
 		receive({ jsonrpc: "2.0", id: 1, result: { tools: [] } });
 	});
 
-	it("cancels queued work when the invoking run is cancelled", async () => {
-		const controller = new AbortController();
-		const reply = executeCraftCommand("craft.mcp", args(), {
-			...context,
-			signal: controller.signal,
-		});
-		const requestId = post.mock.calls[0][0].requestId;
-		const rejected = expect(reply).rejects.toMatchObject({ code: "cancelled" });
-		controller.abort();
-		await rejected;
-		expect(post.mock.calls.at(-1)?.[0]).toEqual({
-			type: "mcp-cancel",
-			requestId,
-		});
-	});
+	it.each(["visible", "hidden"] as const)(
+		"cancels queued work through the device bridge while %s",
+		async (visibility) => {
+			vi.spyOn(document, "visibilityState", "get").mockReturnValue(visibility);
+			const controller = new AbortController();
+			const reply = executeDeviceCommand("craft.mcp", args(), {
+				...context,
+				signal: controller.signal,
+			});
+			const rejected = expect(reply).rejects.toMatchObject({
+				code: "cancelled",
+			});
+			await vi.dynamicImportSettled();
+			const requestId = post.mock.calls[0][0].requestId;
+			controller.abort();
+			await rejected;
+			expect(post.mock.calls.at(-1)?.[0]).toEqual({
+				type: "mcp-cancel",
+				requestId,
+			});
+		},
+	);
 
 	it("rejects a response whose JSON-RPC id does not match the pending request", async () => {
 		const reply = executeCraftCommand("craft.mcp", args(), context);

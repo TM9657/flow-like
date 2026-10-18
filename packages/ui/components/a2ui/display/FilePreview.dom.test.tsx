@@ -3,6 +3,7 @@ import { type ComponentProps, act, useEffect, useState } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IHelperState } from "../../../state/backend-state/helper-state";
+import { normalizeComponent } from "../../builder/componentDefaults";
 import type { CraftDocument } from "../../storage/craft-document";
 import type {
 	useComponentEventTrigger,
@@ -11,7 +12,12 @@ import type {
 } from "../ActionHandler";
 import { applyElementUpdate } from "../apply-a2ui-message";
 import { getFilePreviewEventContextSchema } from "../file-preview-events";
-import type { BoundValue, FilePreviewComponent } from "../types";
+import type {
+	BoundValue,
+	FileEditorComponent,
+	FilePreviewComponent,
+} from "../types";
+import { A2UIFileEditor } from "./FileEditor";
 import { A2UIFilePreview } from "./FilePreview";
 
 type EditorProps = Omit<ComponentProps<typeof CraftDocument>, "viewer"> & {
@@ -218,10 +224,38 @@ async function render(overrides: Partial<FilePreviewComponent> = {}) {
 	await act(async () => vi.dynamicImportSettled());
 }
 
+async function renderEditor(overrides: Partial<FileEditorComponent> = {}) {
+	await act(async () => {
+		root?.render(
+			<A2UIFileEditor
+				component={{
+					id: "preview",
+					type: "fileEditor",
+					editor: { literalString: "solidcraft" },
+					...overrides,
+				}}
+				componentId="preview"
+				surfaceId="page-1"
+				renderChild={() => null}
+			/>,
+		);
+	});
+	await act(async () => vi.dynamicImportSettled());
+}
+
 function editor() {
 	if (!mocks.editor || !container.querySelector("[data-document]"))
 		throw new Error("No document editor is mounted");
 	return mocks.editor;
+}
+
+function saveFile(
+	file: File,
+	onProgress?: Parameters<NonNullable<EditorProps["onSave"]>>[1],
+) {
+	const onSave = editor().onSave;
+	if (!onSave) throw new Error("No Save workflow is configured");
+	return onSave(file, onProgress);
 }
 
 function editedFile() {
@@ -233,6 +267,170 @@ function editedFile() {
 function eventNames() {
 	return mocks.triggerEvent.mock.calls.map(([name]) => name);
 }
+
+describe("A2UI file creation", () => {
+	it.each([
+		["wordcraft", "docx"],
+		["pdfcraft", "pdf"],
+		["deckcraft", "pptx"],
+		["gridcraft", "xlsx"],
+		["vectorcraft", "vectorcraft"],
+		["photocraft", "pcraft"],
+		["soundcraft", "scraftz"],
+		["filmcraft", "fcproj"],
+		["designcraft", "designcraft"],
+		["cadcraft", "dxf"],
+		["solidcraft", "solidcraft"],
+	])(
+		"creates a blank %s document when its Save workflow is configured",
+		async (id, extension) => {
+			await renderEditor({
+				editor: { literalString: id },
+				eventHandlers: { save: [saveAction] },
+			});
+			expect(
+				container
+					.querySelector("[data-document]")
+					?.getAttribute("data-document"),
+			).toBe(id);
+			expect(editor()).toMatchObject({
+				create: true,
+				filename: `Untitled.${extension}`,
+				editable: true,
+				initialEditing: true,
+				showDownload: true,
+				toolTarget: {
+					appId: "app-1",
+					surfaceId: "page-1",
+					componentId: "preview",
+				},
+			});
+			expect(editor().url).toBeUndefined();
+			expect(fetch).not.toHaveBeenCalled();
+			expect(mocks.upload).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each([
+		undefined,
+		{ "*": [saveAction] },
+		{ save: [] },
+		{ save: [{ name: "navigate_page", context: { route: "/" } }] },
+	])(
+		"shows setup without opening a blank editor until an exact Save workflow exists: %j",
+		async (eventHandlers) => {
+			await renderEditor({ eventHandlers });
+			expect(container.querySelector("[data-document]")).toBeNull();
+			expect(container.textContent).toContain("Connect a Save workflow");
+			expect(fetch).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each([false, true])(
+		"loads an optional initial model after normalization=%s",
+		async (normalized) => {
+			const component: FileEditorComponent = {
+				type: "fileEditor",
+				editor: { literalString: "solidcraft" },
+				url: { literalString: "/files/part.step" },
+				eventHandlers: { save: [saveAction] },
+			};
+			await renderEditor(
+				normalized
+					? (normalizeComponent(component) as FileEditorComponent)
+					: component,
+			);
+			expect(editor()).toMatchObject({
+				create: false,
+				filename: "part.step",
+				editable: true,
+				initialEditing: true,
+				viewer: { id: "solidcraft", extension: "step" },
+				url: expect.stringContaining("/files/part.step"),
+			});
+		},
+	);
+
+	it("keeps a source image on its native preview until saving is configured", async () => {
+		await renderEditor({
+			editor: { literalString: "photocraft" },
+			src: { literalString: "/files/picture.png" },
+		});
+		expect(container.querySelector("img")).not.toBeNull();
+		expect(container.querySelector("[data-document]")).toBeNull();
+	});
+
+	it("keeps File Preview source-based even when editable is enabled", async () => {
+		await render({ src: undefined, ...editableProps });
+		expect(container.querySelector("[data-document]")).toBeNull();
+	});
+
+	it("retains a blank draft read-only when the Save workflow is removed", async () => {
+		await renderEditor({ eventHandlers: { save: [saveAction] } });
+		const mount = mocks.mounts;
+		await act(async () => editor().onDirtyChange?.(true));
+		await renderEditor();
+		expect(mocks.mounts).toBe(mount);
+		expect(editor()).toMatchObject({ create: true, editable: false });
+		expect(editor().onSave).toBeUndefined();
+	});
+
+	it("saves a new document through upload and the existing bound event contract", async () => {
+		await renderEditor({
+			value: { path: "$.data.createdFile" },
+			eventHandlers: { save: [saveAction] },
+		});
+		const file = new File(["native model"], "Untitled.solidcraft", {
+			type: "application/octet-stream",
+		});
+		await act(async () => saveFile(file));
+		expect(mocks.upload).toHaveBeenCalledWith(file, false);
+		expect(mocks.triggerEvent).toHaveBeenCalledWith(
+			"save",
+			expect.anything(),
+			expect.objectContaining({
+				src: "",
+				filename: file.name,
+				file: expect.objectContaining({ name: file.name, url: temporary.url }),
+			}),
+			expect.objectContaining({ requireSuccess: true }),
+		);
+		expect(mocks.setByPath).toHaveBeenCalledWith(
+			"$.data.createdFile",
+			expect.objectContaining({ name: file.name }),
+		);
+		expect(eventNames()).toEqual(["save", "saved"]);
+	});
+
+	it("keeps Set Media Source updates compatible with the selected editor", async () => {
+		const updated = applyElementUpdate(
+			{
+				id: "preview",
+				component: {
+					id: "preview",
+					type: "fileEditor",
+					editor: { literalString: "solidcraft" },
+				},
+			},
+			{
+				type: "setMediaSource",
+				src: "/files/part.step",
+				filename: "part.step",
+				mimeType: "model/step",
+				mediaKind: "file",
+			},
+		);
+		expect(updated.component).not.toHaveProperty("fileType");
+		await renderEditor({
+			...(updated.component as FileEditorComponent),
+			eventHandlers: { save: [saveAction] },
+		});
+		expect(editor()).toMatchObject({
+			create: false,
+			viewer: { id: "solidcraft", extension: "step" },
+		});
+	});
+});
 
 describe("A2UI file preview routing", () => {
 	it.each([
@@ -431,7 +629,7 @@ describe("A2UI file preview routing", () => {
 		mocks.context.isPreviewMode = false;
 		await render(editableProps);
 		expect(editor().editable).toBe(false);
-		await expect(editor().onSave(editedFile())).rejects.toThrow(
+		await expect(saveFile(editedFile())).rejects.toThrow(
 			"Editing is no longer enabled",
 		);
 		expect(mocks.upload).not.toHaveBeenCalled();
@@ -457,7 +655,7 @@ describe("A2UI document save actions", () => {
 		const onProgress = vi.fn();
 		let saving!: Promise<void>;
 		await act(async () => {
-			saving = editor().onSave(file, onProgress);
+			saving = saveFile(file, onProgress);
 		});
 		const value = {
 			name: file.name,
@@ -518,7 +716,7 @@ describe("A2UI document save actions", () => {
 	it("does not emit saved when the save workflow rejects", async () => {
 		mocks.triggerEvent.mockRejectedValueOnce(new Error("Destination rejected"));
 		await render(editableProps);
-		await expect(editor().onSave(editedFile())).rejects.toThrow(
+		await expect(saveFile(editedFile())).rejects.toThrow(
 			"Destination rejected",
 		);
 		expect(eventNames()).toEqual(["save"]);
@@ -533,9 +731,7 @@ describe("A2UI document save actions", () => {
 	it("does not publish metadata or run save when uploading fails", async () => {
 		mocks.upload.mockRejectedValueOnce(new Error("Upload failed"));
 		await render(editableProps);
-		await expect(editor().onSave(editedFile())).rejects.toThrow(
-			"Upload failed",
-		);
+		await expect(saveFile(editedFile())).rejects.toThrow("Upload failed");
 		expect(mocks.setElementValue).not.toHaveBeenCalled();
 		expect(mocks.setByPath).not.toHaveBeenCalled();
 		expect(mocks.triggerEvent).not.toHaveBeenCalled();
@@ -552,7 +748,7 @@ describe("A2UI document save actions", () => {
 		async (url) => {
 			mocks.upload.mockResolvedValueOnce(url);
 			await render(editableProps);
-			await expect(editor().onSave(editedFile())).rejects.toThrow();
+			await expect(saveFile(editedFile())).rejects.toThrow();
 			expect(mocks.setElementValue).not.toHaveBeenCalled();
 			expect(mocks.setByPath).not.toHaveBeenCalled();
 			expect(mocks.triggerEvent).not.toHaveBeenCalled();
@@ -563,7 +759,7 @@ describe("A2UI document save actions", () => {
 		mocks.context.resolveTemporaryUploadTarget.mockResolvedValue("local");
 		await render(editableProps);
 		const file = editedFile();
-		await act(async () => editor().onSave(file));
+		await act(async () => saveFile(file));
 		expect(mocks.upload).toHaveBeenCalledExactlyOnceWith(file, false);
 		expect(mocks.context.resolveTemporaryUploadTarget).not.toHaveBeenCalled();
 	});
@@ -573,9 +769,7 @@ describe("A2UI document save actions", () => {
 		mocks.upload.mockReturnValueOnce(upload.promise);
 		await render(editableProps);
 		const file = editedFile();
-		const saving = editor()
-			.onSave(file)
-			.catch((error: Error) => error);
+		const saving = saveFile(file).catch((error: Error) => error);
 		await act(async () => {
 			await Promise.resolve();
 		});
@@ -627,7 +821,7 @@ describe("A2UI document save actions", () => {
 		await act(async () => {
 			editor().onDirtyChange?.(true);
 			editor().onError?.("Export failed");
-			await editor().onSave(editedFile());
+			await saveFile(editedFile());
 		});
 		expect(eventNames()).toEqual(["dirtyChange", "error", "save", "saved"]);
 		for (const [name, , context] of mocks.triggerEvent.mock.calls) {
@@ -679,6 +873,8 @@ describe("A2UI document session preservation", () => {
 	it("retains an opened media editor as read-only when editing is revoked", async () => {
 		const media = { src: { literalString: "/files/picture.png" } };
 		await render({ ...editableProps, ...media });
+		const previousSave = editor().onSave;
+		if (!previousSave) throw new Error("Expected a configured Save workflow");
 		const node = container.querySelector("[data-document]");
 		await act(async () => {
 			editor().onReady?.();
@@ -688,7 +884,8 @@ describe("A2UI document session preservation", () => {
 		expect(container.querySelector("[data-document]")).toBe(node);
 		expect(editor().editable).toBe(false);
 		expect(container.querySelector("img")).toBeNull();
-		await expect(editor().onSave(editedFile())).rejects.toThrow(
+		expect(editor().onSave).toBeUndefined();
+		await expect(previousSave(editedFile())).rejects.toThrow(
 			"Editing is no longer enabled",
 		);
 		expect(mocks.upload).not.toHaveBeenCalled();
@@ -735,7 +932,7 @@ describe("A2UI document session preservation", () => {
 		});
 		expect(window.confirm).toHaveBeenCalledTimes(1);
 		expect(editor().filename).toBe("presentation.pptx");
-		await act(async () => editor().onSave(editedFile()));
+		await act(async () => saveFile(editedFile()));
 		expect(mocks.triggerEvent).toHaveBeenCalledWith(
 			"save",
 			{ eventHandlers: { save: [originalAction] } },

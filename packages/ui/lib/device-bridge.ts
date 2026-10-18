@@ -211,13 +211,14 @@ export async function executeDeviceCommand(
 	args: Record<string, unknown>,
 	context: DeviceContext,
 ): Promise<unknown> {
-	assertLive(context);
+	// Open editor sessions serve MCP clients while Flow-Like is in the background.
 	if (command === "craft.session" || command === "craft.mcp") {
 		const { executeCraftCommand } = await import(
 			"../components/storage/craft-mcp-session"
 		);
 		return executeCraftCommand(command, args, context);
 	}
+	assertLive(context);
 	if (command === "audio.play") {
 		const { playFrontendAudio } = await import("./frontend-audio");
 		return playFrontendAudio(args, context);

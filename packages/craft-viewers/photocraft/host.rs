@@ -114,6 +114,7 @@ async fn start_app() -> Result<(), String> {
                     name: String::new(),
                     document_id: None,
                     reported_dirty: false,
+                    new_document: false,
                     last_exported: None,
                     preview_revision: 0,
                     texture: None,
@@ -131,6 +132,7 @@ struct Host {
     name: String,
     document_id: Option<photocraft_doc::DocId>,
     reported_dirty: bool,
+    new_document: bool,
     last_exported: Option<u64>,
     preview_revision: u64,
     texture: Option<egui::TextureHandle>,
@@ -163,6 +165,28 @@ impl Host {
                 })
                 .ok_or("Invalid MCP request.")?;
                 event("mcp-response", detail);
+            }
+            Some("create") => {
+                if self.opened {
+                    return Err("This editor already has a file open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A file name is required.")?;
+                if !INPUTS.contains(&extension(&name).as_str()) {
+                    return Err("This image format is unsupported.".into());
+                }
+                self.app
+                    .session
+                    .execute("file.new", json!({"name": name}))
+                    .map_err(|e| e.to_string())?;
+                self.app.sync_views();
+                self.document_id = self.app.session.active().map(|state| state.doc.id);
+                self.name = name;
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                self.opened = true;
+                self.new_document = true;
+                event("opened", json!({"readOnly": self.read_only}));
             }
             Some("open") => {
                 if self.opened {
@@ -203,7 +227,9 @@ impl Host {
                 self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
             }
             Some("export") => {
-                if !self.opened || self.read_only {
+                let download =
+                    field(&message, "purpose").as_string().as_deref() == Some("download");
+                if !self.opened || (self.read_only && !download) {
                     return Err("Enable editing before saving.".into());
                 }
                 if self.app.session.active().map(|state| state.doc.id) != self.document_id {
@@ -263,7 +289,9 @@ impl Host {
                     return Err("The exported file exceeds 50 MiB or is empty.".into());
                 }
                 let revision = state.revision;
-                self.last_exported = Some(revision);
+                if !download {
+                    self.last_exported = Some(revision);
+                }
                 emit("exported", &json!({"requestId": request, "revision": revision, "warnings": exported.warnings}).to_string(), &exported.bytes);
             }
             Some("saved") => {
@@ -274,6 +302,7 @@ impl Host {
                             && state.revision as f64 == revision
                         {
                             state.saved_revision = state.revision;
+                            self.new_document = false;
                             self.last_exported = None;
                         }
                     }
@@ -285,12 +314,13 @@ impl Host {
     }
 
     fn report_dirty(&mut self) {
-        let dirty = self
-            .app
-            .session
-            .documents()
-            .iter()
-            .any(|state| state.is_dirty());
+        let dirty = self.new_document
+            || self
+                .app
+                .session
+                .documents()
+                .iter()
+                .any(|state| state.is_dirty());
         if dirty != self.reported_dirty {
             self.reported_dirty = dirty;
             event("dirty", json!({"dirty": dirty}));

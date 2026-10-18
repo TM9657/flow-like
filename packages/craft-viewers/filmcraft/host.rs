@@ -131,6 +131,7 @@ async fn start_app() -> Result<(), String> {
 struct Pending {
     request: String,
     revision: u64,
+    download: bool,
 }
 struct Opening {
     name: String,
@@ -182,6 +183,28 @@ impl Host {
                 .ok_or("Invalid MCP request.")?;
                 event("mcp-response", detail);
             }
+            Some("create") => {
+                if self.opened || self.opening.is_some() {
+                    return Err("A video project is already open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A project name is required.")?;
+                if !name.to_ascii_lowercase().ends_with(".fcproj") {
+                    return Err("New video projects use the .fcproj format.".into());
+                }
+                self.execute(
+                    "file.newProject",
+                    json!({"name": name.trim_end_matches(".fcproj")}),
+                )?;
+                self.execute("file.newSequence", json!({"name": "Sequence 1"}))?;
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                self.opened = true;
+                event(
+                    "opened",
+                    json!({"revision": self.web.app.session.revision, "readOnly": self.read_only}),
+                );
+            }
             Some("open") => {
                 if self.opened || self.opening.is_some() {
                     return Err("A video file is already open.".into());
@@ -204,6 +227,22 @@ impl Host {
                 let path = format!("/files/{name}");
                 let bytes = data.to_vec();
                 crate::fs::put(&path, bytes.clone());
+                if name.to_ascii_lowercase().ends_with(".fcproj") {
+                    let result = self.execute("file.open", json!({"path": path}))?;
+                    if result["missingMedia"]
+                        .as_u64()
+                        .is_some_and(|count| count > 0)
+                    {
+                        return Err("This video project references separate media files. Open a self-contained project or a rendered video.".into());
+                    }
+                    self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                    self.opened = true;
+                    event(
+                        "opened",
+                        json!({"revision": self.web.app.session.revision, "readOnly": self.read_only}),
+                    );
+                    return Ok(());
+                }
                 self.opening = Some(Opening {
                     name: name.clone(),
                     path,
@@ -219,14 +258,13 @@ impl Host {
                 self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true)
             }
             Some("export") => {
-                if !self.opened || self.read_only {
+                let download =
+                    field(&message, "purpose").as_string().as_deref() == Some("download");
+                if !self.opened || (self.read_only && !download) {
                     return Err("Enable editing before saving.".into());
                 }
                 if self.pending.is_some() {
                     return Err("A video export is already in progress.".into());
-                }
-                if field(&message, "format").as_string().as_deref() != Some("mp4") {
-                    return Err("Video exports use MP4.".into());
                 }
                 let request = field(&message, "requestId")
                     .as_string()
@@ -234,6 +272,30 @@ impl Host {
                 self.web.app.stop();
                 let revision = self.web.app.session.revision;
                 let session = &self.web.app.session;
+                if field(&message, "format").as_string().as_deref() == Some("fcproj") {
+                    let bytes = filmcraft_format::encode_with_view(
+                        &session.project,
+                        Some(&session.project_view()),
+                        false,
+                    );
+                    if bytes.is_empty() || bytes.len() > MAX_BYTES {
+                        return Err("The exported project is empty or exceeds 200 MiB.".into());
+                    }
+                    if !download {
+                        self.last_exported = Some(revision);
+                    }
+                    emit(
+                        "exported",
+                        &json!({"requestId": request, "revision": revision}).to_string(),
+                        &bytes,
+                    );
+                    return Ok(());
+                }
+                if field(&message, "format").as_string().as_deref() != Some("mp4") {
+                    return Err(
+                        "Video exports use MP4 or the native .fcproj project format.".into(),
+                    );
+                }
                 let sequence = session
                     .state
                     .active_sequence
@@ -251,7 +313,11 @@ impl Host {
                         );
                     },
                 );
-                self.pending = Some(Pending { request, revision });
+                self.pending = Some(Pending {
+                    request,
+                    revision,
+                    download,
+                });
             }
             Some("saved") => {
                 if let Some(revision) = field(&message, "revision").as_f64() {
@@ -280,7 +346,9 @@ impl Host {
         };
         match bytes {
             Ok(bytes) if bytes.len() <= MAX_BYTES && !bytes.is_empty() => {
-                self.last_exported = Some(pending.revision);
+                if !pending.download {
+                    self.last_exported = Some(pending.revision);
+                }
                 emit(
                     "exported",
                     &json!({"requestId": pending.request, "revision": pending.revision})

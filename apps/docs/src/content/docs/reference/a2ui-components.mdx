@@ -203,6 +203,7 @@ The tables below group runtime components by purpose.
 | `tableRow` | Explicit table row | `cells`, `selected`, `disabled` |
 | `tableCell` | Explicit table cell | `content`, `isHeader`, spans, `align` |
 | `filePreview` | Preview files and edit supported formats with WASM editors | `src`, `filename`, `mimeType`, `fileType`, `editable`, `initialEditing`, `value` |
+| `fileEditor` | Create a document or edit an optional input file | `editor`, `src`, `filename`, `editable`, `value` |
 | `diffView` | Compare text, code, Markdown, JSON, or documents | `original`, `modified`, `mode`, `kind`, `language` |
 | `boundingBoxOverlay` | Display boxes over an image | image source, boxes, labels, and display options |
 
@@ -324,6 +325,37 @@ using the same upload path as chat attachments. This always creates a new
 temporary file, even when the save workflow runs locally. The component never
 overwrites the original file.
 
+Use **File Editor** (`fileEditor`) when the page creates documents. Select an
+editor in the builder, optionally supply `src` or `url`, and attach a **Save**
+workflow in the Actions tab. Without a source, the selected editor creates a new
+document. With a source, it opens that file. The full editing workspace requires
+the Save workflow; an empty editor shows a setup prompt until it is configured.
+`editable` and `initialEditing` default to `true` on this component.
+
+```json
+{
+  "type": "fileEditor",
+  "editor": { "literalString": "solidcraft" },
+  "filename": { "literalString": "New model.solidcraft" },
+  "value": { "path": "$.data.model.exportedFile" },
+  "eventHandlers": {
+    "save": [
+      {
+        "name": "workflow_event",
+        "context": { "nodeId": "save-model-event-node-id" }
+      }
+    ]
+  }
+}
+```
+
+The `editor` value selects `wordcraft`, `pdfcraft`, `deckcraft`, `gridcraft`,
+`vectorcraft`, `photocraft`, `soundcraft`, `filmcraft`, `designcraft`, `cadcraft`,
+or `solidcraft`. Use `solidcraft` for 3D models and `cadcraft` for DXF drawings.
+Omit `filename` to use the selected editor's default name and native format.
+New video projects use `.fcproj`; projects that depend on separate media files
+need those files and cannot open as standalone inputs here.
+
 The `save` event carries the new URL as `url` and `signedUrls`. Both are
 strings, following the single-file input convention.
 It also carries exported metadata as both `file` and `value`, plus `src` for
@@ -337,7 +369,10 @@ Some editors convert formats: `.potx` and `.ppsx` export as `.pptx`,
 while `.xls`, `.xlsb`, and `.ods` export as `.xlsx`. Use the exported filename
 and MIME type when choosing the destination.
 
-To let an agent use the open editor, target this `filePreview` with **Get Element**
+Both components use the same save events. For a new document, `src` in the event
+context is an empty string.
+
+To let an agent use the open editor, target the `filePreview` or `fileEditor` with **Get Element**
 and connect its **Element** output to **Editor Element** on **Register Editor MCP
 Tools**. You can also select the component directly in the **Editor Element**
 picker, or copy **Agent target** from the editor toolbar, paste it into the

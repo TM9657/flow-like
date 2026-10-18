@@ -148,6 +148,7 @@ register("soundcraft", "Flows Audio", "scraft", "scraftz", 100);
 register("filmcraft", "Flows Video", "mp4", undefined, 200, "video");
 register("filmcraft", "Flows Video", "m4v mov webm", "mp4", 200, "video");
 register("filmcraft", "Flows Video", "mkv avi mxf mts m2ts", "mp4", 200);
+register("filmcraft", "Flows Video", "fcproj", undefined, 200);
 register("designcraft", "Flows Design", "idml designcraft");
 register("cadcraft", "Flows CAD", "dxf", undefined, 100);
 // A SolidCraft project keeps modeling edits without replacing an imported model.
@@ -163,6 +164,45 @@ export function craftViewer(filename: string): CraftViewer | undefined {
 	return viewers.get(
 		storageDisplayName(filename).split(".").at(-1)?.toLowerCase() ?? "",
 	);
+}
+
+export const CRAFT_EDITOR_IDS = [
+	"wordcraft",
+	"pdfcraft",
+	"deckcraft",
+	"gridcraft",
+	"vectorcraft",
+	"photocraft",
+	"soundcraft",
+	"filmcraft",
+	"designcraft",
+	"cadcraft",
+	"solidcraft",
+] as const;
+export type CraftEditorId = (typeof CRAFT_EDITOR_IDS)[number];
+
+const CREATION_FORMATS: Record<CraftEditorId, string> = {
+	wordcraft: "docx",
+	pdfcraft: "pdf",
+	deckcraft: "pptx",
+	gridcraft: "xlsx",
+	vectorcraft: "vectorcraft",
+	photocraft: "pcraft",
+	soundcraft: "scraftz",
+	filmcraft: "fcproj",
+	designcraft: "designcraft",
+	cadcraft: "dxf",
+	solidcraft: "solidcraft",
+};
+
+export function craftCreationFilename(editor: string): string | undefined {
+	const extension = CREATION_FORMATS[editor as CraftEditorId];
+	return typeof extension === "string" ? `Untitled.${extension}` : undefined;
+}
+
+export function craftCreationViewer(editor: string): CraftViewer | undefined {
+	const filename = craftCreationFilename(editor);
+	return filename ? craftViewer(filename) : undefined;
 }
 
 export function craftSaveLabel(viewer: CraftViewer): string {

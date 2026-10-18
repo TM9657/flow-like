@@ -48,6 +48,29 @@ const filePreviewEvent = (id: string, label: string, description: string) => ({
 	contextSchema: getFilePreviewEventContextSchema(id),
 });
 
+const FILE_DOCUMENT_EVENTS = [
+	filePreviewEvent(
+		"save",
+		"Save file",
+		"The editor uploaded a new temporary file to the backend. Requires a workflow action to handle its URL; includes url, signedUrls, file, value, and the original src.",
+	),
+	filePreviewEvent(
+		"saved",
+		"File saved",
+		"Every save workflow completed successfully. Includes url, signedUrls, file, value, and the original src.",
+	),
+	filePreviewEvent(
+		"dirtyChange",
+		"Unsaved changes changed",
+		"The editor's unsaved state changed. Includes dirty.",
+	),
+	filePreviewEvent(
+		"error",
+		"File error",
+		"Preview, export, upload, or saving failed. Includes message.",
+	),
+];
+
 /** Static interaction contracts implemented by the built-in renderers. */
 export const COMPONENT_EVENT_MANIFEST = {
 	excalidraw: [
@@ -111,28 +134,8 @@ export const COMPONENT_EVENT_MANIFEST = {
 		event("boxClick", "Box clicked", "A bounding box was clicked."),
 	],
 	button: [event("click", "Click", "The button was clicked.")],
-	filePreview: [
-		filePreviewEvent(
-			"save",
-			"Save file",
-			"The editor uploaded a new temporary file to the backend. Requires a workflow action to handle its URL; includes url, signedUrls, file, value, and the original src.",
-		),
-		filePreviewEvent(
-			"saved",
-			"File saved",
-			"Every save workflow completed successfully. Includes url, signedUrls, file, value, and the original src.",
-		),
-		filePreviewEvent(
-			"dirtyChange",
-			"Unsaved changes changed",
-			"The editor's unsaved state changed. Includes dirty.",
-		),
-		filePreviewEvent(
-			"error",
-			"File error",
-			"Preview, export, upload, or saving failed. Includes message.",
-		),
-	],
+	filePreview: FILE_DOCUMENT_EVENTS,
+	fileEditor: FILE_DOCUMENT_EVENTS,
 	feedback: [event("submit", "Submit", "The user submitted their feedback.")],
 	textField: [
 		event(

@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { craftSaveLabel, craftViewer } from "./craft-viewers";
+import {
+	CRAFT_EDITOR_IDS,
+	craftCreationFilename,
+	craftCreationViewer,
+	craftSaveLabel,
+	craftViewer,
+} from "./craft-viewers";
 import { createStorageCraftFile } from "./storage-craft";
 
 describe("storage editor routing and save targets", () => {
@@ -27,6 +33,7 @@ describe("storage editor routing and save targets", () => {
 		["sound.mp3", "soundcraft", "wav"],
 		["sound.flac", "soundcraft", "flac"],
 		["movie.mov", "filmcraft", "mp4"],
+		["project.fcproj", "filmcraft", "fcproj"],
 		["photo.png", "photocraft", "png"],
 		["animation.gif", "photocraft", "pcraft"],
 	])("routes %s to %s and exports %s", (name, id, format) => {
@@ -92,6 +99,37 @@ describe("storage editor routing and save targets", () => {
 	});
 });
 
+describe("blank editor native formats", () => {
+	it.each([
+		["wordcraft", "docx"],
+		["pdfcraft", "pdf"],
+		["deckcraft", "pptx"],
+		["gridcraft", "xlsx"],
+		["vectorcraft", "vectorcraft"],
+		["photocraft", "pcraft"],
+		["soundcraft", "scraftz"],
+		["filmcraft", "fcproj"],
+		["designcraft", "designcraft"],
+		["cadcraft", "dxf"],
+		["solidcraft", "solidcraft"],
+	])("creates %s in its editable .%s format", (editor, extension) => {
+		expect(CRAFT_EDITOR_IDS).toContain(editor);
+		expect(craftCreationFilename(editor)).toBe(`Untitled.${extension}`);
+		expect(craftCreationViewer(editor)).toMatchObject({
+			id: editor,
+			extension,
+			outputExtension: extension,
+		});
+	});
+	it.each(["unknown", "toString", "__proto__"])(
+		"does not create a document for unknown editor %s",
+		(editor) => {
+			expect(craftCreationFilename(editor)).toBeUndefined();
+			expect(craftCreationViewer(editor)).toBeUndefined();
+		},
+	);
+});
+
 function requireViewer(name: string) {
 	const viewer = craftViewer(name);
 	if (!viewer) throw new Error(`Missing viewer for ${name}`);
@@ -107,6 +145,7 @@ it("keeps runtime limits and advertised imports aligned with storage routing", (
 		"file.png",
 		"file.wav",
 		"file.mp4",
+		"file.fcproj",
 		"file.dxf",
 		"file.solidcraft",
 		"file.step",

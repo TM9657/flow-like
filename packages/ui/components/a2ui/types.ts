@@ -1219,6 +1219,25 @@ export interface FilePreviewComponent extends ComponentBase {
 	autoPlay?: BoundValue;
 }
 
+/** Create a document or edit an optional initial file in the selected editor. */
+export interface FileEditorComponent extends ComponentBase {
+	type: "fileEditor";
+	editor: BoundValue;
+	src?: BoundValue;
+	url?: BoundValue;
+	filename?: BoundValue;
+	mimeType?: BoundValue;
+	/** Defaults to true. Editing requires an exact save workflow. */
+	editable?: BoundValue;
+	/** Defaults to true. */
+	initialEditing?: BoundValue;
+	value?: BoundValue;
+	/** Export the current draft locally. Defaults to true. */
+	showDownload?: BoundValue;
+	height?: BoundValue;
+	fallbackText?: BoundValue;
+}
+
 export interface DiffViewComponent extends ComponentBase {
 	type: "diffView";
 	original: BoundValue; // left / old content (text or document URL)
@@ -1900,6 +1919,7 @@ export type A2UIComponent =
 	| IframeComponent
 	| PlotlyChartComponent
 	| FilePreviewComponent
+	| FileEditorComponent
 	| DiffViewComponent
 	| NivoChartComponent
 	| BoundingBoxOverlayComponent

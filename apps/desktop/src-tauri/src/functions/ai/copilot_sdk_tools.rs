@@ -3453,7 +3453,7 @@ CHILDREN FORMAT:
 
 AVAILABLE COMPONENTS (full docs + selection table in your system prompt):
 Layout: column, row, grid, stack, scrollArea, absolute, aspectRatio, overlay, box, center, spacer
-Display: text, image, icon, video, lottie, badge, avatar, userProfile, progress, spinner, skeleton, divider, markdown, diffView, filePreview, geoMap
+Display: text, image, icon, video, lottie, badge, avatar, userProfile, progress, spinner, skeleton, divider, markdown, diffView, filePreview, fileEditor, geoMap
 Interactive: button, textField (multiline for textarea), select, slider, checkbox, switch, radioGroup, dateTimeInput, fileInput, imageInput, voiceInput (audio recording/dictation), feedback (thumbs rating), appLink, link
 Container: card, modal, tabs, accordion, drawer, tooltip, popover
 Data: table, plotlyChart, nivoChart, calendar, gantt, graph (own nodes/edges), ontologyGraph (this project's ontology, loads itself)
@@ -3811,6 +3811,9 @@ fn known_props_for_type(component_type: &str) -> Option<&'static [&'static str]>
             "filename",
             "mimeType",
             "fileType",
+            "editable",
+            "initialEditing",
+            "value",
             "showControls",
             "fit",
             "fallbackText",
@@ -3819,6 +3822,19 @@ fn known_props_for_type(component_type: &str) -> Option<&'static [&'static str]>
             "loading",
             "variant",
             "autoPlay",
+        ]),
+        "fileEditor" => Some(&[
+            "editor",
+            "src",
+            "url",
+            "filename",
+            "mimeType",
+            "editable",
+            "initialEditing",
+            "value",
+            "showDownload",
+            "height",
+            "fallbackText",
         ]),
         "boundingBoxOverlay" => Some(&[
             "src",
@@ -4252,6 +4268,7 @@ fn required_props_for_type(component_type: &str) -> &'static [&'static str] {
         "icon" => &["name"],
         "video" => &["src"],
         "lottie" => &["src"],
+        "fileEditor" => &["editor"],
         "markdown" => &["content"],
         "diffView" => &["original", "modified"],
         "badge" => &["content"],
@@ -6835,6 +6852,27 @@ mod tests {
                 "'{comp_type}' rejects props it declares as known: {unknown_prop_errors:?}"
             );
         }
+    }
+
+    #[test]
+    fn emit_ui_requires_an_editor_for_file_editor() {
+        let components = json!([{
+            "id": "root",
+            "component": {
+                "type": "fileEditor",
+                "url": { "literalString": "/files/part.step" }
+            }
+        }]);
+        let (_, errors) = validate_ui_components("root", &json!({}), &components);
+        assert_eq!(
+            errors,
+            vec!["root: missing required prop 'editor' on 'fileEditor'. This prop is mandatory."]
+        );
+
+        let mut configured = components;
+        configured[0]["component"]["editor"] = json!({ "literalString": "solidcraft" });
+        let (_, errors) = validate_ui_components("root", &json!({}), &configured);
+        assert!(errors.is_empty(), "{errors:?}");
     }
 
     #[test]

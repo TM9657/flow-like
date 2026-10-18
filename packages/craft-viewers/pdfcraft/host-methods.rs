@@ -1,4 +1,12 @@
 impl PdfCraftApp {
+    pub fn host_create(&mut self, name: &str) -> Result<(), String> {
+        let bytes = self
+            .session
+            .create_blank(612.0, 792.0, 1)
+            .map_err(|e| e.to_string());
+        self.open_created_bytes(name, bytes)
+    }
+
     pub fn host_revision(&self) -> u64 {
         self.active_ids()
             .and_then(|(_, id)| self.session.get(id))
@@ -55,7 +63,9 @@ impl PdfCraftApp {
     pub fn host_mcp(&mut self, message: &serde_json::Value, read_only: bool) -> serde_json::Value {
         let mutating = message["method"] == "tools/call"
             && message["params"]["name"].as_str().is_some_and(|name| {
-                pdfcraft_automation::tools().iter().any(|tool| tool.name == name && !tool.read_only)
+                pdfcraft_automation::tools()
+                    .iter()
+                    .any(|tool| tool.name == name && !tool.read_only)
             });
         if mutating && !read_only {
             if let Some((_, id)) = self.active_ids() {

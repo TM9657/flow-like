@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import {
 	MAX_DOCX_BYTES,
@@ -69,6 +70,18 @@ describe("WordCraft message boundary", () => {
 			read({ type: "exported", requestId: "save-1", bytes, revision: 8 }),
 		).toEqual({ type: "exported", requestId: "save-1", bytes, revision: 8 });
 	});
+	it("accepts a real export buffer from another window realm", () => {
+		const bytes = runInNewContext("new Uint8Array([80, 75, 3, 4]).buffer");
+		expect(bytes).not.toBeInstanceOf(ArrayBuffer);
+		expect(
+			read({ type: "exported", requestId: "save-portal", bytes, revision: 8 }),
+		).toEqual({
+			type: "exported",
+			requestId: "save-portal",
+			bytes,
+			revision: 8,
+		});
+	});
 
 	it("accepts measured export progress and stages without a percentage", () => {
 		for (const progress of [0, 42.5, 100, null]) {
@@ -106,6 +119,8 @@ describe("WordCraft message boundary", () => {
 	it.each([
 		{ requestId: 12 },
 		{ bytes: new Uint8Array([80, 75]) },
+		{ bytes: { byteLength: 4, [Symbol.toStringTag]: "ArrayBuffer" } },
+		{ bytes: new SharedArrayBuffer(4) },
 		{ bytes: new ArrayBuffer(0) },
 		{ bytes: new ArrayBuffer(MAX_DOCX_BYTES + 1) },
 		{ revision: -1 },

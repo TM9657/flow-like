@@ -135,6 +135,10 @@ pub fn set_component_schema_by_type(pin: &mut Pin, component_type: &str) -> bool
             pin.set_schema::<FilePreviewProps>();
             true
         }
+        "fileeditor" => {
+            pin.set_schema::<FileEditorProps>();
+            true
+        }
         "boundingboxoverlay" => {
             pin.set_schema::<BoundingBoxOverlayProps>();
             true
@@ -370,6 +374,7 @@ pub fn valid_component_types() -> &'static [&'static str] {
         "tableRow",
         "tableCell",
         "filePreview",
+        "fileEditor",
         "boundingBoxOverlay",
         // Interactive
         "button",

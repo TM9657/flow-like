@@ -6,7 +6,7 @@ export function useCraftMcpSession(options: {
 	sessionId: string;
 	editor: string;
 	channel: string;
-	frame: () => Window | null;
+	frame: () => HTMLIFrameElement | null;
 	post: (message: Record<string, unknown>) => void;
 	ready: boolean;
 	editable: boolean;
@@ -21,13 +21,17 @@ export function useCraftMcpSession(options: {
 	const componentId = target?.componentId;
 	useEffect(() => {
 		if (!ready || !appId || !surfaceId || !componentId) return;
+		const runtimeFrame = latest.current.frame();
+		const ownerWindow = runtimeFrame?.ownerDocument.defaultView;
+		if (!runtimeFrame || !ownerWindow) return;
 		const session = new CraftMcpSession({
 			target: { appId, surfaceId, componentId },
 			sessionId,
 			editor,
 			channel,
-			origin: window.location.origin,
-			frame: () => latest.current.frame(),
+			origin: new URL(runtimeFrame.src, runtimeFrame.ownerDocument.baseURI)
+				.origin,
+			frame: () => latest.current.frame()?.contentWindow ?? null,
 			post: (message) => latest.current.post(message),
 			state: () => {
 				const current = latest.current;
@@ -44,9 +48,9 @@ export function useCraftMcpSession(options: {
 			},
 		});
 		const receive = (event: MessageEvent) => session.receive(event);
-		window.addEventListener("message", receive);
+		ownerWindow.addEventListener("message", receive);
 		return () => {
-			window.removeEventListener("message", receive);
+			ownerWindow.removeEventListener("message", receive);
 			session.dispose();
 		};
 	}, [appId, surfaceId, componentId, sessionId, editor, channel, ready]);
