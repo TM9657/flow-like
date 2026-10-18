@@ -69,6 +69,7 @@ import type {
 	SurfaceComponent,
 	TableColumn,
 } from "../a2ui/types";
+import { WidgetConsentStatus } from "../store/widget-permissions";
 import { Button } from "../ui/button";
 import {
 	Collapsible,
@@ -97,7 +98,6 @@ import { Switch } from "../ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Textarea } from "../ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { WidgetConsentStatus } from "../store/widget-permissions";
 import { WidgetSchemaListEditor } from "../widget-contract/WidgetSchemaListEditor";
 import { AssetPicker, type AssetPickerProps } from "./AssetPicker";
 import { useBuilder } from "./BuilderContext";
@@ -126,6 +126,7 @@ const ASSET_FIELDS_BY_COMPONENT: Record<
 	image: { src: "image", fallback: "image" },
 	video: { src: "video", poster: "image" },
 	filePreview: { src: "all", url: "all" },
+	fileEditor: { src: "all", url: "all" },
 	avatar: { src: "image" },
 	lottie: { src: "animation" },
 	iframe: { src: "all" },
@@ -405,7 +406,9 @@ function PropertyEditor({ component, onUpdate }: PropertyEditorProps) {
 	>;
 	const componentType = component.component?.type;
 	const props =
-		componentType === "model3d" || componentType === "excalidraw"
+		componentType === "model3d" ||
+		componentType === "excalidraw" ||
+		componentType === "fileEditor"
 			? { ...getDefaultProps(componentType), ...rawProps }
 			: componentType === "filePreview"
 				? {
@@ -434,7 +437,7 @@ function PropertyEditor({ component, onUpdate }: PropertyEditorProps) {
 			const literalAssetPath = getLiteralAssetPath(value);
 
 			if (
-				componentType === "filePreview" &&
+				(componentType === "filePreview" || componentType === "fileEditor") &&
 				(key === "src" || key === "url") &&
 				literalAssetPath !== undefined
 			) {
@@ -443,7 +446,9 @@ function PropertyEditor({ component, onUpdate }: PropertyEditorProps) {
 					[key]: value,
 					filename: literalString(inferFileName(literalAssetPath)),
 					mimeType: literalString(inferMimeTypeFromSource(literalAssetPath)),
-					fileType: literalString(fileType),
+					...(componentType === "filePreview"
+						? { fileType: literalString(fileType) }
+						: {}),
 				};
 
 				if (key === "src") {

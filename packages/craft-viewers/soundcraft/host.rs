@@ -212,6 +212,7 @@ async fn start_app() -> Result<(), String> {
                     busy: false,
                     read_only: true,
                     reported_dirty: false,
+                    unsaved_new: false,
                     last_exported: None,
                 }))
             }),
@@ -228,6 +229,7 @@ struct Host {
     busy: bool,
     read_only: bool,
     reported_dirty: bool,
+    unsaved_new: bool,
     last_exported: Option<u64>,
 }
 
@@ -351,6 +353,31 @@ impl Host {
                 ctx.request_repaint();
             }
 
+            Some("create") => {
+                if self.opened {
+                    return Err("This editor already has a document open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A document name is required.")?;
+                if !name.to_ascii_lowercase().ends_with(".scraftz") {
+                    return Err("New documents use the .scraftz format.".into());
+                }
+                if self.busy {
+                    return Err("Wait for the current audio import to finish.".into());
+                }
+                self.app
+                    .engine
+                    .execute("session.new", &json!({"name": name, "template": "blank"}))
+                    .map_err(|error| error.to_string())?;
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                self.opened = true;
+                self.unsaved_new = true;
+                event(
+                    "opened",
+                    json!({"revision": self.app.engine.revision, "readOnly": self.read_only}),
+                );
+            }
             Some("open") => {
                 if self.opened || self.busy {
                     return Err("An audio file is already open.".into());
@@ -382,7 +409,10 @@ impl Host {
                 if self.busy {
                     return Err("Wait for the audio import to finish before saving.".into());
                 }
-                if !self.opened || self.read_only {
+                if !self.opened
+                    || (self.read_only
+                        && field(&message, "purpose").as_string().as_deref() != Some("download"))
+                {
                     return Err("Enable editing before saving.".into());
                 }
                 let request = field(&message, "requestId")
@@ -419,7 +449,9 @@ impl Host {
                     return Err("The exported file exceeds 100 MiB.".into());
                 }
                 let revision = self.app.engine.revision;
-                self.last_exported = Some(revision);
+                if field(&message, "purpose").as_string().as_deref() != Some("download") {
+                    self.last_exported = Some(revision);
+                }
                 emit(
                     "exported",
                     &json!({"requestId": request, "revision": revision}).to_string(),
@@ -433,6 +465,7 @@ impl Host {
                     {
                         self.app.engine.mark_clean();
                         self.last_exported = None;
+                        self.unsaved_new = false;
                     }
                 }
             }
@@ -481,7 +514,7 @@ impl eframe::App for Host {
         }
         self.app.logic(ctx);
         self.take_import_prompt();
-        let dirty = self.opened && self.app.engine.is_dirty();
+        let dirty = self.unsaved_new || (self.opened && self.app.engine.is_dirty());
         if dirty != self.reported_dirty {
             self.reported_dirty = dirty;
             event(

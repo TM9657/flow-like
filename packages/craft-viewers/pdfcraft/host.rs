@@ -104,6 +104,25 @@ impl Host {
                     json!({"requestId":request_id,"response":response}),
                 );
             }
+            Some("create") => {
+                if self.opened {
+                    return Err("This editor already has a document open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A document name is required.")?;
+                if extension(&name) != "pdf" {
+                    return Err("Only PDF documents are supported.".into());
+                }
+                self.app.host_create(&name)?;
+                self.name = name;
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                self.opened = true;
+                event(
+                    "opened",
+                    json!({"revision": self.revision(), "readOnly": self.read_only}),
+                );
+            }
             Some("open") => {
                 if self.opened {
                     return Err("This editor already has a document open.".into());
@@ -138,10 +157,12 @@ impl Host {
                 self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
             }
             Some("export") => {
+                let download =
+                    field(&message, "purpose").as_string().as_deref() == Some("download");
                 if !self.opened {
                     return Err("Open a document first.".into());
                 }
-                if self.read_only {
+                if self.read_only && !download {
                     return Err("Enable editing before saving.".into());
                 }
                 let request = field(&message, "requestId")
@@ -157,8 +178,10 @@ impl Host {
                 if bytes.is_empty() || bytes.len() > MAX_BYTES {
                     return Err("The saved document exceeds 200 MiB.".into());
                 }
-                self.last_exported = Some(revision);
-                self.exported_bytes = Some(bytes.clone());
+                if !download {
+                    self.last_exported = Some(revision);
+                    self.exported_bytes = Some(bytes.clone());
+                }
                 emit(
                     "exported",
                     &json!({"requestId": request, "revision": revision}).to_string(),

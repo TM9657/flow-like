@@ -13,7 +13,7 @@ export function validateCommand(data, session, manifest) {
 	)
 		return { type: data.type, requestId: data.requestId };
 	if (data.type === "mcp-request") return validateMcpRequest(data);
-	if (data.type === "open") {
+	if (data.type === "open" || data.type === "create") {
 		if (
 			typeof data.name !== "string" ||
 			data.name.length > 1024 ||
@@ -23,6 +23,12 @@ export function validateCommand(data, session, manifest) {
 		) {
 			throw new Error("This file type is not supported by this editor.");
 		}
+		if (data.type === "create")
+			return {
+				type: "create",
+				name: data.name,
+				readOnly: data.readOnly !== false,
+			};
 		if (
 			!(data.bytes instanceof ArrayBuffer) ||
 			!data.bytes.byteLength ||
@@ -54,7 +60,12 @@ export function validateCommand(data, session, manifest) {
 			data.format.length > 16
 		)
 			return null;
-		return { type: data.type, requestId: data.requestId, format: data.format };
+		return {
+			type: data.type,
+			requestId: data.requestId,
+			format: data.format,
+			...(data.purpose === "download" ? { purpose: "download" } : {}),
+		};
 	}
 	if (
 		data.type === "saved" &&

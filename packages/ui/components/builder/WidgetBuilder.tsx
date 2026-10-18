@@ -1001,7 +1001,7 @@ function VisualCanvas({
 				<div
 					data-canvas-id={canvasId}
 					className={cn(
-						"min-h-full rounded-lg border shadow-sm relative",
+						"h-full min-h-full rounded-lg border shadow-sm relative",
 						backgroundClass,
 					)}
 					style={{
@@ -1016,7 +1016,10 @@ function VisualCanvas({
 					data-canvas-background="true"
 				>
 					{/* Editor controls use the rendered elements without adding layout boxes. */}
-					<BuilderRenderer surface={surface} className="w-full min-h-full" />
+					<BuilderRenderer
+						surface={surface}
+						className="h-full w-full min-h-full"
+					/>
 
 					{/* Empty state */}
 					{components.size <= 1 && (
@@ -1340,7 +1343,7 @@ function BuilderPreview({ surfaceId, appCustomCss }: BuilderPreviewProps) {
 				widgetRefs={Object.fromEntries(widgetRefs)}
 				onMessage={handleMessage}
 				onA2UIMessage={handleA2UIMessage}
-				className="min-h-full w-full"
+				className="h-full min-h-full w-full"
 				appId={actionContext?.appId}
 				boardId={actionContext?.boardId}
 				eventId={actionContext?.eventId}

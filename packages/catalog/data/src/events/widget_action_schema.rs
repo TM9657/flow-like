@@ -104,7 +104,7 @@ pub(super) fn is_pending_component_context(schema: &Value, selected: &str) -> bo
         return false;
     }
     let expected = match marker["componentType"].as_str() {
-        Some("filePreview") => file_preview_event_context_schema(selected),
+        Some("filePreview" | "fileEditor") => file_preview_event_context_schema(selected),
         Some("excalidraw") => excalidraw_event_context_schema(selected),
         _ => None,
     };
@@ -305,7 +305,7 @@ fn infer_exposed_component(
     };
     let typed_events: Option<(&[&str], fn(&str) -> Option<Value>)> =
         match component["type"].as_str() {
-            Some("filePreview") => Some((
+            Some("filePreview" | "fileEditor") => Some((
                 &["save", "saved", "dirtyChange", "error"],
                 file_preview_event_context_schema,
             )),
@@ -427,7 +427,7 @@ impl PageWalker<'_, '_> {
                 }
             }
             Some("widgetInstance") => self.widget_instance(component, depth + 1),
-            Some("filePreview") => self.file_preview(component),
+            Some("filePreview" | "fileEditor") => self.file_preview(component),
             Some("excalidraw") => self.excalidraw(component),
             // Ordinary components send their route context without a widget payload.
             _ if self.routes_directly(component) => self.inference.untyped_source(),
@@ -809,13 +809,21 @@ mod tests {
 
     #[test]
     fn file_preview_events_infer_direct_contexts_without_a_widget_payload_wrapper() {
-        for event in ["save", "saved", "dirtyChange", "error"] {
-            let result = infer(&page(file_preview(event)));
-            assert_eq!(result.action_ids, BTreeSet::from([event.to_string()]));
-            let expected = file_preview_event_context_schema(event).unwrap();
-            assert_eq!(result.context_schema(), Some(&expected));
-            assert!(expected["properties"].get("payload").is_none());
-            assert!(jsonschema::meta::is_valid(&expected));
+        for component_type in ["filePreview", "fileEditor"] {
+            for event in ["save", "saved", "dirtyChange", "error"] {
+                let mut component = file_preview(event);
+                component["type"] = json!(component_type);
+                let result = infer(&page(component));
+                assert_eq!(result.action_ids, BTreeSet::from([event.to_string()]));
+                let expected = file_preview_event_context_schema(event).unwrap();
+                assert_eq!(result.context_schema(), Some(&expected));
+                assert!(expected["properties"].get("payload").is_none());
+                assert!(jsonschema::meta::is_valid(&expected));
+                let mut seed = expected;
+                seed["x-flow-like-pending-component-event"] =
+                    json!({"componentType":component_type,"eventName":event});
+                assert!(is_pending_component_context(&seed, event));
+            }
         }
     }
 

@@ -95,6 +95,35 @@ describe("Excalidraw generated components", () => {
 	});
 });
 
+describe("File Editor generated components", () => {
+	test("repairs a missing required editor with the builder default", () => {
+		const result = validateComponents([
+			{ id: "editor", component: { type: "fileEditor" } },
+		] as SurfaceComponent[]);
+		expect(result.components[0]?.component).toMatchObject({
+			type: "fileEditor",
+			editor: { literalString: "wordcraft" },
+		});
+		expect(result.warnings).toEqual([
+			'editor: injected default for required prop "editor" on fileEditor',
+		]);
+	});
+
+	test("preserves the selected editor, optional source, and exact Save workflow", () => {
+		const component = {
+			type: "fileEditor" as const,
+			editor: { literalString: "solidcraft" },
+			url: { path: "$.file.url" },
+			eventHandlers: {
+				save: [{ name: "workflow_event", context: { nodeId: "save" } }],
+			},
+		};
+		const result = validateComponents([{ id: "editor", component }]);
+		expect(result.components[0]?.component).toEqual(component);
+		expect(result.warnings).toEqual([]);
+	});
+});
+
 describe("KNOWN_PROPS drift protection", () => {
 	test("has an entry for every component type in the A2UIComponent union", () => {
 		const manifestTypes = Object.keys(COMPONENT_PROPS).sort();

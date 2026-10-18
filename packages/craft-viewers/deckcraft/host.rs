@@ -70,6 +70,7 @@ async fn start_app() -> Result<(), String> {
                     read_only: true,
                     name: String::new(),
                     reported_dirty: false,
+                    unsaved_new: false,
                     last_exported: None,
                     preview_revision: 0,
                     textures: Default::default(),
@@ -85,6 +86,7 @@ struct Host {
     read_only: bool,
     name: String,
     reported_dirty: bool,
+    unsaved_new: bool,
     last_exported: Option<u64>,
     preview_revision: u64,
     textures: std::collections::HashMap<usize, (f32, egui::TextureHandle)>,
@@ -114,6 +116,31 @@ impl Host {
                 ctx.request_repaint();
             }
 
+            Some("create") => {
+                if self.opened {
+                    return Err("This editor already has a document open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A document name is required.")?;
+                if !name.to_ascii_lowercase().ends_with(".pptx") {
+                    return Err("New documents use the .pptx format.".into());
+                }
+                let hosted = self.app.session.hosted;
+                self.app.session.hosted = false;
+                let created = self.app.session.execute("file.new", &json!({}));
+                self.app.session.hosted = hosted;
+                created.map_err(|error| error.to_string())?;
+                self.app.home = None;
+                self.name = name;
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                self.opened = true;
+                self.unsaved_new = true;
+                event(
+                    "opened",
+                    json!({"revision": self.revision(), "readOnly": self.read_only}),
+                );
+            }
             Some("open") => {
                 if self.opened {
                     return Err("This editor already has a document open.".into());
@@ -158,7 +185,9 @@ impl Host {
                 if !self.opened {
                     return Err("Open a document first.".into());
                 }
-                if self.read_only {
+                if self.read_only
+                    && field(&message, "purpose").as_string().as_deref() != Some("download")
+                {
                     return Err("Enable editing before saving.".into());
                 }
                 let request = field(&message, "requestId")
@@ -177,7 +206,9 @@ impl Host {
                     return Err("The saved document exceeds 50 MiB.".into());
                 }
                 let revision = self.revision();
-                self.last_exported = Some(revision);
+                if field(&message, "purpose").as_string().as_deref() != Some("download") {
+                    self.last_exported = Some(revision);
+                }
                 emit(
                     "exported",
                     &json!({"requestId": request, "revision": revision}).to_string(),
@@ -193,6 +224,7 @@ impl Host {
                             doc.saved_doc = doc.doc.clone();
                         }
                         self.last_exported = None;
+                        self.unsaved_new = false;
                     }
                 }
             }
@@ -204,7 +236,7 @@ impl Host {
         self.app.session.active().map(|d| d.revision).unwrap_or(0)
     }
     fn report_dirty(&mut self) {
-        let dirty = self.app.session.active().is_some_and(|d| d.is_dirty());
+        let dirty = self.unsaved_new || self.app.session.active().is_some_and(|d| d.is_dirty());
         if dirty != self.reported_dirty {
             self.reported_dirty = dirty;
             event(

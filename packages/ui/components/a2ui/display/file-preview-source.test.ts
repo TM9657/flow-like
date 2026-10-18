@@ -1,10 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { resolveCraftPreview } from "./file-preview-source";
+import { resolveCraftEditor, resolveCraftPreview } from "./file-preview-source";
 
 const PPTX_MIME =
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const DOCX_MIME =
 	"application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+describe("explicit editor source selection", () => {
+	it("uses the native project format for a new document", () => {
+		expect(
+			resolveCraftEditor("solidcraft", undefined, "New part.step"),
+		).toMatchObject({
+			filename: "New part.solidcraft",
+			viewer: { id: "solidcraft", extension: "solidcraft" },
+		});
+	});
+	it("uses the selected editor for an opaque initial file", () => {
+		expect(
+			resolveCraftEditor("wordcraft", "https://files.example/download"),
+		).toMatchObject({ filename: "download.docx", viewer: { id: "wordcraft" } });
+	});
+	it("rejects unsupported editor IDs and mismatched initial files", () => {
+		expect(resolveCraftEditor("unknown")).toBeUndefined();
+		expect(resolveCraftEditor("solidcraft", "/letter.docx")).toBeUndefined();
+		expect(resolveCraftEditor("solidcraft", "/model.FCStd")).toBeUndefined();
+	});
+});
 
 describe("Craft preview source detection", () => {
 	it("uses an explicit presentation filename for an opaque signed URL", () => {

@@ -10,6 +10,40 @@ const message = (type, values = {}) => ({
 	...values,
 });
 
+test("creates DOCX without input bytes and distinguishes snapshot downloads", () => {
+	assert.deepEqual(
+		validateCommand(
+			message("create", { name: "Untitled.docx", readOnly: false }),
+			session,
+		),
+		{
+			type: "create",
+			name: "Untitled.docx",
+			readOnly: false,
+		},
+	);
+	assert.equal(
+		validateCommand(message("create", { name: "Untitled.docx" }), session)
+			.readOnly,
+		true,
+	);
+	assert.throws(
+		() => validateCommand(message("create", { name: "Untitled.pdf" }), session),
+		/DOCX/,
+	);
+	assert.deepEqual(
+		validateCommand(
+			message("export", { requestId: "copy", purpose: "download" }),
+			session,
+		),
+		{
+			type: "export",
+			requestId: "copy",
+			purpose: "download",
+		},
+	);
+});
+
 test("ignores messages for another channel or document session", () => {
 	assert.equal(
 		validateCommand({ ...message("export"), channel: "other" }, session),

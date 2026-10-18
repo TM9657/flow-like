@@ -184,6 +184,13 @@ bun tests/craft-solid-browser/verify.ts
 
 # Discover live MCP tools and verify document edits and undo.
 bun tests/craft-mcp-browser/verify.ts
+
+# Create blank documents, export, save and reopen them in each editor.
+bun tests/craft-create-browser/verify.ts
+
+# Verify builder sizing and editor messaging inside responsive previews.
+CRAFT_NESTED_PREVIEW=1 bun tests/craft-create-browser/verify.ts solidcraft wordcraft
+bun tests/a2ui-file-editor-browser/verify.ts
 ```
 
 The live editor MCP adapters reuse each pin's tool definitions and handlers.

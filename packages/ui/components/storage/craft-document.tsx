@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
 import { Button } from "../ui/button";
+import { downloadCraftFile } from "./craft-download";
 import type { CraftToolTarget } from "./craft-mcp-session";
 import { CraftMcpTargetButton } from "./craft-mcp-target-button";
 import { type CraftViewer, craftSaveLabel } from "./craft-viewers";
@@ -26,14 +27,15 @@ import { readWordcraftMessage } from "./wordcraft-protocol";
 interface CraftDocumentProps {
 	toolTarget?: CraftToolTarget;
 	viewer: CraftViewer;
-	url: string;
+	url?: string;
+	create?: boolean;
 	filename: string;
 	outputFilename?: string;
 	title?: ReactNode;
 	editable: boolean;
 	initialEditing?: boolean;
 	showDownload?: boolean;
-	onSave: (
+	onSave?: (
 		file: File,
 		onProgress?: BulkUploadProgressCallback,
 	) => Promise<void>;
@@ -47,7 +49,7 @@ export function CraftDocument(props: CraftDocumentProps) {
 	const [attempt, setAttempt] = useState(0);
 	return (
 		<CraftSession
-			key={`${props.url}\n${props.filename}\n${attempt}`}
+			key={`${props.url}\n${props.create}\n${props.filename}\n${props.viewer.id}\n${attempt}`}
 			{...props}
 			onRetry={() => setAttempt((value) => value + 1)}
 		/>
@@ -58,10 +60,11 @@ function CraftSession({
 	toolTarget,
 	viewer,
 	url,
+	create = false,
 	filename,
 	outputFilename,
 	title,
-	editable,
+	editable: requestedEditable,
 	initialEditing = false,
 	showDownload = true,
 	onSave,
@@ -71,9 +74,10 @@ function CraftSession({
 	onReady,
 	onRetry,
 }: CraftDocumentProps & { onRetry: () => void }) {
+	const editable = requestedEditable && !!onSave;
 	const channel = "flow-like-craft";
 	const [runtimeRequested, setRuntimeRequested] = useState(
-		(initialEditing && editable) || !viewer.nativePreview,
+		create || (initialEditing && editable) || !viewer.nativePreview,
 	);
 	const [runtimeAvailable, setRuntimeAvailable] = useState(
 		process.env.NODE_ENV !== "development",
@@ -101,7 +105,7 @@ function CraftSession({
 	const [warnings, setWarnings] = useState<string[]>([]);
 	const [saved, setSaved] = useState(false);
 	const [download, setDownload] = useState<Blob | null>(null);
-	const [downloadUrl, setDownloadUrl] = useState(url);
+	const [downloadUrl, setDownloadUrl] = useState(url ?? "");
 	const sourceBlob = useRef<Blob | null>(null);
 	const active = useRef(true);
 	const saveAction = useRef<() => void>(() => {});
@@ -109,6 +113,7 @@ function CraftSession({
 		id: string;
 		timer: ReturnType<typeof setTimeout>;
 		persisting: boolean;
+		purpose: "save" | "download";
 		onTimeout: () => void;
 	} | null>(null);
 	const latest = useRef({
@@ -145,9 +150,11 @@ function CraftSession({
 
 	const post = useCallback(
 		(data: Record<string, unknown>, transfer: Transferable[] = []) => {
-			frame.current?.contentWindow?.postMessage(
+			const runtimeFrame = frame.current;
+			if (!runtimeFrame?.contentWindow) return;
+			runtimeFrame.contentWindow.postMessage(
 				{ channel, session, ...data },
-				window.location.origin,
+				new URL(runtimeFrame.src, runtimeFrame.ownerDocument.baseURI).origin,
 				transfer,
 			);
 		},
@@ -192,7 +199,7 @@ function CraftSession({
 		sessionId: session,
 		editor: viewer.id,
 		channel,
-		frame: () => frame.current?.contentWindow ?? null,
+		frame: () => frame.current,
 		post,
 		ready: status === "ready" && runtimeRequested && runtimeAvailable,
 		editable,
@@ -202,9 +209,15 @@ function CraftSession({
 
 	useEffect(() => {
 		active.current = true;
+		const runtimeFrame = frame.current;
+		const ownerWindow = runtimeFrame?.ownerDocument.defaultView ?? window;
+		const origin = runtimeFrame
+			? new URL(runtimeFrame.src, runtimeFrame.ownerDocument.baseURI).origin
+			: window.location.origin;
 		const controller = new AbortController();
 		let ready = false;
 		let opened = false;
+		let sent = false;
 		let bytes: ArrayBuffer | undefined;
 		const timeout = setTimeout(() => {
 			if (runtimeRequested && runtimeAvailable && !opened) {
@@ -216,7 +229,18 @@ function CraftSession({
 			}
 		}, 90_000);
 		const open = () => {
-			if (!ready || !bytes || controller.signal.aborted) return;
+			if (!ready || sent || (!create && !bytes) || controller.signal.aborted)
+				return;
+			sent = true;
+			if (create) {
+				post({
+					type: "create",
+					name: filename,
+					readOnly: !latest.current.editable || !latest.current.editing,
+				});
+				return;
+			}
+			if (!bytes) return;
 			post(
 				{
 					type: "open",
@@ -232,7 +256,7 @@ function CraftSession({
 			const message = readWordcraftMessage(
 				event,
 				frame.current?.contentWindow ?? null,
-				window.location.origin,
+				origin,
 				session,
 				channel,
 				viewer.maxBytes,
@@ -308,7 +332,10 @@ function CraftSession({
 					)
 						break;
 					clearTimeout(request.timer);
-					if (!latest.current.editable) {
+					if (
+						request.purpose === "save" &&
+						(!latest.current.editable || !latest.current.onSave)
+					) {
 						setSaveFailed(true);
 						reportError("You do not have permission to save this file.");
 						finishSave();
@@ -320,9 +347,24 @@ function CraftSession({
 					const file = new File([message.bytes], outputName, {
 						type: viewer.mime,
 					});
+					if (request.purpose === "download") {
+						try {
+							downloadCraftFile(file);
+						} catch (cause) {
+							reportError(fileSaveError(cause));
+						} finally {
+							finishSave();
+						}
+						break;
+					}
+					const onSave = latest.current.onSave;
+					if (!onSave) {
+						finishSave();
+						break;
+					}
 					void (async () => {
 						try {
-							await latest.current.onSave(file, (percent, detail) => {
+							await onSave(file, (percent, detail) => {
 								if (!active.current || pending.current !== request) return;
 								setSaveProgress(storageSaveProgress(percent, detail));
 							});
@@ -343,9 +385,17 @@ function CraftSession({
 				}
 			}
 		};
-		window.addEventListener("message", receive);
+		ownerWindow.addEventListener("message", receive);
 		void (async () => {
 			try {
+				if (create) {
+					open();
+					return;
+				}
+				if (!url)
+					throw new Error(
+						"Choose a document to open or create a new document.",
+					);
 				if (runtimeRequested && sourceBlob.current) {
 					bytes = await sourceBlob.current.arrayBuffer();
 					open();
@@ -393,12 +443,13 @@ function CraftSession({
 			clearTimeout(timeout);
 			if (pending.current) clearTimeout(pending.current.timer);
 			pending.current = null;
-			window.removeEventListener("message", receive);
+			ownerWindow.removeEventListener("message", receive);
 			latest.current.onDirtyChange?.(false);
 			latest.current.onBusyChange?.(false);
 		};
 	}, [
 		url,
+		create,
 		filename,
 		session,
 		post,
@@ -416,13 +467,14 @@ function CraftSession({
 			post({ type: "set-read-only", readOnly: !editable || !editing });
 	}, [editable, editing, status, post, runtimeRequested]);
 
-	function saveDocument() {
-		if (!editable || !editing || pending.current || status !== "ready") return;
+	function exportDocument(purpose: "save" | "download") {
+		if (pending.current || status !== "ready") return;
+		if (purpose === "save" && (!editable || !editing || !onSave)) return;
 		const id = crypto.randomUUID();
 		setError("");
 		reportedError.current = null;
 		setSaveFailed(false);
-		setSaved(false);
+		if (purpose === "save") setSaved(false);
 		setSaving(true);
 		setSaveProgress({ stage: "Preparing file", progress: null });
 		latest.current.onBusyChange?.(true);
@@ -435,15 +487,24 @@ function CraftSession({
 		pending.current = {
 			id,
 			persisting: false,
+			purpose,
 			onTimeout,
 			timer: setTimeout(
 				onTimeout,
 				viewer.id === "filmcraft" ? 10 * 60_000 : 60_000,
 			),
 		};
-		post({ type: "export", requestId: id, format: viewer.outputExtension });
+		post({
+			type: "export",
+			requestId: id,
+			format: viewer.outputExtension,
+			...(purpose === "download" ? { purpose } : {}),
+		});
 	}
-	saveAction.current = saveDocument;
+	function saveDocument() {
+		exportDocument("save");
+	}
+	saveAction.current = onSave ? saveDocument : () => exportDocument("download");
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background">
@@ -456,7 +517,9 @@ function CraftSession({
 					aria-live="polite"
 				>
 					{saving
-						? "Saving..."
+						? pending.current?.purpose === "download"
+							? "Preparing download..."
+							: "Saving..."
 						: dirty
 							? "Unsaved changes"
 							: saved
@@ -485,7 +548,18 @@ function CraftSession({
 				{showDownload && (
 					<Button asChild variant="ghost" size="sm" className="shrink-0">
 						<a
-							href={downloadUrl}
+							href={downloadUrl || undefined}
+							aria-disabled={status !== "ready" || saving}
+							onClick={(event) => {
+								if (status !== "ready" || saving) {
+									event.preventDefault();
+									return;
+								}
+								if (editing || dirty || create) {
+									event.preventDefault();
+									exportDocument("download");
+								}
+							}}
 							download={downloadName}
 							target="_blank"
 							rel="noopener noreferrer"

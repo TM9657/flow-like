@@ -107,6 +107,7 @@ async fn start_app() -> Result<(), String> {
                     name: String::new(),
                     document_id: None,
                     reported_dirty: false,
+                    unsaved_new: false,
                     last_exported: None,
                     preview_revision: 0,
                     textures: HashMap::new(),
@@ -125,6 +126,7 @@ struct Host {
     name: String,
     document_id: Option<u64>,
     reported_dirty: bool,
+    unsaved_new: bool,
     last_exported: Option<u64>,
     preview_revision: u64,
     textures: HashMap<usize, egui::TextureHandle>,
@@ -156,6 +158,31 @@ impl Host {
                 ctx.request_repaint();
             }
 
+            Some("create") => {
+                if self.opened {
+                    return Err("This editor already has a document open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A document name is required.")?;
+                if !name.to_ascii_lowercase().ends_with(".designcraft") {
+                    return Err("New documents use the .designcraft format.".into());
+                }
+                self.app
+                    .session
+                    .execute("file.new", &json!({"title": name}))
+                    .map_err(|error| error.to_string())?;
+                self.app.after_engine();
+                self.document_id = self.app.session.active().map(|state| state.uid);
+                self.name = name;
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                self.opened = true;
+                self.unsaved_new = true;
+                event(
+                    "opened",
+                    json!({"revision": self.app.session.active().map(|state| state.revision).unwrap_or(0), "readOnly": self.read_only}),
+                );
+            }
             Some("open") => {
                 if self.opened {
                     return Err("This editor already has a file open.".into());
@@ -214,7 +241,10 @@ impl Host {
                 self.app.ui.dialog = None;
             }
             Some("export") => {
-                if !self.opened || self.read_only {
+                if !self.opened
+                    || (self.read_only
+                        && field(&message, "purpose").as_string().as_deref() != Some("download"))
+                {
                     return Err("Enable editing before saving.".into());
                 }
                 if self.app.session.active().map(|state| state.uid) != self.document_id {
@@ -229,10 +259,12 @@ impl Host {
                 if !matches!(format.as_str(), "designcraft" | "idml") {
                     return Err("This layout export format is unsupported.".into());
                 }
-                self.app
-                    .session
-                    .commit_interaction()
-                    .map_err(|e| e.to_string())?;
+                if !self.read_only {
+                    self.app
+                        .session
+                        .commit_interaction()
+                        .map_err(|e| e.to_string())?;
+                }
                 let state = self.app.session.active().ok_or("No file is open.")?;
                 let (bytes, warnings) = if format == "idml" {
                     (
@@ -249,7 +281,9 @@ impl Host {
                     return Err("The exported file exceeds 50 MiB or is empty.".into());
                 }
                 let revision = state.revision;
-                self.last_exported = Some(revision);
+                if field(&message, "purpose").as_string().as_deref() != Some("download") {
+                    self.last_exported = Some(revision);
+                }
                 emit(
                     "exported",
                     &json!({"requestId": request, "revision": revision, "warnings": warnings})
@@ -267,6 +301,7 @@ impl Host {
                             state.saved_doc = state.doc.clone();
                             state.saved_revision = state.revision;
                             self.last_exported = None;
+                            self.unsaved_new = false;
                         }
                     }
                 }
@@ -277,12 +312,13 @@ impl Host {
     }
 
     fn report_dirty(&mut self) {
-        let dirty = self
-            .app
-            .session
-            .documents()
-            .iter()
-            .any(|state| state.is_dirty());
+        let dirty = self.unsaved_new
+            || self
+                .app
+                .session
+                .documents()
+                .iter()
+                .any(|state| state.is_dirty());
         if dirty != self.reported_dirty {
             self.reported_dirty = dirty;
             event("dirty", json!({"dirty": dirty}));

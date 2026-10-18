@@ -105,6 +105,7 @@ async fn start_app() -> Result<(), String> {
                     opened: false,
                     read_only: true,
                     reported_dirty: false,
+                    unsaved_new: false,
                     last_exported: None,
                 }))
             }),
@@ -120,6 +121,7 @@ struct Host {
     opened: bool,
     read_only: bool,
     reported_dirty: bool,
+    unsaved_new: bool,
     last_exported: Option<u64>,
 }
 impl Host {
@@ -147,6 +149,27 @@ impl Host {
                 ctx.request_repaint();
             }
 
+            Some("create") => {
+                if self.opened {
+                    return Err("This editor already has a document open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A document name is required.")?;
+                if !name.to_ascii_lowercase().ends_with(".dxf") {
+                    return Err("New documents use the .dxf format.".into());
+                }
+                self.app.session.new_drawing(false);
+                self.app.ui.start_tab = false;
+                self.app.canvas.zoom_pending = true;
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                self.opened = true;
+                self.unsaved_new = true;
+                event(
+                    "opened",
+                    json!({"revision": self.app.session.state().map(|state| state.revision).unwrap_or(0), "readOnly": self.read_only}),
+                );
+            }
             Some("open") => {
                 if self.opened {
                     return Err("A drawing is already open.".into());
@@ -187,7 +210,10 @@ impl Host {
                 self.app.ui.dialog = None;
             }
             Some("export") => {
-                if !self.opened || self.read_only {
+                if !self.opened
+                    || (self.read_only
+                        && field(&message, "purpose").as_string().as_deref() != Some("download"))
+                {
                     return Err("Enable editing before saving.".into());
                 }
                 let request = field(&message, "requestId")
@@ -215,7 +241,9 @@ impl Host {
                     return Err("The exported drawing exceeds 100 MiB.".into());
                 }
                 let revision = state.revision;
-                self.last_exported = Some(revision);
+                if field(&message, "purpose").as_string().as_deref() != Some("download") {
+                    self.last_exported = Some(revision);
+                }
                 emit(
                     "exported",
                     &json!({"requestId": request, "revision": revision}).to_string(),
@@ -230,6 +258,7 @@ impl Host {
                         {
                             state.saved = state.doc.clone();
                             self.last_exported = None;
+                            self.unsaved_new = false;
                         }
                     }
                 }
@@ -273,7 +302,7 @@ impl eframe::App for Host {
             }
         }
         self.app.logic(ctx);
-        let dirty = self.app.session.docs.iter().any(|doc| doc.is_dirty());
+        let dirty = self.unsaved_new || self.app.session.docs.iter().any(|doc| doc.is_dirty());
         if dirty != self.reported_dirty {
             self.reported_dirty = dirty;
             event("dirty", json!({"dirty": dirty}));

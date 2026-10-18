@@ -86,3 +86,14 @@ export function handleMcpControl(
 		response: { jsonrpc: "2.0", id: message.id, result },
 	};
 }
+export function isCraftHostSender(source, receiver) {
+	// React portals can send from an outer same-origin embedding window.
+	let ancestor = receiver.parent;
+	for (let depth = 0; depth < 8 && ancestor && ancestor !== receiver; depth++) {
+		if (source === ancestor) return true;
+		const parent = ancestor.parent;
+		if (parent === ancestor) break;
+		ancestor = parent;
+	}
+	return false;
+}

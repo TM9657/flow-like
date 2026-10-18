@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import { handleMcpControl, validateMcpRequest } from "./mcp.mjs";
+import {
+	handleMcpControl,
+	isCraftHostSender,
+	validateMcpRequest,
+} from "./mcp.mjs";
 import { CHANNEL, validateCommand } from "./protocol.mjs";
 import {
 	validateCommand as wordCommand,
@@ -121,7 +125,7 @@ async fn inspect(&self, Parameters(p): Parameters<DocIndex>) -> Result<Value, Er
 	assert.throws(() => blockEnd("{", 0), /Unclosed/);
 });
 
-test("live hosts revoke access even with a full queue and discard cancelled or expired tools", () => {
+test("live hosts scope embedding senders, revoke access with a full queue, and discard cancelled tools", () => {
 	for (const [directory, channel, validate, takeName] of [
 		["craft-viewers", CHANNEL, validateCommand, "flowLikeCraftTake"],
 		["wordcraft", WORD_CHANNEL, wordCommand, "flowLikeWordcraftTake"],
@@ -129,7 +133,12 @@ test("live hosts revoke access even with a full queue and discard cancelled or e
 		let now = 100;
 		const listeners = new Map();
 		const sent = [];
-		const parent = { postMessage: (message) => sent.push(message) };
+		const outer = { parent: null };
+		outer.parent = outer;
+		const parent = {
+			parent: outer,
+			postMessage: (message) => sent.push(message),
+		};
 		const window = {
 			parent,
 			addEventListener: (name, callback) => listeners.set(name, callback),
@@ -144,8 +153,10 @@ test("live hosts revoke access even with a full queue and discard cancelled or e
 			URLSearchParams,
 			Date: { now: () => now },
 			CHANNEL: channel,
+			isCraftHostSender,
 			MAX_DOCUMENT_BYTES: 1024,
-			validateCommand: validate,
+			validateCommand: (data, session, manifest) =>
+				validate(data, session, manifest ?? { extensions: ["docx"] }),
 			handleMcpControl: (command, info) => handleMcpControl(command, info, now),
 			mcpError: (command, message, code) => ({
 				requestId: command.requestId,
@@ -156,12 +167,46 @@ test("live hosts revoke access even with a full queue and discard cancelled or e
 				},
 			}),
 		});
-		const deliver = (command) =>
+		const deliver = (command, overrides = {}) =>
 			listeners.get("message")({
 				source: parent,
 				origin: "https://flow.test",
 				data: { channel, session: "live", ...command },
+				...overrides,
 			});
+		for (const source of [parent, outer]) {
+			deliver({ type: "set-read-only", readOnly: false }, { source });
+			assert.equal(window[takeName]().readOnly, false);
+		}
+		for (const overrides of [
+			{ source: { parent: outer } },
+			{ source: {} },
+			{ source: null },
+			{ source: window },
+			{ source: outer, origin: "https://other.test" },
+			{ source: outer, origin: "null" },
+			{
+				source: outer,
+				data: {
+					channel,
+					session: "old",
+					type: "set-read-only",
+					readOnly: false,
+				},
+			},
+			{
+				source: outer,
+				data: {
+					channel: "wrong",
+					session: "live",
+					type: "set-read-only",
+					readOnly: false,
+				},
+			},
+		]) {
+			deliver({ type: "set-read-only", readOnly: false }, overrides);
+			assert.equal(window[takeName](), null);
+		}
 		for (let id = 0; id < 8; id++)
 			deliver(
 				request(
@@ -200,5 +245,20 @@ test("live hosts revoke access even with a full queue and discard cancelled or e
 			sent.some((message) => message.type === "error"),
 			false,
 		);
+		deliver({ type: "create", name: "Untitled.docx", readOnly: false });
+		deliver({ type: "set-read-only", readOnly: true });
+		const created = window[takeName]();
+		assert.equal(created.type, "create");
+		assert.equal(created.readOnly, true);
+		assert.equal(window[takeName]().readOnly, true);
 	}
+});
+
+test("embedding sender traversal is bounded and rejects standalone windows", () => {
+	const chain = Array.from({ length: 10 }, () => ({}));
+	for (let index = 0; index < chain.length; index++)
+		chain[index].parent = chain[Math.min(index + 1, chain.length - 1)];
+	assert.equal(isCraftHostSender(chain[8], chain[0]), true);
+	assert.equal(isCraftHostSender(chain[9], chain[0]), false);
+	assert.equal(isCraftHostSender(chain[9], chain[9]), false);
 });

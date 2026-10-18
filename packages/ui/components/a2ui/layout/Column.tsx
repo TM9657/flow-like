@@ -53,7 +53,7 @@ export function A2UIColumn({
 		<div
 			ref={elementRef}
 			className={cn(
-				"flex flex-col",
+				"flex min-h-0 flex-col",
 				align && alignMap[align],
 				justify && justifyMap[justify],
 				reverse && "flex-col-reverse",

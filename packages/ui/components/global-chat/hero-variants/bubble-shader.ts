@@ -298,7 +298,7 @@ export function readTokenRGB(
 	if (!tokenCanvas) {
 		const c = document.createElement("canvas");
 		c.width = c.height = 1;
-		tokenCanvas = c.getContext("2d");
+		tokenCanvas = c.getContext("2d", { willReadFrequently: true });
 	}
 	if (!tokenCanvas) return [...fallback];
 	const el = document.createElement("span");
