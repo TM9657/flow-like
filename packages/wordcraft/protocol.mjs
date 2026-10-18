@@ -13,10 +13,20 @@ export function validateCommand(data, session) {
 	)
 		return { type: data.type, requestId: data.requestId };
 	if (data.type === "mcp-request") return validateMcpRequest(data);
-	if (data.type === "open") {
-		if (typeof data.name !== "string" || !/\.docx$/i.test(data.name)) {
+	if (data.type === "open" || data.type === "create") {
+		if (
+			typeof data.name !== "string" ||
+			data.name.length > 1024 ||
+			!/\.docx$/i.test(data.name)
+		) {
 			throw new Error("Only DOCX documents are supported.");
 		}
+		if (data.type === "create")
+			return {
+				type: "create",
+				name: data.name,
+				readOnly: data.readOnly !== false,
+			};
 		if (
 			!(data.bytes instanceof ArrayBuffer) ||
 			!data.bytes.byteLength ||
@@ -39,7 +49,11 @@ export function validateCommand(data, session) {
 		typeof data.requestId === "string" &&
 		data.requestId.length <= 128
 	) {
-		return { type: data.type, requestId: data.requestId };
+		return {
+			type: data.type,
+			requestId: data.requestId,
+			...(data.purpose === "download" ? { purpose: "download" } : {}),
+		};
 	}
 	if (
 		data.type === "saved" &&

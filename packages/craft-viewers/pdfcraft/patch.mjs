@@ -48,6 +48,16 @@ export default function prepare({ directory, original, write, replaceOnce }) {
 		),
 	);
 	const editingPath = "crates/ui-egui/src/editing.rs";
+	const createPath = "crates/ui-egui/src/create_ui.rs";
+	write(
+		createPath,
+		replaceOnce(
+			original(createPath),
+			"    fn open_created_bytes(",
+			"    pub(crate) fn open_created_bytes(",
+			"host document creation",
+		),
+	);
 	let editing = original(editingPath);
 	const save =
 		"pub(crate) fn save_then(&mut self, index: usize, target: SaveTarget, after: impl FnOnce(&mut Self) + Send + 'static) -> bool {";

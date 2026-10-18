@@ -49,6 +49,7 @@ pub enum A2UIComponentType {
     TableRow(TableRowProps),
     TableCell(TableCellProps),
     FilePreview(FilePreviewProps),
+    FileEditor(FileEditorProps),
     DiffView(DiffViewProps),
     BoundingBoxOverlay(BoundingBoxOverlayProps),
 
@@ -1932,7 +1933,7 @@ pub struct ExcalidrawProps {
 // File Preview
 // =============================================================================
 
-/// Direct action context emitted by File Preview. Shared with the frontend event manifest.
+/// Direct action context emitted by File Preview and File Editor. Shared with the frontend manifest.
 pub fn file_preview_event_context_schema(event_name: &str) -> Option<Value> {
     static CONTRACT: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
         serde_json::from_str(include_str!("file-preview-event-schemas.json"))
@@ -1994,6 +1995,42 @@ pub struct FilePreviewProps {
     /// Audio (animated `variant`) only: auto-play when the source is set, e.g. a conversation reply. Default false.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_play: Option<BoundValue>,
+}
+
+/// A document editor that opens an optional file or starts a new document.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileEditorProps {
+    /// Editor ID: wordcraft, pdfcraft, deckcraft, gridcraft, vectorcraft, photocraft,
+    /// soundcraft, filmcraft, designcraft, cadcraft, or solidcraft.
+    pub editor: BoundValue,
+    /// Optional initial file URL or storage path. Omit to create a new document.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub src: Option<BoundValue>,
+    /// Alias for src; media-source update nodes write both fields.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<BoundValue>,
+    /// Input filename, or the name for a new document.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<BoundValue>,
+    /// Allow editing when an exact save workflow handler is configured. Defaults to true.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub editable: Option<BoundValue>,
+    /// Start in edit mode. Defaults to true.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub initial_editing: Option<BoundValue>,
+    /// Exported temporary file metadata, written before the save workflow runs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<BoundValue>,
+    /// Allow downloading the current document. Defaults to true.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_download: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallback_text: Option<BoundValue>,
 }
 
 /// Diff viewer component for text, code, markdown and documents
@@ -2413,6 +2450,32 @@ mod tests {
             serde_json::to_value(component).expect("filePreview should serialize"),
             input
         );
+    }
+
+    #[test]
+    fn file_editor_requires_an_editor_and_preserves_optional_source_and_bindings() {
+        assert!(
+            serde_json::from_value::<A2UIComponentType>(json!({ "type": "fileEditor" })).is_err()
+        );
+        for source in [None, Some(json!({ "path": "document.source" }))] {
+            let mut input = json!({
+                "type": "fileEditor",
+                "editor": { "literalString": "solidcraft" },
+                "filename": { "literalString": "New model.solidcraft" },
+                "editable": { "path": "document.canEdit" },
+                "initialEditing": { "literalBool": true },
+                "showDownload": { "literalBool": true },
+                "value": { "path": "document.exportedFile" }
+            });
+            if let Some(source) = source {
+                input["src"] = source;
+            }
+            let component: A2UIComponentType = serde_json::from_value(input.clone()).unwrap();
+            assert_eq!(serde_json::to_value(component).unwrap(), input);
+        }
+        let schema = serde_json::to_value(schemars::schema_for!(FileEditorProps)).unwrap();
+        assert_eq!(schema["required"], json!(["editor"]));
+        assert!(schema["properties"].get("url").is_some());
     }
 
     #[test]

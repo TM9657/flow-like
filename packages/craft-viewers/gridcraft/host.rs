@@ -64,6 +64,7 @@ async fn start_app() -> Result<(), String> {
                     read_only: true,
                     name: String::new(),
                     reported_dirty: false,
+                    unsaved_new: false,
                     last_exported: None,
                 }))
             }),
@@ -77,6 +78,7 @@ struct Host {
     read_only: bool,
     name: String,
     reported_dirty: bool,
+    unsaved_new: bool,
     last_exported: Option<u64>,
 }
 impl Host {
@@ -107,6 +109,29 @@ impl Host {
                 ctx.request_repaint();
             }
 
+            Some("create") => {
+                if self.opened {
+                    return Err("This editor already has a document open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A document name is required.")?;
+                if !name.to_ascii_lowercase().ends_with(".xlsx") {
+                    return Err("New documents use the .xlsx format.".into());
+                }
+                self.app.session.new_workbook();
+                if let Some(doc) = self.app.session.active_mut() {
+                    doc.title = name.clone();
+                }
+                self.name = name;
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                self.opened = true;
+                self.unsaved_new = true;
+                event(
+                    "opened",
+                    json!({"revision": self.revision(), "readOnly": self.read_only}),
+                );
+            }
             Some("open") => {
                 if self.opened {
                     return Err("This editor already has a document open.".into());
@@ -166,7 +191,9 @@ impl Host {
                 if !self.opened {
                     return Err("Open a document first.".into());
                 }
-                if self.read_only {
+                if self.read_only
+                    && field(&message, "purpose").as_string().as_deref() != Some("download")
+                {
                     return Err("Enable editing before saving.".into());
                 }
                 let request = field(&message, "requestId")
@@ -181,11 +208,13 @@ impl Host {
                 ) {
                     return Err("This format is supported for import only. Choose a supported export format.".into());
                 }
-                if self.app.editor.is_some() && !self.app.commit_edit(0, 0, false, false) {
-                    return Err("Finish editing the current cell before saving.".into());
+                if !self.read_only {
+                    if self.app.editor.is_some() && !self.app.commit_edit(0, 0, false, false) {
+                        return Err("Finish editing the current cell before saving.".into());
+                    }
+                    self.app.commit_text_box_edit()?;
+                    self.app.store_view_state();
                 }
-                self.app.commit_text_box_edit()?;
-                self.app.store_view_state();
                 let doc = self.app.session.doc().map_err(|e| e.to_string())?;
                 let bytes =
                     gridcraft_engine::io::save_bytes(&doc.wb, &format!("workbook.{format}"))
@@ -194,7 +223,9 @@ impl Host {
                     return Err("The saved document exceeds 50 MiB.".into());
                 }
                 let revision = self.revision();
-                self.last_exported = Some(revision);
+                if field(&message, "purpose").as_string().as_deref() != Some("download") {
+                    self.last_exported = Some(revision);
+                }
                 emit(
                     "exported",
                     &json!({"requestId": request, "revision": revision}).to_string(),
@@ -212,6 +243,7 @@ impl Host {
                             doc.saved = doc.wb.clone();
                         }
                         self.last_exported = None;
+                        self.unsaved_new = false;
                     }
                 }
             }
@@ -223,7 +255,8 @@ impl Host {
         self.app.session.active().map(|d| d.revision).unwrap_or(0)
     }
     fn report_dirty(&mut self) {
-        let dirty = self.app.editor.is_some()
+        let dirty = self.unsaved_new
+            || self.app.editor.is_some()
             || self.app.text_box_editor.is_some()
             || self.app.session.active().is_some_and(|d| d.is_dirty());
         if dirty != self.reported_dirty {

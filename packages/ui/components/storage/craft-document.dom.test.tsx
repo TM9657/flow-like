@@ -11,6 +11,8 @@ import {
 	vi,
 } from "vitest";
 import type { BulkUploadProgressCallback } from "../../lib/bulk-upload";
+import { downloadCraftFile } from "./craft-download";
+vi.mock("./craft-download", () => ({ downloadCraftFile: vi.fn() }));
 import { CraftDocument } from "./craft-document";
 import { executeCraftCommand } from "./craft-mcp-session";
 import { craftViewer } from "./craft-viewers";
@@ -65,6 +67,7 @@ let reportError: Mock<(message: string) => void>;
 let iframeLoadingDisabled: boolean;
 
 beforeEach(() => {
+	vi.mocked(downloadCraftFile).mockClear();
 	Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 	const settings = (window as unknown as HappyWindow).happyDOM.settings;
 	iframeLoadingDisabled = settings.navigation.disableChildFrameNavigation;
@@ -866,4 +869,91 @@ it("waits for a development build without loading a missing iframe or timing out
 	);
 	await receive({ type: "ready" });
 	expect(messages("open")).toHaveLength(1);
+});
+
+describe("blank document creation", () => {
+	it("creates without a source download and saves through the configured handler", async () => {
+		await render(true, undefined, {
+			url: undefined,
+			create: true,
+			initialEditing: true,
+		});
+		expect(fetchDocument).not.toHaveBeenCalled();
+		await receive({ type: "ready" });
+		expect(messages("open")).toHaveLength(0);
+		expect(messages("create")).toEqual([
+			expect.objectContaining({ name: "report.xlsx", readOnly: false }),
+		]);
+		expect(messages("create")[0]).not.toHaveProperty("bytes");
+		await receive({ type: "opened", revision: 0 });
+		await receive({ type: "dirty", dirty: true, revision: 0 });
+		await click("Save");
+		const request = messages("export").at(-1);
+		await receive({
+			type: "exported",
+			requestId: request?.requestId,
+			bytes: editedBytes.buffer.slice(0),
+			revision: 0,
+		});
+		expect(saveDocument).toHaveBeenCalledTimes(1);
+		expect(saveDocument.mock.calls[0][0].name).toBe("report.xlsx");
+		expect(messages("saved")).toEqual([
+			expect.objectContaining({ revision: 0 }),
+		]);
+	});
+	it("downloads the live draft without invoking Save or clearing dirty state", async () => {
+		await render(true, undefined, {
+			url: undefined,
+			create: true,
+			initialEditing: true,
+		});
+		await receive({ type: "ready" });
+		await receive({ type: "opened", revision: 0 });
+		await receive({ type: "dirty", dirty: true, revision: 0 });
+		await act(async () => {
+			container.querySelector<HTMLAnchorElement>("a[download]")?.click();
+		});
+		const request = messages("export").at(-1);
+		expect(request).toMatchObject({ purpose: "download" });
+		await receive({
+			type: "exported",
+			requestId: request?.requestId,
+			bytes: editedBytes.buffer.slice(0),
+			revision: 0,
+		});
+		expect(downloadCraftFile).toHaveBeenCalledTimes(1);
+		const file = vi.mocked(downloadCraftFile).mock.calls[0][0];
+		expect(file.name).toBe("report.xlsx");
+		expect(new Uint8Array(await file.arrayBuffer())).toEqual(editedBytes);
+		expect(saveDocument).not.toHaveBeenCalled();
+		expect(messages("saved")).toHaveLength(0);
+		expect(dirtyChange).toHaveBeenLastCalledWith(true);
+	});
+	it.each([true, false])(
+		"retains the draft and download after Save revocation (create=%s)",
+		async (create) => {
+			const props = {
+				url: create ? undefined : "/files/report.xlsx",
+				create,
+				initialEditing: true,
+			};
+			await render(true, undefined, props);
+			await receive({ type: "ready" });
+			await receive({ type: "opened" });
+			await receive({ type: "dirty", dirty: true, revision: 1 });
+			const originalSession = session();
+			await render(true, undefined, { ...props, onSave: undefined });
+			expect(session()).toBe(originalSession);
+			expect(messages(create ? "create" : "open")).toHaveLength(1);
+			expect(messages("set-read-only").at(-1)).toMatchObject({
+				readOnly: true,
+			});
+			expect(container.querySelector('[aria-label="Save"]')).toBeNull();
+			expect(container.querySelector('[aria-label^="Edit"]')).toBeNull();
+			await act(async () => {
+				container.querySelector<HTMLAnchorElement>("a[download]")?.click();
+			});
+			expect(messages("export").at(-1)).toMatchObject({ purpose: "download" });
+		},
+	);
 });

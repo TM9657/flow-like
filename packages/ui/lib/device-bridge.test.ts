@@ -30,6 +30,44 @@ const event = (payload: unknown) =>
 	({ event_type: "a2ui", event_id: "event", payload }) as IIntercomEvent;
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+test.each([
+	"clipboard.write",
+	"audio.play",
+	"camera.capture",
+	"camera.captureAudio",
+	"location.current",
+	"location.geofencePermission",
+])("%s still requires the foreground", async (command) => {
+	const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
+	Object.defineProperty(globalThis, "document", {
+		configurable: true,
+		value: { visibilityState: "hidden" },
+	});
+	let nativeCalls = 0;
+	const unregister = registerDeviceAdapter(async () => {
+		nativeCalls++;
+	});
+	try {
+		await expect(
+			executeDeviceCommand(
+				command,
+				{},
+				{
+					appId: "app",
+					executionTarget: "local",
+					userInitiated: true,
+				},
+			),
+		).rejects.toMatchObject({ code: "foreground_required" });
+		expect(nativeCalls).toBe(0);
+	} finally {
+		unregister();
+		previous
+			? Object.defineProperty(globalThis, "document", previous)
+			: Reflect.deleteProperty(globalThis, "document");
+	}
+});
+
 test("only audio playback can request a timeout above two minutes", () => {
 	expect(
 		parseDeviceRequest(message({ command: "audio.play", timeout_ms: 900000 }))

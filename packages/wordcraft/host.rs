@@ -139,6 +139,7 @@ async fn start_app() -> Result<(), String> {
                     read_only: true,
                     name: "document.docx".into(),
                     reported_dirty: false,
+                    unsaved_new: false,
                     last_exported: None,
                     preview_revision: 0,
                     textures: HashMap::new(),
@@ -155,6 +156,7 @@ struct Host {
     read_only: bool,
     name: String,
     reported_dirty: bool,
+    unsaved_new: bool,
     last_exported: Option<u64>,
     preview_revision: u64,
     textures: HashMap<usize, (f32, egui::TextureHandle)>,
@@ -185,6 +187,32 @@ impl Host {
                 ctx.request_repaint();
             }
 
+            Some("create") => {
+                if self.opened {
+                    return Err("This editor already has a document open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A document name is required.")?;
+                if !name.to_ascii_lowercase().ends_with(".docx") {
+                    return Err("New documents use the .docx format.".into());
+                }
+                let region = wordcraft_ui_egui::i18n::system_region();
+                self.app
+                    .session
+                    .set_document(wordcraft_engine::blank_document(&region));
+                self.app.session.path = Some(name.clone().into());
+                self.app.session.autosave = false;
+                self.app.ui.backstage = false;
+                self.name = name;
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                self.opened = true;
+                self.unsaved_new = true;
+                event(
+                    "opened",
+                    json!({"revision": self.app.session.rev(), "readOnly": self.read_only}),
+                );
+            }
             Some("open") => {
                 if self.opened {
                     return Err("This editor already has a document open.".into());
@@ -229,7 +257,10 @@ impl Host {
                 self.app.session.relayout();
             }
             Some("export") => {
-                if !self.opened || self.read_only {
+                if !self.opened
+                    || (self.read_only
+                        && field(&message, "purpose").as_string().as_deref() != Some("download"))
+                {
                     return Err("Enable editing before saving.".into());
                 }
                 let request = field(&message, "requestId")
@@ -243,7 +274,9 @@ impl Host {
                     return Err("The exported document exceeds 50 MiB.".into());
                 }
                 let revision = self.app.session.rev();
-                self.last_exported = Some(revision);
+                if field(&message, "purpose").as_string().as_deref() != Some("download") {
+                    self.last_exported = Some(revision);
+                }
                 emit(
                     "exported",
                     &json!({"requestId": request, "name": self.name, "revision": revision})
@@ -258,6 +291,7 @@ impl Host {
                     {
                         self.app.session.dirty = false;
                         self.last_exported = None;
+                        self.unsaved_new = false;
                     }
                 }
             }
@@ -267,7 +301,7 @@ impl Host {
     }
 
     fn report_dirty(&mut self) {
-        let dirty = self.app.session.dirty;
+        let dirty = self.unsaved_new || self.app.session.dirty;
         if dirty != self.reported_dirty {
             self.reported_dirty = dirty;
             event(

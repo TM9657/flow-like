@@ -5,6 +5,7 @@
  */
 
 import { SEMANTIC_BOX_TAGS } from "../a2ui/semantic-box-tags";
+import { CRAFT_EDITOR_IDS } from "../storage/craft-viewers";
 
 export type PropType =
 	| "string"
@@ -380,6 +381,30 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 			],
 		},
 		autoPlay: { type: "boundValue" },
+	},
+	fileEditor: {
+		type: { type: "string", required: true },
+		editor: { type: "boundValue", required: true, enum: [...CRAFT_EDITOR_IDS] },
+		src: {
+			type: "boundValue",
+			description:
+				"Optional initial file. Leave empty to start a new document.",
+		},
+		url: { type: "boundValue" },
+		filename: { type: "boundValue" },
+		mimeType: { type: "boundValue" },
+		editable: {
+			type: "boundValue",
+			description: "Enable editing once the Save action has a workflow.",
+		},
+		initialEditing: { type: "boundValue" },
+		value: {
+			type: "boundValue",
+			description: "Last exported temporary file metadata, set before saving",
+		},
+		showDownload: { type: "boundValue" },
+		height: { type: "boundValue" },
+		fallbackText: { type: "boundValue" },
 	},
 	diffView: {
 		type: { type: "string", required: true },

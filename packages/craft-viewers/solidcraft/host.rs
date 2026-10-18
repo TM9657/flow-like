@@ -159,6 +159,7 @@ async fn start_app() -> Result<(), String> {
                     read_only: true,
                     reported_dirty: false,
                     last_exported: None,
+                    unsaved_new: false,
                 }))
             }),
         )
@@ -176,6 +177,7 @@ struct Host {
     read_only: bool,
     reported_dirty: bool,
     last_exported: Option<u64>,
+    unsaved_new: bool,
 }
 
 impl Host {
@@ -203,6 +205,36 @@ impl Host {
                 ctx.request_repaint();
             }
 
+            Some("create") => {
+                if self.opened {
+                    return Err("A model is already open.".into());
+                }
+                let name = field(&message, "name")
+                    .as_string()
+                    .ok_or("A model name is required.")?;
+                let basename = name.rsplit(['/', '\\']).next().unwrap_or("");
+                let (title, extension) = basename
+                    .rsplit_once('.')
+                    .ok_or("Use a .solidcraft model name.")?;
+                if title.trim().is_empty() || !extension.eq_ignore_ascii_case("solidcraft") {
+                    return Err("New models use the .solidcraft format.".into());
+                }
+                self.app
+                    .session
+                    .replace_design(Session::new(solidcraft_engine::doc::Document::new(title)));
+                self.app.home.open = false;
+                self.app.fit_view();
+                self.read_only = field(&message, "readOnly").as_bool().unwrap_or(true);
+                READ_ONLY.set(self.read_only);
+                self.opened = true;
+                self.unsaved_new = true;
+                self.reported_dirty = true;
+                event(
+                    "opened",
+                    json!({"revision": self.app.session.revision, "readOnly": self.read_only, "warnings": []}),
+                );
+                event("dirty", json!({"dirty": true}));
+            }
             Some("open") => {
                 if self.opened {
                     return Err("A model is already open.".into());
@@ -266,12 +298,18 @@ impl Host {
                     self.app.tool = None;
                     self.app.params = None;
                     self.app.design_properties = None;
+                    self.app.menu = Default::default();
+                    self.app.ui.palette_open = false;
+                    self.app.viewport.boxsel = None;
+                    self.app.viewport.point_drag = None;
                 }
                 self.read_only = read_only;
                 READ_ONLY.set(read_only);
             }
             Some("export") => {
-                if !self.opened || self.read_only {
+                let download =
+                    field(&message, "purpose").as_string().as_deref() == Some("download");
+                if !self.opened || (self.read_only && !download) {
                     return Err("Enable editing before saving.".into());
                 }
                 if !self.app.session.pending_moves.is_empty() {
@@ -303,7 +341,9 @@ impl Host {
                     return Err("The exported model exceeds 100 MiB.".into());
                 }
                 let revision = self.app.session.revision;
-                self.last_exported = Some(revision);
+                if !download {
+                    self.last_exported = Some(revision);
+                }
                 emit(
                     "exported",
                     &json!({"requestId": request, "revision": revision}).to_string(),
@@ -317,66 +357,12 @@ impl Host {
                 {
                     self.app.session.mark_saved();
                     self.last_exported = None;
+                    self.unsaved_new = false;
                 }
             }
             _ => {}
         }
         Ok(())
-    }
-
-    fn preview(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui.button("Fit model").clicked() {
-                self.app.fit_view();
-            }
-            for (label, view) in [
-                ("Isometric", "iso"),
-                ("Front", "front"),
-                ("Top", "top"),
-                ("Right", "right"),
-            ] {
-                if ui.button(label).clicked() {
-                    self.app.animate_view(view);
-                }
-            }
-            ui.label("Drag to orbit · Shift-drag to pan · Scroll to zoom");
-        });
-        let rect = ui.available_rect_before_wrap();
-        let response = ui.interact(
-            rect,
-            ui.id().with("model_preview_navigation"),
-            egui::Sense::drag(),
-        );
-        if response.dragged() {
-            let (delta, pan) = ui.input(|i| (i.pointer.delta(), i.modifiers.shift));
-            self.app.cancel_view_animation();
-            if pan {
-                self.app
-                    .cam
-                    .pan(delta.x as f64, delta.y as f64, rect.height() as f64);
-            } else {
-                self.app.cam.orbit(delta.x as f64, delta.y as f64);
-            }
-        }
-        if response.hovered() {
-            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll != 0.0 {
-                self.app.cancel_view_animation();
-                self.app.cam.zoom_at((-scroll as f64 * 0.005).exp(), None);
-            }
-        }
-        // The upstream viewport also reads raw context input, even in disabled UI.
-        // Only the camera controls above receive it in preview mode.
-        let preview_input = ui.ctx().input(Clone::clone);
-        ui.ctx().input_mut(|input| {
-            input.events.clear();
-            input.pointer = Default::default();
-            input.smooth_scroll_delta = egui::Vec2::ZERO;
-        });
-        ui.add_enabled_ui(false, |ui| {
-            solidcraft_ui_egui::viewport::show(&mut self.app, ui)
-        });
-        ui.ctx().input_mut(|input| *input = preview_input);
     }
 }
 
@@ -414,7 +400,9 @@ impl eframe::App for Host {
         }
         self.app.home.open = false;
         self.app.logic(ctx);
-        let dirty = self.app.session.is_dirty() || !self.app.session.pending_moves.is_empty();
+        let dirty = self.unsaved_new
+            || self.app.session.is_dirty()
+            || !self.app.session.pending_moves.is_empty();
         if dirty != self.reported_dirty {
             self.reported_dirty = dirty;
             event("dirty", json!({"dirty": dirty}));
@@ -422,7 +410,7 @@ impl eframe::App for Host {
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if self.read_only || !self.opened {
-            self.preview(ui);
+            self.app.host_preview(ui);
         } else {
             self.app.ui(ui);
         }

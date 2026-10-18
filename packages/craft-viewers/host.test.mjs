@@ -9,6 +9,54 @@ const command = (type, fields = {}) => ({
 	type,
 	...fields,
 });
+test("creates a named document without import bytes and distinguishes snapshot downloads", () => {
+	assert.deepEqual(
+		validateCommand(
+			command("create", { name: "Untitled.xlsx", readOnly: false }),
+			session,
+			manifest,
+		),
+		{
+			type: "create",
+			name: "Untitled.xlsx",
+			readOnly: false,
+		},
+	);
+	assert.equal(
+		validateCommand(
+			command("create", { name: "Untitled.xlsx" }),
+			session,
+			manifest,
+		).readOnly,
+		true,
+	);
+	assert.throws(
+		() =>
+			validateCommand(
+				command("create", { name: "Untitled.exe" }),
+				session,
+				manifest,
+			),
+		/not supported/,
+	);
+	assert.deepEqual(
+		validateCommand(
+			command("export", {
+				requestId: "copy",
+				format: "xlsx",
+				purpose: "download",
+			}),
+			session,
+			manifest,
+		),
+		{
+			type: "export",
+			requestId: "copy",
+			format: "xlsx",
+			purpose: "download",
+		},
+	);
+});
 test("validates session, imported extension, binary payload and per-editor size", () => {
 	assert.equal(
 		validateCommand({ ...command("open"), session: "old" }, session, manifest),

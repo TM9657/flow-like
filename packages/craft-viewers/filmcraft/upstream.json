@@ -9,6 +9,7 @@
 	"canvasId": "craft_canvas",
 	"maxBytes": 209715200,
 	"extensions": [
+		"fcproj",
 		"mp4",
 		"m4v",
 		"mov",

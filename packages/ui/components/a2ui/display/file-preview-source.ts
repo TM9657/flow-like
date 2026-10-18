@@ -1,4 +1,8 @@
-import { craftViewer } from "../../storage/craft-viewers";
+import {
+	craftCreationFilename,
+	craftCreationViewer,
+	craftViewer,
+} from "../../storage/craft-viewers";
 import { inferFileName } from "../media-source";
 
 const DOCUMENT_EXTENSIONS: Record<string, string> = {
@@ -63,4 +67,34 @@ export function resolveCraftPreview(
 				filename: `${filename || (name === "file" || source.startsWith("data:") ? "document" : name)}.${extension}`,
 			}
 		: undefined;
+}
+
+/** Explicit editor selection keeps a source from opening in a different editor. */
+export function resolveCraftEditor(
+	editor: string,
+	source?: string,
+	filename?: string,
+	mimeType?: string,
+) {
+	const viewer = craftCreationViewer(editor);
+	if (!viewer) return undefined;
+	if (!source) {
+		const name = filename ? inferFileName("", filename) : undefined;
+		return {
+			viewer,
+			filename: name
+				? `${name.replace(/\.[^.]+$/, "")}.${viewer.outputExtension}`
+				: (craftCreationFilename(editor) ??
+					`Untitled.${viewer.outputExtension}`),
+		};
+	}
+	const detected = resolveCraftPreview(source, filename, mimeType);
+	if (detected) return detected.viewer.id === editor ? detected : undefined;
+	const name = inferFileName(source, filename);
+	if ((filename || !source.startsWith("data:")) && /\.[a-z0-9]+$/i.test(name))
+		return undefined;
+	return {
+		viewer,
+		filename: `${name === "file" || source.startsWith("data:") ? "document" : name}.${viewer.extension}`,
+	};
 }

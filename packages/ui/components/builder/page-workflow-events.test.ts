@@ -42,6 +42,7 @@ describe("page workflow event options", () => {
 		"microWidgetInstance",
 		"widgetInstance",
 		"filePreview",
+		"fileEditor",
 		"excalidraw",
 	])("allows context events on %s", (type) => {
 		expect(
@@ -95,6 +96,7 @@ describe("creating a workflow event", () => {
 		["microWidgetInstance", ["widget_action", "simple"]],
 		["widgetInstance", ["widget_action", "simple"]],
 		["filePreview", ["widget_action"]],
+		["fileEditor", ["widget_action"]],
 		["excalidraw", ["widget_action"]],
 		["button", ["simple"]],
 		[undefined, ["simple"]],

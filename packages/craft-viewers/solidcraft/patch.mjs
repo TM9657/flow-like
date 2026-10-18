@@ -51,6 +51,7 @@ pub fn host_command(id: &str) -> Option<std::result::Result<Value, String>> {
 		"interactive command dispatch",
 	);
 	ui += `
+mod host_ui;
 impl SolveApp {
     pub fn host_action(&mut self, id: &str) -> bool {
         if let Some(result) = solidcraft_engine::host_command(id) {
@@ -62,6 +63,42 @@ impl SolveApp {
 }
 `;
 	write("crates/ui-egui/src/lib.rs", ui);
+	write(
+		"crates/ui-egui/src/host_ui.rs",
+		readFileSync(join(directory, "host_ui.rs"), "utf8"),
+	);
+	let viewport = original("crates/ui-egui/src/viewport.rs");
+	viewport = replaceOnce(
+		viewport,
+		"crate::navigation::handle(app, ui, rect, &resp, NavCaps::MODEL)",
+		"crate::navigation::handle(app, ui, rect, &resp, if crate::host_ui::read_only() { NavCaps::RENDER } else { NavCaps::MODEL })",
+		"preview camera capabilities",
+	);
+	viewport = replaceOnce(
+		viewport,
+		"crate::select_other::track_hold(app, ui.ctx(), &proj, inside, primary_pressed, primary_down, hover, primary_nav.is_some() || mode.is_some());",
+		"!crate::host_ui::read_only() && crate::select_other::track_hold(app, ui.ctx(), &proj, inside, primary_pressed, primary_down, hover, primary_nav.is_some() || mode.is_some());",
+		"preview selection hold",
+	);
+	viewport = replaceOnce(
+		viewport,
+		"    // ---- interaction ----",
+		"    if !crate::host_ui::read_only() {\n    // ---- interaction ----",
+		"preview document interactions",
+	);
+	viewport = replaceOnce(
+		viewport,
+		"    crate::preview::paint_sketches(app, &painter, &proj);",
+		"    }\n    crate::host_ui::overlays(ui, |ui| {\n    crate::preview::paint_sketches(app, &painter, &proj);",
+		"preview document overlays",
+	);
+	viewport = replaceOnce(
+		viewport,
+		"    axis_view(app, ui, rect);\n    nav_bar(app, ui, rect);",
+		"    });\n    axis_view(app, ui, rect);\n    nav_bar(app, ui, rect);",
+		"native preview navigation",
+	);
+	write("crates/ui-egui/src/viewport.rs", viewport);
 
 	let documents = original("crates/ui-egui/src/documents.rs");
 	for (const [signature, command] of [

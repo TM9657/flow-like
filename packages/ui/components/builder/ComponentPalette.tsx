@@ -290,6 +290,13 @@ const COMPONENT_DEFINITIONS: ComponentDefinition[] = [
 		description: "Preview files (PDF, images, etc)",
 	},
 	{
+		type: "fileEditor",
+		label: "File Editor",
+		icon: PenTool,
+		category: "Display",
+		description: "Create a document or edit an initial file",
+	},
+	{
 		type: "diffView",
 		label: "Diff View",
 		icon: FileDiff,

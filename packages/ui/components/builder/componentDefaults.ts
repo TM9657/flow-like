@@ -725,6 +725,18 @@ export const COMPONENT_DEFAULT_PROPS: Record<
 		loading: str("lazy"),
 		autoPlay: bool(false),
 	},
+	fileEditor: {
+		editor: str("wordcraft"),
+		src: str(""),
+		filename: str(""),
+		mimeType: str(""),
+		editable: bool(true),
+		initialEditing: bool(true),
+		value: { literalJson: "null" },
+		showDownload: bool(true),
+		height: str(""),
+		fallbackText: str("This file cannot be opened in the selected editor."),
+	},
 	diffView: {
 		original: str('function greet(name) {\n  return "Hi " + name;\n}'),
 		modified: str("function greet(name) {\n  return `Hello, ${name}!`;\n}"),
@@ -847,6 +859,14 @@ export function normalizeComponent(
 				`[A2UI] Removing unknown property "${key}" from component type "${type}"`,
 			);
 		}
+	}
+
+	if (
+		type === "fileEditor" &&
+		normalized.src == null &&
+		normalized.url != null
+	) {
+		normalized.src = normalized.url;
 	}
 
 	// Then, fill in missing required props with defaults

@@ -7,12 +7,12 @@
  * never receives invalid data.
  */
 
-import { getRegisteredTypes } from "../a2ui/component-type-registry";
 import {
 	type A2UIComponentType,
 	COMPONENT_BASE_PROPS,
 	COMPONENT_PROPS,
 } from "../a2ui/component-prop-manifest";
+import { getRegisteredTypes } from "../a2ui/component-type-registry";
 import {
 	isSemanticBoxTag,
 	normalizeSemanticBoxTag,
@@ -74,6 +74,7 @@ const REQUIRED_PROPS: Record<string, string[]> = {
 	icon: ["name"],
 	video: ["src"],
 	lottie: ["src"],
+	fileEditor: ["editor"],
 	markdown: ["content"],
 	diffView: ["original", "modified"],
 	badge: ["content"],
@@ -127,6 +128,7 @@ const REQUIRED_PROPS: Record<string, string[]> = {
 const DEFAULT_BOUND_VALUES: Record<string, BoundValue> = {
 	content: { literalString: "" },
 	src: { literalString: "" },
+	editor: { literalString: "wordcraft" },
 	original: { literalString: "" },
 	modified: { literalString: "" },
 	name: { literalString: "circle" },

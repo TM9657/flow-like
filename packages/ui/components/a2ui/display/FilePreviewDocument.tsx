@@ -24,7 +24,7 @@ import type {
 	FilePreviewExportedFile,
 } from "../file-preview-events";
 import { registerA2UINavigationGuard } from "../navigation-guard";
-import type { FilePreviewComponent } from "../types";
+import type { FileEditorComponent, FilePreviewComponent } from "../types";
 
 const CraftDocument = lazy(() =>
 	import("../../storage/craft-document").then((module) => ({
@@ -38,7 +38,9 @@ const WordcraftDocument = lazy(() =>
 );
 const EXACT = { legacyFallback: false, wildcardFallback: false } as const;
 
-export function filePreviewSaveActions(component: FilePreviewComponent) {
+export function filePreviewSaveActions(
+	component: FilePreviewComponent | FileEditorComponent,
+) {
 	const { actions } = resolveEventActions(
 		component.eventHandlers,
 		"save",
@@ -55,11 +57,12 @@ export function filePreviewSaveActions(component: FilePreviewComponent) {
 }
 
 interface FilePreviewDocumentProps {
-	component: FilePreviewComponent;
+	component: FilePreviewComponent | FileEditorComponent;
 	componentId: string;
 	surfaceId: string;
 	source: string;
-	url: string;
+	url?: string;
+	create?: boolean;
 	filename: string;
 	viewer: CraftViewer;
 	editable: boolean;
@@ -228,7 +231,7 @@ export function FilePreviewDocument(props: FilePreviewDocumentProps) {
 			assertActive();
 			if (!actions.length)
 				throw new Error(
-					"Configure a save workflow before editing this document.",
+					"Configure a save workflow before saving this document.",
 				);
 			// Chat attachments use the same helper. Upload online regardless of where
 			// the save workflow runs so it receives a backend URL, never local bytes.
@@ -301,11 +304,13 @@ export function FilePreviewDocument(props: FilePreviewDocumentProps) {
 			? { appId: actionContext.appId, surfaceId, componentId }
 			: undefined,
 		url: sessionUrl,
+		create: props.create,
 		filename,
 		editable,
 		initialEditing,
 		showDownload,
-		onSave,
+		onSave:
+			filePreviewSaveActions(props.component).length > 0 ? onSave : undefined,
 		onDirtyChange,
 		onBusyChange,
 		onError,

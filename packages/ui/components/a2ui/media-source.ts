@@ -250,7 +250,8 @@ export function applyMediaSourceUpdate(
 				...(componentType === "iframe" ? { srcdoc: undefined } : {}),
 			};
 			break;
-		case "filePreview": {
+		case "filePreview":
+		case "fileEditor": {
 			const viewer = craftViewer(inferFileName(src, filename));
 			// Node media kinds are broad hints. Let the registry select Office,
 			// spreadsheet, and other non-native viewers from the supplied filename.
@@ -265,8 +266,11 @@ export function applyMediaSourceUpdate(
 				url: srcValue,
 				...(filenameValue ? { filename: filenameValue } : {}),
 				...(mimeTypeValue ? { mimeType: mimeTypeValue } : {}),
-				...(previewType ? { fileType: previewType } : {}),
-				...(mediaKind === "video" || mediaKind === "audio"
+				...(componentType === "filePreview" && previewType
+					? { fileType: previewType }
+					: {}),
+				...(componentType === "filePreview" &&
+				(mediaKind === "video" || mediaKind === "audio")
 					? { showControls: componentData.showControls ?? literalBool(true) }
 					: {}),
 			};

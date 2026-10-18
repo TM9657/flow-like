@@ -15,6 +15,7 @@ export { A2UIIframe } from "./Iframe";
 export { A2UIPlotlyChart } from "./PlotlyChart";
 export { A2UITable, A2UITableRow, A2UITableCell } from "./Table";
 export { A2UIFilePreview } from "./FilePreview";
+export { A2UIFileEditor } from "./FileEditor";
 export { A2UIDiffView } from "./DiffView";
 export { A2UINivoChart } from "./NivoChart";
 export { A2UIBoundingBoxOverlay } from "./BoundingBoxOverlay";
