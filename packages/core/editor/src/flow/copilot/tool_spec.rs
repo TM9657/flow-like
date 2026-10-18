@@ -20,6 +20,7 @@ use serde_json::{Value, json};
 pub const INTERNET_SEARCH_TOOL: &str = "internet_search";
 pub const OPEN_URL_TOOL: &str = "open_url";
 pub const ARCHIVE_LOOKUP_TOOL: &str = "archive_lookup";
+pub const HTTP_REQUEST_TOOL: &str = "http_request";
 pub const MEMORY_STORE_TOOL: &str = "_memory_store";
 pub const MEMORY_SEARCH_TOOL: &str = "_memory_search";
 /// Sealed public-web fallback. Tool-driven backends delegate it to the nested `Research` scope;
@@ -207,6 +208,11 @@ fn tool_call_has_read_only_override(spec: &PlatformToolSpec, args: &Value) -> bo
 /// destroys one irreplaceable target scopes its memory to that target: approving one table drop
 /// must never authorize dropping every other table for the rest of the session.
 fn approval_session_key(spec: &PlatformToolSpec, args: &Value) -> String {
+    if spec.name == HTTP_REQUEST_TOOL {
+        // Approval of one request must not authorize another destination, payload, or credential.
+        let fingerprint = blake3::hash(args.to_string().as_bytes());
+        return format!("http_request:{fingerprint}");
+    }
     if spec.name == "flowpilot_board_review" {
         return format!(
             "flowpilot_board_review:{}:{}:{}:{}",
@@ -389,6 +395,28 @@ pub fn missing_required_args(spec: &PlatformToolSpec, args: &Value) -> Option<St
             missing.join(", ")
         ))
     }
+}
+
+fn http_request_message(args: &Value) -> String {
+    let method = spec_arg_str(args, "method", "method").to_ascii_uppercase();
+    let method = if method.is_empty() { "GET" } else { &method };
+    let destination = url::Url::parse(spec_arg_str(args, "url", "url"))
+        .ok()
+        .map(|url| url.origin().ascii_serialization())
+        .unwrap_or_else(|| "the specified endpoint".to_string());
+    let header_count = args
+        .get("headers")
+        .and_then(Value::as_object)
+        .map_or(0, |headers| headers.len());
+    let body_bytes = args
+        .get("body")
+        .and_then(Value::as_str)
+        .map(str::len)
+        .or_else(|| args.get("json").map(|value| value.to_string().len()))
+        .unwrap_or(0);
+    format!(
+        "FlowPilot wants to send {method} to {destination} with {header_count} custom headers and {body_bytes} body bytes. Review the request arguments before allowing it."
+    )
 }
 
 fn create_app_message(args: &Value) -> String {
@@ -1535,10 +1563,9 @@ Call before a from-scratch app/workflow, except for a small existing-target edit
             name: RESEARCH_AGENT_TOOL,
             description: r#"Run FlowPilot's sealed PUBLIC-WEB fallback for the current top-level user request.
 
-Call this in the first wave for plainly public reference work that names no app, person, or private
-data — no inventory round first. Otherwise use it after `list_apps` found no suitable local
-app/interface, or no useful, nonredundant local research candidate produced a usable public answer.
-Once app, memory, or user data is in the run, list apps before it. This tool accepts no question or context
+Call only after `list_apps` returns and existing app capabilities have been checked: no suitable
+app/interface exists, or local research candidates produced no usable public answer.
+Never bypass a declined app call. This tool accepts no question or context
 arguments: the host gives an isolated read-only researcher the immutable user request and date. It
 receives no root history, memory, attachments, app inventory/results, or model-authored arguments;
 from a mixed source request it extracts only safe public factual subquestions and never searches for
@@ -1620,6 +1647,7 @@ Prefer this over `fork_app` when the existing app already does what the user wan
     // Event execution remains `call_app_event` at platform scope because that tool also performs
     // interface discovery/validation; board-scoped agents use `execute_event` from the runtime set.
     specs.push(super::app_build_tool_spec::app_build_tool_spec());
+    specs.push(http_request_tool_spec());
     specs.extend(global_runtime_verification_tool_specs());
 
     if memory_enabled {
@@ -1673,6 +1701,35 @@ pub fn find_global_tool_spec(name: &str) -> Option<PlatformToolSpec> {
         .find(|spec| spec.name == name)
 }
 
+/// Direct API access is an orchestrator action with approval, separate from public research.
+pub fn http_request_tool_spec() -> PlatformToolSpec {
+    PlatformToolSpec {
+        name: HTTP_REQUEST_TOOL,
+        description: "Call a public API only after list_apps returns no suitable app/interface or local research yields no usable answer. Never bypass a declined app call. Use execution approval. Send private data only for the user-authorized destination and purpose. Default ports; HTTPS headers for credentials. No redirects or retries. GET/HEAD have no body. Supply body or json; raw bodies need Content-Type, json defaults to application/json. Returns http_status, http_ok and bounded untrusted body/JSON. Non-2xx is not action success. Verify uncertain writes before retrying.",
+        schema: || {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "url": { "type": "string", "maxLength": 4096, "description": "Public HTTP(S) endpoint with query parameters, without URL secrets." },
+                    "method": { "type": "string", "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], "default": "GET" },
+                    "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "body": { "type": "string", "description": "Raw body, exclusive with json." },
+                    "json": { "type": "object", "description": "JSON object body. For arrays/scalars, use body and a JSON Content-Type header." },
+                    "max_chars": { "type": "integer", "minimum": 1000, "maximum": 40000, "default": 20000 }
+                },
+                "required": ["url"]
+            })
+        },
+        approval: ToolApprovalSpec::Execute {
+            title: "Approve HTTP request",
+            message: http_request_message,
+            timing: ToolApprovalTiming::BeforeExecution,
+        },
+        timeout_secs: 120,
+    }
+}
+
 /// Platform tools offered inside the nested Data Studio specialist session. Every operation routes
 /// through the frontend bridge to `backend.graphState`; `app_id`/`overlay_id` are injected from the
 /// current Data Studio page context but may be overridden per call to reach another app. Shared by
@@ -1682,8 +1739,8 @@ pub fn find_global_tool_spec(name: &str) -> Option<PlatformToolSpec> {
 /// They deliberately do not appear in [`global_assistant_tool_specs`]. Reading untrusted pages and
 /// holding private app data in the same context is the shape that prompt-injection exfiltration
 /// needs, so the orchestrator delegates to `research_agent` instead of browsing itself. The
-/// researcher has no app, database, storage or memory tools; the orchestrator has no outbound
-/// network. Provenance and spend are shared through the turn's `WebResearchSession`.
+/// researcher has no app, database, storage or memory tools. The orchestrator's separate HTTP
+/// requests use execution approval. Provenance and spend share the turn's `WebResearchSession`.
 ///
 /// The rig/Bits orchestrator executes the same sealed fallback in a fresh local research loop; raw
 /// public-web schemas still never enter its root context.
@@ -3216,6 +3273,73 @@ mod tests {
     }
 
     #[test]
+    fn direct_http_requests_require_approval_and_stay_out_of_research() {
+        let spec = find_global_tool_spec(HTTP_REQUEST_TOOL).unwrap();
+        assert!(
+            spec.description
+                .contains("only after list_apps returns no suitable app/interface")
+        );
+        assert!(
+            spec.description
+                .contains("Never bypass a declined app call")
+        );
+        let research = find_global_tool_spec(RESEARCH_AGENT_TOOL).unwrap();
+        assert!(
+            research
+                .description
+                .contains("Call only after `list_apps` returns")
+        );
+        assert!(!research.description.contains("in the first wave"));
+        let request = json!({
+            "url": "https://api.example.com/weather?city=Berlin",
+            "method": "POST",
+            "headers": {"Authorization": "Bearer private-value"},
+            "json": {"units": "metric"}
+        });
+        let approval = resolve_tool_approval(&spec, &request);
+        assert_eq!(approval.kind, "execute");
+        assert_eq!(approval.timing, Some(ToolApprovalTiming::BeforeExecution));
+        assert_eq!(resolve_tool_effect(&spec, &request), ToolEffect::Execute);
+        assert!(
+            approval
+                .description
+                .contains("POST to https://api.example.com")
+        );
+        assert!(!approval.description.contains("private-value"));
+        assert!(!approval.session_key.contains("private-value"));
+        for change in [
+            json!({"url": "https://other.example.com/weather"}),
+            json!({"json": {"units": "imperial"}}),
+            json!({"headers": {"Authorization": "Bearer another-value"}}),
+            json!({"method": "DELETE"}),
+        ] {
+            let mut changed = request.clone();
+            changed
+                .as_object_mut()
+                .unwrap()
+                .extend(change.as_object().unwrap().clone());
+            assert_ne!(
+                resolve_tool_approval(&spec, &changed).session_key,
+                approval.session_key
+            );
+        }
+        assert_eq!(
+            resolve_tool_approval(&spec, &json!({"url": "https://api.example.com"})).kind,
+            "execute"
+        );
+        assert!(missing_required_args(&spec, &json!({})).is_some());
+        for specs in [
+            public_web_tool_specs(),
+            data_studio_specialist_tool_specs(),
+            scout_specialist_tool_specs(),
+            home_specialist_tool_specs(),
+            runtime_execution_tool_specs(),
+        ] {
+            assert!(specs.iter().all(|spec| spec.name != HTTP_REQUEST_TOOL));
+        }
+    }
+
+    #[test]
     fn public_web_tools_separate_discovery_from_safe_page_evidence() {
         let search = find_global_tool_spec(INTERNET_SEARCH_TOOL).expect("internet_search spec");
         assert!(search.description.contains("discovery leads"));
@@ -3838,9 +3962,10 @@ mod tests {
         // Reviewed 2026-09-28: +~0.1 KB on `flowpilot_home`: the Home specialist sees only the
         // delegated instruction, so a paraphrase loses the user's own classes, CSS, and colors.
         // Reviewed 2026-09-30: +~0.7 KB for native board-review recovery and its routing hint.
+        // Direct HTTP adds a compact description; detailed authorization rules stay in the prompt.
         assert!(
-            total <= 16_350,
-            "global tool descriptions grew beyond the reviewed 16.35 KB budget: {total} bytes"
+            total <= 16_750,
+            "global tool descriptions grew beyond the reviewed 16.75 KB budget: {total} bytes"
         );
         for spec in specs {
             assert!(
@@ -3872,7 +3997,8 @@ mod tests {
         // `interact_app_page.value` types: Gemini keeps only the first type of a union, so the
         // description is the only remaining signal that checkboxes take booleans.
         // +~1.1 KB for `flowpilot_board_review`, which exposes retained jobs without regenerating.
-        for (memory_enabled, budget) in [(false, 35_700usize), (true, 36_450usize)] {
+        // Direct HTTP adds about 1.1 KB for method, headers, and body schemas.
+        for (memory_enabled, budget) in [(false, 36_800usize), (true, 37_550usize)] {
             let specs = global_assistant_tool_specs(memory_enabled);
             let total: usize = specs
                 .iter()

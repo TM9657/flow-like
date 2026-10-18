@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-	entersPrivateContext,
+	httpRequestRefusal,
 	isReturnedAppInventory,
 	sealedResearchRefusal,
 } from "./local-app-discovery";
@@ -10,7 +10,6 @@ const state = (
 	overrides: Partial<Parameters<typeof sealedResearchRefusal>[1]> = {},
 ) => ({
 	appInventoryReturned: false,
-	privateContextEntered: false,
 	sealedResearchUsed: false,
 	...overrides,
 });
@@ -52,52 +51,78 @@ describe("isReturnedAppInventory", () => {
 	});
 });
 
-describe("entersPrivateContext", () => {
-	test("discovery and the researcher itself carry no private data", () => {
-		expect(entersPrivateContext("list_apps")).toBe(false);
-		expect(entersPrivateContext("research_agent")).toBe(false);
-	});
-
-	test("everything else is private, including unknown tools", () => {
-		for (const tool of [
-			"call_app_chat",
-			"call_app_event",
-			"data_studio_agent",
-			"open_app_page",
-			"_memory_search",
-			"a_tool_added_next_year",
-		]) {
-			expect(entersPrivateContext(tool)).toBe(true);
-		}
-	});
-});
-
 describe("sealedResearchRefusal", () => {
-	test("a plainly public request researches in the first wave", () => {
-		expect(code(RUN, undefined)).toBeUndefined();
-		expect(code(RUN, state())).toBeUndefined();
+	test("a fresh public request must wait for app discovery", () => {
+		expect(code(RUN, undefined)).toBe("local_app_discovery_required");
+		expect(code(RUN, state())).toBe("local_app_discovery_required");
+		expect(sealedResearchRefusal(RUN, state())?.retryable).toBe(true);
 	});
 
-	test("a run already holding private data must list apps first", () => {
-		expect(code(RUN, state({ privateContextEntered: true }))).toBe(
-			"local_app_discovery_required",
-		);
-		expect(
-			code(
-				RUN,
-				state({ privateContextEntered: true, appInventoryReturned: true }),
-			),
-		).toBeUndefined();
+	test("a returned inventory allows research", () => {
+		expect(code(RUN, state({ appInventoryReturned: true }))).toBeUndefined();
 	});
 
 	test("the researcher is one-shot per run", () => {
-		expect(code(RUN, state({ sealedResearchUsed: true }))).toBe(
-			"sealed_research_already_used",
-		);
+		expect(
+			code(
+				RUN,
+				state({ appInventoryReturned: true, sealedResearchUsed: true }),
+			),
+		).toBe("sealed_research_already_used");
 	});
 
 	test("a run with no id is refused so the one-shot cap stays enforceable", () => {
 		expect(code(undefined, state())).toBe("sealed_research_unavailable");
 		expect(code("  ", state())).toBe("sealed_research_unavailable");
+	});
+});
+
+describe("httpRequestRefusal", () => {
+	test("requires app discovery before an HTTP approval can be requested", () => {
+		for (const routingState of [undefined, state()]) {
+			const refusal = httpRequestRefusal(RUN, routingState);
+			expect(refusal?.code).toBe("local_app_discovery_required");
+			expect(refusal?.retryable).toBe(true);
+		}
+	});
+
+	test("has no one-shot limit after discovery, including after research", () => {
+		const discovered = state({
+			appInventoryReturned: true,
+			sealedResearchUsed: true,
+		});
+		expect(httpRequestRefusal(RUN, discovered)).toBeUndefined();
+		expect(httpRequestRefusal(RUN, discovered)).toBeUndefined();
+	});
+
+	test("requires a run id to establish discovery", () => {
+		const discovered = state({ appInventoryReturned: true });
+		expect(httpRequestRefusal(undefined, discovered)?.code).toBe(
+			"local_app_discovery_required",
+		);
+		expect(httpRequestRefusal("  ", discovered)?.code).toBe(
+			"local_app_discovery_required",
+		);
+	});
+});
+
+describe("research and HTTP fallback discovery", () => {
+	test.each([
+		["ok", true],
+		["partial", true],
+		["error", false],
+		["timeout", false],
+		["cancelled", false],
+	] as const)("a %s inventory controls both fallbacks", (status, allowed) => {
+		const routingState = state({
+			appInventoryReturned: isReturnedAppInventory({ status, apps: [] }),
+		});
+		for (const gate of [sealedResearchRefusal, httpRequestRefusal]) {
+			if (allowed) expect(gate(RUN, routingState)).toBeUndefined();
+			else
+				expect(gate(RUN, routingState)?.code).toBe(
+					"local_app_discovery_required",
+				);
+		}
 	});
 });

@@ -49,20 +49,20 @@ pub(super) fn global_orchestrator_tool_scope_error(
     tool_name: &str,
 ) -> Option<String> {
     use flow_like::flow::copilot::tool_spec::{
-        ARCHIVE_LOOKUP_TOOL, INTERNET_SEARCH_TOOL, OPEN_URL_TOOL,
+        ARCHIVE_LOOKUP_TOOL, HTTP_REQUEST_TOOL, INTERNET_SEARCH_TOOL, OPEN_URL_TOOL,
     };
 
     (tool_set != FrontendPlatformToolSet::Global
         && matches!(
             tool_name,
-            INTERNET_SEARCH_TOOL | OPEN_URL_TOOL | ARCHIVE_LOOKUP_TOOL
+            INTERNET_SEARCH_TOOL | OPEN_URL_TOOL | ARCHIVE_LOOKUP_TOOL | HTTP_REQUEST_TOOL
         ))
     .then(|| {
         serde_json::json!({
             "status": "error",
             "code": "global_orchestrator_tool_only",
             "tool": tool_name,
-            "message": "Public-web research is available only to the top-level FlowPilot orchestrator."
+            "message": "Direct web and HTTP tools are available only to the top-level FlowPilot orchestrator."
         })
         .to_string()
     })
@@ -95,7 +95,7 @@ impl PlatformToolBridge for DesktopPlatformBridge {
 
     async fn call(&self, tool_name: &str, arguments: serde_json::Value) -> String {
         use crate::functions::ai::copilot_sdk_tools::approval_from_spec;
-        use flow_like::flow::copilot::tool_spec::missing_required_args;
+        use flow_like::flow::copilot::tool_spec::{HTTP_REQUEST_TOOL, missing_required_args};
 
         // Do not even enqueue a frontend event after the owning model run has ended. Cancellation
         // is checked again inside the blocking bridge scope to close the race after this preflight.
@@ -131,10 +131,12 @@ impl PlatformToolBridge for DesktopPlatformBridge {
         // exactly the same policy as the Copilot SDK / MCP backends.
         let approval = approval_from_spec(&spec, &arguments);
         let timeout = Duration::from_secs(spec.timeout_secs);
+        let http_deadline = std::time::Instant::now().checked_add(timeout);
 
         let bridge = self.bridge.clone();
         let name = tool_name.to_string();
         let cancellation = self.cancellation.clone();
+        let http_arguments = (tool_name == HTTP_REQUEST_TOOL).then(|| arguments.clone());
         match tokio::task::spawn_blocking(move || {
             crate::functions::ai::frontend_tool_bridge::with_frontend_tool_execution_scope(
                 cancellation,
@@ -144,8 +146,25 @@ impl PlatformToolBridge for DesktopPlatformBridge {
         })
         .await
         {
-            Ok(value) => serde_json::to_string(&value)
-                .unwrap_or_else(|_| "{\"status\":\"error\"}".to_string()),
+            Ok(value) => {
+                let value = if let Some(arguments) = http_arguments {
+                    crate::functions::ai::frontend_tool_bridge::complete_http_request_approval(
+                        &arguments,
+                        value,
+                        self.is_cancelled().await,
+                        crate::functions::ai::frontend_tool_bridge::http_request_cancellation(
+                            self.bridge.channel().clone(),
+                            Some(self.cancellation.clone()),
+                            http_deadline,
+                        ),
+                    )
+                    .await
+                } else {
+                    value
+                };
+                serde_json::to_string(&value)
+                    .unwrap_or_else(|_| "{\"status\":\"error\"}".to_string())
+            }
             Err(err) => {
                 serde_json::json!({ "status": "error", "error": err.to_string() }).to_string()
             }

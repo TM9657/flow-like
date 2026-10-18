@@ -51,9 +51,9 @@ use flow_like::copilot::{ChatImage, CopilotScope, UnifiedCopilotResponse};
 use flow_like::flow::copilot::memory::{AssistantMemory, MemoryEntry, MemoryStatus};
 use flow_like::flow::copilot::platform::{PlatformToolBridge, run_internet_search};
 use flow_like::flow::copilot::tool_spec::{
-    INTERNET_SEARCH_TOOL, PlatformToolSpec, find_data_studio_tool_spec, find_global_tool_spec,
-    find_home_tool_spec_for_access, find_scout_tool_spec, missing_required_args,
-    resolve_tool_approval,
+    HTTP_REQUEST_TOOL, INTERNET_SEARCH_TOOL, PlatformToolSpec, find_data_studio_tool_spec,
+    find_global_tool_spec, find_home_tool_spec_for_access, find_scout_tool_spec,
+    missing_required_args, resolve_tool_approval,
 };
 use flow_like::flow::copilot::{
     AttachmentManifestEntry, ChatMessage, GlobalDataStudioContext, GlobalOpenBoardContext,
@@ -634,6 +634,151 @@ mod specialist_tool_spec_tests {
     use super::*;
 
     #[flow_like_types::tokio::test]
+    async fn http_request_approval_failures_never_reach_the_engine() {
+        // An engine call with these arguments would fail URL validation instead.
+        let arguments = json!({ "url": "not a URL" });
+        for (approved, result, error, expected_status) in [
+            (false, None, None, "denied"),
+            (true, None, None, "error"),
+            (true, Some(json!({ "status": "ok" })), None, "error"),
+            (
+                true,
+                Some(json!({ "http_request_approved": true })),
+                None,
+                "error",
+            ),
+            (
+                true,
+                Some(json!({ "status": "unrecognized", "http_request_approved": true })),
+                None,
+                "error",
+            ),
+            (
+                true,
+                Some(json!({ "status": "ok", "http_request_approved": true })),
+                Some("failed".to_string()),
+                "error",
+            ),
+        ] {
+            let output = complete_http_request_approval(
+                &arguments,
+                ToolResultBody {
+                    request_id: String::new(),
+                    approved,
+                    result,
+                    error,
+                },
+                false,
+                std::future::pending(),
+            )
+            .await;
+            let output: Value = serde_json::from_str(&output).unwrap();
+            assert_eq!(output["status"], expected_status);
+            if expected_status == "error" {
+                assert!(output["error"].as_str().is_some_and(|message| {
+                    message == "failed" || message.contains("acknowledge approval")
+                }));
+            }
+        }
+        let cancelled = complete_http_request_approval(
+            &arguments,
+            ToolResultBody {
+                request_id: String::new(),
+                approved: true,
+                result: Some(json!({ "status": "ok", "http_request_approved": true })),
+                error: None,
+            },
+            true,
+            std::future::pending(),
+        )
+        .await;
+        let cancelled: Value = serde_json::from_str(&cancelled).unwrap();
+        assert_eq!(cancelled["status"], "cancelled");
+    }
+
+    #[flow_like_types::tokio::test]
+    async fn http_request_preserves_structured_discovery_refusals_without_execution() {
+        let refusal = json!({
+            "status": "error",
+            "code": "local_app_discovery_required",
+            "retryable": true,
+            "message": "Call list_apps and wait for its result first."
+        });
+        let result = complete_http_request_approval(
+            &json!({ "url": "not a URL" }),
+            ToolResultBody {
+                request_id: String::new(),
+                approved: true,
+                result: Some(refusal.clone()),
+                error: None,
+            },
+            false,
+            std::future::pending(),
+        )
+        .await;
+        let result: Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(result, refusal);
+    }
+
+    #[flow_like_types::tokio::test]
+    async fn http_cancellation_observes_channel_stop_after_approval_and_expiry() {
+        use flow_like_types::channel::{ChannelPush, ChannelPushKind, InProcessChannel};
+        use flow_like_types::tokio::time::timeout;
+
+        let channel = InProcessChannel::register(
+            flow_like_types::channel::new_request_id(),
+            Duration::from_secs(30),
+        )
+        .await;
+        let cancellation = http_request_cancellation(channel.as_ref(), i64::MAX);
+        flow_like_types::tokio::pin!(cancellation);
+        assert!(
+            timeout(Duration::from_millis(10), &mut cancellation)
+                .await
+                .is_err()
+        );
+        channel
+            .push(ChannelPush {
+                channel_id: channel.channel_id().to_string(),
+                request_id: None,
+                kind: ChannelPushKind::Cancel,
+                value: Value::Null,
+            })
+            .await;
+        timeout(Duration::from_secs(1), &mut cancellation)
+            .await
+            .expect("a later channel stop must interrupt the HTTP request");
+        channel.close().await;
+
+        let channel = InProcessChannel::register(
+            flow_like_types::channel::new_request_id(),
+            Duration::from_secs(30),
+        )
+        .await;
+        timeout(
+            Duration::from_secs(1),
+            http_request_cancellation(channel.as_ref(), 0),
+        )
+        .await
+        .expect("an expired tool deadline must cancel before transmission");
+        channel.close().await;
+    }
+
+    #[test]
+    fn http_requests_are_available_only_to_the_global_orchestrator() {
+        assert!(server_platform_tool_spec(None, HTTP_REQUEST_TOOL, false).is_some());
+        for specialist in [
+            PlatformSpecialist::Home,
+            PlatformSpecialist::Scout,
+            PlatformSpecialist::DataStudio,
+        ] {
+            assert!(
+                server_platform_tool_spec(Some(specialist), HTTP_REQUEST_TOOL, false).is_none()
+            );
+        }
+    }
+
+    #[flow_like_types::tokio::test]
     async fn home_read_only_bridge_rejects_apply_without_emitting_a_request() {
         let channel = flow_like_types::channel::InProcessChannel::register(
             "home-read-only-bridge-test",
@@ -791,6 +936,15 @@ impl PlatformToolBridge for ServerPlatformBridge {
         match self.channel.wait(&ticket, None).await {
             Ok(ChannelOutcome::Responded(value)) => {
                 match serde_json::from_value::<ToolResultBody>(value) {
+                    Ok(response) if tool_name == HTTP_REQUEST_TOOL => {
+                        complete_http_request_approval(
+                            &arguments,
+                            response,
+                            self.channel.is_cancelled().await,
+                            http_request_cancellation(self.channel.as_ref(), ticket.expires_at),
+                        )
+                        .await
+                    }
                     Ok(response) => normalize_response(tool_name, response),
                     Err(_) => tool_error(tool_name, "The FlowPilot tool response was malformed."),
                 }
@@ -810,6 +964,56 @@ impl PlatformToolBridge for ServerPlatformBridge {
                 tool_error(tool_name, "The FlowPilot tool channel failed.")
             }
         }
+    }
+}
+
+async fn complete_http_request_approval(
+    arguments: &Value,
+    response: ToolResultBody,
+    cancelled: bool,
+    cancellation: impl std::future::Future<Output = ()>,
+) -> String {
+    if !response.approved || response.error.is_some() {
+        return normalize_response(HTTP_REQUEST_TOOL, response);
+    }
+    if response.result.as_ref().is_some_and(|result| {
+        matches!(
+            result.get("status").and_then(Value::as_str),
+            Some("error" | "denied" | "cancelled" | "timeout")
+        )
+    }) {
+        return normalize_response(HTTP_REQUEST_TOOL, response);
+    }
+    let acknowledged = response.result.as_ref().is_some_and(|result| {
+        result.get("status").and_then(Value::as_str) == Some("ok")
+            && result.get("http_request_approved").and_then(Value::as_bool) == Some(true)
+            && !result.get("error").is_some_and(|error| !error.is_null())
+    });
+    if !acknowledged {
+        return tool_error(
+            HTTP_REQUEST_TOOL,
+            "The frontend did not acknowledge approval of this HTTP request.",
+        );
+    }
+    if cancelled {
+        return json!({
+            "status": "cancelled",
+            "tool": HTTP_REQUEST_TOOL,
+            "message": "The owning FlowPilot run ended before the HTTP request could execute."
+        })
+        .to_string();
+    }
+    flow_like::flow::copilot::http_request::run_http_request_cancellable(arguments, cancellation)
+        .await
+        .to_string()
+}
+
+async fn http_request_cancellation(channel: &dyn Channel, expires_at: i64) {
+    loop {
+        if flow_like_types::channel::now_unix() >= expires_at || channel.is_cancelled().await {
+            return;
+        }
+        flow_like_types::tokio::time::sleep(Duration::from_millis(250)).await;
     }
 }
 

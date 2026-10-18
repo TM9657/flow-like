@@ -2493,7 +2493,19 @@ export class EventState implements IEventState {
 		appId: string,
 		eventId: string,
 		runId: string,
+		source: "local" | "remote" = "local",
 	): Promise<IRegressionCorpusPayload> {
+		if (source === "remote") {
+			if (!this.backend.profile || !this.backend.auth) {
+				throw new Error("Remote run payloads require an online profile");
+			}
+			return fetcher<IRegressionCorpusPayload>(
+				this.backend.profile,
+				`apps/${appId}/events/${eventId}/corpus/${runId}/payload`,
+				{ method: "GET" },
+				this.backend.auth,
+			);
+		}
 		return await invoke<IRegressionCorpusPayload>(
 			"get_regression_corpus_payload",
 			{ appId, eventId, runId },

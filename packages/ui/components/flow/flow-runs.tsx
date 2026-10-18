@@ -28,6 +28,7 @@ import {
 	formatDuration,
 	formatRelativeTime,
 } from "../../lib";
+import { getErrorMessage } from "../../lib/error-message";
 import { logLevelFromNumber, logLevelToNumber } from "../../lib/log-level";
 import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { cn } from "../../lib/utils";
@@ -334,7 +335,7 @@ const FlowRunsComponent = ({
 					t("addedToRegressionSet", "Run added to the regression set"),
 				);
 			} catch (error) {
-				toast.error(error instanceof Error ? error.message : String(error));
+				toast.error(getErrorMessage(error));
 			}
 		},
 		[appId, backend.eventState, t],
@@ -358,6 +359,7 @@ const FlowRunsComponent = ({
 						appId,
 						run.event_id,
 						run.run_id,
+						"remote",
 					);
 					nodeId = entry.node_id;
 					payload = entry.payload as object;
@@ -370,7 +372,7 @@ const FlowRunsComponent = ({
 					);
 				}
 			} catch (error) {
-				toast.error(error instanceof Error ? error.message : String(error));
+				toast.error(getErrorMessage(error));
 				return;
 			}
 			const node = nodes[nodeId];
