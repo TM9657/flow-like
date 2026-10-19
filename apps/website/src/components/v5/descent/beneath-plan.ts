@@ -1,4 +1,4 @@
-import type { BoardLayout } from "../board/board-layout";
+import type { BoardLayout, Rect } from "../board/board-layout";
 import { PULSE } from "../board/board-pulse";
 import type { BoardScenarioId, BoardSpec } from "../board/board-spec";
 
@@ -60,6 +60,8 @@ export interface ScenarioPlan {
 	readonly landing: string | null;
 	/** Every thread the scenario's pulses run along. */
 	readonly threads: ReadonlySet<string>;
+	/** The route's nodes, in board units: what the story shows. */
+	readonly nodes: readonly Rect[];
 }
 
 /**
@@ -203,7 +205,20 @@ function buildPlan(
 		threads: new Set(
 			hops.filter((hop) => hop.kind === "thread").map((hop) => hop.id),
 		),
+		nodes: layout.routes[id].nodes.map((node) => {
+			const { x, y, width, height } = layout.node(node);
+			return { x, y, width, height };
+		}),
 	};
+}
+
+/** The box around a plan's route nodes, in board units. */
+export function storyBox(plan: ScenarioPlan): Rect {
+	const left = Math.min(...plan.nodes.map((n) => n.x));
+	const top = Math.min(...plan.nodes.map((n) => n.y));
+	const right = Math.max(...plan.nodes.map((n) => n.x + n.width));
+	const bottom = Math.max(...plan.nodes.map((n) => n.y + n.height));
+	return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 /** One plan per scenario, in DescentData.scenarios order. */

@@ -7,7 +7,7 @@ import type { BoardNodeKind, BoardScenarioId, BoardStrings } from "../components
 import { BOARD_STRING_KEYS, createBoard } from "../components/v5/board/board-spec";
 import type { DescentApp, DescentData } from "../components/v5/descent/types";
 import type { AppKind } from "../components/v5/descent/ui-draw";
-import { APP_SPECS, FIXTURES } from "../components/v5/descent/ui-draw";
+import { APP_SPECS, ARC_ORDER, FIXTURES } from "../components/v5/descent/ui-draw";
 import type { Lang, TranslationKey } from "../i18n";
 import { defaultLang, translations } from "../i18n";
 
@@ -64,7 +64,9 @@ const descentData: DescentData = {
     route: tList(`v5.apps.flow.${id}.route`),
   })),
   appFlowIndex: [1, 0, 2, 1, 2, 1, 2, 0],
-  scenarioAppIndex: [1, 3, 6],
+  // Each story's hero is the app it lands in: Finance Approvals, the
+  // Operations HQ dashboard, FlowPilot Workspace.
+  scenarioAppIndex: [1, 0, 6],
 };
 const S = descentData.strings;
 const dataJson = JSON.stringify(descentData).replace(/</g, "\\u003c");
@@ -281,9 +283,9 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
 
       <div class="dock" role="group" aria-label={S.ariaRail} data-dock>
         <div class="dock-rail" data-dock-rail>
-          {apps.map((app, index) => (
-            <button type="button" aria-pressed={index === app0 ? "true" : "false"} disabled>
-              <i aria-hidden="true">{app.name.charAt(0)}</i><b>{app.name}</b><small>{app.category}</small>
+          {ARC_ORDER.map((index) => (
+            <button type="button" data-app={index} aria-pressed={index === app0 ? "true" : "false"} disabled>
+              <i aria-hidden="true">{apps[index].name.charAt(0)}</i><b>{apps[index].name}</b><small>{apps[index].category}</small>
             </button>
           ))}
         </div>
@@ -396,6 +398,7 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
   .dock button[aria-pressed="true"] small { color: #b4b4bc; }
   .dock button:focus-visible, .scenarios button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .dock[data-away] { pointer-events: none; }
+  .dock[data-away] button { scroll-margin-block: 0; }
 
   /* Operating-layer copy: the band under the picture. No rules: air separates
      the head row (kicker, scenario tabs) from the copy. The label stays for
@@ -412,21 +415,25 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
   .layer-text > * { grid-area: 1 / 1; }
   .layer-ghost { visibility: hidden; pointer-events: none; }
   .layer-label, .scenarios small { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* A changed story's copy fades out while the old route dims, and back in with the new one. */
+  .layer-copy { transition: opacity .24s ease; }
+  .layer-copy[data-swap] { opacity: 0; transition-duration: .12s; }
   .layer-copy h4 { margin: 0; font-size: clamp(26px, 2.4vw, 34px); line-height: 1.02; letter-spacing: -.045em; font-weight: 640; }
   .layer-copy p { margin: 10px 0 0; max-width: 820px; color: #a9adb6; font-size: 15px; line-height: 1.5; }
   .route { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 16px; }
-  /* Scenario tabs: the running scenario fills its tab instead of drawing a bar. */
+  /* Scenario tabs: the running scenario fills its tab instead of drawing a bar;
+     the fill's leading edge is a soft gradient, never a seam. */
   .scenarios { display: flex; gap: 4px; margin-inline-start: auto; }
   .scenarios button { position: relative; display: inline-flex; align-items: baseline; gap: 8px; min-height: 34px; padding: 8px 14px; overflow: hidden; border: 0; border-radius: 999px; background: transparent; color: #8d929b; font: inherit; font-size: 13px; font-weight: 560; line-height: 1.3; white-space: nowrap; cursor: pointer; transition: color .25s, background .25s; }
   .scenarios button > :is(i, b) { position: relative; }
-  .scenarios button > i { font: 10.5px/1 var(--mono); font-style: normal; letter-spacing: .08em; color: #6b7079; transition: color .25s; }
+  .scenarios button > i { font: 10.5px/1 var(--mono); font-style: normal; letter-spacing: .08em; color: #8d929b; transition: color .25s; }
   .scenarios button > b { font-weight: inherit; }
   .scenarios button:hover { color: var(--foreground); }
   .scenarios button[aria-pressed="true"] { background: rgb(255 255 255 / .06); color: var(--foreground); }
-  .scenarios button[aria-pressed="true"] > i { color: var(--accent); }
-  .scenarios button > .sc-bar { position: absolute; inset: 0; display: block; overflow: hidden; border-radius: inherit; opacity: 0; pointer-events: none; transition: opacity .3s; }
-  .scenarios button > .sc-bar > i { display: block; height: 100%; background: rgb(251 86 45 / .16); transform: scaleX(0); transform-origin: left; }
-  .scenarios button[aria-pressed="true"] > .sc-bar[data-on] { opacity: 1; }
+  .scenarios button[aria-pressed="true"] > i { color: #ff8a6b; }
+  .scenarios button > .sc-bar { --feather: 36px; position: absolute; inset: 0; display: block; overflow: hidden; border-radius: inherit; opacity: 0; pointer-events: none; }
+  .scenarios button > .sc-bar > i { display: block; width: calc(100% + var(--feather)); height: 100%; background: linear-gradient(90deg, rgb(251 86 45 / .13) calc(100% - var(--feather)), rgb(251 86 45 / 0)); transform: translateX(-100%); }
+  .scenarios button[aria-pressed="true"] > .sc-bar[data-on] { opacity: 1; transition: opacity .3s; }
 
   /* Static gallery of the app windows, at the scale the scene shows them. */
   .fb-gallery { position: relative; grid-row: 2; display: flex; flex-wrap: wrap; gap: 26px 18px; justify-content: center; align-items: flex-end; padding: 40px 24px 56px; background: radial-gradient(60% 46% at 50% 100%, #efe8e3, transparent 72%); }
@@ -509,7 +516,10 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
   .descent:is([data-mode="pending"], [data-mode="motion"]) .sub-head { position: absolute; top: 108px; left: var(--edge); width: min(520px, calc(100% - 2 * var(--edge))); max-width: none; margin: 0; }
   .descent:is([data-mode="pending"], [data-mode="motion"]) .store-label { display: flex; position: absolute; top: 116px; right: var(--edge); }
   .descent:is([data-mode="pending"], [data-mode="motion"]) .cue { display: flex; position: absolute; right: var(--edge); bottom: 104px; }
-  .descent:is([data-mode="pending"], [data-mode="motion"]) .scrim { display: block; position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; height: 44%; pointer-events: none; opacity: 0; background: linear-gradient(rgb(12 14 19 / 0), rgb(12 14 19 / .72) 42%, rgb(12 14 19 / .94) 78%); }
+  /* The scrim covers only the band, from a short lead-in above it (--scrim-h,
+     measured by the controller), so the lit route keeps its brightness. */
+  .scrim { --scrim-lead: 44px; }
+  .descent:is([data-mode="pending"], [data-mode="motion"]) .scrim { display: block; position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; height: var(--scrim-h, 34%); pointer-events: none; opacity: 0; background: linear-gradient(rgb(12 14 19 / 0), rgb(12 14 19 / .9) var(--scrim-lead), rgb(12 14 19 / .94)); }
   /* Beneath there is no dock: the band takes its place at the foot of the stage. */
   .descent { --band-foot: clamp(28px, 6.4svh, 60px); }
   .descent:is([data-mode="pending"], [data-mode="motion"]) .below { position: absolute; z-index: 2; left: var(--edge); right: var(--edge); bottom: var(--band-foot); padding: 0; background: none; opacity: 0; pointer-events: none; }
@@ -519,7 +529,8 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
   /* Reduced motion: no pin. The sub-head sits in flow on the porcelain, a short
      gradient turns dark, and one composed still of the operating layer follows.
      The still is the view beneath, so the dock is there for keyboards only: its
-     buttons ring their window on focus. */
+     buttons ring their window on focus, and it sits at the still's top, where
+     the windows are, so the browser's focus scroll lands on them. */
   .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .stage { padding: 0; background: #0c0e13; }
   .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .above { display: flex; grid-row: 1; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 18px 40px; padding: 110px var(--edge) 170px; background: linear-gradient(var(--background) calc(100% - 160px), color-mix(in oklab, var(--background), #0c0e13 8%) calc(100% - 128px), color-mix(in oklab, var(--background), #0c0e13 34%) calc(100% - 92px), color-mix(in oklab, var(--background), #0c0e13 72%) calc(100% - 52px), color-mix(in oklab, var(--background), #0c0e13 94%) calc(100% - 20px), #0c0e13); }
   .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .sub-head { margin: 0; }
@@ -528,9 +539,9 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
   .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .scene-host { display: block; position: relative; height: 100vh; height: 100svh; }
   .descent:is([data-mode="reduced"], [data-mode="pending-still"]) :is(.veil-bottom, .scrim) { display: block; align-self: end; position: relative; z-index: 1; pointer-events: none; }
   .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .veil-bottom { height: 26vh; background: linear-gradient(rgb(12 14 19 / 0), #0c0e13 92%); }
-  .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .scrim { height: 44%; background: linear-gradient(rgb(12 14 19 / 0), rgb(12 14 19 / .72) 42%, rgb(12 14 19 / .94) 78%); }
+  .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .scrim { height: var(--scrim-h, 34%); background: linear-gradient(rgb(12 14 19 / 0), rgb(12 14 19 / .9) var(--scrim-lead), rgb(12 14 19 / .94)); }
   .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .below { align-self: end; position: relative; z-index: 2; margin: 0 var(--edge) var(--band-foot); padding: 0; background: none; }
-  .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .dock { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .dock { position: absolute; left: 0; top: 0; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
   /* Where the kicker and the tabs no longer share a row, the tabs sit under
      the kicker, their labels on the copy's left edge. */
@@ -599,12 +610,12 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
     .descent:is([data-mode="pending"], [data-mode="motion"]) .sub-head { top: 84px; left: 20px; width: calc(100% - 40px); }
     .descent:is([data-mode="pending"], [data-mode="motion"]) .cue { right: 20px; bottom: 96px; }
     .descent:is([data-mode="pending"], [data-mode="motion"]) .dock { left: 12px; right: 12px; bottom: 14px; max-width: none; transform: none; }
-    .descent:is([data-mode="pending"], [data-mode="motion"]) .scrim { height: 58%; }
     .descent { --band-foot: 22px; }
     .descent:is([data-mode="pending"], [data-mode="motion"]) .below { left: 14px; right: 14px; }
     .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .above { padding: 84px 20px 130px; }
     .descent:is([data-mode="reduced"], [data-mode="pending-still"]) .below { margin: 0 14px var(--band-foot); }
-    .descent[data-mode]:not([data-mode="fallback"]) .route { display: none; }
+    /* The route stays as one compact row of chips. */
+    .descent[data-mode]:not([data-mode="fallback"]) .route { flex-wrap: nowrap; gap: 4px; }
   }
 
   /* Short phones: a smaller title and slimmer tabs. */
@@ -618,7 +629,7 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
   @media (prefers-reduced-motion: reduce) {
     .cue > i::after { animation: none; transform: translateY(14px); }
     .ls-status[data-state="running"] > i { animation: none; }
-    .dock, .dock button, .scenarios button, .fb-node, .fb-w, .fb-win { transition: none; }
+    .dock, .dock button, .scenarios button, .layer-copy, .fb-node, .fb-w, .fb-win { transition: none; }
   }
 </style>
 
@@ -635,7 +646,8 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
   .v5-apps .route > b:last-of-type[data-lit] { background: rgb(251 86 45 / .16); color: #ffd9cc; }
   .v5-apps .route > i { color: #6b7079; font-size: 12px; font-style: normal; }
   @media (max-width: 800px) {
-    .v5-apps .route > b { padding: 5px 7px; font-size: 11px; }
+    .v5-apps .route > b { min-width: 0; padding: 5px 7px; overflow: hidden; font-size: 11px; text-overflow: ellipsis; }
+    .v5-apps .route > i { flex: none; font-size: 11px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .v5-apps .route > b { transition: none; }
@@ -750,10 +762,10 @@ const boardStyle = `--bh:${unit(boardBottom)};min-width:${Math.round(boardRight)
       { name: "01-intro", intro: 0.55, p: 0, t: 1.4, app: 0 },
       { name: "02-rest", p: 0, t: 3.2, app: 0 },
       { name: "03-app-selected", p: 0, t: 3.7, app: 6 },
-      { name: "04a-glass", p: 0.25, t: 4.1, app: 1 },
-      { name: "04b-board", p: 0.38, t: 4.1, app: 1 },
-      { name: "05-alive", p: 0.56, t: 2.2, app: 1 },
-      { name: "06-settle", p: 0.76, t: 2.9, app: 1 },
+      { name: "04a-glass", p: 0.22, t: 4.1, app: 1 },
+      { name: "04b-board", p: 0.3, t: 4.1, app: 1 },
+      { name: "05-alive", p: 0.44, t: 2.2, app: 1 },
+      { name: "06-settle", p: 0.56, t: 2.9, app: 1 },
       { name: "07a-approval-hop", p: 1, t: 1.4, scenario: 0 },
       { name: "07b-approval-arrive", p: 1, t: 4.6, scenario: 0 },
       { name: "08a-insight-hop", p: 1, t: 1.8, scenario: 1 },

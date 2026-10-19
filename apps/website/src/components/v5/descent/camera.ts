@@ -63,7 +63,12 @@ export function createCameraRig(
 	const kind = (): LayoutKind => (stage.portrait ? "portrait" : "landscape");
 	const yawTarget = (p: number) =>
 		yawFor(p, stage.portrait, windows.theta(stage.app));
-	const arcYawTarget = () => (stage.portrait ? -windows.theta(stage.app) : 0);
+	// A phone frames one window: keyboard focus on an app brings its window
+	// overhead, so its focus ring is seen, and the selected app comes back after.
+	const arcYawTarget = () =>
+		stage.portrait
+			? -windows.theta(stage.focus >= 0 ? stage.focus : stage.app)
+			: 0;
 
 	/** The key camera at p with the intro's lift, the rest yaw and the arc's pan, into camPos and camAt. */
 	function keyPose(p: number, pan: number) {
@@ -126,7 +131,7 @@ export function createCameraRig(
 	/** A slow sway once the layer is alive, and the pointer's parallax. */
 	function drift(p: number) {
 		const motion = stage.motion;
-		const sway = smooth(TIMELINE.glass[1], TIMELINE.alive + 0.1, p) * motion;
+		const sway = smooth(TIMELINE.pull[1], TIMELINE.alive + 0.1, p) * motion;
 		const par = stage.pointerSmooth;
 		camPos.x += Math.sin(stage.t * 0.13) * SWAY * sway;
 		camPos.y += Math.sin(stage.t * 0.09 + 1.3) * SWAY * 0.35 * sway;
@@ -154,7 +159,7 @@ export function createCameraRig(
 		// header, and the picture settles up as the copy band arrives.
 		aim(p, reveal: Reveal) {
 			const comp = composer.get();
-			const final = smooth(TIMELINE.glass[0], TIMELINE.glass[1], p);
+			const final = smooth(TIMELINE.pull[0], TIMELINE.pull[1], p);
 			const pan = comp.open.offset[0] * final;
 			keyPose(p, pan);
 			const fov = lens(p, reveal, comp, final);

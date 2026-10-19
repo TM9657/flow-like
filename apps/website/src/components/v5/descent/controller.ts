@@ -47,6 +47,10 @@ const AUTOPLAY_DELAY = 3500;
 const REVEAL_AT = 0.92;
 const CONTEXT_GRACE = 3000;
 const SAFE_GAP = 16;
+/** CSS px above the band over which its scrim fades in. */
+const SCRIM_LEAD = 44;
+/** Milliseconds a changed story's copy waits, faded out, while the old route dims (beneath SWAP.out). */
+const COPY_SWAP_MS = 140;
 /**
  * Clear CSS px between the picture and the copy band (the composition adds
  * its own margin): a share of the stage's height, less on narrow stages.
@@ -55,11 +59,16 @@ const AIR = { height: 0.062, width: 0.045, min: 20, max: 56 } as const;
 export const bandAir = (width: number, height: number) =>
 	clamp(Math.min(height * AIR.height, width * AIR.width), AIR.min, AIR.max);
 /** Progress over which the copy band fades in; the scene settles its picture up over the same range (shared.ts TIMELINE.band). */
-export const BAND_IN = [0.7, 0.88] as const;
+export const BAND_IN = [0.46, 0.62] as const;
+/** Share of the settle the picture covers before the band starts to show, so the two never meet. */
+export const BAND_SHOW = 0.4;
 /** CSS px the band rises as it fades in. */
 const BAND_TRAVEL = 16;
-/** Progress over which the dock leaves as the floor turns to glass: beneath, the windows are the app selector. */
-const DOCK_OUT = [0.16, 0.28] as const;
+/**
+ * Progress over which the dock leaves with the sub-head, before the floor
+ * turns to glass: beneath, the windows are the app selector.
+ */
+const DOCK_OUT = [0.08, 0.17] as const;
 /** CSS px the dock sinks as it leaves. */
 const DOCK_TRAVEL = 14;
 const PROGRESS_ID = "descent-progress";
@@ -234,7 +243,8 @@ interface Progress {
 	stop(): void;
 }
 
-// The bar under the active scenario row runs for the scenario's duration.
+// The active tab fills for the scenario's duration: its tint slides in from
+// the left with a soft leading edge, so the tab never shows two flat colours.
 function createProgress(): Progress {
 	let bar: HTMLElement | null = null;
 	let run: Animation | null = null;
@@ -253,7 +263,7 @@ function createProgress(): Progress {
 			bar = next;
 			bar.setAttribute("data-on", "");
 			run = fill.animate(
-				[{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }],
+				[{ transform: "translateX(-100%)" }, { transform: "translateX(0)" }],
 				{
 					duration: seconds * 1000,
 					easing: "linear",
@@ -367,7 +377,11 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 		statusEl,
 		scenarioWrap,
 	} = parts;
+	// The dock lists the apps in the arc's order, left to right like their
+	// windows; each button names its app.
 	const appButtons = [...dock.querySelectorAll<HTMLButtonElement>("button")];
+	const appOf = (b: HTMLElement) => Number(b.dataset.app);
+	const buttonOf = (app: number) => appButtons.find((b) => appOf(b) === app);
 	const scenarioButtons = [
 		...scenarioWrap.querySelectorAll<HTMLButtonElement>("button"),
 	];
@@ -399,6 +413,9 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 	let requested = false;
 	let lostTimer = 0;
 	let layoutFrame = 0;
+	let copySwap = 0;
+	/** Route pill changes that arrive while the copy is swapped out, applied with the new copy. */
+	let routeQueue: (() => void)[] = [];
 	let lastArea = "";
 	let applied: DescentSafeArea | null = null;
 	let resolveSettled: () => void = () => {};
@@ -477,23 +494,51 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 		if (!on) autoplay.cancel();
 	}
 
-	// Keyboard focus entering the band before it shows scrolls the descent to
-	// its end, so the focus ring lands on visible controls.
-	function revealForFocus() {
-		if (mode !== "motion" || revealed) return;
+	/** Scrolls the pinned descent to progress `at`. */
+	function scrollToProgress(at: number) {
 		const r = track.getBoundingClientRect();
 		window.scrollTo({
-			top: window.scrollY + r.top + REVEAL_AT * pinSpan(r),
+			top: window.scrollY + r.top + at * pinSpan(r),
 			behavior: "instant",
 		});
 	}
 
-	// The band fades in and rises a little as the picture settles up to make
-	// room for it.
+	/** Whether the stage has scrolled up past the end of its pin. */
+	const pastPin = () => stage.getBoundingClientRect().top < -1;
+
+	// Keyboard focus entering the band before it shows scrolls the descent to
+	// its end, so the focus ring lands on visible controls; focus coming back
+	// from below the section pins the stage again, so its window row is seen.
+	function revealForFocus() {
+		if (mode !== "motion") return;
+		if (pastPin()) scrollToProgress(1);
+		else if (!revealed) scrollToProgress(REVEAL_AT);
+	}
+
+	// Beneath, an app's button is not seen: its window is, and carries the
+	// focus ring. The browser scrolls the button itself into view, which can
+	// leave the window row above the screen, so once it has, the whole still,
+	// or the pinned stage, is brought into view.
+	function showWindowsForFocus() {
+		requestAnimationFrame(() => {
+			if (mode === "motion") {
+				if (pastPin()) scrollToProgress(1);
+				return;
+			}
+			if (mode !== "reduced") return;
+			const r = host.getBoundingClientRect();
+			if (r.top < -1 || r.bottom > window.innerHeight + 1) {
+				window.scrollBy({ top: r.top, behavior: "instant" });
+			}
+		});
+	}
+
+	// The band fades in and rises a little once the picture has mostly settled
+	// up to make room for it.
 	function raiseBand(belowIn: number) {
-		below.style.opacity = String(smooth(0.15, 1, belowIn));
+		below.style.opacity = String(smooth(BAND_SHOW, 1, belowIn));
 		below.style.transform = `translateY(${BAND_TRAVEL * (1 - belowIn)}px)`;
-		setRevealed(belowIn > 0.5);
+		setRevealed(belowIn > 0.7);
 	}
 
 	// The dock serves the surface. Beneath, the windows are the app selector:
@@ -511,16 +556,20 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 		above.style.transform = `translateY(${-28 * aboveOut}px)`;
 		subHead.style.opacity = String(smooth(0.25, 0.9, intro));
 		sinkDock(p);
-		raiseBand(smooth(BAND_IN[0], BAND_IN[1], p));
-		scrim.style.opacity = String(smooth(BAND_IN[0] - 0.04, BAND_IN[1], p));
+		const belowIn = smooth(BAND_IN[0], BAND_IN[1], p);
+		raiseBand(belowIn);
+		scrim.style.opacity = String(smooth(BAND_SHOW / 2, 1, belowIn));
 		veilTop.style.opacity = String(1 - smooth(0, 0.06, p));
 		veilBottom.style.opacity = String(smooth(0.8, 1, p));
 		applyTheme();
 	}
 
-	const press = (buttons: readonly HTMLButtonElement[], index: number) => {
+	const press = (
+		buttons: readonly HTMLButtonElement[],
+		on: (b: HTMLButtonElement, i: number) => boolean,
+	) => {
 		for (const [i, b] of buttons.entries()) {
-			b.setAttribute("aria-pressed", String(i === index));
+			b.setAttribute("aria-pressed", String(on(b, i)));
 		}
 	};
 
@@ -534,7 +583,7 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 		const over = need > dockRail.clientWidth + 1;
 		if (over === dock.hasAttribute("data-overflow")) return;
 		dock.toggleAttribute("data-overflow", over);
-		centre(dockRail, appButtons[state.app]);
+		centre(dockRail, buttonOf(state.app));
 	}
 
 	// Scrolls a horizontal scroller so the item sits in its middle.
@@ -548,17 +597,10 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 
 	// The copy sits in a live region: only real changes may touch it, so the
 	// server-rendered state is not announced again when the scene boots.
-	function renderDom() {
+	function renderCopy() {
 		const sc = data.scenarios[state.scenario];
 		const app = data.apps[state.app];
 		if (!sc || !app) return;
-		press(appButtons, state.app);
-		press(scenarioButtons, state.scenario);
-		const selected = windows.find(
-			(win) => win.dataset.app === String(state.app),
-		);
-		for (const win of windows)
-			win.toggleAttribute("data-selected", win === selected);
 		setText(labelEl, `${app.name} / ${sc.label}`);
 		setText(titleEl, sc.title);
 		setText(detailEl, sc.detail);
@@ -567,7 +609,46 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 			graph.dataset.scenario = shown;
 			route.show(sc.route, mode !== "motion" || !eventsSeen);
 		}
-		centre(dockRail, appButtons[state.app]);
+	}
+
+	// Route pill changes wait for the copy they belong to while it is swapped out.
+	const onRoute = (change: () => void) => {
+		if (copySwap) routeQueue.push(change);
+		else change();
+	};
+
+	// A story change on the shown band crossfades the copy with the board: the
+	// old copy fades while the old route dims, the new one arrives with the new
+	// route, so no frame pairs one story's words with another's picture.
+	function swapCopy() {
+		window.clearTimeout(copySwap);
+		routeQueue = [];
+		copy.dataset.swap = "";
+		copySwap = window.setTimeout(() => {
+			copySwap = 0;
+			renderCopy();
+			const queued = routeQueue;
+			routeQueue = [];
+			for (const change of queued) change();
+			delete copy.dataset.swap;
+		}, COPY_SWAP_MS);
+	}
+
+	function renderDom() {
+		press(appButtons, (b) => appOf(b) === state.app);
+		press(scenarioButtons, (_, i) => i === state.scenario);
+		const selected = windows.find(
+			(win) => win.dataset.app === String(state.app),
+		);
+		for (const win of windows)
+			win.toggleAttribute("data-selected", win === selected);
+		const story = graph.dataset.scenario !== String(state.scenario);
+		if (story && mode === "motion" && revealed && !reducedQuery.matches) {
+			swapCopy();
+		} else if (!copySwap) {
+			renderCopy();
+		}
+		centre(dockRail, buttonOf(state.app));
 		if (mode === "fallback") {
 			centre(gallery, selected);
 			centreRoute();
@@ -602,8 +683,11 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 		});
 	}
 
-	function play() {
+	// A changed story stops the old one's progress at once, so two tabs are
+	// never filled together.
+	function play(story: boolean) {
 		autoplay.cancel();
+		if (story) progress.stop();
 		renderDom();
 		scene?.selectApp(state.app);
 		scene?.setScenario(state.scenario);
@@ -611,30 +695,33 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 	}
 
 	function selectApp(index: number) {
+		const before = state.scenario;
 		state.app = index;
 		state.scenario = data.appFlowIndex[index] ?? state.scenario;
-		play();
+		play(state.scenario !== before);
 	}
 
 	function selectScenario(index: number) {
+		const before = state.scenario;
 		state.scenario = index;
 		state.app = data.scenarioAppIndex[index] ?? state.app;
-		play();
+		play(state.scenario !== before);
 	}
 
 	function onScenarioEvent(event: DescentScenarioEvent) {
 		if (event.scenario !== state.scenario) return;
 		eventsSeen = true;
 		if (event.type === "start") {
-			route.clear();
+			onRoute(() => route.clear());
 			status.running();
 			progress.start(scenarioButtons[event.scenario], event.duration);
 		} else if (event.type === "hop") {
-			route.light(event.step);
+			const { step } = event;
+			onRoute(() => route.light(step));
 		} else if (event.type === "arrive") {
-			route.arrive();
+			onRoute(() => route.arrive());
 		} else {
-			route.fill();
+			onRoute(() => route.fill());
 			status.done();
 			progress.finish();
 			autoplay.completed();
@@ -722,8 +809,16 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 		};
 	}
 
+	// The scrim darkens only what the band covers, from a short lead-in above
+	// it, so the lit route above the band keeps its full brightness.
+	function sizeScrim() {
+		const depth = layoutTop(host) + host.offsetHeight - layoutTop(below);
+		stage.style.setProperty("--scrim-h", `${Math.round(depth + SCRIM_LEAD)}px`);
+	}
+
 	function syncSafeArea() {
 		if (!scene || (mode !== "motion" && mode !== "reduced")) return;
+		sizeScrim();
 		const area = measureSafeArea();
 		const key = JSON.stringify(area);
 		if (key === lastArea) return;
@@ -809,6 +904,9 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 			created = create(host, data, {
 				reducedMotion: reduced,
 				onSelectApp: selectApp,
+				// Beneath, the windows are the app selector: resting on one holds
+				// the story, as the dock does at the surface.
+				onHoverApp: (index) => autoplay.hold("windows-pointer", index >= 0),
 				onTheme: (theme) => {
 					sceneDark = theme === "dark";
 					applyTheme();
@@ -939,17 +1037,23 @@ export function bootDescent(root: HTMLElement): DescentController | null {
 		scene.focusApp(index);
 		if (mode === "reduced") scene.render();
 	}
-	for (const [i, b] of appButtons.entries()) {
+	for (const b of appButtons) {
+		const app = appOf(b);
 		b.addEventListener("click", () => {
 			interact();
-			selectApp(i);
+			selectApp(app);
 		});
 		b.addEventListener("keydown", onKey);
 		// The browser's own focus scroll can leave a button half under the
-		// rail's faded edge; this brings it inside the rail's padding.
+		// rail's faded edge; this brings it inside the rail's padding. Beneath,
+		// where the dock is not seen, its window's row is brought into view.
 		b.addEventListener("focus", () => {
-			b.scrollIntoView({ block: "nearest", inline: "nearest" });
-			if (b.matches(":focus-visible")) focusWindow(i);
+			if (dock.hasAttribute("data-away") || mode === "reduced") {
+				showWindowsForFocus();
+			} else {
+				b.scrollIntoView({ block: "nearest", inline: "nearest" });
+			}
+			if (b.matches(":focus-visible")) focusWindow(app);
 		});
 		b.addEventListener("blur", () => focusWindow(-1));
 	}

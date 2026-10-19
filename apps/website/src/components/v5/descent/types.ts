@@ -63,6 +63,8 @@ export interface DescentSafeArea {
 export interface DescentOptions {
 	reducedMotion: boolean;
 	onSelectApp?: (index: number) => void;
+	/** Fires when the pointer comes to rest on an app's window (its index), or leaves the windows (-1). */
+	onHoverApp?: (index: number) => void;
 	/** Fires on the frame the rendered image turns from the porcelain world to the dark operating layer, and back. */
 	onTheme?: (theme: DescentTheme) => void;
 	onScenarioEvent?: (event: DescentScenarioEvent) => void;

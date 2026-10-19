@@ -26,12 +26,15 @@ export const marginX = (width: number) =>
 /** World units the top corners keep above the window tops: the selected window rises. */
 const HEADROOM = 0.14;
 /**
- * CSS px the picture may sit lower before the copy band shows, centred in the
- * room the band will take; it settles up by that much as the band fades in.
- * The band is still faint while the picture covers the first third of the
- * settle, so the two never meet on screen.
+ * How far the picture may sit lower before the copy band shows, centred in the
+ * room the band will take (a share of the stage's height, at most `max` CSS
+ * px); it settles up by that much as the band arrives. The band only shows
+ * once the picture has covered most of the settle (controller BAND_SHOW), so
+ * the two never meet on screen.
  */
-export const SETTLE_MAX = 96;
+export const SETTLE = { share: 0.17, max: 160 } as const;
+export const settleMax = (height: number) =>
+	Math.min(SETTLE.max, height * SETTLE.share);
 
 interface Range {
 	readonly min: number;
@@ -500,11 +503,11 @@ export function compose(input: ComposeInput): Composition {
 	const room = h - insets.top - insets.bottom - 2 * MARGIN_Y;
 	const bandTop = insets.top + MARGIN_Y + Math.max(0, (room - used) / 2);
 	const bandShift = h / 2 - fit.top * fit.scale - bandTop;
-	// Before it: the same picture, lowered toward the middle of the room the
-	// band will take, never so far that the band fading in would meet it.
+	// Before it: the same picture, centred in the room the band will take a
+	// part of, never so far down that the band fading in would meet it.
 	const openRoom = h - free.top - free.bottom - 2 * MARGIN_Y;
 	const openTop = free.top + MARGIN_Y + Math.max(0, (openRoom - used) / 2);
-	const openShift = bandShift - clamp(openTop - bandTop, 0, SETTLE_MAX);
+	const openShift = bandShift - clamp(openTop - bandTop, 0, settleMax(h));
 	const offset = [pan, 0, 0] as const;
 	return {
 		rest,

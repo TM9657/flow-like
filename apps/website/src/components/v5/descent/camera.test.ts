@@ -46,14 +46,14 @@ describe.each(["landscape", "portrait"] as const)("%s timeline", (kind) => {
 		}
 	});
 
-	test("the camera only pulls back, and only during the glass beat", () => {
+	test("the camera only pulls back, and only while it pulls back", () => {
 		const positions = sample(kind, "pos");
 		for (let i = 1; i < positions.length; i++) {
 			expect(positions[i][2]).toBeGreaterThanOrEqual(
 				positions[i - 1][2] - 1e-9,
 			);
 		}
-		const end = sampleKeys(keys, TIMELINE.glass[1], "pos");
+		const end = sampleKeys(keys, TIMELINE.pull[1], "pos");
 		const last = sampleKeys(keys, 1, "pos");
 		for (let j = 0; j < 3; j++) expect(last[j]).toBeCloseTo(end[j], 9);
 	});

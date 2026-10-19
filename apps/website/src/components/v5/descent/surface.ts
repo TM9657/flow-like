@@ -16,10 +16,10 @@ import {
 
 /**
  * The drain front (world units from the nearest dock) at the start and the
- * end of the glass beat; its soft edge widens as it travels, so the floor
- * darkens as a gradient and never shows an edge.
+ * end of the glass beat, and the half width of its soft edge: narrow, so the
+ * floor is porcelain or dark glass and never a grey haze between them.
  */
-const DRAIN = { from: -3, to: 46, soft: 1.4, spread: 0.18 } as const;
+const DRAIN = { from: -2, to: 46, soft: 0.9 } as const;
 /** Opacity of the glass once drained, at the start of the beat and at its end. */
 const GLASS_ALPHA = { from: 0.32, to: 0.06 } as const;
 /** The dark beneath the floor, the board's own background colour. */
@@ -30,11 +30,12 @@ const FLOOR_SIZE = 1400;
 const FOG = { light: 0.021, dark: 0.024 } as const;
 
 // The floor. On the porcelain it is the page itself: exact background, the dot
-// grid, contact shadows and the lit slot under every dock. A soft front then
+// grid, contact shadows and a fine ember slot under every dock. A front then
 // spreads from the docks, outward and toward the camera: behind it the floor
-// is dark glass that lets the operating layer beneath show through, with the
-// slots still lit. The front's edge is several world units wide, so the light
-// drains as a gradient.
+// is dark glass that lets the operating layer beneath show through. Its edge
+// is narrow, and drained floor fogs toward the dark, so the light never turns
+// to a grey haze on its way out. On the glass only the windows the story
+// touches keep a short, soft glow at the dock their threads leave from.
 const FLOOR_FRAG = /* glsl */ `
 uniform vec4 uWinA[8];
 uniform vec4 uWinB[8];
@@ -52,6 +53,8 @@ varying vec3 vWorld;
 ${GLSL_FOG}
 ${GLSL_DOTS}
 ${GLSL_SDF}
+const float SLOT = 0.86;
+const float DOCK = 0.24;
 vec2 toLocal(vec2 v, float c, float s) {
   return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
 }
@@ -64,6 +67,8 @@ void main() {
   float ao = 0.0;
   float contact = 0.0;
   float slot = 0.0;
+  float dock = 0.0;
+  float glow = 0.0;
   float foot = 0.0;
   float near = 1e3;
   for (int i = 0; i < 8; i++) {
@@ -73,7 +78,7 @@ void main() {
     float s = sin(a.w);
     vec2 l = toLocal(p - a.xy, c, s);
     float hw = a.z;
-    float ds = sdRound(l, vec2(hw * 0.86, 0.008), 0.008);
+    float ds = sdRound(l, vec2(hw * SLOT, 0.008), 0.008);
     near = min(near, max(ds, 0.0));
     if (ds > hw + 1.5) continue;
     vec2 lx = toLocal(dpx, c, s);
@@ -83,18 +88,21 @@ void main() {
     float h = max(b.y, 0.0);
     float lean = b.x;
     float energy = 0.3 + b.z * 0.9 + b.w * 1.6;
+    float story = b.z * 0.9 + b.w * 1.6;
     float wEff = max(0.008, pw * 0.8);
     float line = (1.0 - smoothstep(wEff - pw * 0.5, wEff + pw * 0.5, abs(l.y))) * (0.008 / wEff);
-    line *= 1.0 - smoothstep(hw * 0.86 - pwx, hw * 0.86 + pwx, abs(l.x));
-    slot += line * energy;
+    slot += line * (1.0 - smoothstep(hw * SLOT - pwx, hw * SLOT + pwx, abs(l.x))) * energy;
+    float dd = sdRound(l, vec2(hw * DOCK, 0.008), 0.008);
+    dock += line * (1.0 - smoothstep(hw * DOCK - pwx * 4.0, hw * DOCK + pwx * 4.0, abs(l.x))) * story;
+    glow += exp(-max(dd, 0.0) * 8.0) * story;
     foot += exp(-max(ds, 0.0) * 9.0) * energy;
     float dFoot = sdRound(l - vec2(0.0, -lean * 0.5), vec2(hw * 0.97, lean * 0.5 + 0.015), 0.05);
     ao += (1.0 - smoothstep(-0.05, 0.16 + h * 0.9, dFoot)) * 0.075 / (1.0 + h * 4.0);
     float dBase = sdRound(l - vec2(0.0, 0.01), vec2(hw * 0.985, 0.012), 0.012);
     contact += (1.0 - smoothstep(0.0, 0.035 + h * 0.6, dBase)) * 0.2 / (1.0 + h * 6.0);
   }
-  // The front leads from the docks; the rest of the floor follows the sky, so
-  // no part of it stays lighter than the stage around it.
+  // The front leads from the docks; once the sky has turned at the horizon
+  // the rest of the floor follows it.
   float drain = max(1.0 - smoothstep(uDrain - uSoft, uDrain + uSoft, near), uFollow);
   float breathe = 0.9 + 0.1 * sin(uTime * 1.4) * uMotion;
   float fog = fogAmount(vWorld);
@@ -103,21 +111,22 @@ void main() {
   vec3 glass = uGlass * uGlassAlpha;
   vec3 surf = mix(porcelain, glass, drain);
   float alpha = mix(1.0, uGlassAlpha, drain);
-  // The slots stay lit on both: a fine ember line on the porcelain, a warmer
-  // glow on the glass where the threads leave the apps.
-  vec3 emit = ember * slot * mix(0.55 + 0.5 * breathe, 1.25 * breathe, drain) * 0.7;
-  emit += ember * foot * mix(0.02, 0.05, drain);
-  vec3 pm = mix(surf, uFogColor, fog) + emit * (1.0 - fog);
+  vec3 lit = ember * slot * (0.55 + 0.5 * breathe) * 0.7 + ember * foot * 0.02;
+  vec3 glassLit = ember * (dock * 0.5 + glow * 0.045) * breathe;
+  vec3 emit = mix(lit, glassLit, drain);
+  vec3 haze = mix(uFogColor, uGlass, drain);
+  vec3 pm = mix(surf, haze, fog) + emit * (1.0 - fog);
   gl_FragColor = vec4(pm, mix(alpha, 1.0, fog));
 }
 `;
 
 /**
- * The sky darkens from the horizon upward: a soft front (in NDC heights above
- * the horizon) that starts below it and ends above the frame. The floor's fog
- * takes the sky's colour at the horizon, so the two always meet without a seam.
+ * The sky darkens from the horizon upward: a front (NDC heights above the
+ * horizon) that starts `lead` below it and leaves past the frame's top edge,
+ * with a narrow soft edge of half width `soft`. The undrained floor's fog takes
+ * the sky's colour at the horizon, so the two always meet without a seam.
  */
-const SKY = { from: -1.4, to: 2.8, soft: 0.55 } as const;
+const SKY = { lead: 0.04, soft: 0.1 } as const;
 /** CSS px from the stage's top of the header's bottom edge: its theme follows the sky there. */
 const HEADER_LINE = 64;
 
@@ -153,7 +162,7 @@ export function createSurface(ctx: SceneContext): Surface {
 		uWinA: shared.uWinA,
 		uWinB: shared.uWinB,
 		uDrain: { value: DRAIN.from as number },
-		uSoft: { value: DRAIN.soft as number },
+		uSoft: { value: DRAIN.soft },
 		uFollow: { value: 0 },
 		uGlassAlpha: { value: GLASS_ALPHA.from as number },
 		uTime: shared.uTime,
@@ -187,8 +196,8 @@ export function createSurface(ctx: SceneContext): Surface {
 	const skyUniforms = {
 		uViewport: { value: new THREE.Vector2(1, 1) },
 		uHorizon: { value: 0 },
-		uFront: { value: SKY.from as number },
-		uSoft: { value: SKY.soft as number },
+		uFront: { value: -(SKY.lead + SKY.soft) },
+		uSoft: { value: SKY.soft },
 		uLight: { value: new THREE.Vector3(light.r, light.g, light.b) },
 		uDark: { value: new THREE.Vector3(darkSrgb.r, darkSrgb.g, darkSrgb.b) },
 	};
@@ -224,12 +233,13 @@ export function createSurface(ctx: SceneContext): Surface {
 		1 - smooth(front - SKY.soft, front + SKY.soft, y);
 
 	return {
-		// The sky darkens from the horizon up and the floor from the docks out,
-		// so the dark spreads from the windows; it reaches the header line and
-		// the bottom of the frame about together.
+		// The floor turns first, from the docks out to the frame's foot and the
+		// far floor; then the sky turns from the horizon up past the header.
 		update(reveal: Reveal) {
-			const front = lerp(SKY.from, SKY.to, reveal.sky);
 			const level = horizon();
+			const start = -(SKY.lead + SKY.soft);
+			const end = Math.max(start + 0.1, 1 - level + SKY.soft);
+			const front = lerp(start, end, reveal.skyFront);
 			const atHorizon = darkAt(0, front);
 			renderer.getDrawingBufferSize(size);
 			skyUniforms.uViewport.value.copy(size);
@@ -237,9 +247,7 @@ export function createSurface(ctx: SceneContext): Surface {
 			skyUniforms.uFront.value = front;
 			mixSrgb(shared.uFogColor.value, COLORS.bg, COLORS.bgDark, atHorizon);
 			shared.uFogDensity.value = lerp(FOG.light, FOG.dark, reveal.sky);
-			const drain = lerp(DRAIN.from, DRAIN.to, reveal.glass);
-			uniforms.uDrain.value = drain;
-			uniforms.uSoft.value = DRAIN.soft + DRAIN.spread * Math.max(0, drain);
+			uniforms.uDrain.value = lerp(DRAIN.from, DRAIN.to, reveal.glass);
 			uniforms.uFollow.value = atHorizon;
 			uniforms.uGlassAlpha.value = lerp(
 				GLASS_ALPHA.from,

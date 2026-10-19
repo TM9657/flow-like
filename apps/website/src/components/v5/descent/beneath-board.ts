@@ -12,18 +12,28 @@ import {
 	css,
 	paintBoard,
 } from "../board/board-paint";
-import type { BoardScenarioId, BoardSpec } from "../board/board-spec";
+import type {
+	BoardGrid,
+	BoardScenarioId,
+	BoardSpec,
+} from "../board/board-spec";
 import type { BoardPlacement } from "./internal";
 
 /** Board units of dark ground painted around everything. */
 const PAD = 28;
 /**
  * The board tells one story at a time: off the active route every node is a
- * whisper of the product's board and no wire is drawn. The base painting is
- * that whisper alone; the lit painting adds the route at full strength.
+ * whisper of the product's board, or nothing on a phone, which frames the story
+ * alone, and no wire is drawn. The base painting is that whisper alone; the lit
+ * painting adds the route at full strength.
  */
-const STORY: BoardEmphasis = { inactive: 0.12, text: 0.9, wires: 0 };
+const STORY: Record<BoardGrid, BoardEmphasis> = {
+	landscape: { inactive: 0.12, text: 0.9, wires: 0 },
+	portrait: { inactive: 0, text: 0.9, wires: 0 },
+};
 const NO_ROUTE = new Set<never>();
+/** Uniform values that leave the whole board shown and the whole route lit. */
+const ALL = { story: [-0.1, -0.2], window: [-0.5, 1.5, 0.1] } as const;
 
 const BOARD_VERT = /* glsl */ `
 varying vec2 vUv;
@@ -36,9 +46,11 @@ void main() {
 // Two paintings of the board on its own dark ground, which is also the colour
 // around it beneath: the whisper board and the same board with its route, mixed
 // by uLit. uFade brings it up from that ground with depth: the top row, nearest
-// the glass, first, the deepest row last. uEdge fades it out toward the frame's
-// sides (x: the fade's width in drawing pixels, 0 for none; y: the drawing's
-// width), so a node a phone's frame cuts dissolves.
+// the glass, first, the deepest row last. uStory hides the board below the
+// story (v: shown above x, gone below y). uWindow lights the route only inside
+// a phone's frame (u: lit between x and y, out by z beyond). uEdge fades it out
+// toward the frame's sides (x: the fade's width in drawing pixels, 0 for none;
+// y: the drawing's width), so a node a phone's frame cuts dissolves.
 const BOARD_FRAG = /* glsl */ `
 const float DEPTH_FADE = 1.2;
 uniform sampler2D uBase;
@@ -47,10 +59,14 @@ uniform float uLit;
 uniform float uFade;
 uniform vec3 uGround;
 uniform vec2 uEdge;
+uniform vec2 uStory;
+uniform vec3 uWindow;
 varying vec2 vUv;
 void main() {
-  vec3 col = mix(texture2D(uBase, vUv).rgb, texture2D(uLitMap, vUv).rgb, uLit);
+  float inside = smoothstep(uWindow.x - uWindow.z, uWindow.x, vUv.x) * (1.0 - smoothstep(uWindow.y, uWindow.y + uWindow.z, vUv.x));
+  vec3 col = mix(texture2D(uBase, vUv).rgb, texture2D(uLitMap, vUv).rgb, uLit * inside);
   float keep = smoothstep(0.0, 1.0, uFade * (1.0 + DEPTH_FADE) - (1.0 - vUv.y) * DEPTH_FADE);
+  keep *= smoothstep(uStory.y, uStory.x, vUv.y);
   if (uEdge.x > 0.0) keep *= smoothstep(0.0, uEdge.x, min(gl_FragCoord.x, uEdge.y - gl_FragCoord.x));
   gl_FragColor = vec4(mix(uGround, col, keep), 1.0);
 }
@@ -82,6 +98,17 @@ export interface BoardSurface {
 	density(scale: number): void;
 	/** Lays the board out again with the fonts the page has now, then repaints. */
 	relayout(): void;
+	/** Lays out another grid of the board (a phone's or the wide one), with its emphasis, then repaints. */
+	regrid(spec: BoardSpec, grid: BoardGrid): void;
+	/** Hides the board below board y `bottom`, fading out over the `feather` board units under it. */
+	clip(bottom: number, feather: number): void;
+	/**
+	 * Lights the route only between board x `left` and `right`, fading out over
+	 * `feather` board units beyond them (a phone's frame); null lights it everywhere.
+	 */
+	spotlight(
+		window: { left: number; right: number; feather: number } | null,
+	): void;
 	/** Fades the board out over `fade` drawing pixels at the sides of a drawing `width` wide (0: no fade). */
 	edgeFade(fade: number, width: number): void;
 	dispose(): void;
@@ -117,6 +144,8 @@ function createBoardMaterial() {
 				value: new THREE.Color().setRGB(r / 255, g / 255, b / 255, "srgb"),
 			},
 			uEdge: { value: new THREE.Vector2() },
+			uStory: { value: new THREE.Vector2(...ALL.story) },
+			uWindow: { value: new THREE.Vector3(...ALL.window) },
 		},
 		vertexShader: BOARD_VERT,
 		fragmentShader: BOARD_FRAG,
@@ -131,9 +160,11 @@ interface Painting {
 
 export function createBoardSurface(
 	renderer: THREE.WebGLRenderer,
-	spec: BoardSpec,
+	initial: BoardSpec,
 	fonts: BoardFonts,
 ): BoardSurface {
+	let spec = initial;
+	let emphasis = STORY.landscape;
 	const measure = createMeasure();
 	const group = new THREE.Group();
 	group.name = "board";
@@ -192,7 +223,7 @@ export function createBoardSurface(
 			view: { x: -area.x * zoom, y: -area.y * zoom, zoom },
 			activeNodes: on ? new Set(on.nodes) : NO_ROUTE,
 			activeEdges: on ? new Set(on.edges) : NO_ROUTE,
-			emphasis: STORY,
+			emphasis,
 		});
 	}
 
@@ -276,6 +307,28 @@ export function createBoardSurface(
 		relayout() {
 			build();
 			repaint();
+		},
+		regrid(next, grid) {
+			spec = next;
+			emphasis = STORY[grid];
+			build();
+			repaint();
+		},
+		clip(bottom, feather) {
+			const v = (y: number) => 1 - (y - area.y) / area.height;
+			material.uniforms.uStory.value.set(v(bottom), v(bottom + feather));
+		},
+		spotlight(window) {
+			const u = (x: number) => (x - area.x) / area.width;
+			const uniform = material.uniforms.uWindow.value;
+			if (!window) uniform.set(...ALL.window);
+			else {
+				uniform.set(
+					u(window.left),
+					u(window.right),
+					window.feather / area.width,
+				);
+			}
 		},
 		edgeFade(fade, width) {
 			material.uniforms.uEdge.value.set(fade, width);
