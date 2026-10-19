@@ -200,6 +200,12 @@ fn tool_call_has_read_only_override(spec: &PlatformToolSpec, args: &Value) -> bo
             "operation",
         ));
     }
+    if spec.name == "forecast_tool" {
+        return matches!(
+            spec_arg_str(args, "operation", "operation"),
+            "list_models" | "run" | "list" | "get"
+        );
+    }
 
     false
 }
@@ -208,6 +214,23 @@ fn tool_call_has_read_only_override(spec: &PlatformToolSpec, args: &Value) -> bo
 /// destroys one irreplaceable target scopes its memory to that target: approving one table drop
 /// must never authorize dropping every other table for the rest of the session.
 fn approval_session_key(spec: &PlatformToolSpec, args: &Value) -> String {
+    if spec.name == "forecast_tool" {
+        let scope = if args
+            .get("user_scoped")
+            .or_else(|| args.get("userScoped"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            "user"
+        } else {
+            "project"
+        };
+        return format!(
+            "forecast:{}:{}:{scope}",
+            spec_arg_str(args, "operation", "operation"),
+            spec_arg_str(args, "app_id", "appId")
+        );
+    }
     if spec.name == HTTP_REQUEST_TOOL {
         // Approval of one request must not authorize another destination, payload, or credential.
         let fingerprint = blake3::hash(args.to_string().as_bytes());
@@ -542,6 +565,22 @@ fn graph_overlay_message(args: &Value) -> String {
         }
         _ => "The Data Studio agent wants to update an ontology/overlay.".to_string(),
     }
+}
+
+fn forecast_save_message(args: &Value) -> String {
+    let name = spec_arg_str(args, "name", "name");
+    let app = spec_arg_str(args, "app_id", "appId");
+    let scope = if args
+        .get("user_scoped")
+        .or_else(|| args.get("userScoped"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        "your personal database"
+    } else {
+        "the shared project database"
+    };
+    format!("FlowPilot wants to save the completed prediction '{name}' in {scope} for app '{app}'.")
 }
 
 fn graph_element_message(args: &Value) -> String {
@@ -1506,7 +1545,7 @@ Side-effecting; requires approval."#,
         },
         PlatformToolSpec {
             name: "data_studio_agent",
-            description: r#"Data specialist for tables, SQL/Cypher, ontologies, graphs, analytics, actions and charts.
+            description: r#"Data specialist for tables, SQL/Cypher, ontologies, graphs, forecasts, analytics, actions and charts.
 Reads/changes data on apps that already exist and during BUILD; never edits boards or UI. It needs no preflight:
 pass the exact app_id, optional overlay_id, and complete question/change. Prefer an active Event that
 already performs the requested action; this is not a restriction on this tool. Never bypass a failed,
@@ -2070,6 +2109,23 @@ pub fn find_workspace_research_tool_spec(name: &str) -> Option<PlatformToolSpec>
 pub fn data_studio_tool_specs() -> Vec<PlatformToolSpec> {
     vec![
         PlatformToolSpec {
+            name: "forecast_tool",
+            description: r#"Forecast an app's time series using native models and read-only SQL over its Lance tables or saved views.
+
+Operations: list_models (only Forecasting Bits activated in the current profile), run (forecast and optional historical holdout), list (saved prediction summaries), get (saved definition, metrics and bounded points), save (persist a completed run; asks for approval). No operation installs models or changes source tables.
+
+Inspect source columns with database_tool before run. Pass request with model_bit_id from list_models, sql, mapping and horizon; SQL may join multiple tables in the same database scope. Map timestamp, targets, optional series_id and numeric past_covariates/known_covariates. Rows must be regularly spaced with no duplicates; null targets are missing observations. Known covariates require future_sql covering every future step. Use backtest_horizon and backtest_offset to evaluate an earlier window: use length-horizon-offset rows as model history, evaluate the next horizon rows, exclude later history. Offset zero evaluates the trailing window. Full-history future forecasts are also returned.
+
+run returns an opaque run_id and compact evidence. save accepts that run_id plus name/description; the host retains the exact request/result in the current session, app, profile and data scope. Never construct forecast values, pass a result payload, or claim a run is saved before save succeeds. Cache misses require rerunning; saved predictions can be read without an active model. limit bounds returned samples, never the native inference input. Reports must identify holdout dates, observed counts and metric units; MAE/RMSE use target units, MAPE/WAPE are percentages."#,
+            schema: forecast_tool_schema,
+            approval: ToolApprovalSpec::Mutating {
+                title: "Save prediction",
+                message: forecast_save_message,
+                timing: ToolApprovalTiming::BeforeExecution,
+            },
+            timeout_secs: 600,
+        },
+        PlatformToolSpec {
             name: "graph_overlay_tool",
             description: r#"Inspect and manage ONTOLOGIES (graph overlays) for an app. An overlay maps node/edge labels onto database tables via id/display/property columns.
 
@@ -2118,6 +2174,64 @@ Operations: `list_actions`, `describe_action`, `prerun_action` (read-only); `inv
             timeout_secs: 600,
         },
     ]
+}
+
+fn forecast_tool_schema() -> Value {
+    let request = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "model_bit_id": {"type":"string", "minLength":1, "maxLength":256, "description":"Activated Forecasting Bit ID from list_models. The host supplies the current profile."},
+            "sql": {"type":"string", "minLength":1, "maxLength":262144, "description":"Read-only SQL returning complete regularly spaced historical series. May join same-scope tables or views."},
+            "params": {"type":"object", "description":"Bound SQL parameters; defaults to an empty object."},
+            "mapping": {
+                "type":"object",
+                "additionalProperties":false,
+                "properties": {
+                    "timestamp":{"type":"string", "description":"Arrow timestamp/date or integer epoch-millisecond column."},
+                    "series_id":{"type":["string","null"], "description":"Optional string/integer grouping column; omit for one series."},
+                    "targets":{"type":"array", "items":{"type":"string"}, "minItems":1, "description":"Numeric columns to predict; nulls mark missing observations."},
+                    "past_covariates":{"type":"array", "items":{"type":"string"}, "description":"Numeric inputs available only before the forecasting cutoff."},
+                    "known_covariates":{"type":"array", "items":{"type":"string"}, "description":"Numeric inputs available in both history and future_sql."},
+                    "frequency_ms":{"type":["integer","null"], "minimum":1, "description":"Optional regular interval in milliseconds; otherwise inferred per series. No implicit resampling."}
+                },
+                "required":["timestamp","targets"]
+            },
+            "horizon":{"type":"integer", "minimum":1, "maximum":65536, "description":"Future steps per series; model limits and output budgets also apply."},
+            "quantile_levels":{"type":"array", "items":{"type":"number", "exclusiveMinimum":0, "exclusiveMaximum":1}, "description":"Requested supported quantiles in increasing order; omit or [] for native output. Point-only models such as TinyTimeMixer require [] and return no uncertainty bands."},
+            "future_sql":{"type":["string","null"], "maxLength":262144, "description":"Required exactly when known_covariates are mapped; returns timestamp/group and known values for the entire future horizon."},
+            "future_params":{"type":"object", "description":"Bound parameters for future_sql."},
+            "backtest_horizon":{"type":"integer", "minimum":0, "maximum":65536, "default":0, "description":"Historical evaluation steps; zero disables holdout."},
+            "backtest_offset":{"type":"integer", "minimum":0, "maximum":50000, "default":0, "description":"Historical observations after the evaluated window. Requires positive backtest_horizon and at least two earlier history rows."},
+            "budget":{
+                "type":"object",
+                "additionalProperties":false,
+                "properties":{
+                    "maximum_rows":{"type":"integer", "minimum":1, "maximum":50000},
+                    "maximum_bytes":{"type":"integer", "minimum":1024, "maximum":67108864},
+                    "maximum_tensor_elements":{"type":"integer", "minimum":1, "maximum":16777216}
+                },
+                "description":"Optional lower limits for inputs and chart materialization. Omit for service defaults. Truncated input is rejected."
+            }
+        },
+        "required":["model_bit_id","sql","mapping","horizon"]
+    });
+    json!({
+        "type":"object",
+        "additionalProperties":false,
+        "properties":{
+            "operation":{"type":"string", "enum":["list_models","run","list","get","save"]},
+            "app_id":{"type":"string", "description":"Target app ID; omit to use the current Data Studio app."},
+            "user_scoped":{"type":"boolean", "default":false, "description":"Use the current user's personal database instead of the shared project database."},
+            "request":request,
+            "forecast_id":{"type":"string", "description":"Existing saved prediction ID, required for get."},
+            "run_id":{"type":"string", "description":"Exact completed run ID returned by run in this app/profile/scope, required for save."},
+            "name":{"type":"string", "minLength":1, "maxLength":256, "description":"Saved prediction name, required for save."},
+            "description":{"type":"string", "maxLength":4000, "description":"Optional note for save."},
+            "limit":{"type":"integer", "minimum":1, "maximum":100, "default":20, "description":"Maximum returned summaries or sampled chart points. Does not truncate inference inputs."}
+        },
+        "required":["operation"]
+    })
 }
 
 fn graph_overlay_tool_schema() -> Value {
@@ -2804,9 +2918,70 @@ mod tests {
         );
     }
 
-    /// The Data Studio database tool multiplexes reads and writes over one name, so its approval
-    /// policy has to be resolved per call — and a `delete_table` approval must not become a licence
-    /// to drop every other table for the rest of the session.
+    #[test]
+    fn forecasting_reads_and_inference_are_read_only_but_saves_need_scoped_approval() {
+        let spec = find_data_studio_tool_spec("forecast_tool").expect("forecasting tool");
+        for operation in ["list_models", "run", "list", "get"] {
+            let args = json!({"operation":operation});
+            assert_eq!(resolve_tool_approval(&spec, &args).kind, "none");
+            assert_eq!(resolve_tool_effect(&spec, &args), ToolEffect::ReadOnly);
+        }
+        let args = json!({"operation":"save", "app_id":"sales", "name":"October outlook", "run_id":"completed"});
+        let approval = resolve_tool_approval(&spec, &args);
+        assert_eq!(approval.kind, "mutating");
+        assert_eq!(approval.timing, Some(ToolApprovalTiming::BeforeExecution));
+        assert!(approval.description.contains("October outlook"));
+        assert!(approval.description.contains("shared project database"));
+        for different in [
+            json!({"operation":"save", "app_id":"other"}),
+            json!({"operation":"save", "app_id":"sales", "user_scoped":true}),
+        ] {
+            assert_ne!(
+                approval.session_key,
+                resolve_tool_approval(&spec, &different).session_key
+            );
+        }
+        assert_eq!(
+            resolve_tool_approval(&spec, &json!({"operation":"unknown"})).kind,
+            "mutating"
+        );
+        assert!(find_global_tool_spec("forecast_tool").is_none());
+        assert!(find_workflow_context_tool_spec("forecast_tool").is_none());
+        assert!(find_home_tool_spec("forecast_tool").is_none());
+        assert!(find_scout_tool_spec("forecast_tool").is_none());
+    }
+
+    #[test]
+    fn forecasting_schema_supports_historical_evaluation_without_client_results_or_profile_override()
+     {
+        let spec = find_data_studio_tool_spec("forecast_tool").unwrap();
+        let schema = (spec.schema)();
+        assert_eq!(schema["additionalProperties"], json!(false));
+        assert_eq!(
+            schema["properties"]["operation"]["enum"],
+            json!(["list_models", "run", "list", "get", "save"])
+        );
+        assert_eq!(schema["properties"]["limit"]["maximum"], 100);
+        let request = &schema["properties"]["request"];
+        assert_eq!(request["additionalProperties"], json!(false));
+        assert_eq!(
+            request["required"],
+            json!(["model_bit_id", "sql", "mapping", "horizon"])
+        );
+        assert_eq!(request["properties"]["backtest_offset"]["default"], 0);
+        assert_eq!(
+            request["properties"]["mapping"]["required"],
+            json!(["timestamp", "targets"])
+        );
+        for forbidden in ["result", "profile_id", "profileId"] {
+            assert!(schema["properties"].get(forbidden).is_none());
+            assert!(request["properties"].get(forbidden).is_none());
+        }
+        assert!(schema["properties"]["run_id"].is_object());
+        assert!(schema["properties"]["forecast_id"].is_object());
+    }
+
+    /// Approval is resolved per operation. Approving one table drop cannot authorize other drops.
     #[test]
     fn data_studio_database_approval_is_resolved_per_operation() {
         let spec = data_studio_database_tool_spec();

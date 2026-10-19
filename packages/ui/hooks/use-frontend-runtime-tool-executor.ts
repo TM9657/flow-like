@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useContext, useEffect, useRef } from "react";
+import { AuthContext } from "react-oidc-context";
 
 import type { SurfaceComponent } from "../components/a2ui/types";
 import { compactJson, compactLogEvents } from "../components/flowpilot/utils";
 import type { IAttachment } from "../components/interfaces/chat-default/chat-db";
 import type { ILog, ILogMetadata, IRunPayload } from "../lib";
 import { ApiResponseError } from "../lib/api-error";
+import { getApiOrigin } from "../lib/api-url";
 import { runAppChatMessage } from "../lib/app-chat-run";
 import {
 	collectRunEvidence,
@@ -25,6 +27,10 @@ import {
 	inspectUiPageList,
 	summarizeUiInspectPage as summarizePage,
 } from "../lib/flowpilot/ui-page-inspection";
+import {
+	type ForecastToolContext,
+	ForecastToolSession,
+} from "../lib/forecast-tool";
 import {
 	attachmentDisplayName,
 	resolveForwardFiles,
@@ -193,6 +199,7 @@ export function resolveUiInspectWidgetEntries(
 
 export const FRONTEND_RUNTIME_TOOL_NAMES = [
 	"database_tool",
+	"forecast_tool",
 	"storage_tool",
 	"ui_inspect",
 	"execute_event",
@@ -223,6 +230,8 @@ interface FrontendRuntimeToolExecutorOptions {
 export interface FrontendRuntimeToolContext {
 	/** User files the orchestrator forwarded to this run; database_tool import_geojson reads them. */
 	attachments?: readonly IAttachment[];
+	/** Immutable Data Studio request context; never inferred from the open page. */
+	forecast?: ForecastToolContext;
 }
 
 function getArgString(
@@ -1712,6 +1721,19 @@ export function useFrontendRuntimeToolExecutor(
 	const { defaultAppId, defaultBoardId, defaultOverlayId } = options;
 	const backend = useBackend();
 	const executionService = useExecutionServiceOptional();
+	const auth = useContext(AuthContext);
+	const forecastSession = useRef(new ForecastToolSession());
+	forecastSession.current.bind({
+		backend,
+		identity: JSON.stringify([
+			getApiOrigin(backend.profile),
+			backend.profile?.id ?? "",
+			auth?.isAuthenticated ? auth.user?.profile.sub : "local",
+		]),
+		profileId: backend.profile?.id ?? "",
+		available: !!backend.profile?.id && !auth?.isLoading,
+	});
+	useEffect(() => () => forecastSession.current.clear(), []);
 
 	return useCallback(
 		async (
@@ -1719,6 +1741,13 @@ export function useFrontendRuntimeToolExecutor(
 			args: Record<string, unknown>,
 			context?: FrontendRuntimeToolContext,
 		): Promise<unknown> => {
+			if (toolName === "forecast_tool") {
+				if (!context?.forecast)
+					throw new Error(
+						"Forecasting tools are available through the Data Studio specialist.",
+					);
+				return forecastSession.current.execute(args, context.forecast);
+			}
 			const toolAppId = resolveToolAppId(args, defaultAppId);
 
 			switch (toolName) {

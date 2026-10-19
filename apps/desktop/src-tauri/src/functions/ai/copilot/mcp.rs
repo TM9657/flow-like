@@ -122,7 +122,9 @@ pub(super) fn flowpilot_mcp_server_instructions<'a>(
         || names.contains("list_board_nodes")
         || names.contains("write_flowscript");
     let has_ui = names.contains("emit_ui");
-    let has_data = names.contains("graph_overlay_tool") || names.contains("graph_query_tool");
+    let has_data = names.contains("graph_overlay_tool")
+        || names.contains("graph_query_tool")
+        || names.contains("forecast_tool");
     let has_home = names.contains("get_home_context") || names.contains("apply_home_layout");
     let can_apply_home = names.contains("apply_home_layout");
     let has_global = names.contains("list_apps") && names.contains("flowpilot_board");
@@ -161,7 +163,7 @@ pub(super) fn flowpilot_mcp_server_instructions<'a>(
             "You are the read-only FlowPilot BOARD specialist. Inspect the current board and its read-only context, then answer. Never edit FlowScript, execute workflows, emit UI, or mutate app data/storage. Do not use shell or file-edit tools for FlowPilot artifacts."
         }
         (false, false, true) => {
-            "You are the FlowPilot DATA STUDIO specialist. Use only the provided database, graph, analytics, and ontology tools. Never author FlowScript or emit UI. Do not use shell or file-edit tools for FlowPilot artifacts."
+            "You are the FlowPilot DATA STUDIO specialist. Use only the provided database, graph, forecasting, analytics, and ontology tools. Discover active forecasting models before running; save completed predictions by their returned run_id through the tool's approval flow. Never author FlowScript or emit UI. Do not use shell or file-edit tools for FlowPilot artifacts."
         }
         (true, true, false) => {
             "This is an explicit combined root FlowPilot surface, not a specialist. Keep UI changes in emit_ui and board behavior in the FlowScript lifecycle; never use one role's tools to perform the other's work."

@@ -985,14 +985,14 @@ async fn execute_prepared(
         Some(app_id.clone()),
         &board_id,
         &payload.id,
-        None,
+        event_id.clone(),
         cancellation_token.clone(),
         Some(board_name),
         event_name,
         event_type,
     );
 
-    shared_flow_like_state.register_run(&run_id, run_data);
+    shared_flow_like_state.register_run(&run_id, run_data.clone());
     started.store(true, Ordering::Relaxed);
 
     let run_arc = internal_run.run.clone();
@@ -1016,7 +1016,31 @@ async fn execute_prepared(
     let meta = tokio::select! {
         biased;
         _ = cancellation_token.cancelled() => {
-            println!("Board execution cancelled for run: {}", run_id);
+            let elapsed_ms = run_data.elapsed().as_millis() as u64;
+            #[cfg(debug_assertions)]
+            println!(
+                "Board execution cancelled for run: {} source=execute_board app_id={} board_id={} board_name={:?} event_id={:?} event_name={:?} event_type={:?} elapsed_ms={}",
+                run_id,
+                app_id,
+                run_data.board_id,
+                run_data.board_name.as_deref(),
+                run_data.event_id.as_deref(),
+                run_data.event_name.as_deref(),
+                run_data.event_type.as_deref(),
+                elapsed_ms,
+            );
+            tracing::info!(
+                source = "execute_board",
+                run_id = %run_id,
+                app_id = %app_id,
+                board_id = %run_data.board_id,
+                board_name = ?run_data.board_name.as_deref(),
+                event_id = ?run_data.event_id.as_deref(),
+                event_name = ?run_data.event_name.as_deref(),
+                event_type = ?run_data.event_type.as_deref(),
+                elapsed_ms,
+                "Board execution cancelled"
+            );
             match tokio::time::timeout(Duration::from_secs(30), &mut handle).await {
                 Ok(Ok(meta)) => meta,
                 Ok(Err(e)) if e.is_cancelled() => {

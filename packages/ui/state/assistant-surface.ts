@@ -116,6 +116,10 @@ export interface AssistantDataStudioSurface {
 	overlayName?: string;
 	/** Table currently selected in the explorer, if any. */
 	selectedTable?: string;
+	/** Data Studio tab currently visible. */
+	view?: string;
+	/** Saved prediction currently open in the Forecast tab. */
+	forecastId?: string;
 	/** Whether the visible data comes from the signed-in user's private store. */
 	userScoped?: boolean;
 	/** Names of the overlays available in the app, for grounding. */

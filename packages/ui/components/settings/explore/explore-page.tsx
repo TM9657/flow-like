@@ -34,6 +34,7 @@ import {
 	OntologyModelPanel,
 	OntologySharingPanel,
 } from "@flow-like/flow-like-ui/components/settings/data-studio/data-studio-panels";
+import { ForecastWorkspace } from "@flow-like/flow-like-ui/components/settings/data-studio/forecasting/forecast-workspace";
 import {
 	type DataStudioTableInfo,
 	OntologySetupDialog,
@@ -42,6 +43,7 @@ import { QueryWorkbench } from "@flow-like/flow-like-ui/components/settings/data
 import { TableDesignerDialog } from "@flow-like/flow-like-ui/components/settings/data-studio/table-designer-dialog";
 import { OntologyExplorer } from "@flow-like/flow-like-ui/components/ui/graph";
 import { useInvalidateOntologyTable } from "@flow-like/flow-like-ui/components/ui/graph/use-object-edit-fields";
+import { selectProfileForecastingModels } from "@flow-like/flow-like-ui/lib/bit/forecasting-model";
 import { getErrorMessage } from "@flow-like/flow-like-ui/lib/error-message";
 import { asArray } from "@flow-like/flow-like-ui/lib/response-shape";
 import type {
@@ -75,6 +77,7 @@ import {
 	Share2,
 	SquareTerminal,
 	Trash2,
+	TrendingUp,
 	Workflow,
 	X,
 } from "lucide-react";
@@ -124,6 +127,9 @@ export const ExploreDataPage: React.FC<ExploreDataPageProps> = ({ appId }) => {
 	const searchParams = useSearchParams();
 	const tableParam = searchParams?.get("table") ?? null;
 	const overlayParam = searchParams?.get("overlay") ?? null;
+	const studioView = searchParams?.get("view") ?? "overview";
+	const forecastId =
+		studioView === "forecast" ? searchParams?.get("forecast") : undefined;
 	const pathname = usePathname();
 
 	const table = useMemo(() => {
@@ -178,6 +184,8 @@ export const ExploreDataPage: React.FC<ExploreDataPageProps> = ({ appId }) => {
 			overlayName,
 			overlayNames,
 			selectedTable: table || undefined,
+			view: studioView,
+			forecastId: forecastId || undefined,
 			userScoped,
 		});
 		return () => setDataStudioSurface(null);
@@ -188,6 +196,8 @@ export const ExploreDataPage: React.FC<ExploreDataPageProps> = ({ appId }) => {
 		overlayName,
 		overlayNames,
 		table,
+		studioView,
+		forecastId,
 		userScoped,
 		setDataStudioSurface,
 	]);
@@ -336,6 +346,7 @@ const DATA_STUDIO_VIEWS = [
 	"sharing",
 	"sources",
 	"queries",
+	"forecast",
 ] as const;
 
 type DataStudioView = (typeof DATA_STUDIO_VIEWS)[number];
@@ -354,6 +365,9 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	const requestOpenAssistant = useAssistantSurface(
+		(state) => state.requestOpenAssistant,
+	);
 	const invalidateTable = useInvalidateOntologyTable();
 	const router = useRouter();
 	const pathname = usePathname();
@@ -382,6 +396,39 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 	const canReadBoards = permissions.can(RolePermissions.ReadBoards);
 	const canReadTeam = permissions.can(RolePermissions.ReadTeam);
 	const canExecuteEvents = permissions.can(RolePermissions.ExecuteEvents);
+	const profileBits = useInvoke(
+		backend.bitState.getProfileBits,
+		backend.bitState,
+		[],
+		canReadData && !!backend.profile?.id,
+		[backend.profile?.id, backend.profile?.bits],
+	);
+	const forecastingModels = useMemo(
+		() =>
+			selectProfileForecastingModels(
+				asArray(profileBits.data),
+				backend.profile?.bits,
+				backend.profile?.hub,
+			),
+		[profileBits.data, backend.profile?.bits, backend.profile?.hub],
+	);
+	const projectForecasts = useInvoke(
+		backend.queryState.listForecasts,
+		backend.queryState,
+		[appId, false, 1],
+		canReadData && forecastingModels.length === 0,
+	);
+	const personalForecasts = useInvoke(
+		backend.queryState.listForecasts,
+		backend.queryState,
+		[appId, true, 1],
+		canReadData && forecastingModels.length === 0,
+	);
+	const showForecasts =
+		forecastingModels.length > 0 ||
+		asArray(projectForecasts.data).length > 0 ||
+		asArray(personalForecasts.data).length > 0 ||
+		activeView === "forecast";
 	// Overlays carrying executable actions are additionally checked against
 	// WriteEvents server-side, so authoring one needs both bits.
 	const canWriteActions =
@@ -528,6 +575,9 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 	);
 
 	const refreshStudio = useCallback(() => {
+		profileBits.refetch();
+		projectForecasts.refetch();
+		personalForecasts.refetch();
 		tables.refetch();
 		userTables.refetch();
 		ontologies.refetch();
@@ -541,6 +591,9 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			installedOntologies.refetch();
 		}
 	}, [
+		profileBits.refetch,
+		projectForecasts.refetch,
+		personalForecasts.refetch,
 		tables.refetch,
 		userTables.refetch,
 		ontologies.refetch,
@@ -591,6 +644,27 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 			params.set("view", "queries");
 			if (userScoped) params.set("scope", "user");
 			else params.delete("scope");
+			router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+		},
+		[router, pathname, searchParams],
+	);
+	const setForecastScope = useCallback(
+		(userScoped: boolean) => {
+			const params = new URLSearchParams(searchParams?.toString() ?? "");
+			params.set("view", "forecast");
+			params.delete("forecast");
+			if (userScoped) params.set("scope", "user");
+			else params.delete("scope");
+			router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+		},
+		[router, pathname, searchParams],
+	);
+	const setSavedForecast = useCallback(
+		(id?: string) => {
+			const params = new URLSearchParams(searchParams?.toString() ?? "");
+			params.set("view", "forecast");
+			if (id) params.set("forecast", id);
+			else params.delete("forecast");
 			router.replace(`${pathname}?${params.toString()}`, { scroll: false });
 		},
 		[router, pathname, searchParams],
@@ -1207,6 +1281,12 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 							<SquareTerminal className="mr-1.5 h-3.5 w-3.5" />
 							{t("queries", "Queries")}
 						</TabsTrigger>
+						{showForecasts && (
+							<TabsTrigger value="forecast">
+								<TrendingUp className="mr-1.5 h-3.5 w-3.5" />
+								{t("forecast", "Forecast")}
+							</TabsTrigger>
+						)}
 					</TabsList>
 				</div>
 				<TabsContent value="overview" className="flex-1 overflow-y-auto p-6">
@@ -1488,6 +1568,21 @@ const DatabaseOverview: React.FC<DatabaseOverviewProps> = ({
 						userTables={asArray(userTables.data)}
 						userScoped={searchParams.get("scope") === "user"}
 						onScopeChange={setQueryScope}
+					/>
+				</TabsContent>
+				<TabsContent value="forecast" className="min-h-0 flex-1 p-0">
+					<ForecastWorkspace
+						appId={appId}
+						profileId={backend.profile?.id ?? ""}
+						models={forecastingModels}
+						projectTables={asArray(tables.data)}
+						userTables={asArray(userTables.data)}
+						userScoped={searchParams.get("scope") === "user"}
+						onScopeChange={setForecastScope}
+						canWrite={canWriteData}
+						savedForecastId={searchParams.get("forecast") ?? undefined}
+						onSavedForecastChange={setSavedForecast}
+						onAskFlowPilot={() => requestOpenAssistant()}
 					/>
 				</TabsContent>
 			</Tabs>

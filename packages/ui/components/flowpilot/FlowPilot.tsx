@@ -1391,6 +1391,10 @@ function FlowPilotImpl({
 									);
 						break;
 					}
+					case "forecast_tool":
+						throw new Error(
+							"Use the Data Studio specialist to run or save forecasts.",
+						);
 					case "database_tool":
 					case "storage_tool":
 					case "ui_inspect":

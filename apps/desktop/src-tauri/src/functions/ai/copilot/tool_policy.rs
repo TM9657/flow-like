@@ -323,6 +323,7 @@ pub(super) fn specialist_tool_policy(
         names.extend([
             "database_tool",
             "graph_overlay_tool",
+            "forecast_tool",
             "graph_query_tool",
             "graph_element_tool",
             "ontology_action_tool",

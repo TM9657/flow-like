@@ -48,6 +48,13 @@ export function resolveFrontendToolApprovalScope({
 			rememberable: false,
 		};
 	}
+	if (toolName === "forecast_tool" && args.operation === "save") {
+		// Approval names one retained result and destination; never waive future saves.
+		return {
+			sessionKey: `forecast_tool:save:request:${scopePart(requestId)}`,
+			rememberable: false,
+		};
+	}
 	if (toolName !== "interact_app_page") {
 		return {
 			sessionKey: approvalSessionKey || `${toolName}:${approvalKind ?? "none"}`,

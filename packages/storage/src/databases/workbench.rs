@@ -4,6 +4,7 @@
 //! concurrency semaphore, and adapter construction as the graph SQL surface.
 
 pub mod saved_query;
+pub mod source_access;
 
 use crate::arrow_utils::record_batch_to_value;
 use crate::databases::graph::lancegraph::{

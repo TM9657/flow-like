@@ -16,6 +16,7 @@ import {
 	localTtsAssetId,
 } from "@flow-like/flow-like-ui";
 import type { IBitSearchQuery } from "@flow-like/flow-like-ui/lib/schema/hub/bit-search-query";
+import { forecastingDependencyRequests } from "@flow-like/flow-like-ui/lib/bit/forecasting-model";
 import type { ISettingsProfile } from "@flow-like/flow-like-ui/types";
 import { WebApiState } from "./api-state";
 import {
@@ -122,6 +123,20 @@ export class WebBitState implements IBitState {
 	}
 
 	async getPackFromBit(bit: IBit): Promise<{ bits: IBit[] }> {
+		if (bit.type === IBitTypes.Forecasting) {
+			const dependencies = forecastingDependencyRequests(bit);
+			const bits = [bit];
+			for (let offset = 0; offset < dependencies.length; offset += 16) {
+				bits.push(
+					...(await Promise.all(
+						dependencies
+							.slice(offset, offset + 16)
+							.map(({ id, hub }) => this.getBit(id, hub)),
+					)),
+				);
+			}
+			return { bits };
+		}
 		try {
 			// The hub answers this route with a bare `Bit[]`, not a `{ bits }` envelope.
 			const response = await apiGet<IBit[] | { bits?: IBit[] } | undefined>(
@@ -183,11 +198,18 @@ export class WebBitState implements IBitState {
 	}
 
 	async getPackSize(bits: IBit[]): Promise<number> {
+		if (bits.some((bit) => bit.type === IBitTypes.Forecasting)) {
+			return bits.reduce((total, bit) => total + Math.max(0, bit.size ?? 0), 0);
+		}
 		// Size calculation not needed for web - streaming from server
 		return 0;
 	}
 
 	async getBitSize(bit: IBit): Promise<number> {
+		if (bit.type === IBitTypes.Forecasting) {
+			const pack = await this.getPackFromBit(bit);
+			return this.getPackSize(pack.bits);
+		}
 		// Size calculation not needed for web - streaming from server
 		return 0;
 	}
@@ -207,18 +229,25 @@ export class WebBitState implements IBitState {
 	}
 
 	async getProfileBits(): Promise<IBit[]> {
-		try {
-			const profileId = this.backend.profile?.id;
-			if (!profileId) return [];
-			return (
-				(await apiGet<IBit[]>(
-					`profile/${profileId}/bits?limit=100&device_models=true`,
-					this.backend.auth,
-				)) ?? []
+		const profile = this.backend.profile;
+		if (!profile?.id) return [];
+		const bits = new Map<string, IBit>();
+		// The endpoint pages activated references, then adds private Bits to every
+		// reply. Missing catalog rows can also leave a non-final page short.
+		const referenceCount = Math.max(profile.bits?.length ?? 0, 1);
+		for (let offset = 0; offset < referenceCount; offset += 100) {
+			const page = await apiGet<IBit[]>(
+				`profile/${encodeURIComponent(profile.id)}/bits?limit=100&offset=${offset}&device_models=true`,
+				this.backend.auth,
 			);
-		} catch {
-			return [];
+			if (!Array.isArray(page)) {
+				throw new Error("The profile model list returned an invalid response.");
+			}
+			for (const bit of page) {
+				bits.set(`${bit.hub ?? profile.hub ?? ""}:${bit.id}`, bit);
+			}
 		}
+		return [...bits.values()];
 	}
 
 	async listCustomBits(): Promise<IBit[]> {

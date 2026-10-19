@@ -194,3 +194,18 @@ test("SystemOne uses native providers and keeps hosted pricing editable", () => 
 	expect(custom).toContain("Endpoint URL");
 	expect(custom).not.toContain("Hosted model pricing");
 });
+
+test("forecasting parameters expose checkpoint families and assets without chat controls", () => {
+	const markup = renderEditor({
+		bitType: IBitTypes.Forecasting,
+		provider: "local:forecast",
+	});
+	expect(markup).toContain("Forecasting model family");
+	expect(markup).toContain("Timestral");
+	expect(markup).toContain("Chronos 2");
+	expect(markup).toContain("Toto 2");
+	expect(markup).toContain("Add checkpoint asset");
+	expect(markup).not.toContain("API surface");
+	expect(markup).not.toContain("Context length");
+	expect(markup).not.toContain("Hosted model pricing");
+});

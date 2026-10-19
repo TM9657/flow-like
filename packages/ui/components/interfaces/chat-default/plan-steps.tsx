@@ -1,20 +1,20 @@
 "use client";
 
 import { useTranslation } from "@flow-like/locales";
-import AlertTriangle from "lucide-react/dist/esm/icons/triangle-alert.js";
-import CheckCircle2 from "lucide-react/dist/esm/icons/circle-check.js";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.js";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
-import Circle from "lucide-react/dist/esm/icons/circle.js";
+import CheckCircle2 from "lucide-react/dist/esm/icons/circle-check.js";
 import CircleMinus from "lucide-react/dist/esm/icons/circle-minus.js";
+import Circle from "lucide-react/dist/esm/icons/circle.js";
 import DatabaseIcon from "lucide-react/dist/esm/icons/database.js";
 import History from "lucide-react/dist/esm/icons/history.js";
-import LayoutIcon from "lucide-react/dist/esm/icons/panels-top-left.js";
 import Loader2 from "lucide-react/dist/esm/icons/loader-2.js";
+import LayoutIcon from "lucide-react/dist/esm/icons/panels-top-left.js";
+import AlertTriangle from "lucide-react/dist/esm/icons/triangle-alert.js";
 import WorkflowIcon from "lucide-react/dist/esm/icons/workflow.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { cn } from "../../../lib/utils";
 import { formatDuration } from "../../../lib/date";
+import { cn } from "../../../lib/utils";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -22,6 +22,11 @@ import {
 } from "../../ui/collapsible";
 import type { IBuildLaneDetail, IPlanStep, PlanStepStatus } from "./chat-db";
 import { ReasoningViewer } from "./reasoning-viewer";
+import {
+	ActivitySources,
+	ToolActivityRow,
+	stepActivityTitle,
+} from "./tool-activity";
 
 interface PlanStepsProps {
 	steps: IPlanStep[];
@@ -44,6 +49,20 @@ interface PlanStepsProps {
 const VISIBLE_STEPS_COUNT = 4;
 
 function StatusIcon({ status }: { status: PlanStepStatus }) {
+	const labels: Record<PlanStepStatus, string> = {
+		planned: "Planned",
+		progress: "In progress",
+		done: "Completed",
+		failed: "Not completed",
+	};
+	return (
+		<span role="img" aria-label={labels[status]} title={labels[status]}>
+			<StatusGlyph status={status} />
+		</span>
+	);
+}
+
+function StatusGlyph({ status }: { status: PlanStepStatus }) {
 	switch (status) {
 		case "planned":
 			return <Circle className="size-3.5 text-muted-foreground/60" />;
@@ -153,7 +172,7 @@ function ActivitySummaryLabel({
 			<span className="min-w-0 flex-1 truncate">
 				<span className="text-foreground">{activeTitle ?? "Working…"}</span>
 				<span className="text-muted-foreground">
-					{` · `}
+					{" · "}
 					{`${summary.settledCount}/${summary.total}`}
 				</span>
 			</span>
@@ -283,7 +302,7 @@ function BuildLaneRow({
 										{gap.function}
 									</span>
 								)}
-								{gap.function && gap.detail ? ` — ` : ""}
+								{gap.function && gap.detail ? ": " : ""}
 								{gap.detail}
 							</li>
 						))}
@@ -315,6 +334,19 @@ function StepRow({
 		step.startTime && step.endTime
 			? formatDuration((step.endTime - step.startTime) * 1000)
 			: null;
+	if (step.detail?.kind === "tool_activity") {
+		return (
+			<ToolActivityRow
+				step={step}
+				detail={step.detail}
+				isActive={isActive}
+				isExpanded={isExpanded}
+				onToggle={onToggle}
+				statusIcon={<StatusIcon status={step.status} />}
+				duration={duration}
+			/>
+		);
+	}
 
 	return (
 		<div
@@ -344,7 +376,7 @@ function StepRow({
 							: "text-foreground/90",
 					)}
 				>
-					{step.title}
+					{stepActivityTitle(step)}
 				</span>
 				{step.description && (
 					<span className="text-xs text-muted-foreground truncate min-w-0 flex-1">
@@ -465,11 +497,14 @@ export function InlineStepGroup({
 				) : (
 					<StatusDots steps={steps} />
 				)}
-				<ActivitySummaryLabel
-					summary={summary}
-					running={running}
-					activeTitle={activeStep?.title}
-				/>
+				<span className="flex min-w-0 flex-1 flex-col gap-1.5">
+					<ActivitySummaryLabel
+						summary={summary}
+						running={running}
+						activeTitle={activeStep && stepActivityTitle(activeStep)}
+					/>
+					<ActivitySources steps={steps} />
+				</span>
 				<ChevronDown
 					className={cn(
 						"size-3.5 shrink-0 transition-transform",
@@ -606,11 +641,14 @@ export function PlanSteps({
 				) : (
 					<StatusDots steps={steps} />
 				)}
-				<ActivitySummaryLabel
-					summary={summary}
-					running={running}
-					activeTitle={activeStep?.title}
-				/>
+				<span className="flex min-w-0 flex-1 flex-col gap-1.5">
+					<ActivitySummaryLabel
+						summary={summary}
+						running={running}
+						activeTitle={activeStep && stepActivityTitle(activeStep)}
+					/>
+					<ActivitySources steps={steps} />
+				</span>
 				<ChevronDown
 					className={cn(
 						"size-3.5 shrink-0 transition-transform",

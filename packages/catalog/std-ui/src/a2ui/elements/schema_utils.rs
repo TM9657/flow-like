@@ -307,6 +307,10 @@ pub fn set_component_schema_by_type(pin: &mut Pin, component_type: &str) -> bool
             pin.set_schema::<NivoChartProps>();
             true
         }
+        "forecastchart" => {
+            pin.set_schema::<ForecastChartProps>();
+            true
+        }
         "graph" => {
             pin.set_schema::<GraphProps>();
             true
@@ -420,6 +424,7 @@ pub fn valid_component_types() -> &'static [&'static str] {
         "iframe",
         "plotlyChart",
         "nivoChart",
+        "forecastChart",
         "graph",
         "ontologyGraph",
         // Planning

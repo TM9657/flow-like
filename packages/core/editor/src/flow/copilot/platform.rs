@@ -512,6 +512,15 @@ fn platform_tool_serialization_lane(name: &str, arguments: &Value) -> Option<Str
         }
         // Tables and overlays are app-scoped state.
         "data_studio_agent" => return Some(format!("data:{}", app())),
+        "forecast_tool"
+            if matches!(
+                spec_arg_str(arguments, "operation", "operation"),
+                "run" | "save"
+            ) =>
+        {
+            // Keep CPU runs and saves ordered without treating inference as a durable write.
+            return Some(format!("data:{}", app()));
+        }
         // Personal Home layout edits are bound to the current profile by the nested tool guards.
         // The root delegation schema intentionally carries no model-authored profile id.
         "flowpilot_home" => return Some("home:current-profile".to_string()),
@@ -2364,6 +2373,7 @@ mod tests {
             .collect();
         assert!(data.contains(&"database_tool"));
         assert!(data.contains(&"graph_overlay_tool"));
+        assert!(data.contains(&"forecast_tool"));
 
         let home: Vec<&str> = PlatformSurface::Home
             .tool_specs(false)
@@ -2386,6 +2396,7 @@ mod tests {
             "create_app",
             "database_tool",
             "graph_overlay_tool",
+            "forecast_tool",
             "flowpilot_widget",
         ] {
             assert!(!home.contains(&forbidden));
@@ -2889,6 +2900,44 @@ mod tests {
             platform_tool_serialization_lane("upsert_event", &event_args),
             Some("sequential".to_string())
         );
+    }
+
+    #[test]
+    fn forecast_inference_and_saves_share_the_app_data_lane_but_reads_can_run_in_parallel() {
+        let run = json!({"operation":"run", "app_id":"sales"});
+        let save = json!({"operation":"save", "app_id":"sales"});
+        assert_eq!(
+            platform_tool_serialization_lane("forecast_tool", &run),
+            Some("data:sales".into())
+        );
+        assert_eq!(
+            platform_tool_serialization_lane("forecast_tool", &run),
+            platform_tool_serialization_lane("forecast_tool", &save)
+        );
+        assert_ne!(
+            platform_tool_serialization_lane("forecast_tool", &run),
+            platform_tool_serialization_lane(
+                "forecast_tool",
+                &json!({"operation":"run", "app_id":"other"})
+            )
+        );
+        for operation in ["list_models", "list", "get"] {
+            assert!(
+                platform_tool_serialization_lane(
+                    "forecast_tool",
+                    &json!({"operation":operation,"app_id":"sales"})
+                )
+                .is_none()
+            );
+        }
+        assert!(!platform_tool_requires_ordered_execution(
+            "forecast_tool",
+            &run
+        ));
+        assert!(platform_tool_requires_ordered_execution(
+            "forecast_tool",
+            &save
+        ));
     }
 
     #[test]

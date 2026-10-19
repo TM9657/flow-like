@@ -609,15 +609,7 @@ pub async fn hub_push(ctx: &Context, path: &Path, dry_run: bool) -> Result<()> {
     let mut stored_bits: BTreeMap<String, Bit> = BTreeMap::new();
     for entry in &planned {
         println!("pushing {} [{}]", entry.id, entry.bit_type);
-        let mut payload = entry.payload.clone();
-        let dependencies = entry
-            .dependencies
-            .iter()
-            .map(|dependency| dependency_reference(dependency, &stored_bits, &ctx.hub_domain))
-            .collect::<Result<Vec<_>>>()?;
-        if let Some(payload) = payload.as_object_mut() {
-            payload.insert("dependencies".to_string(), Value::Array(dependencies));
-        }
+        let payload = entry.push_payload(&stored_bits, &ctx.hub_domain)?;
 
         let mut last = 0.0;
         let stored = admin
@@ -676,28 +668,6 @@ pub async fn hub_delete(ctx: &Context, bit_ids: &[String], confirmed: bool) -> R
     }
     println!("\ndeleted {} bits from {}", bit_ids.len(), ctx.hub_domain);
     Ok(())
-}
-
-/// The hub stores a dependency as `hub:id`, and the hub half is only known
-/// once the dependency itself has been written.
-fn dependency_reference(
-    dependency: &spec::Dependency,
-    stored: &BTreeMap<String, Bit>,
-    hub: &str,
-) -> Result<Value> {
-    let reference = match dependency {
-        spec::Dependency::Local(id) => {
-            let bit = stored
-                .get(id)
-                .ok_or_else(|| anyhow!("dependency {id} was not written before its dependent"))?;
-            let bit_hub = if bit.hub.is_empty() { hub } else { &bit.hub };
-            format!("{bit_hub}:{}", bit.id)
-        }
-        spec::Dependency::Remote(reference) if reference.contains(':') => reference.clone(),
-        spec::Dependency::Remote(id) => format!("{hub}:{id}"),
-    };
-
-    Ok(Value::String(reference))
 }
 
 /// Progress frames arrive per chunk. Report a stage change and then only every

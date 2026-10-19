@@ -1,7 +1,10 @@
 use anyhow::Result;
 use flow_like::app::App;
+use flow_like::flow::board::Board;
 use flow_like::flow::event::{Event, EventExecutionMode};
 use flow_like::flow::execution::{LogLevel, LogMeta};
+use flow_like::flow_like_storage::Path;
+use flow_like::flow_like_storage::object_store::{ObjectStore, ObjectStoreExt};
 use flow_like_types::Value;
 use flow_like_types::create_id;
 use flow_like_types::tokio;
@@ -10,7 +13,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::future::Future;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use tauri::AppHandle;
 
 use super::{EventRegistration, EventSink, manager::DbConnection};
@@ -95,14 +98,10 @@ struct DaemonHandle {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct BoardMarker {
-    version: (u32, u32, u32),
-    updated_secs: u64,
-    updated_nanos: u32,
-    hash: Option<u64>,
-    nodes: usize,
-    layers: usize,
-    variables: usize,
-    comments: usize,
+    e_tag: Option<String>,
+    version: Option<String>,
+    last_modified: chrono::DateTime<chrono::Utc>,
+    size: u64,
 }
 
 impl DaemonSink {
@@ -361,6 +360,19 @@ async fn run_daemon_loop(
         let run_result = loop {
             tokio::select! {
                 _ = supervisor_token.cancelled() => {
+                    #[cfg(debug_assertions)]
+                    println!(
+                        "Stopping daemon run: reason=supervisor_stopped app_id={} event_id={} event_name={:?} board_id={}",
+                        registration.app_id, registration.event_id, event.name, event.board_id,
+                    );
+                    tracing::info!(
+                        reason = "supervisor_stopped",
+                        app_id = %registration.app_id,
+                        event_id = %registration.event_id,
+                        event_name = %event.name,
+                        board_id = %event.board_id,
+                        "Stopping daemon run"
+                    );
                     run_token.cancel();
                     let _ = tokio::time::timeout(STOP_TIMEOUT, &mut run_future).await;
                     return;
@@ -377,8 +389,16 @@ async fn run_daemon_loop(
                     ).await;
 
                     if changed {
+                        #[cfg(debug_assertions)]
+                        println!(
+                            "Latest board changed; restarting daemon run: reason=board_revision_changed app_id={} event_id={} event_name={:?} board_id={}",
+                            registration.app_id, registration.event_id, event.name, event.board_id,
+                        );
                         tracing::info!(
+                            reason = "board_revision_changed",
+                            app_id = %registration.app_id,
                             event_id = %registration.event_id,
+                            event_name = %event.name,
                             board_id = %event.board_id,
                             "Latest board changed; restarting daemon run"
                         );
@@ -472,7 +492,22 @@ async fn latest_board_changed(
     initial_marker: &BoardMarker,
 ) -> bool {
     match load_board_marker(app_handle, app_id, board_id).await {
-        Ok(marker) => marker != *initial_marker,
+        Ok(marker) if marker != *initial_marker => {
+            #[cfg(debug_assertions)]
+            println!(
+                "Daemon board revision changed: app_id={} board_id={} previous={:?} current={:?}",
+                app_id, board_id, initial_marker, marker,
+            );
+            tracing::info!(
+                app_id,
+                board_id,
+                previous = ?initial_marker,
+                current = ?marker,
+                "Daemon board revision changed"
+            );
+            true
+        }
+        Ok(_) => false,
         Err(err) => {
             tracing::warn!(
                 app_id,
@@ -491,30 +526,28 @@ async fn load_board_marker(
     board_id: &str,
 ) -> Result<BoardMarker> {
     let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-    let app = App::load(app_id.to_string(), flow_like_state).await?;
-    let board = app
-        .open_board(board_id.to_string(), Some(false), None)
-        .await?
-        .snapshot();
-    let (updated_secs, updated_nanos) = system_time_parts(board.updated_at);
-
-    Ok(BoardMarker {
-        version: board.version,
-        updated_secs,
-        updated_nanos,
-        hash: board.hash,
-        nodes: board.nodes.len(),
-        layers: board.layers.len(),
-        variables: board.variables.len(),
-        comments: board.comments.len(),
-    })
+    let store = Board::meta_store(&flow_like_state).await?;
+    read_board_marker(store.as_ref(), app_id, board_id).await
 }
 
-fn system_time_parts(time: SystemTime) -> (u64, u32) {
-    match time.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(duration) => (duration.as_secs(), duration.subsec_nanos()),
-        Err(_) => (0, 0),
-    }
+async fn read_board_marker(
+    store: &dyn ObjectStore,
+    app_id: &str,
+    board_id: &str,
+) -> Result<BoardMarker> {
+    // Watch the persisted revision used by the template cache. Loading a Board
+    // runs schema updates and cleanup, whose derived hashes can change without a save.
+    let root = Path::from("apps").join(app_id);
+    let meta = store
+        .head(&Board::proto_path(&root, board_id, None))
+        .await?;
+
+    Ok(BoardMarker {
+        e_tag: meta.e_tag,
+        version: meta.version,
+        last_modified: meta.last_modified,
+        size: meta.size,
+    })
 }
 
 #[cfg(test)]
@@ -645,11 +678,39 @@ mod tests {
         assert!(!run_failed(None));
     }
 
-    #[test]
-    fn system_time_parts_clamps_pre_epoch_times() {
+    #[tokio::test]
+    async fn board_marker_tracks_saved_revisions_without_loading_node_schemas() {
+        use flow_like::flow_like_storage::object_store::memory::InMemory;
+
+        let store = InMemory::new();
+        let path = Board::proto_path(&Path::from("apps").join("app"), "board", None);
+        // HEAD must work without decoding a board or requiring a node registry.
+        store.put(&path, "first revision".into()).await.unwrap();
+        let initial = read_board_marker(&store, "app", "board").await.unwrap();
         assert_eq!(
-            system_time_parts(SystemTime::UNIX_EPOCH - Duration::from_secs(1)),
-            (0, 0)
+            initial,
+            read_board_marker(&store, "app", "board").await.unwrap(),
+        );
+
+        // A real save must be detected even when the object's size stays the same.
+        store.put(&path, "other revision".into()).await.unwrap();
+        let saved = read_board_marker(&store, "app", "board").await.unwrap();
+        assert_eq!(initial.size, saved.size);
+        assert_ne!(initial, saved);
+        assert_eq!(
+            saved,
+            read_board_marker(&store, "app", "board").await.unwrap(),
+        );
+    }
+
+    #[tokio::test]
+    async fn board_marker_reports_missing_source() {
+        use flow_like::flow_like_storage::object_store::memory::InMemory;
+
+        assert!(
+            read_board_marker(&InMemory::new(), "app", "missing")
+                .await
+                .is_err()
         );
     }
 

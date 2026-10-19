@@ -114,6 +114,7 @@ const REQUIRED_PROPS: Record<string, string[]> = {
 	miniMap: ["width", "height"],
 	aspectRatio: ["ratio"],
 	nivoChart: ["chartType"],
+	forecastChart: ["forecastId"],
 	boundingBoxOverlay: ["src", "boxes"],
 	imageLabeler: ["src", "labels"],
 	imageHotspot: ["src", "hotspots"],

@@ -66,6 +66,89 @@ Q1,120,80`,
 		expect(toNivoData(input).props.groupMode).toBe("grouped");
 	});
 
+	test("names horizontal Nivo axes from their data and reserves legend space", () => {
+		const input = parseChartData(
+			`type: bar
+layout: horizontal
+---
+Model,Downloads
+Toto-Open-Base-1.0,68539
+chronos-2,16564577`,
+			"nivo",
+		);
+
+		const { props } = toNivoData(input);
+		expect(props.layout).toBe("horizontal");
+		expect(props.axisBottom).toEqual(
+			expect.objectContaining({ legend: "Downloads" }),
+		);
+		expect(props.axisLeft).toEqual(
+			expect.objectContaining({ legend: "Model" }),
+		);
+		expect(props.margin).toEqual({
+			top: 30,
+			right: 30,
+			bottom: 68,
+			left: 78,
+		});
+	});
+
+	test("preserves explicit physical axis labels on horizontal Nivo bars", () => {
+		const input = parseChartData(
+			`type: bar
+layout: horizontal
+xLabel: Total downloads
+yLabel: Forecasting model
+---
+Model,Downloads
+chronos-2,16564577`,
+			"nivo",
+		);
+
+		const { props } = toNivoData(input);
+		expect(props.axisBottom).toEqual(
+			expect.objectContaining({ legend: "Total downloads" }),
+		);
+		expect(props.axisLeft).toEqual(
+			expect.objectContaining({ legend: "Forecasting model" }),
+		);
+	});
+
+	test("infers only the unspecified axis and avoids assigning one measure to multiple series", () => {
+		const input = parseChartData(
+			`type: bar
+layout: horizontal
+xLabel: Amount
+---
+Quarter,Revenue,Cost
+Q1,120,80`,
+			"nivo",
+		);
+
+		const { props } = toNivoData(input);
+		expect(props.axisBottom).toEqual(
+			expect.objectContaining({ legend: "Amount" }),
+		);
+		expect(props.axisLeft).toEqual(
+			expect.objectContaining({ legend: "Quarter" }),
+		);
+		input.config.xLabel = undefined;
+		expect(toNivoData(input).props.axisBottom).toBeUndefined();
+	});
+
+	test("keeps unlabelled vertical Nivo axes unchanged", () => {
+		const input = parseChartData("Model,Downloads\nchronos-2,16564577", "nivo");
+		const { props } = toNivoData(input);
+		expect(props.axisBottom).toBeUndefined();
+		expect(props.axisLeft).toBeUndefined();
+		expect(props.margin).toEqual({
+			top: 30,
+			right: 30,
+			bottom: 50,
+			left: 60,
+		});
+	});
+
 	test("maps Plotly titles, stacking, horizontal bars, and legend placement", () => {
 		const input = parseChartData(
 			`type: bar

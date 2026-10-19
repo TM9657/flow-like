@@ -377,13 +377,37 @@ impl EventBusEvent {
             Some(event_type),
         );
 
-        flow_like_state.register_run(&run_id, run_data);
+        flow_like_state.register_run(&run_id, run_data.clone());
         started.store(true, Ordering::Relaxed);
 
         let meta = tokio::select! {
             result = internal_run.execute(execution_state.clone()) => result,
             _ = cancellation_token.cancelled() => {
-                println!("Board execution cancelled for run: {}", run_id);
+                let elapsed_ms = run_data.elapsed().as_millis() as u64;
+                #[cfg(debug_assertions)]
+                println!(
+                    "Board execution cancelled for run: {} source=event_bus app_id={} board_id={} board_name={:?} event_id={:?} event_name={:?} event_type={:?} elapsed_ms={}",
+                    run_id,
+                    self.app_id,
+                    run_data.board_id,
+                    run_data.board_name.as_deref(),
+                    run_data.event_id.as_deref(),
+                    run_data.event_name.as_deref(),
+                    run_data.event_type.as_deref(),
+                    elapsed_ms,
+                );
+                tracing::info!(
+                    source = "event_bus",
+                    run_id = %run_id,
+                    app_id = %self.app_id,
+                    board_id = %run_data.board_id,
+                    board_name = ?run_data.board_name.as_deref(),
+                    event_id = ?run_data.event_id.as_deref(),
+                    event_name = ?run_data.event_name.as_deref(),
+                    event_type = ?run_data.event_type.as_deref(),
+                    elapsed_ms,
+                    "Board execution cancelled"
+                );
                 match tokio::time::timeout(Duration::from_secs(30), internal_run.flush_logs_cancelled()).await {
                     Ok(Ok(Some(meta))) => {
                         Some(meta)

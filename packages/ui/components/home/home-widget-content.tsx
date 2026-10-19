@@ -33,11 +33,14 @@ import {
 	HomeAppSpotlight,
 	HomeModelSpotlight,
 } from "./home-content/discovery";
+import { HomeSavedForecast } from "./home-content/saved-forecast";
 import { HomeSectionHeading } from "./home-content/section-heading";
 import { HomeWorkspacePulse } from "./home-content/workspace-overview";
 
 export function HomeWidgetContent(props: HomeContentProps) {
 	switch (props.widget.type) {
+		case "saved-forecast":
+			return <HomeSavedForecast {...props} />;
 		case "section-heading":
 			return <HomeSectionHeading {...props} />;
 		case "app-spotlight":

@@ -2,6 +2,20 @@ import { describe, expect, test } from "bun:test";
 import { resolveFrontendToolApprovalScope } from "./frontend-tool-approval-scope";
 
 describe("resolveFrontendToolApprovalScope", () => {
+	test("forecast saves approve one exact request without a session waiver", () => {
+		expect(
+			resolveFrontendToolApprovalScope({
+				requestId: "save-1",
+				toolName: "forecast_tool",
+				approvalKind: "mutating",
+				approvalSessionKey: "forecast:app",
+				arguments: { operation: "save", run_id: "run", name: "Forecast" },
+			}),
+		).toEqual({
+			sessionKey: "forecast_tool:save:request:save-1",
+			rememberable: false,
+		});
+	});
 	test("scopes page interaction to the argument app and canonical Event", () => {
 		expect(
 			resolveFrontendToolApprovalScope({

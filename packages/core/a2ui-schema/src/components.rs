@@ -101,6 +101,7 @@ pub enum A2UIComponentType {
     Iframe(IframeProps),
     PlotlyChart(PlotlyChartProps),
     NivoChart(NivoChartProps),
+    ForecastChart(ForecastChartProps),
     Graph(GraphProps),
     OntologyGraph(OntologyGraphProps),
 
@@ -1682,6 +1683,40 @@ pub struct OntologyGraphProps {
     pub height: Option<BoundValue>,
 }
 
+/// Displays a saved forecast using the viewer's project or personal database access.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ForecastChartProps {
+    /// Existing saved forecast ID. Rendering does not run inference.
+    pub forecast_id: BoundValue,
+    /// Owning project, defaulting to the running project.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<BoundValue>,
+    /// Read the current viewer's personal scope instead of project scope.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_scoped: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub series_id: Option<BoundValue>,
+    /// "forecast" for the outlook or "evaluation" for saved holdout results.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_covariates: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_metrics: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_controls: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_header: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compact: Option<BoundValue>,
+    /// Chart height in pixels, clamped to 120 through 1200.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+}
+
 // =============================================================================
 // Image Labeler (Bounding Box Annotation)
 // =============================================================================
@@ -2587,5 +2622,43 @@ mod tests {
         ] {
             assert!(model_properties.contains_key(property));
         }
+    }
+
+    #[test]
+    fn forecast_chart_requires_saved_id_and_preserves_bound_props_through_protobuf() {
+        assert!(
+            serde_json::from_value::<A2UIComponentType>(json!({"type":"forecastChart"})).is_err()
+        );
+        let input = json!({
+            "type":"forecastChart",
+            "forecastId":{"path":"$.data.savedForecast"},
+            "appId":{"literalString":"project-1"},
+            "userScoped":{"literalBool":false},
+            "target":{"literalString":"sales"},
+            "seriesId":{"literalString":"region-a"},
+            "view":{"literalString":"evaluation"},
+            "showCovariates":{"literalBool":false},
+            "showMetrics":{"literalBool":true},
+            "showControls":{"literalBool":false},
+            "showHeader":{"literalBool":true},
+            "compact":{"literalBool":true},
+            "height":{"literalNumber":220.0}
+        });
+        let typed: A2UIComponentType = serde_json::from_value(input.clone()).unwrap();
+        assert_eq!(serde_json::to_value(typed).unwrap(), input);
+        let surface = crate::SurfaceComponent::new("saved-outlook", input.clone())
+            .with_style(crate::Style::default());
+        let wire: flow_like_types_proto::proto::Component = surface.into();
+        let decoded = crate::SurfaceComponent::from(wire);
+        assert_eq!(decoded.component, input);
+        assert!(decoded.style.is_some());
+        let schema = serde_json::to_value(schemars::schema_for!(ForecastChartProps)).unwrap();
+        assert!(
+            schema["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("forecastId"))
+        );
+        assert!(schema["properties"]["userScoped"].is_object());
     }
 }

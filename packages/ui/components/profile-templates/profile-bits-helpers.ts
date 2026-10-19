@@ -42,6 +42,7 @@ export function profileBitTypeLabel(type: string): string {
 		Llm: "Language models",
 		Vlm: "Vision models",
 		SystemOne: "Decision models",
+		Forecasting: "Forecasting models",
 		Stt: "Speech to text",
 		Tts: "Text to speech",
 		Embedding: "Text embeddings",

@@ -528,6 +528,33 @@ Example:
 }"#
         .to_string(),
 
+        "forecastchart" => r#"ForecastChart - Saved Data Studio prediction
+Properties:
+- type: "forecastChart" (required)
+- forecastId: BoundValue string (required) - Existing saved prediction ID; choose it in the editor or bind a known ID
+- appId: BoundValue string - Owning project; defaults to the running project
+- userScoped: BoundValue boolean - Use the current viewer's personal database (default false); project scope supports collaborator access
+- target / seriesId: BoundValue string - Initially selected target and series
+- view: BoundValue string - "forecast" for outlook or "evaluation" for saved holdout results
+- showCovariates / showMetrics / showControls / showHeader: BoundValue boolean
+- compact: BoundValue boolean - Compact layout for small dashboard cards
+- height: BoundValue number - Plot height in pixels, clamped to 120 through 1200
+
+The viewer's current database and source-column permissions apply. This component reads a saved result and never runs inference. Do not invent a forecast ID or put fetched chart values into page state. It emits no workflow events.
+
+Example:
+{
+  "id": "saved-sales-outlook",
+  "component": {
+    "type": "forecastChart",
+    "forecastId": { "path": "$.data.savedForecastId" },
+    "view": { "literalString": "forecast" },
+    "showMetrics": { "literalBool": true },
+    "height": { "literalNumber": 320 }
+  }
+}"#
+        .to_string(),
+
         "modal" => r#"Modal - Dialog overlay
 Properties:
 - type: "modal" (required)
@@ -552,7 +579,7 @@ Example:
         .to_string(),
 
         _ => format!(
-            "No detailed schema page for component type: {}. Detailed pages exist for: column, row, grid, text, button, feedback, appLink, card, userProfile, textField, select, image, icon, diffView, calendar, gantt, checkbox, switch, tabs, modal (plus style categories spacing, colors, effects, layout, responsive, typography). For every other component, use the component documentation embedded in your system prompt — it is the authoritative reference.",
+            "No detailed schema page for component type: {}. Detailed pages exist for: column, row, grid, text, button, feedback, appLink, card, userProfile, textField, select, image, icon, diffView, calendar, gantt, checkbox, switch, tabs, forecastChart, modal (plus style categories spacing, colors, effects, layout, responsive, typography). For every other component, use the component documentation embedded in your system prompt. It is the authoritative reference.",
             component_type
         ),
     }
@@ -723,6 +750,7 @@ mod tests {
         "checkbox",
         "switch",
         "tabs",
+        "forecastChart",
         "modal",
     ];
 

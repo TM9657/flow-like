@@ -47,6 +47,10 @@ const tech = ["JS", "PYTHON", "RUST", "JAVA", "C++", "REACT", "NEXT.JS"];
   </div>
 </section>
 
+<!-- Without JavaScript the header keeps this hero's dark theme down the whole
+     page, so it gets a dark backing to stay legible over the light sections. -->
+<noscript><style is:inline>header.fixed.dark { background: rgb(12 14 19 / .82); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }</style></noscript>
+
 <style>
   .eyebrow { font: 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .16em; color: color-mix(in oklab, var(--muted-foreground) 90%, transparent); }
 
@@ -111,9 +115,12 @@ const tech = ["JS", "PYTHON", "RUST", "JAVA", "C++", "REACT", "NEXT.JS"];
 </style>
 
 <script>
+  const STILL_TIME = 4;
+
   function initV5Hero() {
-    const canvas = document.querySelector<HTMLCanvasElement>(".v5-hero .shader");
-    if (!canvas || canvas.dataset.ready === "true") return;
+    const hero = document.querySelector<HTMLElement>(".v5-hero");
+    const canvas = hero?.querySelector<HTMLCanvasElement>(".shader");
+    if (!hero || !canvas || canvas.dataset.ready === "true") return;
     const gl = canvas.getContext("webgl", { alpha: true, antialias: false });
     if (!gl) return;
     canvas.dataset.ready = "true";
@@ -180,15 +187,17 @@ const tech = ["JS", "PYTHON", "RUST", "JAVA", "C++", "REACT", "NEXT.JS"];
     const mouse = gl.getUniformLocation(program, "m");
     const time = gl.getUniformLocation(program, "t");
     const pointer = { x: 0.7, y: 0.44 };
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const start = performance.now();
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let elapsed = 0;
+    let last = 0;
     let frame = 0;
+    let inView = true;
 
     const move = (event: PointerEvent) => {
       pointer.x += (event.clientX / window.innerWidth - pointer.x) * 0.55;
       pointer.y += (1 - event.clientY / window.innerHeight - pointer.y) * 0.55;
     };
-    const draw = () => {
+    const draw = (seconds: number) => {
       const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
       const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
       const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
@@ -199,12 +208,46 @@ const tech = ["JS", "PYTHON", "RUST", "JAVA", "C++", "REACT", "NEXT.JS"];
       }
       gl.uniform2f(resolution, w, h);
       gl.uniform2f(mouse, pointer.x, pointer.y);
-      gl.uniform1f(time, reduced ? 4 : (performance.now() - start) / 1000);
+      gl.uniform1f(time, seconds);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      if (!reduced) frame = window.requestAnimationFrame(draw);
     };
+    const render = () => draw(reducedMotion.matches ? STILL_TIME : elapsed);
+    // The clock only advances while frames are shown, so the field resumes
+    // exactly where it stopped instead of jumping ahead.
+    const tick = (now: number) => {
+      elapsed += Math.max(0, now - last) / 1000;
+      last = now;
+      draw(elapsed);
+      frame = window.requestAnimationFrame(tick);
+    };
+    const sync = () => {
+      const run = inView && !document.hidden && !reducedMotion.matches;
+      if (run === (frame !== 0)) return;
+      if (run) {
+        last = performance.now();
+        frame = window.requestAnimationFrame(tick);
+      } else {
+        window.cancelAnimationFrame(frame);
+        frame = 0;
+      }
+    };
+
     window.addEventListener("pointermove", move, { passive: true });
-    draw();
+    document.addEventListener("visibilitychange", sync);
+    reducedMotion.addEventListener("change", () => {
+      render();
+      sync();
+    });
+    new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (entry) inView = entry.isIntersecting;
+      sync();
+    }).observe(hero);
+    new ResizeObserver(() => {
+      if (!frame) render();
+    }).observe(canvas);
+    render();
+    sync();
   }
   initV5Hero();
 </script>

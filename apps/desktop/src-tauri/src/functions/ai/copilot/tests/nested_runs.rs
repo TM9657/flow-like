@@ -1,6 +1,30 @@
 use super::*;
 
 #[test]
+fn global_run_pins_profile_for_native_sdk_mcp_and_bits_tool_contexts() {
+    let mut selected_profile = "profile-a".to_string();
+    let context = global_run_tool_context(
+        Some(selected_profile.clone()),
+        Some("run-a".into()),
+        "Evaluate sales".into(),
+    );
+    selected_profile = "profile-b".into();
+    let forwarded = serde_json::to_value(&context).unwrap();
+    assert_eq!(forwarded["profileId"], "profile-a");
+    assert_ne!(
+        context.profile_id.as_deref(),
+        Some(selected_profile.as_str())
+    );
+    assert_eq!(forwarded["runId"], "run-a");
+    assert_eq!(forwarded["sourceUserPrompt"], "Evaluate sales");
+    assert!(
+        global_run_tool_context(None, None, "Read data".into())
+            .profile_id
+            .is_none()
+    );
+}
+
+#[test]
 fn home_run_rejects_a_changed_or_missing_pinned_profile() {
     let context = FrontendToolContext {
         profile_id: Some("profile-a".to_string()),

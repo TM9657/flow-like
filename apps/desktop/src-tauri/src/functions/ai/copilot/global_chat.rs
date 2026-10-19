@@ -307,9 +307,21 @@ pub async fn global_chat_resume(
     })
 }
 
-/// Reuses the same backend selection as `copilot_chat` (profile Bits models plus the GitHub Copilot,
-/// Codex, and Claude Code agent backends) but injects a platform system prompt, self-awareness
-/// context, and the platform tool set instead of board/frontend tools.
+/// Ownership shared by SDK, MCP and Bits tool calls throughout one global run.
+pub(super) fn global_run_tool_context(
+    profile_id: Option<String>,
+    run_id: Option<String>,
+    source_user_prompt: String,
+) -> FrontendToolContext {
+    FrontendToolContext {
+        profile_id,
+        source_user_prompt: Some(source_user_prompt),
+        run_id,
+        ..Default::default()
+    }
+}
+
+/// Reuses the board chat backend selection with platform tools and self-awareness context.
 #[tauri::command]
 pub async fn global_chat(
     app_handle: AppHandle,
@@ -335,11 +347,14 @@ pub async fn global_chat(
     run_id: Option<String>,
     channel: Channel<String>,
 ) -> Result<UnifiedCopilotResponse, String> {
+    // Keep model selection, memory and delegated tools on the profile that owns this run.
+    let profile = copilot_profile(&app_handle).await;
     let model_selection = FlowPilotModelSelection::parse(model_id);
     let history = history.unwrap_or_default();
     let attachments_manifest = attachments_manifest.unwrap_or_default();
     let context = build_global_agent_context(
         &app_handle,
+        profile.as_deref(),
         user_context.as_deref(),
         board_context.as_ref(),
         data_studio_context.as_ref(),
@@ -356,8 +371,6 @@ pub async fn global_chat(
         }
         (!images.is_empty()).then_some(images)
     };
-
-    let profile = copilot_profile(&app_handle).await;
 
     // Profile-scoped semantic memory, enabled only when the user selected an embedding model.
     // Shared by every backend so recall and the memory tools behave identically regardless of
@@ -429,13 +442,11 @@ pub async fn global_chat(
         None => channel,
     };
     let source_user_prompt = user_prompt.clone();
-    let global_tool_context = FrontendToolContext {
-        source_user_prompt: Some(source_user_prompt.clone()),
-        // Carried all the way to the frontend handler so every store write a tool performs lands
-        // on THIS reply's buffers — with several turns streaming there is no "current" bubble.
-        run_id: run_id.clone(),
-        ..Default::default()
-    };
+    let global_tool_context = global_run_tool_context(
+        profile.as_ref().map(|profile| profile.id.clone()),
+        run_id.clone(),
+        source_user_prompt.clone(),
+    );
 
     let result = async {
         match model_selection.backend {

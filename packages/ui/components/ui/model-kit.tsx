@@ -1,6 +1,7 @@
 "use client";
 
 import {
+	ChartNoAxesCombinedIcon,
 	ArrowRightIcon,
 	AudioLinesIcon,
 	CloudIcon,
@@ -24,7 +25,9 @@ export type Modality =
 	| "speech"
 	| "embed"
 	| "video"
-	| "decision";
+	| "decision"
+	| "series"
+	| "forecast";
 
 interface ModalityInfo {
 	label: string;
@@ -34,6 +37,16 @@ interface ModalityInfo {
 }
 
 export const MODALITY: Record<Modality, ModalityInfo> = {
+	series: {
+		label: "Time series",
+		icon: ChartNoAxesCombinedIcon,
+		color: "var(--m-embed)",
+	},
+	forecast: {
+		label: "Forecast",
+		icon: ChartNoAxesCombinedIcon,
+		color: "var(--m-embed)",
+	},
 	decision: {
 		label: "Decisions",
 		icon: ListChecksIcon,
@@ -55,6 +68,8 @@ export interface ModalityFlowSpec {
 /** What a model takes in and what it produces, derived from its bit type. */
 export function bitModalities(type: IBitTypes): ModalityFlowSpec {
 	switch (type) {
+		case IBitTypes.Forecasting:
+			return { inputs: ["series"], output: "forecast" };
 		case IBitTypes.SystemOne:
 			return { inputs: ["text"], output: "decision" };
 		case IBitTypes.Vlm:
@@ -163,7 +178,7 @@ export function ModalityFlow({
 	);
 }
 
-export type Deployment = "hosted" | "local" | "remote";
+export type Deployment = "hosted" | "local" | "remote" | "native";
 
 const DEPLOYMENT: Record<
 	Deployment,
@@ -171,6 +186,11 @@ const DEPLOYMENT: Record<
 > = {
 	hosted: { label: "Hosted", icon: CloudIcon, color: "var(--dep-hosted)" },
 	local: { label: "On-device", icon: HardDriveIcon, color: "var(--dep-local)" },
+	native: {
+		label: "Workflow runtime",
+		icon: HardDriveIcon,
+		color: "var(--dep-local)",
+	},
 	remote: { label: "Remote", icon: CloudIcon, color: "var(--dep-remote)" },
 };
 
@@ -297,6 +317,7 @@ export function ProviderGlyph({
 /** Providers write their own names — title-casing them reads as a typo. */
 const PROVIDER_NAMES: Record<string, string> = {
 	"local:stablediffusion": "stable-diffusion.cpp",
+	"local:forecast": "Native forecasting",
 	anthropic: "Anthropic",
 	azure: "Azure OpenAI",
 	bedrock: "Amazon Bedrock",
@@ -330,6 +351,7 @@ const PROVIDER_NAMES: Record<string, string> = {
 
 /** Human-readable provider label for the byline under a model name. */
 export function providerLabel(bit: IBit): string {
+	if (bit.type === IBitTypes.Forecasting) return "Native forecasting";
 	const params = bit.parameters as
 		| { provider?: { provider_name?: string } }
 		| undefined;

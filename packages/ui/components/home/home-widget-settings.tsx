@@ -16,6 +16,8 @@ import { APP_CATEGORY_ORDER } from "../../lib/category-meta";
 import { asArray } from "../../lib/response-shape";
 import { useBackend } from "../../state/backend-state";
 import { appPairs } from "../library/library-types";
+import { SavedForecastPicker } from "../settings/data-studio/forecasting/saved-forecast-picker";
+import { useSavedForecast } from "../settings/data-studio/forecasting/use-saved-forecast";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -38,6 +40,10 @@ import {
 	informationItems,
 } from "./home-content/personal-content";
 import { useHomeScope } from "./home-content/shared";
+import {
+	normalizeHomeForecastConfig,
+	updateHomeForecastSource,
+} from "./home-forecast-config";
 import { homeImageSource } from "./home-image-config";
 import { HomeStorageImagePicker } from "./home-storage-image-picker";
 import type { IHomeWidget } from "./types";
@@ -1017,11 +1023,147 @@ function DiscoverySettings({ widget, onChange }: SettingsProps) {
 	);
 }
 
+function SavedForecastSettings({ widget, onChange }: SettingsProps) {
+	const config = normalizeHomeForecastConfig(widget.config);
+	const saved = useSavedForecast(
+		config.appId,
+		config.forecastId,
+		config.scope === "personal",
+	);
+	const targets = [
+		...new Set(saved.data?.result.forecasts.map((point) => point.target) ?? []),
+	];
+	const series = [
+		...new Set(
+			saved.data?.result.forecasts.map((point) => point.series_id) ?? [],
+		),
+	];
+	return (
+		<div className="space-y-4">
+			<HomeAppPicker
+				label="Prediction app"
+				value={config.appId ? [config.appId] : []}
+				onChange={(ids) =>
+					onChange({
+						...updateHomeForecastSource(config, { appId: ids[0] ?? "" }),
+					})
+				}
+				allowExplore={false}
+			/>
+			<Choice
+				label="Data scope"
+				value={config.scope}
+				onChange={(scope) =>
+					onChange({
+						...updateHomeForecastSource(config, {
+							scope: scope === "personal" ? "personal" : "project",
+						}),
+					})
+				}
+				choices={[
+					["project", "Project"],
+					["personal", "Personal"],
+				]}
+				hint={
+					config.scope === "personal"
+						? "Loads each viewer's personal data. Other people cannot open your private prediction."
+						: "Viewers need permission to read this prediction's source data."
+				}
+			/>
+			<SavedForecastPicker
+				appId={config.appId}
+				userScoped={config.scope === "personal"}
+				value={config.forecastId}
+				onChange={(forecastId) =>
+					onChange({ ...updateHomeForecastSource(config, { forecastId }) })
+				}
+				disabled={!config.appId}
+			/>
+			{saved.data && (
+				<>
+					<Choice
+						label="Initial view"
+						value={config.view}
+						onChange={(view) =>
+							onChange({
+								...config,
+								view: view === "evaluation" ? "evaluation" : "forecast",
+							})
+						}
+						choices={[
+							["forecast", "Forecast"],
+							...(saved.data.result.backtest || config.view === "evaluation"
+								? [["evaluation", "Holdout evaluation"] as [string, string]]
+								: []),
+						]}
+						hint={
+							config.view === "evaluation" && !saved.data.result.backtest
+								? "This saved prediction has no holdout evaluation. Choose Forecast to view its results."
+								: undefined
+						}
+					/>
+					<Choice
+						label="Initial metric"
+						value={config.target ?? ""}
+						onChange={(target) =>
+							onChange({ ...config, target: target || undefined })
+						}
+						choices={[
+							["", "First metric"],
+							...[
+								...new Set([
+									...targets,
+									...(config.target ? [config.target] : []),
+								]),
+							].map((target): [string, string] => [target, target]),
+						]}
+					/>
+					{series.length > 1 || config.seriesId ? (
+						<Choice
+							label="Initial series"
+							value={config.seriesId ?? ""}
+							onChange={(seriesId) =>
+								onChange({ ...config, seriesId: seriesId || undefined })
+							}
+							choices={[
+								["", "First series"],
+								...[
+									...new Set([
+										...series,
+										...(config.seriesId ? [config.seriesId] : []),
+									]),
+								]
+									.filter(Boolean)
+									.map((seriesId): [string, string] => [seriesId, seriesId]),
+							]}
+						/>
+					) : null}
+				</>
+			)}
+			{saved.isError && (
+				<p className="text-xs leading-normal text-destructive">
+					The saved prediction could not load. Check its selection and your data
+					access.{" "}
+					<button type="button" className="underline" onClick={saved.refetch}>
+						Try again
+					</button>
+				</p>
+			)}
+			<p className="text-xs leading-normal text-muted-foreground">
+				Displays the saved result. Creating a new prediction in Data Studio
+				leaves this widget's selection unchanged.
+			</p>
+		</div>
+	);
+}
+
 export function HomeWidgetSettings({ widget, onChange }: SettingsProps) {
 	const config = widget.config;
 	const update = (key: string, value: unknown) =>
 		onChange({ ...config, [key]: value });
 	const categoryLabel = useAppCategoryLabel();
+	if (widget.type === "saved-forecast")
+		return <SavedForecastSettings widget={widget} onChange={onChange} />;
 	if (widget.type === "section-heading")
 		return (
 			<div className="space-y-4">

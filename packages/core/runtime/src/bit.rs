@@ -279,6 +279,7 @@ fn user_source_artifact_identity(
         BitTypes::Llm => b"llm".as_slice(),
         BitTypes::Vlm => b"vlm".as_slice(),
         BitTypes::SystemOne => b"systemone".as_slice(),
+        BitTypes::Forecasting => b"forecasting".as_slice(),
         BitTypes::Projection => b"projection".as_slice(),
         _ => return None,
     };
@@ -657,6 +658,7 @@ pub enum BitTypes {
     SystemOne,
     Tts,
     Stt,
+    Forecasting,
     Embedding,
     ImageEmbedding,
     File,
@@ -932,6 +934,142 @@ pub struct VLMParameters {
 pub struct SystemOneParameters {
     pub context_length: u32,
     pub provider: ModelProvider,
+}
+
+/// Native architecture used to read a forecasting checkpoint.
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ForecastingModelType {
+    Timestral,
+    Chronos2,
+    Toto2,
+    #[serde(rename = "timesfm2_5")]
+    Timesfm25,
+    TinyTimeMixer,
+}
+
+/// A required checkpoint file supplied by a dependency Bit.
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq)]
+pub struct ForecastingAssetRef {
+    pub bit: String,
+    pub relative_path: String,
+}
+
+pub const FORECASTING_LOCAL_PROVIDER: &str = "local:forecast";
+
+fn default_forecasting_provider() -> ModelProvider {
+    ModelProvider {
+        api_surface: None,
+        provider_name: FORECASTING_LOCAL_PROVIDER.to_string(),
+        model_id: None,
+        version: None,
+        params: None,
+    }
+}
+
+/// Checkpoint architecture and files for a forecasting model Bit.
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
+pub struct ForecastingModelParameters {
+    pub model_type: ForecastingModelType,
+    #[serde(default = "default_forecasting_provider")]
+    pub provider: ModelProvider,
+    #[serde(default)]
+    pub assets: Vec<ForecastingAssetRef>,
+}
+
+impl ForecastingAssetRef {
+    pub fn matches_reference(&self, bit: &Bit, default_hub: &str) -> flow_like_types::Result<bool> {
+        let (hub, id) = self.reference_parts(default_hub)?;
+        Ok(bit.id == id && forecasting_hub_origin(&bit.hub)? == forecasting_hub_origin(hub)?)
+    }
+
+    pub fn reference_parts<'a>(
+        &'a self,
+        default_hub: &'a str,
+    ) -> flow_like_types::Result<(&'a str, &'a str)> {
+        let (hub, id) = self
+            .bit
+            .rsplit_once(':')
+            .unwrap_or((default_hub, &self.bit));
+        if id.is_empty()
+            || id.len() > 128
+            || !id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+            || matches!(id, "." | "..")
+        {
+            flow_like_types::bail!("Invalid forecasting asset Bit reference: {}", self.bit);
+        }
+        forecasting_hub_origin(hub)?;
+        Ok((hub, id))
+    }
+}
+
+fn forecasting_hub_origin(hub: &str) -> flow_like_types::Result<String> {
+    let url = Url::parse(&if hub.starts_with("https://") {
+        hub.to_string()
+    } else {
+        format!("https://{hub}")
+    })?;
+    if hub.trim() != hub
+        || url.scheme() != "https"
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || !matches!(url.path(), "" | "/")
+    {
+        flow_like_types::bail!("Forecasting asset hubs must be HTTPS origins");
+    }
+    Ok(url.origin().ascii_serialization())
+}
+
+impl ForecastingModelParameters {
+    pub fn validate(&self) -> flow_like_types::Result<()> {
+        if self.provider.provider_name != FORECASTING_LOCAL_PROVIDER
+            || self.provider.api_surface.is_some()
+            || self
+                .provider
+                .params
+                .as_ref()
+                .is_some_and(|params| !params.is_empty())
+        {
+            flow_like_types::bail!(
+                "Forecasting Bits require the local:forecast provider without API settings or credentials"
+            );
+        }
+        if self.assets.is_empty() || self.assets.len() > 512 {
+            flow_like_types::bail!("Forecasting Bits require between 1 and 512 checkpoint assets");
+        }
+        let mut destinations = HashSet::new();
+        for asset in &self.assets {
+            asset.reference_parts("api.flow-like.com")?;
+            let name = &asset.relative_path;
+            if name.is_empty()
+                || name.len() > 255
+                || !name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+                || !(name == "config.json"
+                    || name == "LICENSE"
+                    || name == "NOTICE"
+                    || name == "model.safetensors.index.json"
+                    || name.ends_with(".safetensors"))
+            {
+                flow_like_types::bail!(
+                    "Forecasting assets must name config.json, LICENSE, NOTICE, a SafeTensors index, or a SafeTensors file without directories"
+                );
+            }
+            if !destinations.insert(name.as_str()) {
+                flow_like_types::bail!("Duplicate forecasting asset destination: {name}");
+            }
+        }
+        if !destinations.contains("config.json") {
+            flow_like_types::bail!("Forecasting Bits require a config.json asset");
+        }
+        Ok(())
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq, Default)]
@@ -1390,18 +1528,22 @@ impl Bit {
             .is_some_and(|identity| identity == self.hash)
     }
 
-    /// Refresh cache identities for a user-owned llama.cpp root.
+    /// Refresh cache identities for a user-owned local model root.
     ///
     /// Legacy roots use `hash == id`; newer UI saves may carry an older
     /// source-derived hash while being edited. Both are safe to replace. A
     /// caller-supplied content hash is retained and continues to be verified.
     pub fn normalize_user_local_artifact_identity(&mut self) {
-        if !matches!(
-            self.bit_type,
-            BitTypes::Llm | BitTypes::Vlm | BitTypes::SystemOne
-        ) || self
-            .try_to_provider()
-            .is_none_or(|provider| !provider.provider_name.eq_ignore_ascii_case("local"))
+        let forecasting = self
+            .try_to_forecasting()
+            .filter(|parameters| parameters.provider.provider_name == FORECASTING_LOCAL_PROVIDER);
+        if forecasting.is_none()
+            && (!matches!(
+                self.bit_type,
+                BitTypes::Llm | BitTypes::Vlm | BitTypes::SystemOne
+            ) || self
+                .try_to_provider()
+                .is_none_or(|provider| !provider.provider_name.eq_ignore_ascii_case("local")))
         {
             return;
         }
@@ -1421,7 +1563,20 @@ impl Bit {
         update_source_identity_field(&mut hasher, self.id.as_bytes());
         update_source_identity_field(&mut hasher, source_identity.as_bytes());
         update_source_identity_field(&mut hasher, self.hash.as_bytes());
-        if let Some(projection) = self.projection_bit() {
+        if let Some(parameters) = forecasting {
+            update_source_identity_field(&mut hasher, b"forecasting");
+            update_source_identity_field(&mut hasher, self.hub.as_bytes());
+            update_source_identity_field(
+                &mut hasher,
+                format!("{:?}", parameters.model_type).as_bytes(),
+            );
+            let mut assets: Vec<_> = parameters.assets.iter().collect();
+            assets.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+            for asset in assets {
+                update_source_identity_field(&mut hasher, asset.bit.as_bytes());
+                update_source_identity_field(&mut hasher, asset.relative_path.as_bytes());
+            }
+        } else if let Some(projection) = self.projection_bit() {
             update_source_identity_field(&mut hasher, b"projection");
             update_source_identity_field(&mut hasher, projection.hash.as_bytes());
         } else {
@@ -1685,6 +1840,12 @@ impl Bit {
             .flatten()
     }
 
+    pub fn try_to_forecasting(&self) -> Option<ForecastingModelParameters> {
+        (self.bit_type == BitTypes::Forecasting)
+            .then(|| flow_like_types::json::from_value(self.parameters.clone()).ok())
+            .flatten()
+    }
+
     pub fn try_to_stt_provider(&self) -> Option<ModelProvider> {
         if self.bit_type == BitTypes::Stt {
             let parameters =
@@ -1796,6 +1957,10 @@ impl Bit {
     pub(crate) fn model_provider(&self) -> Option<ModelProvider> {
         self.try_to_provider()
             .or_else(|| self.try_to_embedding_provider())
+            .or_else(|| {
+                self.try_to_forecasting()
+                    .map(|parameters| parameters.provider)
+            })
     }
 
     /// Whether a device's model host serves this Bit through the `device` provider.
@@ -1867,7 +2032,122 @@ impl Bit {
         Ok(bit_pack)
     }
 
+    fn forecasting_pack_cache_path(
+        &self,
+        parameters: &ForecastingModelParameters,
+    ) -> flow_like_types::Result<Path> {
+        let identity = flow_like_types::json::to_vec(&(
+            &self.id,
+            &self.hub,
+            &self.hash,
+            &self.file_name,
+            &self.dependency_tree_hash,
+            parameters,
+        ))?;
+        Ok(Path::from("deps-cache").join(format!(
+            "forecasting-{}.bin",
+            blake3::hash(&identity).to_hex()
+        )))
+    }
+
+    fn validated_forecasting_pack(
+        &self,
+        parameters: &ForecastingModelParameters,
+        pack: BitPack,
+    ) -> flow_like_types::Result<BitPack> {
+        let root_origin = forecasting_hub_origin(&self.hub)?;
+        let mut bits = vec![self.clone()];
+        let mut seen = HashSet::new();
+        for asset in &parameters.assets {
+            let (hub, id) = asset.reference_parts(&self.hub)?;
+            let origin = forecasting_hub_origin(hub)?;
+            if id == self.id && origin == root_origin {
+                continue;
+            }
+            if !seen.insert((origin.clone(), id.to_string())) {
+                continue;
+            }
+            let mut matches = pack.bits.iter().filter(|bit| {
+                bit.id == id && forecasting_hub_origin(&bit.hub).is_ok_and(|value| value == origin)
+            });
+            let mut bit = matches.next().cloned().ok_or_else(|| {
+                flow_like_types::anyhow!(
+                    "Forecasting asset {hub}:{id} was not returned by its declared hub"
+                )
+            })?;
+            if matches.next().is_some() {
+                flow_like_types::bail!("Forecasting asset {hub}:{id} resolved ambiguously");
+            }
+            // Equivalent HTTPS origin spellings use the reference's spelling so
+            // downstream asset lookup can compare the declared reference exactly.
+            bit.hub = hub.to_string();
+            bits.push(bit);
+        }
+        Ok(BitPack { bits })
+    }
+
     pub async fn pack(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<BitPack> {
+        if self.bit_type == BitTypes::Forecasting {
+            let parameters = self
+                .try_to_forecasting()
+                .ok_or_else(|| flow_like_types::anyhow!("Invalid forecasting model parameters"))?;
+            parameters.validate()?;
+            let store = FlowLikeState::bit_store(&state).await?.as_generic();
+            let cache_path = self.forecasting_pack_cache_path(&parameters)?;
+            let legacy_key = if self.dependency_tree_hash.is_empty() {
+                &self.id
+            } else {
+                &self.dependency_tree_hash
+            };
+            // Standalone deployments seed the shared dependency cache from
+            // their pinned package metadata before any hub can be reached.
+            let legacy_path = (!legacy_key.is_empty()
+                && legacy_key.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+                }))
+            .then(|| Path::from("deps-cache").join(format!("bit-deps-{legacy_key}.bin")));
+            for candidate in std::iter::once(cache_path.clone()).chain(legacy_path) {
+                if let Ok(cached) =
+                    from_compressed_json::<BitPack>(store.clone(), candidate.clone()).await
+                    && let Ok(cached) = self.validated_forecasting_pack(&parameters, cached)
+                {
+                    if candidate != cache_path {
+                        if let Err(error) =
+                            compress_to_file_json(store.clone(), cache_path.clone(), &cached).await
+                        {
+                            tracing::warn!(bit_id = %self.id, %error, "Could not cache forecasting assets");
+                        }
+                    }
+                    return Ok(cached);
+                }
+            }
+            let root_origin = forecasting_hub_origin(&self.hub)?;
+            let mut bits = vec![self.clone()];
+            let mut seen = HashSet::new();
+            for asset in &parameters.assets {
+                let (hub, id) = asset.reference_parts(&self.hub)?;
+                let origin = forecasting_hub_origin(hub)?;
+                if id == self.id && origin == root_origin {
+                    continue;
+                }
+                if !seen.insert((origin, id.to_string())) {
+                    continue;
+                }
+                let source = crate::hub::Hub::new(hub, state.http_client.clone()).await?;
+                let bit = source.get_bit(id).await?;
+                if bit.id != id {
+                    flow_like_types::bail!(
+                        "Forecasting asset {hub}:{id} resolved to a different Bit"
+                    );
+                }
+                bits.push(bit);
+            }
+            let pack = self.validated_forecasting_pack(&parameters, BitPack { bits })?;
+            if let Err(error) = compress_to_file_json(store, cache_path, &pack).await {
+                tracing::warn!(bit_id = %self.id, %error, "Could not cache forecasting assets");
+            }
+            return Ok(pack);
+        }
         let inline_embedding_assets = self.inline_embedding_asset_bits()?;
         let inline_ids = inline_embedding_assets
             .iter()
@@ -2045,6 +2325,268 @@ mod tests {
     use flow_like_storage::files::store::local_store::LocalObjectStore;
     use flow_like_types::Value;
     use flow_like_types::tokio;
+
+    fn forecasting_bit() -> Bit {
+        Bit {
+            id: "forecast-model".into(),
+            hub: "api.flow-like.com".into(),
+            bit_type: BitTypes::Forecasting,
+            parameters: flow_like_types::json::json!({
+                "model_type": "chronos2",
+                "assets": [{"bit": "model-config", "relative_path": "config.json"}]
+            }),
+            download_link: Some(format!(
+                "https://huggingface.co/amazon/chronos-2/resolve/{}/model.safetensors",
+                "a".repeat(40)
+            )),
+            file_name: Some("model.safetensors".into()),
+            size: Some(1000),
+            ..Bit::default()
+        }
+    }
+
+    #[test]
+    fn forecasting_parameters_require_an_architecture_and_do_not_become_chat_models() {
+        let mut bit = forecasting_bit();
+        for model_type in [
+            "timestral",
+            "chronos2",
+            "toto2",
+            "timesfm2_5",
+            "tiny_time_mixer",
+        ] {
+            bit.parameters["model_type"] = Value::String(model_type.into());
+            let parameters = bit.try_to_forecasting().unwrap();
+            parameters.validate().unwrap();
+            assert_eq!(
+                parameters.provider.provider_name,
+                FORECASTING_LOCAL_PROVIDER
+            );
+            assert!(bit.try_to_provider().is_none());
+            assert_eq!(
+                bit.model_provider().unwrap().provider_name,
+                FORECASTING_LOCAL_PROVIDER
+            );
+            assert!(bit.try_to_llm().is_none());
+        }
+        bit.parameters.as_object_mut().unwrap().remove("model_type");
+        assert!(bit.try_to_forecasting().is_none());
+        bit.parameters["model_type"] = Value::String("chronos_bolt".into());
+        assert!(bit.try_to_forecasting().is_none());
+    }
+
+    #[test]
+    fn forecasting_assets_reject_unsafe_references_and_duplicate_destinations() {
+        let mut parameters = forecasting_bit().try_to_forecasting().unwrap();
+        let asset = &parameters.assets[0];
+        assert_eq!(
+            asset.reference_parts("api.flow-like.com").unwrap(),
+            ("api.flow-like.com", "model-config")
+        );
+        let qualified = ForecastingAssetRef {
+            bit: "https://models.example.com:model-config".into(),
+            relative_path: "config.json".into(),
+        };
+        assert_eq!(
+            qualified.reference_parts("api.flow-like.com").unwrap(),
+            ("https://models.example.com", "model-config")
+        );
+        for reference in [
+            "../config",
+            "hub:../config",
+            "https://user@host:config",
+            "https://host/path:config",
+            "hub:",
+        ] {
+            parameters.assets[0].bit = reference.into();
+            assert!(parameters.validate().is_err(), "accepted {reference}");
+        }
+        parameters = forecasting_bit().try_to_forecasting().unwrap();
+        for path in [
+            "../config.json",
+            "config.py",
+            "a/config.json",
+            "a\\config.json",
+        ] {
+            parameters.assets[0].relative_path = path.into();
+            assert!(parameters.validate().is_err(), "accepted {path}");
+        }
+        parameters = forecasting_bit().try_to_forecasting().unwrap();
+        parameters.assets.push(parameters.assets[0].clone());
+        assert!(
+            parameters
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("Duplicate")
+        );
+        parameters = forecasting_bit().try_to_forecasting().unwrap();
+        parameters.provider.provider_name = "custom:forecast".into();
+        assert!(parameters.validate().is_err());
+    }
+
+    #[test]
+    fn forecasting_user_cache_identity_changes_with_checkpoint_and_asset_sources() {
+        let mut original = forecasting_bit();
+        original.normalize_user_local_artifact_identity();
+        assert!(original.has_matching_user_source_artifact_identity());
+        let mut config_change = original.clone();
+        config_change.parameters["assets"][0]["bit"] = Value::String("replacement-config".into());
+        config_change.normalize_edited_user_local_artifact_identity(Some(&original));
+        assert_eq!(original.hash, config_change.hash);
+        assert_ne!(
+            original.runtime_model_cache_key(),
+            config_change.runtime_model_cache_key()
+        );
+        let mut source_change = original.clone();
+        source_change.download_link = source_change
+            .download_link
+            .map(|source| source.replace(&"a".repeat(40), &"b".repeat(40)));
+        source_change.normalize_edited_user_local_artifact_identity(Some(&original));
+        assert_ne!(original.hash, source_change.hash);
+    }
+
+    #[test]
+    fn forecasting_packs_canonicalize_origin_aliases_and_reject_cross_hub_fallbacks() {
+        let root = forecasting_bit();
+        let parameters = root.try_to_forecasting().unwrap();
+        let asset = Bit {
+            id: "model-config".into(),
+            hub: "https://api.flow-like.com:443/".into(),
+            ..Bit::default()
+        };
+        assert!(
+            parameters.assets[0]
+                .matches_reference(&asset, &root.hub)
+                .unwrap()
+        );
+        let pack = root
+            .validated_forecasting_pack(
+                &parameters,
+                BitPack {
+                    bits: vec![asset.clone()],
+                },
+            )
+            .unwrap();
+        assert_eq!(pack.bits[1].hub, root.hub);
+        let duplicate = BitPack {
+            bits: vec![asset.clone(), asset.clone()],
+        };
+        assert!(
+            root.validated_forecasting_pack(&parameters, duplicate)
+                .is_err()
+        );
+        let mut foreign = asset;
+        foreign.hub = "other.example.com".into();
+        assert!(
+            root.validated_forecasting_pack(
+                &parameters,
+                BitPack {
+                    bits: vec![foreign]
+                }
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn forecasting_packs_reload_from_the_bit_store_without_hub_access() {
+        let temporary = tempfile::tempdir().unwrap();
+        let store = LocalObjectStore::new(temporary.path().to_path_buf()).unwrap();
+        let mut config = FlowLikeConfig::new();
+        config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
+        let state = Arc::new(FlowLikeState::new(
+            config,
+            crate::utils::http::HTTPClient::new_without_refetch(),
+        ));
+        let mut root = forecasting_bit();
+        root.hub = "offline.invalid".into();
+        let parameters = root.try_to_forecasting().unwrap();
+        let path = root.forecasting_pack_cache_path(&parameters).unwrap();
+        let pack = BitPack {
+            bits: vec![
+                root.clone(),
+                Bit {
+                    id: "model-config".into(),
+                    hub: root.hub.clone(),
+                    file_name: Some("config.json".into()),
+                    ..Bit::default()
+                },
+            ],
+        };
+        compress_to_file_json(
+            FlowLikeState::bit_store(&state).await.unwrap().as_generic(),
+            path.clone(),
+            &pack,
+        )
+        .await
+        .unwrap();
+        let cached = tokio::time::timeout(std::time::Duration::from_secs(1), root.pack(state))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(cached.bits.len(), 2);
+        assert_eq!(cached.bits[1].id, "model-config");
+        root.dependency_tree_hash = "updated-tree".into();
+        assert_ne!(path, root.forecasting_pack_cache_path(&parameters).unwrap());
+        let mut changed = parameters;
+        changed.assets[0].bit = "different-config".into();
+        assert_ne!(
+            root.forecasting_pack_cache_path(&changed).unwrap(),
+            root.forecasting_pack_cache_path(&root.try_to_forecasting().unwrap())
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn forecasting_packs_use_pinned_deployment_metadata_offline_and_keep_the_current_root() {
+        let temporary = tempfile::tempdir().unwrap();
+        let store = LocalObjectStore::new(temporary.path().to_path_buf()).unwrap();
+        let mut config = FlowLikeConfig::new();
+        config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
+        let state = Arc::new(FlowLikeState::new(
+            config,
+            crate::utils::http::HTTPClient::new_without_refetch(),
+        ));
+        let mut root = forecasting_bit();
+        root.hub = "offline.invalid".into();
+        root.dependency_tree_hash = "standalone-pinned-pack".into();
+        let mut stale_root = root.clone();
+        stale_root.file_name = Some("stale.safetensors".into());
+        let pack = BitPack {
+            bits: vec![
+                stale_root,
+                Bit {
+                    id: "model-config".into(),
+                    hub: "https://offline.invalid/".into(),
+                    file_name: Some("config.json".into()),
+                    ..Bit::default()
+                },
+            ],
+        };
+        let store = FlowLikeState::bit_store(&state).await.unwrap().as_generic();
+        compress_to_file_json(
+            store.clone(),
+            Path::from("deps-cache/bit-deps-standalone-pinned-pack.bin"),
+            &pack,
+        )
+        .await
+        .unwrap();
+        let cached = tokio::time::timeout(std::time::Duration::from_secs(1), root.pack(state))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(cached.bits.len(), 2);
+        assert_eq!(cached.bits[0].file_name, root.file_name);
+        assert_eq!(cached.bits[1].hub, root.hub);
+        let parameters = root.try_to_forecasting().unwrap();
+        assert!(
+            store
+                .head(&root.forecasting_pack_cache_path(&parameters).unwrap())
+                .await
+                .is_ok()
+        );
+    }
 
     #[test]
     fn systemone_bit_has_its_own_parameters_and_local_artifact_identity() {

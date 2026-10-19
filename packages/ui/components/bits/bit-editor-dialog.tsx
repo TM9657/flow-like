@@ -165,13 +165,27 @@ function BitEditorSession({
 		providerName.toLowerCase() === "mlx" &&
 		[IBitTypes.Llm, IBitTypes.Vlm].includes(draft.type);
 	const hosted = /^(hosted(?::|$)|premium$|internal$)/i.test(providerName);
+	const showCredentials =
+		scope === "custom" && draft.type !== IBitTypes.Forecasting;
 	const dirty =
 		JSON.stringify(draft) !== JSON.stringify(baseline) ||
 		JSON.stringify(secrets) !== JSON.stringify(savedSecrets) ||
 		jsonText !== null;
 	const blocked = busy || imagesBusy > 0;
 	const update = <K extends keyof IBit>(key: K, value: IBit[K]) =>
-		setDraft((current) => ({ ...current, [key]: value }));
+		setDraft((current) => ({
+			...current,
+			[key]: value,
+			...(key === "parameters" &&
+			current.type === IBitTypes.Forecasting &&
+			Array.isArray(value?.assets)
+				? {
+						dependencies: value.assets.flatMap((asset: { bit?: unknown }) =>
+							typeof asset?.bit === "string" ? [asset.bit] : [],
+						),
+					}
+				: {}),
+		}));
 	const updateMeta = <K extends keyof IMetadata>(key: K, value: IMetadata[K]) =>
 		setDraft((current) => ({
 			...current,
@@ -685,7 +699,7 @@ function BitEditorSession({
 												setJsonError(null);
 											}}
 										/>
-										{scope === "custom" && (
+										{showCredentials && (
 											<details className="rounded-xl border p-4">
 												<summary className="cursor-pointer text-sm font-medium">
 													Credentials
@@ -817,6 +831,7 @@ function BitEditorSession({
 																	IBitTypes.Llm,
 																	IBitTypes.Vlm,
 																	IBitTypes.SystemOne,
+																	IBitTypes.Forecasting,
 																]
 															: Object.values(IBitTypes)
 														).map((type) => (

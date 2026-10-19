@@ -3,6 +3,7 @@ import { useTranslation } from "@flow-like/locales";
 import { isScriptNavigationUrl } from "../../lib/navigation-url";
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
+	ChartNoAxesCombinedIcon,
 	AudioLinesIcon,
 	CameraIcon,
 	ClockIcon,
@@ -561,6 +562,8 @@ export function BitTypeIcon({
 		(className ? ` ${className}` : "");
 
 	switch (type) {
+		case IBitTypes.Forecasting:
+			return <ChartNoAxesCombinedIcon className={combinedClass} />;
 		case IBitTypes.SystemOne:
 			return <ListChecksIcon className={combinedClass} />;
 		case IBitTypes.Llm:

@@ -166,6 +166,7 @@ export type {
 	GraphEdgeDef,
 	GraphLabelStyleDef,
 	OntologyGraphComponent,
+	ForecastChartComponent,
 	GeoCoordinate,
 	GeoBoundingBox,
 	GeoRouteGeometry,

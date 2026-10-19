@@ -18,6 +18,7 @@ export { A2UIFilePreview } from "./FilePreview";
 export { A2UIFileEditor } from "./FileEditor";
 export { A2UIDiffView } from "./DiffView";
 export { A2UINivoChart } from "./NivoChart";
+export { A2UIForecastChart } from "./ForecastChart";
 export { A2UIBoundingBoxOverlay } from "./BoundingBoxOverlay";
 export { A2UIGeoMap } from "./GeoMap";
 export { A2UIGraph } from "./Graph";

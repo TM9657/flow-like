@@ -37,6 +37,7 @@ import {
 	Table2,
 	ThumbsUp,
 	ToggleLeft,
+	TrendingUp,
 	Type,
 	Upload,
 	UserRound,
@@ -310,6 +311,14 @@ const COMPONENT_DEFINITIONS: ComponentDefinition[] = [
 		icon: SlidersHorizontal,
 		category: "Display",
 		description: "Nivo data visualization",
+	},
+	{
+		type: "forecastChart",
+		label: "Saved Forecast",
+		icon: TrendingUp,
+		category: "Display",
+		description:
+			"Saved predictions with history, intervals and holdout metrics",
 	},
 	{
 		type: "boundingBoxOverlay",
