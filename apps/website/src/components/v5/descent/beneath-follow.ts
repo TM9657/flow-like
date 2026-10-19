@@ -99,19 +99,57 @@ export function followBeat(
 	return beat;
 }
 
+/** How many of the route's nodes lie whole inside the frame centred at `centre`. */
+function wholeIn(frames: ColumnWindows, centre: number, plan: ScenarioPlan) {
+	const half = frames.span / 2 + 1;
+	let held = 0;
+	for (const node of plan.nodes) {
+		if (node.x >= centre - half && node.x + node.width <= centre + half) held++;
+	}
+	return held;
+}
+
+/**
+ * The frame a run rests in: among the frames that hold its landing point, the
+ * one that holds the most of the route whole, so the end state shows as much
+ * of the story as fits (the one nearest `current` on a tie).
+ */
+export function restWindow(
+	frames: ColumnWindows,
+	plan: ScenarioPlan,
+	current: number,
+): number {
+	const landing = plan.beats[plan.beats.length - 1].focus;
+	const reach = frames.span / 2 - INSET;
+	let best = Number.NaN;
+	let most = -1;
+	for (const c of frames.centers) {
+		if (Math.abs(landing - c) > reach) continue;
+		const held = wholeIn(frames, c, plan);
+		const nearer = Math.abs(c - current) < Math.abs(best - current);
+		if (held > most || (held === most && nearer)) {
+			most = held;
+			best = c;
+		}
+	}
+	return Number.isNaN(best) ? pickWindow(frames, landing, current) : best;
+}
+
 /**
  * The frame centre for a run up to `beat`: each beat in order keeps the previous
- * frame while it still holds that beat's landing point. Taking the beats from
- * the start of the run makes the frame independent of what was shown before.
+ * frame while it still holds that beat's landing point, and the last beat rests
+ * where the most of the story shows. Taking the beats from the start of the run
+ * makes the frame independent of what was shown before.
  */
 export function followWindow(
 	frames: ColumnWindows,
 	plan: ScenarioPlan,
 	beat: number,
 ): number {
+	const last = plan.beats.length - 1;
 	let center = Number.NaN;
-	for (let i = 0; i <= beat; i++) {
+	for (let i = 0; i <= Math.min(beat, last - 1); i++) {
 		center = pickWindow(frames, plan.beats[i].focus, center);
 	}
-	return center;
+	return beat >= last ? restWindow(frames, plan, center) : center;
 }

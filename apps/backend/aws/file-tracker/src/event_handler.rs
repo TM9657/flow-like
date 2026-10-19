@@ -91,6 +91,10 @@ async fn process_s3_event(
             .as_deref()
             .ok_or("Object key is missing")?,
     )?;
+    // DeviceArchive metadata accounts for these server-owned payloads separately.
+    if key.starts_with("device-archives/") {
+        return Ok(());
+    }
     let (user_id, app_id) = parse_key_identity(&key)?;
     let sequencer = accounting::normalize_sequencer(
         event
@@ -210,6 +214,35 @@ fn parse_key_identity(key: &str) -> Result<(Option<String>, String), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn archive_notifications_are_acknowledged_without_storage_or_database_access() {
+        let config = aws_config::SdkConfig::builder()
+            .behavior_version(aws_config::BehaviorVersion::latest())
+            .region(aws_config::Region::new("eu-west-1"))
+            .build();
+        let dynamo = DynamoClient::new(&config);
+        let s3 = S3Client::new(&config);
+        let db = DatabaseConnection::default();
+
+        for event_name in ["ObjectCreated:Put", "ObjectRemoved:Delete"] {
+            let mut event = S3EventRecord::default();
+            event.event_name = Some(event_name.into());
+            event.s3.bucket.name = Some("content".into());
+            event.s3.object.key = Some("device-archives%2Fowner%2Farchive.json".into());
+            // A missing sequencer and disconnected clients would fail accounting.
+            process_s3_event(&event, &dynamo, &s3, None, &db, DbDialect::Postgres)
+                .await
+                .unwrap();
+
+            event.s3.object.key = Some("device-archives-other/owner/archive.json".into());
+            assert!(
+                process_s3_event(&event, &dynamo, &s3, None, &db, DbDialect::Postgres)
+                    .await
+                    .is_err()
+            );
+        }
+    }
 
     #[test]
     fn object_keys_decode_form_encoding_and_keep_literal_plus() {

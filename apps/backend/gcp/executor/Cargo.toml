@@ -7,9 +7,9 @@ description = "Flow-Like GCP synchronous HTTP executor (Cloud Run service, serve
 [dependencies]
 axum.workspace = true
 base64.workspace = true
-# The remote-only server bundle matches the Azure and GCP queue workers. It
-# excludes ONNX metadata, ONNX Runtime and local model weights. Remote-capable
-# text model nodes reach the authenticated API proxy.
+# The server bundle runs forecasting on CPU, matching the Azure and GCP queue
+# workers. It excludes ONNX metadata and ONNX Runtime. Remote-capable text
+# model nodes reach the authenticated API proxy.
 flow-like-catalog = { workspace = true, default-features = false, features = ["server"] }
 flow-like-executor = { workspace = true, features = ["server", "channel-gcp"] }
 # Only `metadata::ensure_no_forbidden_credential_env` is used. The executor

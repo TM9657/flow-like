@@ -74,7 +74,7 @@ impl HTTPClient {
     async fn try_cached_value<T>(
         &self,
         request_hash: &str,
-        request: &Request,
+        request: Option<&Request>,
     ) -> flow_like_types::Result<Option<T>>
     where
         for<'de> T: Deserialize<'de> + Clone,
@@ -173,7 +173,7 @@ impl HTTPClient {
     async fn handle_in_memory<T>(
         &self,
         request_hash: &str,
-        request: &Request,
+        request: Option<&Request>,
     ) -> flow_like_types::Result<T>
     where
         for<'de> T: Deserialize<'de> + Clone,
@@ -183,7 +183,9 @@ impl HTTPClient {
             .ok_or(flow_like_types::anyhow!("Value not found in cache"))?;
         let value = flow_like_types::json::from_value::<T>(value)?;
 
-        self.refetch::<T>(request);
+        if let Some(request) = request {
+            self.refetch::<T>(request);
+        }
         Ok(value)
     }
 
@@ -191,7 +193,7 @@ impl HTTPClient {
     async fn handle_file_cache<T>(
         &self,
         request_hash: &str,
-        request: &Request,
+        request: Option<&Request>,
     ) -> flow_like_types::Result<T>
     where
         for<'de> T: Deserialize<'de> + Clone,
@@ -214,7 +216,9 @@ impl HTTPClient {
         self.cache
             .insert(request_hash.to_string(), generic_value.clone());
         let value = flow_like_types::json::from_value::<T>(generic_value)?;
-        self.refetch::<T>(request);
+        if let Some(request) = request {
+            self.refetch::<T>(request);
+        }
         Ok(value)
     }
 
@@ -262,12 +266,43 @@ impl HTTPClient {
     {
         let request_hash = self.quick_hash(&request);
 
-        if let Some(value) = self.try_cached_value::<T>(&request_hash, &request).await? {
+        if let Some(value) = self
+            .try_cached_value::<T>(&request_hash, Some(&request))
+            .await?
+        {
             return Ok(value);
         }
 
         // fetches from the network
         self.fetch_and_cache::<T>(&request_hash, request).await
+    }
+
+    /// Refresh a mutable listing in the same call. Only a transport failure
+    /// permits the offline copy; HTTP errors and invalid responses stay errors.
+    pub async fn revalidated_request<T>(&self, request: Request) -> flow_like_types::Result<T>
+    where
+        for<'de> T: Deserialize<'de> + Clone + Serialize,
+    {
+        let request_hash = self.quick_hash(&request);
+        match self.fetch_and_cache::<T>(&request_hash, request).await {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                let transport_failure =
+                    error.downcast_ref::<reqwest::Error>().is_some_and(|error| {
+                        error.status().is_none()
+                            && (error.is_connect()
+                                || error.is_timeout()
+                                || error.is_request()
+                                || error.is_body())
+                    });
+                if transport_failure
+                    && let Some(value) = self.try_cached_value::<T>(&request_hash, None).await?
+                {
+                    return Ok(value);
+                }
+                Err(error)
+            }
+        }
     }
 
     pub fn put(&self, request_hash: &str, body: &Value) -> flow_like_types::Result<()> {
@@ -282,6 +317,11 @@ impl HTTPClient {
 mod tests {
     use super::*;
     use flow_like_types::json::json;
+    use flow_like_types::tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+        task::JoinHandle,
+    };
 
     #[derive(Deserialize)]
     struct HubName {
@@ -308,5 +348,91 @@ mod tests {
         assert!(!is_upstream_failure_envelope(
             &json!({ "errorType": 1, "errorMessage": "not an envelope" })
         ));
+    }
+
+    async fn serve_once(status: u16, body: &'static str) -> (String, JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/api/v1/bit", listener.local_addr().unwrap());
+        let server = flow_like_types::tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0; 4096];
+            socket.read(&mut request).await.unwrap();
+            let response = format!(
+                "HTTP/1.1 {status} Test\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        (url, server)
+    }
+
+    #[tokio::test]
+    async fn revalidated_request_returns_new_catalog_in_the_same_call() {
+        let (url, server) = serve_once(200, r#"["old-model","new-forecast"]"#).await;
+        let (http, mut refetches) = HTTPClient::new();
+        let request = http.client().post(url).build().unwrap();
+        let hash = http.quick_hash(&request);
+        http.cache.insert(hash.clone(), json!(["old-model"]));
+
+        let result = http
+            .revalidated_request::<Vec<String>>(request)
+            .await
+            .unwrap();
+        server.await.unwrap();
+        assert_eq!(result, ["old-model", "new-forecast"]);
+        assert_eq!(http.cached_value(&hash), Some(json!(result)));
+        assert!(refetches.try_recv().is_err());
+        let _ = delete_cache_file(&format!("http/{hash}"));
+    }
+
+    #[tokio::test]
+    async fn revalidated_request_uses_valid_cache_when_offline() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/offline-catalog", listener.local_addr().unwrap());
+        drop(listener);
+        let (http, mut refetches) = HTTPClient::new();
+        let request = http.client().post(&url).build().unwrap();
+        let hash = http.quick_hash(&request);
+        http.cache.insert(hash.clone(), json!(["cached-model"]));
+
+        assert_eq!(
+            http.revalidated_request::<Vec<String>>(request)
+                .await
+                .unwrap(),
+            ["cached-model"]
+        );
+        assert!(refetches.try_recv().is_err());
+        http.cache.insert(hash, json!({ "invalid": "catalog" }));
+        assert!(
+            http.revalidated_request::<Vec<String>>(http.client().post(url).build().unwrap())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn revalidated_request_does_not_hide_http_or_invalid_response_errors() {
+        for (status, body) in [
+            (401, r#"{"message":"Sign in required"}"#),
+            (403, r#"{"message":"Forbidden"}"#),
+            (404, r#"{"message":"Not found"}"#),
+            (500, r#"{"message":"Server error"}"#),
+            (200, "invalid JSON"),
+            (
+                200,
+                r#"{"errorType":"Runtime.ExitError","errorMessage":"failed"}"#,
+            ),
+        ] {
+            let (url, server) = serve_once(status, body).await;
+            let http = HTTPClient::new_without_refetch();
+            let request = http.client().post(url).build().unwrap();
+            let hash = http.quick_hash(&request);
+            http.cache.insert(hash.clone(), json!(["cached-model"]));
+
+            let result = http.revalidated_request::<Vec<String>>(request).await;
+            server.await.unwrap();
+            assert!(result.is_err(), "status {status}, body {body}");
+            assert_eq!(http.cached_value(&hash), Some(json!(["cached-model"])));
+        }
     }
 }

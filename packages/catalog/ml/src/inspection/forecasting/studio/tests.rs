@@ -11,6 +11,7 @@ fn request() -> StudioForecastRequest {
         params: json!({}),
         mapping: ForecastTableMapping {
             timestamp: "time".into(),
+            timestamp_format: None,
             series_id: Some("id".into()),
             targets: vec!["target".into()],
             past_covariates: vec!["weather".into()],
@@ -583,6 +584,20 @@ fn workbench_temporal_types_keep_their_actual_arrow_units() {
         TemporalUnit::Days
     );
     result.columns[0].type_name = DataType::Utf8.to_string();
+    assert!(
+        execution::temporal_units(&result, &request.mapping, false)
+            .unwrap()
+            .is_empty()
+    );
+    result.columns[1].type_name = DataType::LargeUtf8.to_string();
+    assert!(execution::temporal_units(&result, &request.mapping, false).is_ok());
+    result.columns[0].type_name =
+        DataType::Timestamp(TimeUnit::Millisecond, Some("UTC".into())).to_string();
+    assert_eq!(
+        execution::temporal_units(&result, &request.mapping, false).unwrap()["time"],
+        TemporalUnit::Milliseconds
+    );
+    result.columns[1].type_name = DataType::Boolean.to_string();
     assert!(execution::temporal_units(&result, &request.mapping, false).is_err());
 }
 

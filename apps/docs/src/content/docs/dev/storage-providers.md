@@ -51,6 +51,30 @@ LOG_BUCKET=flow-like-logs
 Provider-specific names such as `AWS_CONTENT_BUCKET`,
 `AZURE_CONTENT_CONTAINER`, and `GCP_CONTENT_BUCKET` override the generic names.
 
+### Device archive payloads
+
+The API stores encrypted device archive payloads under `device-archives/` in
+the content bucket. The database holds archive metadata, the object reference,
+and `sizeBytes` for quota checks. Only the API's storage identity needs access
+to this prefix; keep it outside client credential scopes and public access.
+File accounting workers exclude it because archive metadata tracks its usage.
+
+Apply the archive payload database migration before deploying this API version.
+Existing inline archives remain readable and expire under their original
+retention deadlines; new uploads use the bucket. Complete the API rollout
+before accepting uploads, since older API versions cannot read bucket-backed
+archives. After bucket writes begin, keep a reader that supports both formats
+when rolling back.
+
+Configure your storage provider to delete objects under this prefix after
+32 days from creation. The API caps archive retention at 31 days and enforces
+each archive's expiry on reads, independently of object deletion. This cleanup
+also removes objects left behind by interrupted uploads. If object versioning
+is enabled, configure deletion of noncurrent versions and expired delete
+markers too. Provider soft-delete or backup retention can retain deleted bytes
+longer. For Amazon S3, use the
+[archive lifecycle procedure](/self-hosting/aws/operations/#device-archive-lifecycle).
+
 ## Amazon S3
 
 ```dotenv

@@ -25,7 +25,7 @@ pub struct PinnedTableSource {
     pub reference: DatabaseReference,
     #[serde(default)]
     pub locator: Option<TableLocator>,
-    /// Temporal columns of the pinned schema whose values are not epoch milliseconds.
+    /// Storage units of temporal columns in the pinned schema.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub temporal_units: BTreeMap<String, TemporalUnit>,
 }
@@ -35,6 +35,7 @@ pub struct PinnedTableSource {
 #[serde(rename_all = "snake_case")]
 pub enum TemporalUnit {
     Seconds,
+    Milliseconds,
     Microseconds,
     Nanoseconds,
     Days,
@@ -43,6 +44,7 @@ impl TemporalUnit {
     fn to_milliseconds(self, value: i64) -> Option<i64> {
         match self {
             Self::Seconds => value.checked_mul(1_000),
+            Self::Milliseconds => Some(value),
             Self::Microseconds => Some(value.div_euclid(1_000)),
             Self::Nanoseconds => Some(value.div_euclid(1_000_000)),
             Self::Days => value.checked_mul(86_400_000),
@@ -1507,6 +1509,9 @@ mod table_io {
             .filter_map(|field| {
                 let unit = match field.data_type() {
                     DataType::Timestamp(TimeUnit::Second, _) => TemporalUnit::Seconds,
+                    DataType::Timestamp(TimeUnit::Millisecond, _) | DataType::Date64 => {
+                        TemporalUnit::Milliseconds
+                    }
                     DataType::Timestamp(TimeUnit::Microsecond, _) => TemporalUnit::Microseconds,
                     DataType::Timestamp(TimeUnit::Nanosecond, _) => TemporalUnit::Nanoseconds,
                     DataType::Date32 => TemporalUnit::Days,

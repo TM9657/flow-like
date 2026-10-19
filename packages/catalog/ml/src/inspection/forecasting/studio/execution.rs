@@ -122,18 +122,25 @@ pub(super) fn temporal_units(
                 DataType::Timestamp(TimeUnit::Microsecond, _) => Some(TemporalUnit::Microseconds),
                 DataType::Timestamp(TimeUnit::Nanosecond, _) => Some(TemporalUnit::Nanoseconds),
                 DataType::Date32 => Some(TemporalUnit::Days),
-                DataType::Timestamp(TimeUnit::Millisecond, _)
-                | DataType::Date64
-                | DataType::Int8
+                DataType::Timestamp(TimeUnit::Millisecond, _) | DataType::Date64 => {
+                    Some(TemporalUnit::Milliseconds)
+                }
+                DataType::Int8
                 | DataType::Int16
                 | DataType::Int32
                 | DataType::Int64
                 | DataType::UInt8
                 | DataType::UInt16
                 | DataType::UInt32
-                | DataType::UInt64 => None,
+                | DataType::UInt64
+                | DataType::Float16
+                | DataType::Float32
+                | DataType::Float64
+                | DataType::Utf8
+                | DataType::LargeUtf8
+                | DataType::Utf8View => None,
                 _ => bail!(
-                    "Timestamp '{name}' must be an Arrow timestamp/date or integer epoch milliseconds; cast it in SQL"
+                    "Timestamp '{name}' must be a native timestamp/date, date text, or numeric Unix epoch column"
                 ),
             };
             if let Some(unit) = unit {
@@ -156,8 +163,15 @@ pub(super) fn temporal_units(
             ) {
                 bail!("Series ID '{name}' must be a string or integer column");
             }
-        } else if !numeric_type(&kind) {
-            bail!("Forecast column '{name}' must be numeric; cast it to DOUBLE in SQL");
+        } else if !numeric_type(&kind)
+            && !matches!(
+                kind,
+                DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View
+            )
+        {
+            bail!(
+                "Forecast column '{name}' must contain numbers or numeric text; cast other numeric types to DOUBLE in SQL"
+            );
         }
     }
     Ok(units)

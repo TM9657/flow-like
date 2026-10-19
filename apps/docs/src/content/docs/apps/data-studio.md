@@ -80,6 +80,10 @@ For data spread across several tables, switch to SQL and join them in one read-o
 
 Preview the input and map its timestamp, numeric targets, and optional series identifier. Each series needs evenly spaced timestamps. Use SQL to aggregate or align observations before forecasting; duplicate timestamps and irregular intervals produce an error. Numeric covariates are additional inputs, such as promotions or whether a store is open. Their availability depends on the selected model. Known future covariates also need a future query with one row per forecast step and series.
 
+Timestamp columns can contain native dates, date text, or Unix epochs. The wizard previews up to 500 rows and shows their UTC interpretation. Automatic detection recognizes seconds, milliseconds, microseconds and nanoseconds for contemporary Unix dates, plus ISO 8601, common year-first dates, month names and RFC 2822 dates. Choose an explicit unit for short epochs near 1970, or **Day first** or **Month first** for ambiguous dates such as `04/05/2026`. Dates without a timezone use UTC. Forecasting requires whole-millisecond precision and validates every row when it runs.
+
+Metrics and covariates can also contain numeric text such as `"62.43"` or `"1.2e3"`. The wizard labels these columns **numeric text**. Conversion applies only to the forecast; it does not alter the source table. Currency symbols, thousands separators, blank strings and invalid values must be cleaned in the source query. Null target values remain missing observations. If **Next** is disabled, the message beside it identifies the missing selection or invalid format.
+
 Set the forecast horizon and run the model. New predictions use each checkpoint's native output. The chart places observed values and forecasts on a shared timeline, with an orange forecast line and a quantile band when the model provides quantiles. TinyTimeMixer displays a mean **Point forecast only**, without a band. Saved predictions retain any explicitly requested quantiles. Covariate tracks share the same timeline; changing their selection requires a new run.
 
 Supported models include Timestral, Chronos-2, Toto 2, TimesFM 2.5 and IBM Granite TinyTimeMixer. TimesFM 2.5 and the supported TinyTimeMixer checkpoints accept one target per series and no covariates. TimesFM supports horizons up to 1,024 steps. The included TinyTimeMixer R2 MSE checkpoint predicts up to 96 steps and targets minutely to hourly observations; provide 512 historical steps where possible. Other TinyTimeMixer variants have different requirements. Choose the model's supported history range in SQL if your table contains more rows per series than it accepts.
@@ -102,13 +106,15 @@ Each series can have its own time interval and last observed timestamp. The hori
 
 ### Evaluate a historical window
 
-Enable **Evaluate on held-out data** and choose how many observed steps to predict. After a run, move the **Forecast as of** slider back through history. Releasing it runs a new evaluation from that cutoff. The chart overlays predictions and actual values for the selected window; **Latest window** returns to the most recent complete window. Keyboard arrow keys also move the cutoff.
+Enable **Evaluate on held-out data** and choose how many observed steps to predict. After a run, move the **Holdout forecast as of** slider back through history. Releasing it runs a new evaluation from that cutoff. The chart overlays predictions and actual values for the selected window; **Latest window** returns to the most recent complete window. Keyboard arrow keys also move the cutoff. **Outlook** continues from the latest observation.
 
 The model receives targets and past covariates only through the cutoff. Inputs marked as known future covariates remain available for the evaluation window. Each series uses the same number of steps back from its own end, and the slider dates follow the selected series. The shortest series limits how far back you can move.
 
 Accuracy metrics describe the selected series, target and historical window. MAE measures average absolute error in the target's units, while RMSE gives larger errors more weight. WAPE divides total absolute error by total absolute actual values; MAPE averages percentage errors for individual observations. Both percentage metrics appear as percentages, and lower errors are better. Missing actuals are excluded. MAPE is unavailable when an actual is zero; WAPE is unavailable when the total absolute actual value is zero. These measurements do not guarantee future accuracy.
 
 Forecasting reads your source tables without changing them. Queries that exceed the input budget are rejected rather than forecasting from an incomplete preview. Native inference runs in Rust on the desktop or a server built with forecasting support.
+
+In the web app, add the Forecasting Bit to your active profile to use it on the server. The browser does not download or run the model. Data Studio sends the query and settings to `POST /apps/{app_id}/db/queries/forecast`; the server checks your data and model access before preparing the series and running inference. This endpoint returns the completed result synchronously. Forecasting nodes run through the configured workflow executor.
 
 ### Set up a forecast with FlowPilot
 

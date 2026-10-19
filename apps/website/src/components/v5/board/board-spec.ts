@@ -366,6 +366,17 @@ const SCENARIOS: readonly BoardScenario[] = [
 	},
 ];
 
+/**
+ * Phones frame two columns and show only the running story, so there Ontology
+ * moves up beside Data Studio: the insight story fits one frame whole. Nodes
+ * of other stories may then sit in a thread's path; they are not drawn while
+ * that thread is.
+ */
+const PORTRAIT_COLUMNS: Partial<Record<BoardNodeId, number>> = { ontology: 1 };
+
+/** Which grid the board is laid out on: the wide board, or the phone's narrow one. */
+export type BoardGrid = "landscape" | "portrait";
+
 const pinKind = (type: BoardValueType): BoardPinKind =>
 	type === "Execution"
 		? "execution"
@@ -374,12 +385,17 @@ const pinKind = (type: BoardValueType): BoardPinKind =>
 			: "data";
 
 /** Resolves the board graph with translated titles and pin labels. */
-export function createBoard(strings: BoardStrings): BoardSpec {
+export function createBoard(
+	strings: BoardStrings,
+	grid: BoardGrid = "landscape",
+): BoardSpec {
 	const nodes = NODES.map(
 		(node): BoardNode => ({
 			id: node.id,
 			kind: node.kind,
-			column: node.column,
+			column:
+				(grid === "portrait" ? PORTRAIT_COLUMNS[node.id] : undefined) ??
+				node.column,
 			row: node.row,
 			offset: node.offset ?? 0,
 			title: strings[node.title],

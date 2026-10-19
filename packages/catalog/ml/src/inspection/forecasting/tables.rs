@@ -16,8 +16,11 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ForecastTableMapping {
-    /// Arrow timestamp/date column or integer epoch milliseconds. Precision must be whole milliseconds.
+    /// Native timestamp/date, date text, or Unix epoch column. Precision must be whole milliseconds.
     pub timestamp: String,
+    /// Auto detects text formats and epoch units. Omission retains integer-as-milliseconds compatibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp_format: Option<ForecastTimestampFormat>,
     /// String or integer column identifying independent series. Omit for a single series.
     #[serde(default)]
     pub series_id: Option<String>,
@@ -32,6 +35,26 @@ pub struct ForecastTableMapping {
     #[serde(default)]
     pub frequency_ms: Option<i64>,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ForecastTimestampFormat {
+    Auto,
+    UnixSeconds,
+    UnixMilliseconds,
+    UnixMicroseconds,
+    UnixNanoseconds,
+    DayFirst,
+    MonthFirst,
+}
+
+#[cfg(any(
+    feature = "studio",
+    feature = "inference",
+    feature = "forecasting",
+    test
+))]
+mod timestamps;
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ForecastTableMetadata {
@@ -56,7 +79,7 @@ pub struct ForecastTableMetadata {
 ))]
 pub(crate) mod preparation {
     use super::*;
-    use crate::inspection::auto_training_tables::{TemporalUnit, epoch_milliseconds};
+    use crate::inspection::auto_training_tables::TemporalUnit;
     use flow_like_ml_forecast::{ForecastRequest, ForecastResult, ForecastSeries};
     use flow_like_types::{Value, anyhow};
     use std::collections::BTreeSet;
@@ -104,37 +127,18 @@ pub(crate) mod preparation {
             .ok_or_else(|| anyhow!("Mapped forecast column '{column}' is missing"))
     }
 
-    fn timestamp(
-        row: &Value,
-        mapping: &ForecastTableMapping,
-        units: &BTreeMap<String, TemporalUnit>,
-    ) -> Result<i64> {
-        let value = cell(row, &mapping.timestamp)?.as_i64().ok_or_else(|| {
-            anyhow!(
-                "Timestamp '{}' must contain non-null integer epoch values or Arrow timestamps",
-                mapping.timestamp
-            )
-        })?;
-        let submillisecond = match units.get(&mapping.timestamp) {
-            Some(TemporalUnit::Microseconds) => value % 1_000 != 0,
-            Some(TemporalUnit::Nanoseconds) => value % 1_000_000 != 0,
-            _ => false,
-        };
-        if submillisecond {
-            return Err(anyhow!(
-                "Forecast timestamps must have whole-millisecond precision"
-            ));
-        }
-        epoch_milliseconds(&mapping.timestamp, value, units)
-    }
-
     fn numeric(row: &Value, column: &str, nullable: bool) -> Result<Option<f32>> {
         let value = cell(row, column)?;
         if value.is_null() && nullable {
             return Ok(None);
         }
-        let value = value.as_f64().ok_or_else(|| {
-            anyhow!("Forecast column '{column}' must contain finite numeric values")
+        let value = value.as_f64().or_else(|| {
+            static NUMBER: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+            let text = value.as_str()?.trim();
+            let pattern = NUMBER.get_or_init(|| regex::Regex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$").unwrap());
+            pattern.is_match(text).then(|| text.parse::<f64>().ok()).flatten()
+        }).ok_or_else(|| {
+            anyhow!("Forecast column '{column}' must contain finite numbers or numeric text; remove currency symbols and thousands separators")
         })? as f32;
         if !value.is_finite() {
             return Err(anyhow!(
@@ -153,7 +157,8 @@ pub(crate) mod preparation {
     ) -> Result<(Groups, Option<bool>)> {
         let mut groups = Groups::new();
         let mut id_is_string = None;
-        for row in rows {
+        let timestamps = super::timestamps::parse_column(&rows, mapping, units)?;
+        for (row, timestamp) in rows.into_iter().zip(timestamps) {
             let id = match &mapping.series_id {
                 None => "series".into(),
                 Some(column) => {
@@ -176,10 +181,7 @@ pub(crate) mod preparation {
                     }
                 }
             };
-            groups
-                .entry(id)
-                .or_default()
-                .push((timestamp(&row, mapping, units)?, row));
+            groups.entry(id).or_default().push((timestamp, row));
         }
         for (id, rows) in &mut groups {
             rows.sort_by_key(|(time, _)| *time);

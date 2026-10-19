@@ -1,6 +1,8 @@
 import { type StoreApi, type UseBoundStore, create } from "zustand";
-import { Bit, Download, type IBit, isMlxModelBit } from "../lib";
-import type { IBackendState } from "./backend-state";
+import { Bit, Download } from "../lib/bit/bit";
+import { isMlxModelBit } from "../lib/bit/mlx-model-pack";
+import type { IBit } from "../lib/schema/bit/bit";
+import { type IBackendState, useBackendStore } from "./backend-state";
 
 declare global {
 	var __FL_DL_MANAGER__: DownloadManager | undefined;
@@ -330,8 +332,8 @@ export class DownloadManager {
 
 interface IDownloadManager {
 	manager: DownloadManager;
-	backend: IBackendState;
-	setDownloadBackend: (backend: IBackendState) => void;
+	backend: IBackendState | null;
+	setDownloadBackend: (backend: IBackendState | null) => void;
 	download: (bit: IBit, cb?: (dl: Download) => void) => Promise<IBit[]>;
 	onProgress: (hash: string, cb: (dl: Download) => void) => () => void;
 	onComplete: (cb: DownloadCompleteListener) => () => void;
@@ -342,11 +344,15 @@ interface IDownloadManager {
 const createStore = () =>
 	create<IDownloadManager>((set, get) => ({
 		manager: getManagerSingleton(),
-		backend: {} as IBackendState,
-		setDownloadBackend: (backend: IBackendState) => set({ backend }),
+		backend: null,
+		setDownloadBackend: (backend: IBackendState | null) => set({ backend }),
 		download: async (bit: IBit, cb?: (dl: Download) => void) => {
-			const { manager, backend } = get();
-			if (!backend.bitState.downloadBit)
+			const { manager } = get();
+			// Hosted views can replace the active backend without mounting a download provider.
+			const backend = useBackendStore.getState().backend ?? get().backend;
+			if (!backend)
+				throw new Error("The download backend is not ready. Please try again.");
+			if (typeof backend.bitState?.downloadBit !== "function")
 				throw new Error("Backend does not support downloading bits.");
 			return await manager.download(backend, bit, cb);
 		},

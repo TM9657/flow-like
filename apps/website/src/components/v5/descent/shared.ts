@@ -15,26 +15,32 @@ export const COLORS = {
 	shadow: new THREE.Color("#4a3c34"),
 };
 
-/** Scroll progress p of the pinned stage at which each beat of the story happens. */
+/**
+ * Scroll progress p of the pinned stage at which each beat of the story happens.
+ * Each surface turns as a narrow front, so every frame is porcelain or dark
+ * glass with one soft edge between them: first the floor, then the sky.
+ */
 export const TIMELINE = {
 	/** The windows rest on the porcelain until here. */
-	rest: 0.15,
-	/** The floor drains to dark glass while the camera pulls back to the whole arc. */
-	glass: [0.15, 0.45],
-	/** The sky darkens from the horizon up, in step with the floor. */
-	sky: [0.17, 0.42],
-	/** The window reflections fade from the floor. */
-	reflections: [0.13, 0.24],
-	/** The board fades up beneath the glass. */
-	board: [0.22, 0.44],
+	rest: 0.12,
+	/** The camera pulls back to the whole arc and the board beneath it, mostly before the glass. */
+	pull: [0.12, 0.34],
+	/** The floor drains to dark glass, from the docks outward. */
+	glass: [0.17, 0.29],
+	/** Then the sky darkens, from the horizon up past the frame's top. */
+	sky: [0.24, 0.31],
+	/** The window reflections fade from the floor before the glass reaches them. */
+	reflections: [0.12, 0.2],
+	/** The board fades up beneath the glass as it drains. */
+	board: [0.18, 0.32],
 	/** The threads draw in from the docks, the centre windows first. */
-	threads: [0.45, 0.66],
+	threads: [0.32, 0.5],
 	/** The active route lights up on the board. */
-	lit: [0.5, 0.62],
+	lit: [0.4, 0.5],
 	/** The layer comes alive: the scenario (re)starts and the windows show their states. */
-	alive: 0.5,
-	/** The copy band fades in (controller.ts fades it over the same range). */
-	band: [0.7, 0.88],
+	alive: 0.4,
+	/** The copy band fades in while the layer comes alive (controller.ts fades it over the same range). */
+	band: [0.46, 0.62],
 } as const;
 
 export const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
@@ -61,6 +67,8 @@ export const pulse = (since: number, length: number) =>
 export function revealInto(p: number, out: Reveal): Reveal {
 	out.glass = within(TIMELINE.glass, p);
 	out.sky = within(TIMELINE.sky, p);
+	out.skyFront =
+		clamp((p - TIMELINE.sky[0]) / (TIMELINE.sky[1] - TIMELINE.sky[0])) ** 2;
 	out.reflections = 1 - within(TIMELINE.reflections, p);
 	out.board = within(TIMELINE.board, p);
 	out.threads = clamp(
@@ -74,6 +82,7 @@ export function revealInto(p: number, out: Reveal): Reveal {
 export const createReveal = (): Reveal => ({
 	glass: 0,
 	sky: 0,
+	skyFront: 0,
 	reflections: 1,
 	board: 0,
 	threads: 0,

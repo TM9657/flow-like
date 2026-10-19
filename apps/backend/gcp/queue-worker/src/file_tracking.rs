@@ -167,6 +167,10 @@ pub async fn process(ctx: &FileTrackingContext, event: &GcsEvent) -> Result<(), 
         );
         return Ok(());
     }
+    // DeviceArchive metadata accounts for these server-owned payloads separately.
+    if event.object.starts_with("device-archives/") {
+        return Ok(());
+    }
     let identity = parse_key_identity(&event.object)
         .ok_or(FileTrackingError::Permanent("invalid_object_key_layout"))?;
     let id = ledger_id(&event.object);

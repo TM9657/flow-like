@@ -255,3 +255,30 @@ describe("saved forecast links and mappings", () => {
 		).toEqual(["returns", "sales"]);
 	});
 });
+
+it("retains timestamp interpretation in saved requests and invalidates a run when it changes", () => {
+	const original: SavedStudioForecast["request"] = {
+		model_bit_id: "model",
+		sql: "SELECT * FROM history",
+		mapping: {
+			timestamp: "time",
+			timestamp_format: "day_first",
+			targets: ["sales"],
+		},
+		horizon: 12,
+	};
+	const restored = restoreForecastSetup(original);
+	expect(restored.request.mapping.timestamp_format).toBe("day_first");
+	expect(forecastRequestFingerprint(original)).not.toBe(
+		forecastRequestFingerprint({
+			...original,
+			mapping: { ...original.mapping, timestamp_format: "month_first" },
+		}),
+	);
+	expect(
+		restoreForecastSetup({
+			...original,
+			mapping: { timestamp: "time", targets: ["sales"] },
+		}).request.mapping.timestamp_format,
+	).toBeUndefined();
+});

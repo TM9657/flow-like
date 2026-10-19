@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import type { IBit } from "../schema/bit/bit";
-import { DEPRECATED_TAG, isDeprecated, listableModels } from "./model-listing";
+import type { IBitState } from "../../state/backend-state/bit-state";
+import { type IBit, IBitTypes } from "../schema/bit/bit";
+import type { IBitSearchQuery } from "../schema/hub/bit-search-query";
+import {
+	DEPRECATED_TAG,
+	isDeprecated,
+	listableModels,
+	searchAllBitsOfType,
+} from "./model-listing";
 
 function bit(overrides: Partial<IBit> & { id: string }): IBit {
 	return {
@@ -13,6 +20,41 @@ function bit(overrides: Partial<IBit> & { id: string }): IBit {
 function named(id: string, name: string, tags: string[] = []): IBit {
 	return bit({ id, meta: { en: { name, tags } } as unknown as IBit["meta"] });
 }
+
+describe("searchAllBitsOfType", () => {
+	test("keeps small model families visible beside a paginated chat catalog", async () => {
+		const chat = Array.from({ length: 125 }, (_, i) =>
+			bit({ id: `chat-${i}`, type: IBitTypes.Llm }),
+		);
+		const forecasts = Array.from({ length: 6 }, (_, i) =>
+			bit({ id: `forecast-${i}`, type: IBitTypes.Forecasting }),
+		);
+		const state = {
+			async searchBits(query: IBitSearchQuery) {
+				const offset = query.offset ?? 0;
+				const limit = query.limit ?? 50;
+				// Old hubs can use different query plans for mixed-type pages.
+				// Their second page overlaps the first and loses small families.
+				if ((query.bit_types?.length ?? 0) > 1) {
+					return offset === 0 ? chat.slice(0, limit) : chat.slice(75);
+				}
+				const family =
+					query.bit_types?.[0] === IBitTypes.Forecasting ? forecasts : chat;
+				return family.slice(offset, offset + limit);
+			},
+		} as IBitState;
+
+		const result = await searchAllBitsOfType.call(state, [
+			IBitTypes.Llm,
+			IBitTypes.Forecasting,
+		]);
+		expect(result).toHaveLength(131);
+		expect(
+			result.filter((model) => model.type === IBitTypes.Forecasting),
+		).toEqual(forecasts);
+		expect(new Set(result.map((model) => model.id)).size).toBe(131);
+	});
+});
 
 describe("isDeprecated", () => {
 	test("a model with no tags is offered", () => {

@@ -29,6 +29,8 @@ export interface Reveal {
 	glass: number;
 	/** The stage background has turned dark. */
 	sky: number;
+	/** Where the sky's dark front is, from the horizon (0) to past the frame's top (1); it speeds up as it rises. */
+	skyFront: number;
 	/** What is left of the window reflections. */
 	reflections: number;
 	/** The board has faded up beneath the glass. */
@@ -244,7 +246,7 @@ export interface CameraKey {
 export interface CameraRig {
 	/** Camera yaw that turns the selected app into view (wide screens). */
 	yawTarget(p: number): number;
-	/** Arc yaw that brings the selected app overhead (phones). */
+	/** Arc yaw that brings the app with keyboard focus, else the selected app, overhead (phones). */
 	arcYawTarget(): number;
 	/** Eases stage.yaw and stage.arcYaw toward their targets. */
 	steer(p: number, k: Rate): void;

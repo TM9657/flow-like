@@ -339,10 +339,12 @@ export function createWindows(ctx: SceneContext): Windows {
 		if (h !== stage.hover) {
 			stage.hover = h;
 			canvas.style.cursor = h >= 0 ? "pointer" : "";
+			options.onHoverApp?.(h);
 		}
 	};
 	const onLeave = () => {
 		stage.pointerInside = false;
+		if (stage.hover >= 0) options.onHoverApp?.(-1);
 		stage.hover = -1;
 		canvas.style.cursor = "";
 	};

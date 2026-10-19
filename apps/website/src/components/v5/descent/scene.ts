@@ -461,6 +461,7 @@ function mountScene(
 			stage.intro = stage.introTarget;
 			stage.pointerSmooth.set(0, 0);
 			stage.pointerInside = false;
+			if (stage.hover >= 0) options.onHoverApp?.(-1);
 			stage.hover = -1;
 			stage.yaw = rig.yawTarget(stage.progress);
 			stage.arcYaw = rig.arcYawTarget();

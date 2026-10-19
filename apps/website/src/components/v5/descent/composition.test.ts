@@ -10,12 +10,12 @@ import { cameraKeys, keyFov, sampleKeys, zoomFov } from "./camera-keys";
 import {
 	MARGIN_Y,
 	PROPORTIONS,
-	SETTLE_MAX,
 	compose,
 	fitArc,
 	marginX,
+	settleMax,
 } from "./composition";
-import { bandAir } from "./controller";
+import { BAND_SHOW, bandAir } from "./controller";
 import type {
 	BoardFrame,
 	Composition,
@@ -33,6 +33,10 @@ const spec = createBoard(strings);
 const measure = (text: string, font: string) =>
 	Array.from(text).length * 0.55 * Number(/([\d.]+)px/.exec(font)?.[1] ?? 10);
 const layout = layoutBoard(spec, { measure, fontFamily: "Inter" });
+const phoneLayout = layoutBoard(createBoard(strings, "portrait"), {
+	measure,
+	fontFamily: "Inter",
+});
 
 /** The arc as the windows lay it out, unturned (phones turn the selected app overhead). */
 function arcView(portrait: boolean): WindowsView {
@@ -58,10 +62,10 @@ const wide: BoardFrame = {
 	centre: layout.bounds.x + layout.bounds.width / 2,
 	span: layout.bounds.width,
 };
-const nodeWidth = layout.nodes[0].width;
+const nodeWidth = phoneLayout.nodes[0].width;
 const phone: BoardFrame = {
-	content: layout.bounds,
-	centre: layout.bounds.x + layout.bounds.width / 2,
+	content: phoneLayout.bounds,
+	centre: phoneLayout.bounds.x + phoneLayout.bounds.width / 2,
 	span: 2 * nodeWidth + 60 + 24,
 };
 
@@ -200,7 +204,7 @@ describe("landscape composition", () => {
 			expect(comp.open.zoom).toBeCloseTo(comp.band.zoom, 9);
 			const drop = comp.band.shiftPx - comp.open.shiftPx;
 			expect(drop).toBeGreaterThanOrEqual(0);
-			expect(drop).toBeLessThanOrEqual(SETTLE_MAX + 1e-6);
+			expect(drop).toBeLessThanOrEqual(settleMax(height) + 1e-6);
 			const open = boardBottom(
 				"landscape",
 				width,
@@ -220,8 +224,8 @@ describe("landscape composition", () => {
 			expect(open).toBeLessThanOrEqual(
 				height - area.open.bottom - MARGIN_Y + 1,
 			);
-			// The band is still faint for the first third of its fade.
-			for (let b = 0.3; b <= 1; b += 0.05) {
+			// The band only shows once the picture has covered BAND_SHOW of the settle.
+			for (let b = BAND_SHOW; b <= 1; b += 0.05) {
 				expect(open + (settled - open) * b).toBeLessThanOrEqual(band);
 			}
 		});
