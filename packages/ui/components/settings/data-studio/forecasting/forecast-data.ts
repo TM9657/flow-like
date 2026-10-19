@@ -2,6 +2,11 @@ import type {
 	QueryColumn,
 	StudioForecastResult,
 } from "../../../../state/backend-state/query-state";
+import {
+	inspectForecastTimestamps,
+	numericTextPattern,
+} from "./forecast-timestamps";
+export { parseForecastTimestamp as timestampValue } from "./forecast-timestamps";
 
 export interface ForecastPlotPoint {
 	timestamp: number;
@@ -27,23 +32,53 @@ export function tableForecastSql(table: string): string {
 	return table ? `SELECT * FROM "${table.replaceAll('"', '""')}"` : "";
 }
 
-export function forecastingColumns(columns: QueryColumn[]) {
-	const numeric = columns.filter((column) =>
-		/^(u?int(8|16|32|64)|float(16|32|64))$/i.test(column.type_name),
+export function forecastingColumns(
+	columns: QueryColumn[],
+	rows: Record<string, unknown>[] = [],
+) {
+	const numericText = columns.filter((column) => {
+		if (!/^(utf8|largeutf8|utf8view|string)$/i.test(column.type_name))
+			return false;
+		const values = rows
+			.map((row) => row[column.name])
+			.filter((value) => value !== null && value !== undefined);
+		return (
+			values.length > 0 &&
+			values.every((value) => numericInputValue(value) !== null)
+		);
+	});
+	const numeric = columns.filter(
+		(column) =>
+			/^(u?int(8|16|32|64)|float(16|32|64))$/i.test(column.type_name) ||
+			numericText.includes(column),
 	);
-	const temporal = columns.filter((column) =>
+	const native = columns.filter((column) =>
 		/^(timestamp|date32|date64)/i.test(column.type_name),
 	);
-	const timestamp =
-		temporal[0]?.name ??
-		numeric.find((column) => /time|date|^ts$|^ds$/i.test(column.name))?.name ??
-		"";
+	const temporal = columns.filter(
+		(column) =>
+			native.includes(column) ||
+			/^(u?int(8|16|32|64)|float(16|32|64)|utf8|largeutf8|utf8view|string)$/i.test(
+				column.type_name,
+			),
+	);
+	const named = temporal.find((column) =>
+		/time|date|^ts$|^ds$/i.test(column.name),
+	);
+	const detected = temporal.find((column) => {
+		if (!/utf8|string/i.test(column.type_name) || numericText.includes(column))
+			return false;
+		const values = rows.map((row) => row[column.name]);
+		return (
+			values.length > 0 &&
+			!inspectForecastTimestamps(values, column.type_name, "auto").error
+		);
+	});
+	const timestamp = native[0]?.name ?? named?.name ?? detected?.name ?? "";
 	return {
 		numeric,
-		temporal: [
-			...temporal,
-			...numeric.filter((column) => /^u?int/i.test(column.type_name)),
-		],
+		numericText,
+		temporal,
 		timestamp,
 		target:
 			numeric.find(
@@ -53,44 +88,22 @@ export function forecastingColumns(columns: QueryColumn[]) {
 	};
 }
 
-export function finiteValue(value: unknown): number | null {
-	return typeof value === "number" && Number.isFinite(value) ? value : null;
+/** Forecast-only conversion; blank, locale-formatted and non-finite text stays invalid. */
+export function numericInputValue(value: unknown): number | null {
+	if (typeof value === "number")
+		return Number.isFinite(value) && Number.isFinite(Math.fround(value))
+			? value
+			: null;
+	if (typeof value !== "string" || !numericTextPattern.test(value.trim()))
+		return null;
+	const number = Number(value.trim());
+	return Number.isFinite(number) && Number.isFinite(Math.fround(number))
+		? number
+		: null;
 }
 
-/** Arrow values retain their units; plain integer columns contain epoch ms. */
-export function timestampValue(
-	value: unknown,
-	typeName = "Int64",
-): number | null {
-	let units: bigint;
-	if (typeof value === "number") {
-		// JSON numbers outside this range may already have lost timestamp precision.
-		if (!Number.isSafeInteger(value)) return null;
-		units = BigInt(value);
-	} else if (typeof value === "string" && /^-?\d+$/.test(value)) {
-		if (value.length > 21) return null;
-		units = BigInt(value);
-	} else if (typeof value === "string" && value.trim()) {
-		const time = Date.parse(value);
-		return Number.isSafeInteger(time) ? time : null;
-	} else return null;
-
-	let milliseconds = units;
-	if (/^date32\b/i.test(typeName)) milliseconds = units * 86400000n;
-	else if (/^timestamp\b/i.test(typeName)) {
-		const unit = /^timestamp\(\s*(second|millisecond|microsecond|nanosecond)\b/i
-			.exec(typeName)?.[1]
-			?.toLowerCase();
-		if (!unit) return null;
-		if (unit === "second") milliseconds = units * 1000n;
-		else if (unit === "microsecond" || unit === "nanosecond") {
-			const divisor = unit === "microsecond" ? 1000n : 1000000n;
-			if (units % divisor !== 0n) return null;
-			milliseconds = units / divisor;
-		}
-	}
-	const time = Number(milliseconds);
-	return Number.isSafeInteger(time) ? time : null;
+export function finiteValue(value: unknown): number | null {
+	return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export function forecastCovariateSupport(

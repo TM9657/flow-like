@@ -46,7 +46,7 @@ portable-metadata = [
     "package-processing",
     "package-geo",
 ]
-# Metadata for remote-only execution. ONNX nodes require the local inference
+# Metadata for headless execution. ONNX nodes require the local inference
 # runtime, so advertising them in this bundle creates catalog entries whose
 # implementations can only return a feature-disabled error.
 remote-metadata = [
@@ -97,10 +97,9 @@ mobile-apple = [
     "local-stt-metal",
     "local-stt-accelerate",
 ]
-# Remote-only headless bundle used by deployments that deliberately do not
-# ship a native inference runtime. The historical `server-execute` feature
-# remains compatibility-complete below; product crates should use this bundle.
-server = ["remote-all", "portable-execute", "remote"]
+# Headless servers run forecasting on CPU and proxy general text/image models.
+# The historical `server-execute` feature remains compatibility-complete below.
+server = ["remote-all", "portable-execute", "remote", "forecasting"]
 # Executors keep no device-local training ledger, so server-local-ml, executor-local-ml
 # and local-runtime-ml never train: boards with training nodes still load, and running
 # one reports that training needs the desktop app or an offline device placement. Through
@@ -155,8 +154,10 @@ local-ml = [
 local-ml-cuda = ["local-ml", "flow-like-catalog-onnx/cuda"]
 local-ml-tensorrt = ["local-ml-cuda", "flow-like-catalog-onnx/tensorrt"]
 training-metadata = ["package-ml"]
+# Forecasting uses its own CPU engine and does not enable ONNX or training.
+forecasting = ["package-ml", "flow-like-catalog-ml/forecasting"]
 # Runs published models with Burn CPU; the training bundles add the device-local ledger.
-ml-inference = ["training-metadata", "flow-like-catalog-ml/inference"]
+ml-inference = ["training-metadata", "forecasting", "flow-like-catalog-ml/inference"]
 training-cpu = ["ml-inference", "flow-like-catalog-ml/training-cpu", "flow-like-catalog-llm?/training"]
 training-auto = ["ml-inference", "flow-like-catalog-ml/training-auto", "flow-like-catalog-llm?/training"]
 training-wgpu = ["training-cpu", "flow-like-catalog-ml/training-wgpu"]
@@ -188,8 +189,8 @@ mimalloc = ["dep:mimalloc"]
 # Portable execution support shared by desktop, mobile, and headless runtimes.
 # Automation is deliberately separate because that package has no iOS/Android
 # nodes. ONNX execution is also separate because it requires local inference.
-# `local-ml` enables it only for products that opt in, leaving the base `server`
-# bundle remote-only.
+# `local-ml` enables it only for products that opt in. CPU forecasting has a
+# separate feature and is included in the base `server` bundle.
 portable-execute = [
     "package-industrial",
     "flow-like-catalog-industrial/execute",
@@ -219,7 +220,7 @@ execute = [
 
 # Historical server execution surface: all portable implementations, including
 # local ONNX inference, but no desktop/RPA automation. `server` is the new
-# remote-only product bundle; `server-local-ml` states the old behavior
+# product bundle with CPU forecasting; `server-local-ml` states the old behavior
 # explicitly.
 server-execute = ["portable-metadata", "portable-execute", "local-ml"]
 

@@ -11263,6 +11263,7 @@ dependencies = [
  "linfa-tsne",
  "ndarray 0.16.1",
  "rand_xoshiro 0.6.0",
+ "regex",
  "rmp-serde",
  "schemars 1.2.1",
  "serde",

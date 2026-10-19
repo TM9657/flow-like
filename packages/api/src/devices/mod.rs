@@ -1,6 +1,7 @@
 //! Device registration authenticates an agent to the API. The registered public
 //! identity binding remains independently verifiable by management controllers.
 
+mod archive_payload;
 pub(crate) mod archives;
 pub(crate) mod certificates;
 pub(crate) mod fleet;

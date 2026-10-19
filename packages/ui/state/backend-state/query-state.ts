@@ -26,8 +26,19 @@ export interface ExecuteSqlResult {
 	truncated: boolean;
 }
 
+export type ForecastTimestampFormat =
+	| "auto"
+	| "unix_seconds"
+	| "unix_milliseconds"
+	| "unix_microseconds"
+	| "unix_nanoseconds"
+	| "day_first"
+	| "month_first";
+
 export interface StudioForecastMapping {
 	timestamp: string;
+	/** Omission preserves the original integer-as-milliseconds interpretation. */
+	timestamp_format?: ForecastTimestampFormat;
 	series_id?: string;
 	targets: string[];
 	past_covariates?: string[];

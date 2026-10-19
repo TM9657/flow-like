@@ -22,6 +22,7 @@ import {
 	Mic,
 	PackageCheck,
 	Plus,
+	RefreshCw,
 	Search,
 	Shield,
 	Sparkles,
@@ -969,6 +970,18 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 						active={showInProfileOnly}
 						onToggle={() => setShowInProfileOnly((v) => !v)}
 					/>
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-8 shrink-0 gap-1.5 text-xs"
+						disabled={foundBits.isFetching}
+						onClick={() => void foundBits.refetch()}
+					>
+						<RefreshCw
+							className={`size-3.5 ${foundBits.isFetching ? "animate-spin" : ""}`}
+						/>
+						{t("refreshModels", "Refresh models")}
+					</Button>
 
 					<Button
 						onClick={openAddCustomModel}
@@ -1238,6 +1251,15 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 			<div
 				className={`mx-auto flex w-full max-w-[1240px] flex-1 flex-col gap-7 pb-12 ${isMobile ? "px-4" : "px-4 sm:px-8"}`}
 			>
+				{foundBits.error && (
+					<p
+						role="alert"
+						className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive"
+					>
+						{t("catalogRefreshFailed", "Could not refresh the model catalog.")}{" "}
+						{foundBits.error.message}
+					</p>
+				)}
 				{foundBits.isLoading ? (
 					<ModelCatalogSkeleton />
 				) : filteredModels.length === 0 ? (

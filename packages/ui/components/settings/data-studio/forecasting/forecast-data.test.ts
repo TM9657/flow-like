@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	buildForecastPlot,
 	finiteValue,
+	numericInputValue,
 	forecastCovariateSupport,
 	forecastOutputLabel,
 	forecastingColumns,
@@ -322,4 +323,43 @@ describe("forecast chart", () => {
 		expect(sampled.some((point) => point.value === null)).toBe(true);
 		expect(sampled.some((point) => point.value === 9999)).toBe(true);
 	});
+});
+
+it("recognizes numeric text from sampled values without turning missing values or IDs into metrics", () => {
+	const columns = [
+		{ name: "timestamp_utc", type_name: 'Timestamp(ms, "UTC")', position: 0 },
+		{ name: "machine_id", type_name: "LargeUtf8", position: 1 },
+		{ name: "temperature_c", type_name: "LargeUtf8", position: 2 },
+		{ name: "bad", type_name: "Utf8", position: 3 },
+	];
+	const inferred = forecastingColumns(columns, [
+		{
+			timestamp_utc: 1000,
+			machine_id: "MACHINE_01",
+			temperature_c: "62.43",
+			bad: "12",
+		},
+		{
+			timestamp_utc: 2000,
+			machine_id: "MACHINE_02",
+			temperature_c: null,
+			bad: "offline",
+		},
+	]);
+	expect(inferred.timestamp).toBe("timestamp_utc");
+	expect(inferred.numeric.map((column) => column.name)).toEqual([
+		"temperature_c",
+	]);
+	for (const invalid of [
+		"",
+		" ",
+		"NaN",
+		"Infinity",
+		"1,234",
+		"$12",
+		"1e100",
+		null,
+	])
+		expect(numericInputValue(invalid)).toBeNull();
+	expect(numericInputValue(" 6.243e1 ")).toBe(62.43);
 });

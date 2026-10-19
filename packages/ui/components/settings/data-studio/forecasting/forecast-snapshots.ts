@@ -61,6 +61,7 @@ export function forecastRequestFingerprint(
 			params: request.params ?? {},
 			mapping: {
 				timestamp: request.mapping.timestamp,
+				timestamp_format: request.mapping.timestamp_format ?? null,
 				series_id: request.mapping.series_id ?? null,
 				targets: request.mapping.targets,
 				past_covariates: request.mapping.past_covariates ?? [],

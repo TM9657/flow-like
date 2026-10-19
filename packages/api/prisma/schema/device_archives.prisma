@@ -6,13 +6,19 @@ model DeviceArchive {
   kind String
   sequence BigInt
   digest String
-  bundle String
+  // Legacy archives retain their inline bundle until they expire.
+  bundle String?
+  payloadRef String?
+  manifestJws String?
+  rosterJws String?
   sizeBytes BigInt
   createdAt BigInt
   expiresAt BigInt
   @@id([deviceId, archiveId])
   @@unique([deviceId, scope, kind, sequence])
   @@index([ownerId, expiresAt])
+  // DSQL stores sizeBytes with INCLUDE; Prisma uses a third key for db push.
+  @@index([ownerId, expiresAt, sizeBytes])
   @@index([expiresAt])
 }
 

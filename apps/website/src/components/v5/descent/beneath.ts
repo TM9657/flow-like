@@ -64,8 +64,8 @@ const THREAD_LEVEL = { base: 0.8, quiet: 0.5 } as const;
 const ROUTE_DIM = 0.45;
 /** CSS px from the frame's sides within which a thread end fades out; past the side it is gone. */
 const SIDE_FADE = 18;
-/** How fast (per second) a phone's board eases toward the beat it follows. */
-const FOLLOW_RATE = 2.2;
+/** How fast (per second) a phone's board eases toward the beat it follows: settled before the next beat leaves. */
+const FOLLOW_RATE = 3.6;
 /** How fast (per second) a wide screen's board eases to frame a changed story. */
 const STORY_RATE = 4;
 /** Board units of air beside the columns a phone keeps in view. */
@@ -86,6 +86,7 @@ const STORY_CLIP = { keep: 8, feather: 40 } as const;
 const SPOT = { clear: 5, feather: 17, rate: 6 } as const;
 /** Opacity of the selected app's own thread when the story does not touch that app: a hint, never lit. */
 const OWN_THREAD = 0.14;
+const NO_THREADS: ReadonlySet<string> = new Set();
 /** Texture pixels per board unit: phones see the board closer, at a higher density. */
 const DENSITY: Record<LayoutKind, number> = { landscape: 2, portrait: 2.25 };
 /** Rates (per second) at which a changed route dims out and the new one lights. */
@@ -556,19 +557,22 @@ export function createBeneath(
 		return threads.find((t) => t.app === stage.app) ?? null;
 	}
 
+	/** The story's threads once its route is painted, so a changed story's threads never meet the old one's. */
+	const storyThreads = (plan: ScenarioPlan | null) =>
+		plan && board.painted() === plan.id ? plan.threads : NO_THREADS;
+
 	// Only the scenario's own threads, from the app it starts in and to the
-	// apps it delivers to, are drawn, and only once its route is painted, so a
-	// changed story's threads never meet the old one's; they light with the route.
+	// apps it delivers to, are drawn; they light with the route.
 	function threadProgress(frame: Frame, plan: ScenarioPlan | null) {
 		const drawIn = frame.reveal.threads;
-		const painted = plan !== null && board.painted() === plan.id;
+		const drawn = storyThreads(plan);
 		const own = ownThread(plan);
 		for (const t of threads) {
 			const start = t.order * THREAD_STAGGER;
 			t.length = ease((drawIn - start) / (1 - THREAD_STAGGER));
-			const story = painted && (plan?.threads.has(t.id) ?? false);
-			const shown = story ? 1 : t === own ? OWN_THREAD : 0;
-			t.show = storyStep(t.show, shown, frame.dt);
+			const story = drawn.has(t.id);
+			const hint = t === own ? OWN_THREAD : 0;
+			t.show = storyStep(t.show, story ? 1 : hint, frame.dt);
 			t.lit = story ? frame.reveal.lit * swap : 0;
 		}
 	}

@@ -2188,9 +2188,10 @@ fn forecast_tool_schema() -> Value {
                 "type":"object",
                 "additionalProperties":false,
                 "properties": {
-                    "timestamp":{"type":"string", "description":"Arrow timestamp/date or integer epoch-millisecond column."},
+                    "timestamp":{"type":"string", "description":"Native timestamp/date, date text, or numeric Unix epoch column."},
+                    "timestamp_format":{"type":"string", "enum":["auto","unix_seconds","unix_milliseconds","unix_microseconds","unix_nanoseconds","day_first","month_first"], "description":"Use auto for new forecasts. Select an explicit Unix unit or date order when ambiguous. Timezone-free dates use UTC; precision must be whole milliseconds. Omission preserves legacy numeric milliseconds."},
                     "series_id":{"type":["string","null"], "description":"Optional string/integer grouping column; omit for one series."},
-                    "targets":{"type":"array", "items":{"type":"string"}, "minItems":1, "description":"Numeric columns to predict; nulls mark missing observations."},
+                    "targets":{"type":"array", "items":{"type":"string"}, "minItems":1, "description":"Numeric or strictly numeric text columns to predict; nulls mark missing observations."},
                     "past_covariates":{"type":"array", "items":{"type":"string"}, "description":"Numeric inputs available only before the forecasting cutoff."},
                     "known_covariates":{"type":"array", "items":{"type":"string"}, "description":"Numeric inputs available in both history and future_sql."},
                     "frequency_ms":{"type":["integer","null"], "minimum":1, "description":"Optional regular interval in milliseconds; otherwise inferred per series. No implicit resampling."}

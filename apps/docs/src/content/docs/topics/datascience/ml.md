@@ -60,11 +60,17 @@ Choose a **Forecasting** Bit in the model catalog and connect it to **Load Forec
 
 Check the checkpoint's license before using its weights. Timestral's Modified MIT terms require a separate commercial license when your company or employer's global consolidated revenue exceeded US$20 million, or its equivalent, in the preceding month. This restriction covers derivatives, modifications and combined works; see the pinned [209M license](https://huggingface.co/mistralai/Timestral-209M/resolve/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE) and [5M license](https://huggingface.co/mistralai/Timestral-5M/resolve/bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f/LICENSE). These weight licenses are separate from the inference source code's license.
 
-A Forecasting Bit records `model_type`, the native `local:forecast` provider and its checkpoint assets. Its primary file is `model.safetensors`, or `model.safetensors.index.json` for sharded weights. Map a Config Bit to `config.json` in `parameters.assets`, and map every shard to the filename listed in the index. For example, an asset entry can be `{"bit":"your-hub:config-bit-id","relative_path":"config.json"}`. Optional `LICENSE` and `NOTICE` assets keep the checkpoint's terms with its files. These files use the existing Bit download cache. Custom model Bits can reference published asset Bits; administrators can publish the config and shards with the model.
+A Forecasting Bit records `model_type`, the native `local:forecast` provider and its checkpoint assets. Its primary file is `model.safetensors`, or `model.safetensors.index.json` for sharded weights. Map a Config Bit to `config.json` in `parameters.assets`, and map every shard to the filename listed in the index. For example, an asset entry can be `{"bit":"your-hub:config-bit-id","relative_path":"config.json"}`. Optional `LICENSE` and `NOTICE` assets keep the checkpoint's terms with its files. Desktop installations use the existing Bit download cache. Custom model Bits can reference published asset Bits; administrators can publish the config and shards with the model.
 
 TimesFM 2.5 and the supported TinyTimeMixer checkpoints accept one target per series and no covariates. TimesFM returns a median and quantiles from 0.1 through 0.9. TinyTimeMixer's MSE checkpoints return a mean point forecast without quantiles. Other families' joint-target and covariate support depends on the checkpoint; inspect **Forecast Model Info** before choosing inputs.
 
 The default checkpoint limit is 2 GiB. Increase `maximum_bytes` when loading a larger checkpoint on a host with enough memory. Weights are loaded as FP32, so their runtime memory can exceed their download size.
+
+#### Run forecasts on a server
+
+Standard API and workflow executor builds include native CPU forecasting, including AWS Lambda. `local:forecast` means inference runs in the process handling the request or workflow. In the web app, that process is on the server.
+
+When a server's Bit store is remote, the loader stages checkpoint files in a temporary local directory. Missing assets are downloaded and verified there without changing how other models use the remote store. Data Studio loads a model for each request, and workflow model handles belong to the current execution. Loaded models are not retained across Lambda invocations. Size memory, temporary storage, and execution time for the model, input history, and number of groups; checkpoint size alone does not describe the full resource use.
 
 #### Forecast from a table
 
@@ -73,6 +79,7 @@ The **Forecast** node accepts the existing Lance table handle, `NodeDBConnection
 ```json
 {
   "timestamp": "time",
+  "timestamp_format": "auto",
   "series_id": "sensor_id",
   "targets": ["reading"],
   "past_covariates": [],
@@ -81,11 +88,13 @@ The **Forecast** node accepts the existing Lance table handle, `NodeDBConnection
 }
 ```
 
-Each historical row contains a timestamp and one value per target column. Rows sharing `sensor_id` form one independent series. Multiple target columns within that series require a checkpoint with joint-target support. Omit `series_id` to treat the whole table as one series. The node pins the source table version and sorts each series chronologically. Timestamps must be Arrow timestamps/dates or integer epoch milliseconds with whole-millisecond precision. Omit `frequency_ms` to infer spacing from at least two rows per series. Each series can have its own interval and final timestamp; the same forecast horizon applies to all groups. Duplicate timestamps and irregular spacing return an error. Fill missing time positions explicitly before forecasting; null target cells become missing-observation masks.
+Set `mapping.timestamp_format` to `auto` for date text and automatic Unix unit detection, or choose `unix_seconds`, `unix_milliseconds`, `unix_microseconds`, `unix_nanoseconds`, `day_first` or `month_first`. Native Arrow timestamps always retain their declared units. Omitting this field preserves the original numeric epoch-millisecond interpretation. Timestamp parsing, numeric-text conversion and validation are shared by Data Studio and workflow nodes.
+
+Each historical row contains a timestamp and one value per target column. Rows sharing `sensor_id` form one independent series. Multiple target columns within that series require a checkpoint with joint-target support. Omit `series_id` to treat the whole table as one series. The node pins the source table version and sorts each series chronologically. Timestamps can be native dates, date text, or Unix epochs and must have whole-millisecond precision. Omit `frequency_ms` to infer spacing from at least two rows per series. Each series can have its own interval and final timestamp; the same forecast horizon applies to all groups. Duplicate timestamps and irregular spacing return an error. Fill missing time positions explicitly before forecasting; null target cells become missing-observation masks.
 
 Use a machine ID column to forecast every machine from one table. The mapping accepts one ID column; derive a unique composite key in SQL when grouping by several columns. To forecast an overall total, aggregate the history by timestamp first and forecast the resulting single series. Grouping alone does not aggregate values or model interactions between groups. Summing per-group quantiles does not produce a calibrated uncertainty band for the total.
 
-Map numeric auxiliary columns with `past_covariates` or `known_covariates`. Known covariates also require a `future_source` table containing exactly `horizon` future rows per series, with matching ID and timestamp columns and aligned covariate values. Covariate cells must be finite numbers. The node does not encode categories.
+Map numeric auxiliary columns with `past_covariates` or `known_covariates`. Known covariates also require a `future_source` table containing exactly `horizon` future rows per series, with matching ID and timestamp columns and aligned covariate values. Targets and covariates accept finite numbers or numeric text. The node does not encode categories.
 
 The `table` output is a separate, pinned Lance table with one row per series, target and future timestamp:
 

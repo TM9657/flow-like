@@ -1,5 +1,7 @@
 "use client";
 
+import { timestampFormatOptions } from "./forecast-timestamps";
+
 import { ArrowLeft, ArrowRight, Loader2, Play } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { cn } from "../../../../lib/utils";
@@ -197,6 +199,12 @@ export function ForecastSetupReview({
 	const rows = [
 		["Data scope", userScoped ? "Personal data" : "Project data"],
 		["Timestamp", mapping.timestamp],
+		[
+			"Timestamp format",
+			timestampFormatOptions.find(
+				(option) => option.value === mapping.timestamp_format,
+			)?.label ?? "Saved interpretation (numeric milliseconds)",
+		],
 		[
 			"Forecast grouping",
 			mapping.series_id

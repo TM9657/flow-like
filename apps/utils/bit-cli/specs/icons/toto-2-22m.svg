@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>Datadog Toto 2</title>
+  <rect width="64" height="64" rx="14" fill="#26133c"/>
+  <path d="M17 19v26M27 14v36M37 19v26M47 24v16" stroke="#6e3c9e" stroke-width="6" stroke-linecap="round"/>
+  <path d="M12 36h8l7-14 10 20 7-13h8" fill="none" stroke="#f3e6ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="52" cy="29" r="4" fill="#c88aff"/>
+</svg>
