@@ -11,9 +11,8 @@ const MAX_PAGES = 50;
 /**
  * Every bit matching the query, not just the first page.
  *
- * A search without an explicit limit returns 50 rows, so a catalogue that has
- * outgrown that silently loses models — and which ones it loses is unstable,
- * because the query declares no order.
+ * A search without an explicit limit returns 50 rows. Fetch successive pages
+ * so larger catalogs include every model.
  */
 export async function searchAllBits(
 	this: IBitState,
@@ -45,7 +44,18 @@ export async function searchAllBitsOfType(
 	this: IBitState,
 	bitTypes: IBitTypes[],
 ): Promise<IBit[]> {
-	return await searchAllBits.call(this, { bit_types: bitTypes });
+	// Keep each family on its own pages. Older hubs can return overlapping
+	// pages for a mixed-type search, which hides small families in a large catalog.
+	const families = await Promise.all(
+		[...new Set(bitTypes)].map((type) =>
+			searchAllBits.call(this, { bit_types: [type] }),
+		),
+	);
+	const bits = new Map<string, IBit>();
+	for (const family of families) {
+		for (const bit of family) bits.set(bit.id, bit);
+	}
+	return [...bits.values()];
 }
 
 function displayName(bit: IBit): string | undefined {

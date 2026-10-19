@@ -195,7 +195,11 @@ pub(super) fn payload(payload: &CreateStudioForecast) -> Result<()> {
     if result.input_rows != history.len() + future.len() {
         bail!("Saved forecast input row count is inconsistent");
     }
-    let units = BTreeMap::new();
+    // Saved result points are already normalized, regardless of the source format.
+    let units = BTreeMap::from([(
+        mapping.timestamp.clone(),
+        crate::inspection::auto_training_tables::TemporalUnit::Milliseconds,
+    )]);
     let future = (!mapping.known_covariates.is_empty())
         .then(|| (future.into_values().map(Value::Object).collect(), &units));
     let prepared = preparation::inputs(

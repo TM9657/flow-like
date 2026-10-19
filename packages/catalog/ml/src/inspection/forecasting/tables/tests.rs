@@ -6,6 +6,7 @@ use flow_like_types::Value;
 fn mapping() -> ForecastTableMapping {
     ForecastTableMapping {
         timestamp: "time".into(),
+        timestamp_format: None,
         series_id: Some("id".into()),
         targets: vec!["sales".into()],
         past_covariates: vec![],
@@ -755,4 +756,121 @@ mod lance {
                 .is_err()
         );
     }
+}
+
+#[test]
+fn numeric_text_targets_and_covariates_are_converted_without_losing_nulls() {
+    let mut mapping = mapping();
+    mapping.past_covariates = vec!["temperature".into()];
+    let input = vec![
+        json!({"id":"a", "time":10, "sales":" 6.243e1 ", "temperature":"-1.25"}),
+        json!({"id":"a", "time":20, "sales":null, "temperature":".5"}),
+    ];
+    let prepared = prepare_rows(input, &mapping).unwrap();
+    assert_eq!(prepared.request.series[0].targets, [vec![62.43, 0.0]]);
+    assert_eq!(
+        prepared.request.series[0].observed_mask,
+        Some(vec![vec![true, false]])
+    );
+    for invalid in [
+        "", " ", "NaN", "Infinity", "1,234", "$12", "1e100", "sensor",
+    ] {
+        let input = vec![
+            json!({"id":"a", "time":10, "sales":invalid}),
+            json!({"id":"a", "time":20, "sales":"2"}),
+        ];
+        assert!(
+            prepare_rows(input, &super::tests::mapping()).is_err(),
+            "{invalid}"
+        );
+    }
+}
+
+#[test]
+fn forecast_timestamp_formats_normalize_before_grouping() {
+    let mut mapping = mapping();
+    mapping.timestamp_format = Some(ForecastTimestampFormat::Auto);
+    let expected = 1_792_413_000_000_i64;
+    for values in [
+        [json!(1792413000), json!(1792413001)],
+        [json!(1792413000000_i64), json!(1792413001000_i64)],
+        [json!("1792413000000000"), json!("1792413001000000")],
+        [json!("1792413000000000000"), json!("1792413001000000000")],
+        [
+            json!("2026-10-19T12:30:00Z"),
+            json!("2026-10-19T14:30:01+02:00"),
+        ],
+        [json!("2026/10/19 12:30:00"), json!("19 Oct 2026 12:30:01")],
+        [
+            json!("October 19, 2026 12:30:00"),
+            json!("Mon, 19 Oct 2026 12:30:01 +0000"),
+        ],
+    ] {
+        let rows = vec![
+            json!({"id":"a","time":values[1],"sales":"2"}),
+            json!({"id":"a","time":values[0],"sales":"1"}),
+        ];
+        let prepared = prepare_rows(rows, &mapping).unwrap();
+        assert_eq!(prepared.clocks, [(expected + 1000, 1000)]);
+        assert_eq!(prepared.request.series[0].targets, [vec![1.0, 2.0]]);
+    }
+}
+
+#[test]
+fn timestamp_order_units_and_precision_are_explicit_when_ambiguous() {
+    let mut mapping = mapping();
+    mapping.timestamp_format = Some(ForecastTimestampFormat::Auto);
+    let input = |first: Value, second: Value| {
+        vec![
+            json!({"id":"a","time":first,"sales":1}),
+            json!({"id":"a","time":second,"sales":2}),
+        ]
+    };
+    for (first, second) in [
+        (json!(10), json!(20)),
+        (json!(1792413000), json!(1792413001000_i64)),
+        (json!("04/05/2026"), json!("05/05/2026")),
+        (json!("2026-02-30"), json!("2026-03-01")),
+        (
+            json!("2026-10-19T12:30:00.0001Z"),
+            json!("2026-10-19T12:30:01Z"),
+        ),
+        (json!(null), json!("2026-10-19")),
+        (json!("1792413000.0001"), json!("1792413001")),
+    ] {
+        assert!(prepare_rows(input(first, second), &mapping).is_err());
+    }
+    mapping.timestamp_format = Some(ForecastTimestampFormat::DayFirst);
+    let prepared = prepare_rows(input(json!("04/05/2026"), json!("05/05/2026")), &mapping).unwrap();
+    assert_eq!(prepared.clocks[0].1, 86_400_000);
+    mapping.timestamp_format = Some(ForecastTimestampFormat::UnixSeconds);
+    assert_eq!(
+        prepare_rows(input(json!("10.125"), json!("11.125")), &mapping)
+            .unwrap()
+            .clocks,
+        [(11125, 1000)]
+    );
+    mapping.timestamp_format = None;
+    assert_eq!(
+        prepare_rows(input(json!(10), json!(20)), &mapping)
+            .unwrap()
+            .clocks,
+        [(20, 10)]
+    );
+    mapping.timestamp_format = Some(ForecastTimestampFormat::Auto);
+    let units = BTreeMap::from([("time".into(), TemporalUnit::Milliseconds)]);
+    assert_eq!(
+        prepare(
+            input(json!(10), json!(20)),
+            &units,
+            None,
+            &mapping,
+            2,
+            vec![],
+            &TableBudget::default()
+        )
+        .unwrap()
+        .clocks,
+        [(20, 10)]
+    );
 }

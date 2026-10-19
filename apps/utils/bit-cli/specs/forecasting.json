@@ -17,7 +17,9 @@
 		{
 			"ref": "timestral-209m-config",
 			"type": "Config",
-			"authors": ["Mistral AI"],
+			"authors": [
+				"Mistral AI"
+			],
 			"repository": "https://huggingface.co/mistralai/Timestral-209M",
 			"version": "9874d252ab0aae16f7f7c999f98f98d6ad7d8365",
 			"download_link": "https://huggingface.co/mistralai/Timestral-209M/resolve/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/config.json",
@@ -34,7 +36,9 @@
 		{
 			"ref": "timestral-209m-license",
 			"type": "File",
-			"authors": ["Mistral AI"],
+			"authors": [
+				"Mistral AI"
+			],
 			"repository": "https://huggingface.co/mistralai/Timestral-209M",
 			"version": "9874d252ab0aae16f7f7c999f98f98d6ad7d8365",
 			"download_link": "https://huggingface.co/mistralai/Timestral-209M/resolve/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE",
@@ -51,7 +55,9 @@
 		{
 			"ref": "timestral-209m",
 			"type": "Forecasting",
-			"authors": ["Mistral AI"],
+			"authors": [
+				"Mistral AI"
+			],
 			"repository": "https://huggingface.co/mistralai/Timestral-209M",
 			"version": "9874d252ab0aae16f7f7c999f98f98d6ad7d8365",
 			"license": "Modified MIT (revenue restriction)",
@@ -78,8 +84,8 @@
 			},
 			"meta": {
 				"en": {
-					"name": "Timestral 209M",
-					"description": "Native Rust forecasts with quantiles and covariates. Modified MIT weights with a company revenue restriction.",
+					"name": "Mistral Timestral · 209M",
+					"description": "Forecast with related signals and uncertainty ranges using Mistral’s 209M model. Commercial use is subject to its revenue-based license restriction.",
 					"long_description": "Forecast numeric table data or direct values with the Timestral 209M checkpoint. Supports historical and known future covariates when provided through the shared forecasting contract.\n\nInference runs in Rust. Use this Bit in Data Studio's Forecast tab or the forecasting flow nodes.\n\nThe Modified MIT license does not authorize use when your company's or employer's global consolidated revenue for the preceding month exceeds US$20 million (or its equivalent). This restriction also covers derivatives and combined works. Contact Mistral AI for a separate commercial license if this applies. The upstream license accompanies the weights.",
 					"tags": [
 						"forecasting",
@@ -90,14 +96,17 @@
 					],
 					"use_case": "Forecast table data and evaluate historical predictions.",
 					"website": "https://huggingface.co/mistralai/Timestral-209M",
-					"docs_url": "https://huggingface.co/mistralai/Timestral-209M/resolve/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE"
+					"docs_url": "https://huggingface.co/mistralai/Timestral-209M/resolve/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE",
+					"icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij48dGl0bGU+TWlzdHJhbCBUaW1lc3RyYWwgMjA5TTwvdGl0bGU+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMyNDE1MDkiLz48cGF0aCBkPSJNMTQgNDJWMjNsOSAxMCA5LTE3IDkgMTcgOS0xMHYxOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmY5YTMyIiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Im0xNCA0NyAxMC02IDkgMyA4LTggOSAzIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYzZTMiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGNpcmNsZSBjeD0iNTAiIGN5PSIzOSIgcj0iMyIgZmlsbD0iI2ZmZjNlMyIvPjwvc3ZnPg=="
 				}
 			}
 		},
 		{
 			"ref": "timestral-5m-config",
 			"type": "Config",
-			"authors": ["Mistral AI"],
+			"authors": [
+				"Mistral AI"
+			],
 			"repository": "https://huggingface.co/mistralai/Timestral-5M",
 			"version": "bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f",
 			"download_link": "https://huggingface.co/mistralai/Timestral-5M/resolve/bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f/config.json",
@@ -114,7 +123,9 @@
 		{
 			"ref": "timestral-5m-license",
 			"type": "File",
-			"authors": ["Mistral AI"],
+			"authors": [
+				"Mistral AI"
+			],
 			"repository": "https://huggingface.co/mistralai/Timestral-5M",
 			"version": "bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f",
 			"download_link": "https://huggingface.co/mistralai/Timestral-5M/resolve/bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f/LICENSE",
@@ -131,7 +142,9 @@
 		{
 			"ref": "timestral-5m",
 			"type": "Forecasting",
-			"authors": ["Mistral AI"],
+			"authors": [
+				"Mistral AI"
+			],
 			"repository": "https://huggingface.co/mistralai/Timestral-5M",
 			"version": "bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f",
 			"license": "Modified MIT (revenue restriction)",
@@ -158,8 +171,8 @@
 			},
 			"meta": {
 				"en": {
-					"name": "Timestral 5M",
-					"description": "Small native Rust forecasting model. Modified MIT weights with a company revenue restriction.",
+					"name": "Mistral Timestral · 5M",
+					"description": "A compact 5M model for time-series forecasts with uncertainty ranges. Commercial use is subject to Mistral’s revenue-based license restriction.",
 					"long_description": "Use the smaller Timestral 5M checkpoint to forecast numeric table data or direct values with native quantiles. Inspect the loaded model's capabilities before mapping covariates.\n\nInference runs in Rust. Use this Bit in Data Studio's Forecast tab or the forecasting flow nodes.\n\nThe Modified MIT license does not authorize use when your company's or employer's global consolidated revenue for the preceding month exceeds US$20 million (or its equivalent). This restriction also covers derivatives and combined works. Contact Mistral AI for a separate commercial license if this applies. The upstream license accompanies the weights.",
 					"tags": [
 						"forecasting",
@@ -170,14 +183,17 @@
 					],
 					"use_case": "Forecast table data and evaluate historical predictions.",
 					"website": "https://huggingface.co/mistralai/Timestral-5M",
-					"docs_url": "https://huggingface.co/mistralai/Timestral-5M/resolve/bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f/LICENSE"
+					"docs_url": "https://huggingface.co/mistralai/Timestral-5M/resolve/bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f/LICENSE",
+					"icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij48dGl0bGU+TWlzdHJhbCBUaW1lc3RyYWwgNU08L3RpdGxlPjxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSIjMmIyMDA4Ii8+PHBhdGggZD0iTTIwIDM5VjI1bDYgNyA2LTEyIDYgMTIgNi03djE0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmM5NWIiIHN0cm9rZS13aWR0aD0iNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTE3IDQ2aDEzbDctNSAxMCAyIiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmY4ZTMiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PGNpcmNsZSBjeD0iNDciIGN5PSI0MyIgcj0iMyIgZmlsbD0iI2ZmZjhlMyIvPjxwYXRoIGQ9Im00NSAxNiAzLTQgMyA0LTMgNFoiIGZpbGw9IiNmZmM5NWIiLz48L3N2Zz4="
 				}
 			}
 		},
 		{
 			"ref": "chronos-2-config",
 			"type": "Config",
-			"authors": ["Amazon"],
+			"authors": [
+				"Amazon"
+			],
 			"repository": "https://huggingface.co/amazon/chronos-2",
 			"version": "29ec3766d36d6f73f0696f85560a422f50e8498c",
 			"download_link": "https://huggingface.co/amazon/chronos-2/resolve/29ec3766d36d6f73f0696f85560a422f50e8498c/config.json",
@@ -194,7 +210,9 @@
 		{
 			"ref": "chronos-2",
 			"type": "Forecasting",
-			"authors": ["Amazon"],
+			"authors": [
+				"Amazon"
+			],
 			"repository": "https://huggingface.co/amazon/chronos-2",
 			"version": "29ec3766d36d6f73f0696f85560a422f50e8498c",
 			"license": "apache-2.0",
@@ -221,8 +239,8 @@
 			},
 			"meta": {
 				"en": {
-					"name": "Chronos 2",
-					"description": "Native Rust forecasts with quantiles, multiple targets and covariates. Apache 2.0 weights.",
+					"name": "Amazon Chronos 2",
+					"description": "Forecast related metrics together, with past and planned inputs such as promotions or weather. Includes uncertainty ranges. Apache 2.0.",
 					"long_description": "Forecast related numeric targets within each series, with optional historical and known future covariates. Separate series IDs produce separate forecasts. Supports the Chronos 2 architecture.\n\nInference runs in Rust. Use this Bit in Data Studio's Forecast tab or the forecasting flow nodes.\n\nModel weights are distributed under Apache 2.0.",
 					"tags": [
 						"forecasting",
@@ -233,14 +251,17 @@
 					],
 					"use_case": "Forecast table data and evaluate historical predictions.",
 					"website": "https://huggingface.co/amazon/chronos-2",
-					"docs_url": "https://huggingface.co/amazon/chronos-2/blob/29ec3766d36d6f73f0696f85560a422f50e8498c/README.md"
+					"docs_url": "https://huggingface.co/amazon/chronos-2/blob/29ec3766d36d6f73f0696f85560a422f50e8498c/README.md",
+					"icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij48dGl0bGU+QW1hem9uIENocm9ub3MgMjwvdGl0bGU+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMwZTIwMzEiLz48cGF0aCBkPSJNNDggMjFBMjAgMjAgMCAxIDAgNTEgMzkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzczZDVmMSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48cGF0aCBkPSJNMzIgMTd2MTVsLTggNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZGZmOGZmIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Im0zMyA0NCA3LTggNiAyIDctMTEiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmYjQ0ZiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48Y2lyY2xlIGN4PSI1MyIgY3k9IjI3IiByPSIzIiBmaWxsPSIjZmZiNDRmIi8+PC9zdmc+"
 				}
 			}
 		},
 		{
 			"ref": "toto-2-22m-config",
 			"type": "Config",
-			"authors": ["Datadog"],
+			"authors": [
+				"Datadog"
+			],
 			"repository": "https://huggingface.co/Datadog/Toto-2.0-22m",
 			"version": "685e4ae3e2be8d8998025e53dd98e7fdcb296a89",
 			"download_link": "https://huggingface.co/Datadog/Toto-2.0-22m/resolve/685e4ae3e2be8d8998025e53dd98e7fdcb296a89/config.json",
@@ -257,7 +278,9 @@
 		{
 			"ref": "toto-2-22m",
 			"type": "Forecasting",
-			"authors": ["Datadog"],
+			"authors": [
+				"Datadog"
+			],
 			"repository": "https://huggingface.co/Datadog/Toto-2.0-22m",
 			"version": "685e4ae3e2be8d8998025e53dd98e7fdcb296a89",
 			"license": "apache-2.0",
@@ -284,8 +307,8 @@
 			},
 			"meta": {
 				"en": {
-					"name": "Toto 2.0 22M",
-					"description": "Native Rust forecasts with quantiles for regularly spaced numeric data. Apache 2.0 weights.",
+					"name": "Datadog Toto 2 · 22M",
+					"description": "Forecast regularly spaced sensor and operational measurements with Datadog’s 22M model and uncertainty ranges. Apache 2.0.",
 					"long_description": "Load the Toto 2.0 22M checkpoint for table or direct-value forecasts. Context and horizon must fit the checkpoint's position window. Inspect model capabilities before selecting multiple targets or covariates.\n\nInference runs in Rust. Use this Bit in Data Studio's Forecast tab or the forecasting flow nodes.\n\nModel weights are distributed under Apache 2.0.",
 					"tags": [
 						"forecasting",
@@ -296,14 +319,17 @@
 					],
 					"use_case": "Forecast table data and evaluate historical predictions.",
 					"website": "https://huggingface.co/Datadog/Toto-2.0-22m",
-					"docs_url": "https://huggingface.co/Datadog/Toto-2.0-22m/blob/685e4ae3e2be8d8998025e53dd98e7fdcb296a89/README.md"
+					"docs_url": "https://huggingface.co/Datadog/Toto-2.0-22m/blob/685e4ae3e2be8d8998025e53dd98e7fdcb296a89/README.md",
+					"icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij48dGl0bGU+RGF0YWRvZyBUb3RvIDI8L3RpdGxlPjxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSIjMjYxMzNjIi8+PHBhdGggZD0iTTE3IDE5djI2TTI3IDE0djM2TTM3IDE5djI2TTQ3IDI0djE2IiBzdHJva2U9IiM2ZTNjOWUiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTEyIDM2aDhsNy0xNCAxMCAyMCA3LTEzaDgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2YzZTZmZiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48Y2lyY2xlIGN4PSI1MiIgY3k9IjI5IiByPSI0IiBmaWxsPSIjYzg4YWZmIi8+PC9zdmc+"
 				}
 			}
 		},
 		{
 			"ref": "timesfm-2-5-200m-config",
 			"type": "Config",
-			"authors": ["Google Research"],
+			"authors": [
+				"Google Research"
+			],
 			"repository": "https://huggingface.co/google/timesfm-2.5-200m-pytorch",
 			"version": "1d952420fba87f3c6dee4f240de0f1a0fbc790e3",
 			"download_link": "https://huggingface.co/google/timesfm-2.5-200m-pytorch/resolve/1d952420fba87f3c6dee4f240de0f1a0fbc790e3/config.json",
@@ -320,7 +346,9 @@
 		{
 			"ref": "timesfm-2-5-200m",
 			"type": "Forecasting",
-			"authors": ["Google Research"],
+			"authors": [
+				"Google Research"
+			],
 			"repository": "https://huggingface.co/google/timesfm-2.5-200m-pytorch",
 			"version": "1d952420fba87f3c6dee4f240de0f1a0fbc790e3",
 			"license": "apache-2.0",
@@ -347,8 +375,8 @@
 			},
 			"meta": {
 				"en": {
-					"name": "TimesFM 2.5 200M",
-					"description": "Native Rust point and quantile forecasts for one target per series. Apache 2.0 weights.",
+					"name": "Google TimesFM 2.5 · 200M",
+					"description": "Forecast one metric per series with Google’s 200M model, a median prediction and uncertainty ranges. Supports up to 1,024 future steps. Apache 2.0.",
 					"long_description": "Uses TimesFM 2.5 with input normalization, flip invariance, the continuous quantile head and crossing repair. Supports independent series, up to 15,360 historical steps and 1,024 forecast steps. The adapter returns the median and nine native quantiles. Covariates and joint targets are unavailable in this adapter.\n\nInference runs in Rust. Use this Bit in Data Studio's Forecast tab or the forecasting flow nodes.\n\nModel weights are distributed under Apache 2.0.",
 					"tags": [
 						"forecasting",
@@ -359,14 +387,17 @@
 					],
 					"use_case": "Forecast table data and evaluate historical predictions.",
 					"website": "https://huggingface.co/google/timesfm-2.5-200m-pytorch",
-					"docs_url": "https://huggingface.co/google/timesfm-2.5-200m-pytorch/blob/1d952420fba87f3c6dee4f240de0f1a0fbc790e3/README.md"
+					"docs_url": "https://huggingface.co/google/timesfm-2.5-200m-pytorch/blob/1d952420fba87f3c6dee4f240de0f1a0fbc790e3/README.md",
+					"icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij48dGl0bGU+R29vZ2xlIFRpbWVzRk0gMi41PC90aXRsZT48cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxNCIgZmlsbD0iIzEwMjMzZCIvPjxwYXRoIGQ9Im0xMiA0MiA5LTExIDkgNiAxMC0xNiAxMiA1djIxbC0xMi00LTEwIDQtOS03LTkgOVoiIGZpbGw9IiMyMzRiNzkiLz48cGF0aCBkPSJtMTIgNDIgOS0xMSA5IDYgMTAtMTYgMTIgNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNzViN2ZmIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Im0xMiA0OSA5LTkgOSA3IDEwLTQgMTIgNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNzFkOGI2IiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Im0xMiA0NSA5LTkgOSA2IDEwLTEwIDEyIDQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48Y2lyY2xlIGN4PSI1MiIgY3k9IjM2IiByPSIzIiBmaWxsPSIjZmZkNjZjIi8+PC9zdmc+"
 				}
 			}
 		},
 		{
 			"ref": "granite-ttm-r2-512-96-config",
 			"type": "Config",
-			"authors": ["IBM Research"],
+			"authors": [
+				"IBM Research"
+			],
 			"repository": "https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2",
 			"version": "d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f",
 			"download_link": "https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2/resolve/d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f/config.json",
@@ -383,7 +414,9 @@
 		{
 			"ref": "granite-ttm-r2-512-96",
 			"type": "Forecasting",
-			"authors": ["IBM Research"],
+			"authors": [
+				"IBM Research"
+			],
 			"repository": "https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2",
 			"version": "d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f",
 			"license": "apache-2.0",
@@ -410,8 +443,8 @@
 			},
 			"meta": {
 				"en": {
-					"name": "IBM Granite TinyTimeMixer R2 (512–96)",
-					"description": "Compact native Rust point forecasts with a 512-step context and up to 96 future steps. Apache 2.0 weights.",
+					"name": "IBM Granite TinyTimeMixer · R2",
+					"description": "A compact IBM model for minute-to-hour data. Uses 512 history steps to predict up to 96 future steps. Point forecasts only. Apache 2.0.",
 					"long_description": "Uses the non-frequency-tuned, common-channel MSE checkpoint for independent numeric series. Intended for minutely to hourly observations; use 512 history points where available. Returns mean point forecasts without quantiles or uncertainty bands. Covariates and joint targets are unavailable in this adapter. Leave requested quantile levels empty.\n\nInference runs in Rust. Use this Bit in Data Studio's Forecast tab or the forecasting flow nodes.\n\nModel weights are distributed under Apache 2.0.",
 					"tags": [
 						"forecasting",
@@ -422,7 +455,8 @@
 					],
 					"use_case": "Forecast table data and evaluate historical predictions.",
 					"website": "https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2",
-					"docs_url": "https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2/blob/d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f/README.md"
+					"docs_url": "https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2/blob/d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f/README.md",
+					"icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDY0IDY0Ij48dGl0bGU+SUJNIEdyYW5pdGUgVGlueVRpbWVNaXhlciBSMjwvdGl0bGU+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMxMDJhMmMiLz48cGF0aCBkPSJtMzIgMTEgMTkgMTF2MjFMMzIgNTQgMTMgNDNWMjJaIiBmaWxsPSJub25lIiBzdHJva2U9IiM3NWQ5ZDAiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Im0xMyAyMiAxOSAxMSAxOS0xMU0zMiAzM3YyMSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMzM3ZDdhIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJtMTcgMzcgOC0xMCA4IDEzIDgtMTQgNiA3IiBmaWxsPSJub25lIiBzdHJva2U9IiNlNGZmZmEiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48Y2lyY2xlIGN4PSI0NyIgY3k9IjMzIiByPSIzIiBmaWxsPSIjYTdmM2NlIi8+PC9zdmc+"
 				}
 			}
 		}

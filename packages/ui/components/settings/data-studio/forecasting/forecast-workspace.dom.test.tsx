@@ -175,6 +175,7 @@ const request = (offset = 0): StudioForecastPayload => ({
 	sql: 'SELECT * FROM "history"',
 	mapping: {
 		timestamp: "time",
+		timestamp_format: "auto",
 		series_id: "region",
 		targets: ["sales", "cost"],
 		past_covariates: [],
@@ -698,7 +699,7 @@ describe("forecast setup wizard", () => {
 		await click("sales");
 		expect(button("Next: Model").disabled).toBe(true);
 		expect(container.textContent).toContain(
-			"Choose a timestamp and at least one metric.",
+			"Select at least one metric to forecast.",
 		);
 		await click("cost");
 		await change('select[aria-label="Series ID"]', "region");
@@ -740,6 +741,7 @@ describe("forecast setup wizard", () => {
 				sql: 'SELECT time, region, sales, cost FROM "history"',
 				mapping: {
 					timestamp: "time",
+					timestamp_format: "auto",
 					series_id: "region",
 					targets: ["cost"],
 					past_covariates: [],
@@ -853,6 +855,90 @@ describe("forecast setup wizard", () => {
 			"app-a",
 			expect.objectContaining({ quantile_levels: [] }),
 			false,
+		);
+	});
+});
+
+describe("forecast source formats", () => {
+	it("offers sensor measurements stored as numeric text and sends the chosen timestamp format", async () => {
+		fixture.query.executeSql.mockResolvedValue({
+			columns: [
+				{
+					name: "timestamp_utc",
+					type_name: 'Timestamp(ms, "UTC")',
+					position: 0,
+				},
+				{ name: "machine_id", type_name: "LargeUtf8", position: 1 },
+				{ name: "temperature_c", type_name: "LargeUtf8", position: 2 },
+			],
+			rows: [
+				{
+					timestamp_utc: day(1),
+					machine_id: "MACHINE_01",
+					temperature_c: "62.43",
+				},
+				{
+					timestamp_utc: day(2),
+					machine_id: "MACHINE_01",
+					temperature_c: "63.14",
+				},
+			],
+			row_count: 2,
+			truncated: false,
+		});
+		await mount();
+		await click("Next: Columns");
+		expect(container.textContent).toContain("temperature_cnumeric text");
+		expect(container.textContent).toContain("2025-01-01T00:00:00.000Z");
+		expect(button("Next: Model").disabled).toBe(false);
+		await change('select[aria-label="Series ID"]', "machine_id");
+		await click("Next: Model");
+		await click("Next: Review");
+		await click("Run forecast");
+		expect(fixture.query.forecast.mock.calls[0][1].mapping).toMatchObject({
+			timestamp: "timestamp_utc",
+			timestamp_format: "auto",
+			series_id: "machine_id",
+			targets: ["temperature_c"],
+		});
+	});
+	it("shows the ambiguous date and enables Next after selecting its order", async () => {
+		fixture.query.executeSql.mockResolvedValue({
+			columns: [
+				{ name: "date", type_name: "Utf8", position: 0 },
+				{ name: "sales", type_name: "Float64", position: 1 },
+			],
+			rows: [
+				{ date: "04/05/2026", sales: 10 },
+				{ date: "05/05/2026", sales: 12 },
+			],
+			row_count: 2,
+			truncated: false,
+		});
+		await mount();
+		await click("Next: Columns");
+		expect(button("Next: Model").disabled).toBe(true);
+		expect(container.textContent).toContain("Date order is ambiguous");
+		await change('select[aria-label="Timestamp format"]', "day_first");
+		expect(button("Next: Model").disabled).toBe(false);
+		expect(container.textContent).toContain("2026-05-04T00:00:00.000Z");
+	});
+	it("explains a missing metric with its actual type and sample", async () => {
+		fixture.query.executeSql.mockResolvedValue({
+			columns: [
+				{ name: "time", type_name: "Date32", position: 0 },
+				{ name: "value", type_name: "LargeUtf8", position: 1 },
+			],
+			rows: [{ time: 1, value: "sensor offline" }],
+			row_count: 1,
+			truncated: false,
+		});
+		await mount();
+		await click("Next: Columns");
+		expect(button("Next: Model").disabled).toBe(true);
+		expect(container.textContent).toContain("No usable numeric metrics found");
+		expect(container.textContent).toContain(
+			"value (LargeUtf8): sensor offline",
 		);
 	});
 });

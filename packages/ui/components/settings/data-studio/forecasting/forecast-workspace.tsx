@@ -20,6 +20,7 @@ import { cn } from "../../../../lib/utils";
 import { useBackend } from "../../../../state/backend-state";
 import type {
 	ExecuteSqlResult,
+	ForecastTimestampFormat,
 	SavedStudioForecast,
 	StudioForecastPayload,
 } from "../../../../state/backend-state/query-state";
@@ -41,6 +42,7 @@ import { type CovariateTimeline, ForecastChart } from "./forecast-chart";
 import {
 	buildForecastPlot,
 	finiteValue,
+	numericInputValue,
 	forecastCovariateSupport,
 	forecastOutputLabel,
 	forecastingColumns,
@@ -51,6 +53,11 @@ import {
 	timestampValue,
 	visibleCovariatePoints,
 } from "./forecast-data";
+import {
+	inspectForecastTimestamps,
+	nativeTimestampUnit,
+	timestampFormatOptions,
+} from "./forecast-timestamps";
 import { ForecastLibrary } from "./forecast-library";
 import { ForecastMetrics } from "./forecast-metrics";
 import {
@@ -124,6 +131,9 @@ function ForecastWorkspaceBody({
 	const [previewing, setPreviewing] = useState(false);
 	const [previewError, setPreviewError] = useState<string | null>(null);
 	const [timestamp, setTimestamp] = useState("");
+	const [timestampFormat, setTimestampFormat] = useState<
+		ForecastTimestampFormat | undefined
+	>("auto");
 	const [seriesId, setSeriesId] = useState("");
 	const [targets, setTargets] = useState<string[]>([]);
 	const [covariates, setCovariates] = useState<
@@ -157,6 +167,7 @@ function ForecastWorkspaceBody({
 	mappingRef.current = { timestamp, seriesId };
 	const sourceSql = sourceMode === "table" ? tableForecastSql(table) : sql;
 	const model = forecastingModels.find((item) => item.id === modelId);
+	const modelMeta = model?.meta.en ?? (model && Object.values(model.meta)[0]);
 	const modelName =
 		model?.meta.en?.name ||
 		(model && Object.values(model.meta)[0]?.name) ||
@@ -179,7 +190,22 @@ function ForecastWorkspaceBody({
 	const timestampType = columns.find(
 		(column) => column.name === timestamp,
 	)?.type_name;
-	const inferred = useMemo(() => forecastingColumns(columns), [columns]);
+	const inferred = useMemo(
+		() => forecastingColumns(columns, preview?.result.rows),
+		[columns, preview?.result.rows],
+	);
+	const timestampInspection = useMemo(
+		() =>
+			inspectForecastTimestamps(
+				(preview?.result.rows ?? []).map((row) => row[timestamp]),
+				timestampType ?? "",
+				timestampFormat,
+			),
+		[preview?.result.rows, timestamp, timestampType, timestampFormat],
+	);
+	const metricCandidates = inferred.numeric.filter(
+		(column) => column.name !== timestamp && column.name !== seriesId,
+	);
 	const covariateCandidates = [
 		...new Set([
 			...inferred.numeric.map((column) => column.name),
@@ -212,6 +238,7 @@ function ForecastWorkspaceBody({
 		sql: sourceSql,
 		mapping: {
 			timestamp,
+			timestamp_format: timestampFormat,
 			series_id: seriesId || undefined,
 			targets,
 			past_covariates: selectedCovariates
@@ -287,7 +314,7 @@ function ForecastWorkspaceBody({
 			if (sequence !== previewSequence.current) return;
 			setPreview({ sql: sourceSql, result });
 			const names = new Set(result.columns.map((column) => column.name));
-			const defaults = forecastingColumns(result.columns);
+			const defaults = forecastingColumns(result.columns, result.rows);
 			const mappedTimestamp = names.has(mappingRef.current.timestamp)
 				? mappingRef.current.timestamp
 				: defaults.timestamp;
@@ -295,6 +322,8 @@ function ForecastWorkspaceBody({
 				? mappingRef.current.seriesId
 				: "";
 			setTimestamp(mappedTimestamp);
+			if (mappedTimestamp !== mappingRef.current.timestamp)
+				setTimestampFormat("auto");
 			setSeriesId(mappedSeries);
 			setTargets((current) =>
 				previewForecastTargets(
@@ -329,8 +358,14 @@ function ForecastWorkspaceBody({
 			? "Load the source columns before continuing."
 			: null;
 	let mappingError: string | null = null;
-	if (!timestamp || targets.length === 0)
-		mappingError = "Choose a timestamp and at least one metric.";
+	if (!timestamp) mappingError = "Choose a timestamp column.";
+	else if (sourceReady && timestampInspection.error)
+		mappingError = timestampInspection.error;
+	else if (targets.length === 0)
+		mappingError =
+			metricCandidates.length === 0
+				? "No usable numeric metrics found. Check the column values below or edit the source SQL."
+				: "Select at least one metric to forecast.";
 	else if (
 		targets.includes(timestamp) ||
 		targets.includes(seriesId) ||
@@ -532,10 +567,19 @@ function ForecastWorkspaceBody({
 							(row) => !seriesId || String(row[seriesId]) === previewSeries,
 						)
 						.flatMap((row) => {
-							const time = timestampValue(row[timestamp], timestampType);
+							const time = timestampValue(
+								row[timestamp],
+								timestampType,
+								timestampFormat,
+							);
 							return time === null
 								? []
-								: [{ timestamp: time, value: finiteValue(row[column.name]) }];
+								: [
+										{
+											timestamp: time,
+											value: numericInputValue(row[column.name]),
+										},
+									];
 						});
 			return {
 				name: column.name,
@@ -579,6 +623,7 @@ function ForecastWorkspaceBody({
 		setFutureMode("sql");
 		setFutureSql(request.future_sql ?? "");
 		setTimestamp(request.mapping.timestamp);
+		setTimestampFormat(request.mapping.timestamp_format);
 		setSeriesId(request.mapping.series_id ?? "");
 		setTargets([...request.mapping.targets]);
 		setCovariates(setup.covariates);
@@ -621,6 +666,7 @@ function ForecastWorkspaceBody({
 		setFutureTable("");
 		setFutureMode("table");
 		setTimestamp("");
+		setTimestampFormat("auto");
 		setSeriesId("");
 		setTargets([]);
 		setCovariates({});
@@ -763,6 +809,7 @@ function ForecastWorkspaceBody({
 							value={timestamp}
 							onChange={(value) => {
 								setTimestamp(value);
+								setTimestampFormat("auto");
 								setTargets((current) =>
 									current.filter((name) => name !== value),
 								);
@@ -779,8 +826,63 @@ function ForecastWorkspaceBody({
 							placeholder="Choose a time column"
 						/>
 						<p className="-mt-2 text-[10px] text-muted-foreground">
-							Timestamp/date columns or integer epoch milliseconds.
+							Native dates, date text, or Unix timestamps in seconds,
+							milliseconds, microseconds, or nanoseconds.
 						</p>
+						{timestamp && !nativeTimestampUnit(timestampType ?? "") && (
+							<FieldSelect
+								label="Timestamp format"
+								value={timestampFormat ?? "__legacy__"}
+								onChange={(value) =>
+									setTimestampFormat(
+										value === "__legacy__"
+											? undefined
+											: (value as ForecastTimestampFormat),
+									)
+								}
+								options={[
+									...(timestampFormat === undefined
+										? [
+												{
+													value: "__legacy__",
+													label: "Saved interpretation (numeric milliseconds)",
+												},
+											]
+										: []),
+									...timestampFormatOptions,
+								]}
+							/>
+						)}
+						{timestamp && sourceReady && (
+							<div
+								className="space-y-2 rounded-lg border bg-muted/20 p-3"
+								aria-label="Timestamp preview"
+							>
+								<p className="text-xs font-medium">
+									{timestampInspection.label} · UTC
+								</p>
+								{timestampInspection.samples.map((sample, index) => (
+									<p
+										key={index}
+										className="break-all font-mono text-[11px] text-muted-foreground"
+									>
+										{sample.raw} →{" "}
+										{Math.abs(sample.timestamp) <= 8.64e15
+											? new Date(sample.timestamp).toISOString()
+											: String(sample.timestamp)}
+									</p>
+								))}
+								{timestampInspection.error && (
+									<p role="alert" className="text-xs text-destructive">
+										{timestampInspection.error}
+									</p>
+								)}
+								<p className="text-[10px] text-muted-foreground">
+									Preview checks up to 500 rows. Dates without a timezone use
+									UTC. All rows are validated when the forecast runs.
+								</p>
+							</div>
+						)}
 						<FieldSelect
 							label="Series ID"
 							value={seriesId || "__none__"}
@@ -876,13 +978,49 @@ function ForecastWorkspaceBody({
 												<Check className="size-3" />
 											)}
 											{column.name}
+											{inferred.numericText.some(
+												(item) => item.name === column.name,
+											) && (
+												<span className="ml-1 text-[10px] opacity-70">
+													numeric text
+												</span>
+											)}
 										</button>
 									))}
 							</div>
-							{sourceReady && inferred.numeric.length === 0 && (
+							{sourceReady && metricCandidates.length === 0 && (
 								<p className="text-xs leading-normal text-muted-foreground">
-									Your query needs an integer or floating-point metric.
+									No numeric metric was found. Text columns are accepted when
+									every non-null preview value is a number.
 								</p>
+							)}
+							{inferred.numericText.length > 0 && (
+								<p className="text-[11px] text-muted-foreground">
+									Numeric text is converted for this forecast. Source data stays
+									unchanged; invalid values cause an error.
+								</p>
+							)}
+							{sourceReady && metricCandidates.length === 0 && (
+								<div
+									className="text-[11px] text-muted-foreground"
+									aria-label="Available source columns"
+								>
+									{columns
+										.filter(
+											(column) =>
+												column.name !== timestamp && column.name !== seriesId,
+										)
+										.map((column) => (
+											<p key={column.name}>
+												{column.name} ({column.type_name}):{" "}
+												{String(
+													preview?.result.rows.find(
+														(row) => row[column.name] != null,
+													)?.[column.name] ?? "no values",
+												).slice(0, 80)}
+											</p>
+										))}
+								</div>
 							)}
 							{columns.some((column) => /^decimal/i.test(column.type_name)) && (
 								<p className="text-[11px] leading-normal text-muted-foreground">
@@ -1040,6 +1178,23 @@ function ForecastWorkspaceBody({
 					]}
 					placeholder="Choose a model"
 				/>
+				{modelMeta && (
+					<div className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3">
+						{modelMeta.icon && (
+							<img
+								src={modelMeta.icon}
+								alt=""
+								className="size-10 shrink-0 rounded-lg"
+							/>
+						)}
+						<div className="min-w-0">
+							<p className="text-xs font-medium">{modelName}</p>
+							<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+								{modelMeta.description}
+							</p>
+						</div>
+					</div>
+				)}
 				{forecastingModels.length === 0 && (
 					<p className="text-xs text-muted-foreground">
 						Add a Forecasting model to your profile in the model catalog.

@@ -1,0 +1,61 @@
+---
+title: "A new WebAssembly canvas for your biggest workflows"
+description: "Flow-Like's new WebAssembly renderer draws the workflow graph, adapts detail as you zoom, and keeps the editing controls you already use."
+date: 2026-10-19
+tags: ["workflows", "webassembly", "performance", "studio"]
+cover: "/images/wasm-workflow-renderer-hero.webp"
+draft: false
+---
+
+You zoom out to follow a branch, pan across the board, then zoom back in to change one input. That round trip happens constantly when you build a workflow. As the board grows, the editor has more to draw every time you do it.
+
+**Flow-Like's new workflow canvas adjusts drawing detail as you zoom and keeps the editing controls you already use.** It runs on WebAssembly, a binary format that lets compiled code run inside a browser or desktop webview. The renderer is enabled by default and remains labeled **preview** in Settings.
+
+The work starts with a practical question: how much of a large workflow does the editor need to draw in full detail right now?
+
+## Zoom out to understand. Zoom in to work.
+
+At close range, you need node names, individual pins, and connections you can follow. Farther out, you need the shape of the process: its branches, clusters, and paths back into the main flow.
+
+The new canvas changes its level of detail with the zoom. Labels and pins appear when there is room to read them. Overview views simplify connection geometry and drop detail that would otherwise collapse into visual noise. Selected nodes retain full detail in the native canvas.
+
+The renderer also skips drawing nodes and connections outside the visible area. A board can contain work that matters later without asking the graphics layer to paint all of it now.
+
+## Your node editor is still your node editor
+
+A workflow board contains more than rectangles and wires. It has editable values, menus, comments, and media. Those controls need to behave like the rest of the application.
+
+The new renderer uses a hybrid approach. WebAssembly draws the graph, and existing React components provide the rich controls where they are needed. Hovering or selecting a node can bring its interactive editor into the foreground. Comments and media keep their usual controls.
+
+Editing still goes through the board's existing services. Dragging nodes, making connections, and changing selections operate on the same workflow. The renderer is a view of that board, so choosing it does not require a separate workflow format or an export-and-import step.
+
+This update concerns drawing and interaction in the editor. The workflow execution engine remains responsible for running your nodes.
+
+## Less work between a gesture and a frame
+
+Flow-Like's board-canvas package compiles Rust into a WebAssembly module. It draws the graph with egui, a graphics and UI library, through its WebGL-backed renderer.
+
+The architecture matters more than the file extension. Several choices reduce the work involved in navigating a board:
+
+- **Moving the camera updates the viewport.** Panning and zooming can change what you see without rebuilding and serializing the entire graph scene.
+- **Connections reuse their geometry.** The renderer keeps calculated curves and reuses them when their endpoints have not changed.
+- **Text layout is cached.** Zooming can reuse prepared text, then restore exact font rendering when the gesture settles.
+- **Detail follows the view.** Off-screen content is skipped, and distant connections use simpler geometry where it preserves their visible shape.
+
+These changes target the cost of showing a large graph. The experience still depends on the board, its visible editors, the browser or webview, and the device running it.
+
+The occasional glow along connections is a visual effect. Execution state remains on the nodes. The glow also respects reduced-motion preferences and pauses when the page is hidden.
+
+## You can see which renderer is active
+
+The board has a renderer badge in its upper-right corner. **WASM** means the WebAssembly canvas is active. Open the badge for an explanation of what it draws and a control to switch to React Flow.
+
+If the WebAssembly renderer cannot start, Flow-Like falls back to React Flow and says so in the badge. The panel includes the error and a **Retry WASM** action. You can keep the board open while deciding whether to retry or use the other renderer.
+
+To change the preference yourself, open **Settings → Workflow editor → Use WASM board (preview)**. Turning it off selects React Flow. Your choice is saved for that browser or desktop installation.
+
+## Give it the board you actually work on
+
+Open an existing workflow and look for the **WASM** badge. Trace a connection across the board. Zoom out until you can see the process, then return to a node and edit an input.
+
+[Download Flow-Like](/download/) to try the new canvas. If a particular board exposes a problem, [tell us what you were doing](https://github.com/Rheosoph/flow-like/issues), which browser or desktop app you used, and what the renderer badge showed.

@@ -108,6 +108,10 @@ pub async fn process(
         );
         return Ok(());
     }
+    // DeviceArchive metadata accounts for these server-owned payloads separately.
+    if key.starts_with("device-archives/") {
+        return Ok(());
+    }
     let identity =
         parse_key_identity(key).ok_or(FileTrackingError::Permanent("invalid_blob_key_layout"))?;
 

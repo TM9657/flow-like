@@ -32,6 +32,7 @@ import {
 	isAzureBlobStorageUrl,
 	useAuthStatusStore,
 	useBackendStore,
+	useDownloadManager,
 	useQueryClient,
 } from "@flow-like/flow-like-ui";
 import type { ICommandSync } from "@flow-like/flow-like-ui/lib";
@@ -64,10 +65,10 @@ import {
 	WebUsageState,
 	WebUserState,
 	WebWidgetState,
-} from "@/lib/web-states";
-import { WebAnalyticsState } from "@/lib/web-states/analytics-state";
-import type { WebBackendRef } from "@/lib/web-states/api-utils";
-import { WebSalesState } from "@/lib/web-states/sales-state";
+} from "../lib/web-states";
+import { WebAnalyticsState } from "../lib/web-states/analytics-state";
+import type { WebBackendRef } from "../lib/web-states/api-utils";
+import { WebSalesState } from "../lib/web-states/sales-state";
 
 export class WebBackend implements IBackendState {
 	appState: IAppState;
@@ -250,6 +251,9 @@ export function WebProvider({
 }: Readonly<{ children: React.ReactNode }>) {
 	const queryClient = useQueryClient();
 	const { backend, setBackend } = useBackendStore();
+	const setDownloadBackend = useDownloadManager(
+		(state) => state.setDownloadBackend,
+	);
 
 	useEffect(() => {
 		if (backend && queryClient && backend instanceof WebBackend) {
@@ -268,8 +272,17 @@ export function WebProvider({
 				});
 		}, queryClient);
 
+		setDownloadBackend(backend);
 		setBackend(backend);
-	}, [queryClient, setBackend]);
+		return () => {
+			if (useDownloadManager.getState().backend === backend) {
+				setDownloadBackend(null);
+			}
+			if (useBackendStore.getState().backend === backend) {
+				useBackendStore.setState({ backend: null });
+			}
+		};
+	}, [queryClient, setBackend, setDownloadBackend]);
 
 	if (!backend) {
 		return <LoadingScreen progress={50} />;

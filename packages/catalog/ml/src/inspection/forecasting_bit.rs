@@ -203,6 +203,73 @@ pub(crate) struct StagedForecastBit {
 }
 
 #[cfg(any(feature = "inference", feature = "forecasting"))]
+async fn stage_remote_assets(
+    state: std::sync::Arc<FlowLikeState>,
+    files: Vec<(String, Bit)>,
+    maximum_bytes: u64,
+    callback: flow_like_types::intercom::InterComCallback,
+) -> Result<tempfile::TempDir> {
+    use flow_like::state::FlowLikeConfig;
+    use flow_like::utils::{
+        download::download_bit, download_manager::DownloadManager, http::HTTPClient,
+    };
+    use flow_like_storage::files::store::{FlowLikeStore, local_store::LocalObjectStore};
+    use flow_like_storage::object_store::ObjectStoreExt;
+    use std::sync::Arc;
+
+    // The worker owns its temporary directory until all download workers finish,
+    // including when an HTTP caller disconnects during staging.
+    tokio::spawn(async move {
+        let source = FlowLikeState::bit_store(&state).await?;
+        let directory = tempfile::tempdir()?;
+        let downloads = directory.path().join(".downloads");
+        tokio::fs::create_dir(&downloads).await?;
+        let local = Arc::new(LocalObjectStore::new(downloads.clone())?);
+        let mut config = FlowLikeConfig::new();
+        config.register_bits_store(FlowLikeStore::Local(local.clone()));
+        let mut download_state = FlowLikeState::new(config, HTTPClient::new_without_refetch());
+        download_state.http_client = state.http_client.clone();
+        download_state.download_manager = Arc::new(flow_like_types::sync::Mutex::new(
+            DownloadManager::new_ephemeral(),
+        ));
+        let download_state = Arc::new(download_state);
+        let mut remaining = maximum_bytes;
+
+        for (name, bit) in files {
+            let size = bit
+                .size
+                .filter(|size| *size > 0 && *size <= remaining)
+                .ok_or_else(|| {
+                    anyhow!("Forecast checkpoint exceeds the {maximum_bytes} byte limit")
+                })?;
+            let path = flow_like_storage::Path::from(bit.hash.as_str()).join(
+                bit.file_name
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("Forecast asset has no filename"))?,
+            );
+            let destination = directory.path().join(name);
+            let installed = source
+                .as_generic()
+                .head(&path)
+                .await
+                .is_ok_and(|metadata| metadata.size == size);
+            if installed || bit.download_link.is_none() {
+                stage_asset(&source, &bit, &destination, remaining).await?;
+            } else {
+                // Reuse the Bit downloader's size and checksum validation. This
+                // private store never changes routing for other model families.
+                let downloaded = download_bit(&bit, download_state.clone(), 3, &callback).await?;
+                tokio::fs::rename(local.path_to_filesystem(&downloaded)?, &destination).await?;
+            }
+            remaining -= size;
+        }
+        tokio::fs::remove_dir_all(downloads).await?;
+        Ok(directory)
+    })
+    .await?
+}
+
+#[cfg(any(feature = "inference", feature = "forecasting"))]
 pub(crate) async fn stage_bit(
     state: std::sync::Arc<FlowLikeState>,
     bit: &Bit,
@@ -220,18 +287,27 @@ pub(crate) async fn stage_bit(
     }
     let pack = bit.pack(state.clone()).await?;
     let files = resolve_assets(&bit, &parameters, &pack, maximum_bytes)?;
-    let asset_pack = BitPack {
-        bits: files.iter().map(|(_, bit)| bit.clone()).collect(),
-    };
-    if !asset_pack.is_installed(state.clone()).await? {
-        asset_pack.download(state.clone(), callback).await?;
-    }
     let store = FlowLikeState::bit_store(&state).await?;
-    let temporary = tempfile::tempdir()?;
-    let mut remaining = maximum_bytes;
-    for (name, asset) in &files {
-        remaining -= stage_asset(&store, asset, &temporary.path().join(name), remaining).await?;
-    }
+    let temporary = if matches!(
+        store,
+        flow_like_storage::files::store::FlowLikeStore::Local(_)
+    ) {
+        let asset_pack = BitPack {
+            bits: files.iter().map(|(_, bit)| bit.clone()).collect(),
+        };
+        if !asset_pack.is_installed(state.clone()).await? {
+            asset_pack.download(state.clone(), callback).await?;
+        }
+        let directory = tempfile::tempdir()?;
+        let mut remaining = maximum_bytes;
+        for (name, asset) in &files {
+            remaining -=
+                stage_asset(&store, asset, &directory.path().join(name), remaining).await?;
+        }
+        directory
+    } else {
+        stage_remote_assets(state, files, maximum_bytes, callback).await?
+    };
     let family = match parameters.model_type {
         ForecastingModelType::Timestral => ForecastFamily::Timestral,
         ForecastingModelType::Chronos2 => ForecastFamily::Chronos2,
@@ -473,5 +549,194 @@ mod tests {
             ..bit
         };
         assert!(stage_asset(&store, &wrong_size, &path, 32).await.is_err());
+    }
+
+    #[cfg(any(feature = "inference", feature = "forecasting"))]
+    mod remote_staging {
+        use super::*;
+        use flow_like::{
+            state::FlowLikeConfig,
+            utils::{compression::compress_to_file_json, http::HTTPClient},
+        };
+        use flow_like_storage::{
+            Path, blake3,
+            files::store::FlowLikeStore,
+            object_store::{ObjectStoreExt, memory::InMemory},
+        };
+        use std::{
+            io::{BufRead, BufReader, Write},
+            net::TcpListener,
+            sync::{
+                Arc,
+                atomic::{AtomicBool, AtomicUsize, Ordering},
+            },
+            thread::JoinHandle,
+            time::Duration,
+        };
+
+        struct ArtifactServer {
+            url: String,
+            gets: Arc<AtomicUsize>,
+            stop: Arc<AtomicBool>,
+            worker: Option<JoinHandle<()>>,
+        }
+
+        impl ArtifactServer {
+            fn new(bytes: Vec<u8>) -> Self {
+                let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+                listener.set_nonblocking(true).unwrap();
+                let url = format!(
+                    "http://{}/model.safetensors",
+                    listener.local_addr().unwrap()
+                );
+                let gets = Arc::new(AtomicUsize::new(0));
+                let stop = Arc::new(AtomicBool::new(false));
+                let worker = {
+                    let gets = gets.clone();
+                    let stop = stop.clone();
+                    std::thread::spawn(move || {
+                        while !stop.load(Ordering::Relaxed) {
+                            let (mut stream, _) = match listener.accept() {
+                                Ok(connection) => connection,
+                                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                                    std::thread::sleep(Duration::from_millis(5));
+                                    continue;
+                                }
+                                Err(error) => panic!("Artifact server failed: {error}"),
+                            };
+                            stream.set_nonblocking(false).unwrap();
+                            stream
+                                .set_read_timeout(Some(Duration::from_secs(5)))
+                                .unwrap();
+                            let mut reader = BufReader::new(&mut stream);
+                            let mut line = String::new();
+                            reader.read_line(&mut line).unwrap();
+                            let get = line.starts_with("GET ");
+                            loop {
+                                line.clear();
+                                if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
+                                    break;
+                                }
+                            }
+                            write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", bytes.len()).unwrap();
+                            if get {
+                                gets.fetch_add(1, Ordering::Relaxed);
+                                stream.write_all(&bytes).unwrap();
+                            }
+                        }
+                    })
+                };
+                Self {
+                    url,
+                    gets,
+                    stop,
+                    worker: Some(worker),
+                }
+            }
+        }
+
+        impl Drop for ArtifactServer {
+            fn drop(&mut self) {
+                self.stop.store(true, Ordering::Relaxed);
+                let result = self.worker.take().unwrap().join();
+                if !std::thread::panicking() {
+                    result.unwrap();
+                }
+            }
+        }
+
+        async fn remote_fixture(url: String, expected: &[u8]) -> (Arc<FlowLikeState>, Bit) {
+            let (mut root, _, mut pack) = fixture();
+            root.hash = blake3::hash(expected).to_hex().to_string();
+            root.size = Some(expected.len() as u64);
+            root.download_link = Some(url);
+            pack.bits[0] = root.clone();
+            let store = FlowLikeStore::Memory(Arc::new(InMemory::new()));
+            let config_bit = &pack.bits[1];
+            store
+                .as_generic()
+                .put(
+                    &Path::from(config_bit.hash.as_str())
+                        .join(config_bit.file_name.as_deref().unwrap()),
+                    vec![2_u8; 16].into(),
+                )
+                .await
+                .unwrap();
+            compress_to_file_json(
+                store.as_generic(),
+                Path::from("deps-cache/bit-deps-forecast.bin"),
+                &pack,
+            )
+            .await
+            .unwrap();
+            let mut config = FlowLikeConfig::new();
+            config.register_bits_store(store);
+            (
+                Arc::new(FlowLikeState::new(
+                    config,
+                    HTTPClient::new_without_refetch(),
+                )),
+                root,
+            )
+        }
+
+        #[tokio::test]
+        async fn remote_store_downloads_only_missing_assets_without_changing_model_routing() {
+            let bytes = vec![7_u8; 16];
+            let server = ArtifactServer::new(bytes.clone());
+            let (state, root) = remote_fixture(server.url.clone(), &bytes).await;
+            assert!(!FlowLikeState::can_execute_local_bit_models(&state).await);
+            let staged = stage_bit(state.clone(), &root, 32, None).await.unwrap();
+            assert_eq!(
+                std::fs::read(staged.directory.path().join("model.safetensors")).unwrap(),
+                bytes
+            );
+            assert_eq!(
+                std::fs::read(staged.directory.path().join("config.json")).unwrap(),
+                vec![2_u8; 16]
+            );
+            assert!(!staged.directory.path().join(".downloads").exists());
+            assert_eq!(server.gets.load(Ordering::Relaxed), 1);
+            assert!(!FlowLikeState::can_execute_local_bit_models(&state).await);
+            let store = FlowLikeState::bit_store(&state).await.unwrap();
+            assert!(matches!(store, FlowLikeStore::Memory(_)));
+            assert!(
+                store
+                    .as_generic()
+                    .head(&Path::from(root.hash.as_str()).join("model.safetensors"))
+                    .await
+                    .is_err()
+            );
+            let staged_path = staged.directory.path().to_path_buf();
+            drop(staged);
+            assert!(!staged_path.exists());
+        }
+
+        #[tokio::test]
+        async fn remote_staging_rejects_budget_before_download_and_checks_the_content_hash() {
+            let server = ArtifactServer::new(vec![9_u8; 16]);
+            let (state, root) = remote_fixture(server.url.clone(), &[7_u8; 16]).await;
+            let error = stage_bit(state.clone(), &root, 31, None)
+                .await
+                .err()
+                .unwrap();
+            assert!(error.to_string().contains("byte limit"));
+            assert_eq!(server.gets.load(Ordering::Relaxed), 0);
+            let error = stage_bit(state, &root, 32, None).await.err().unwrap();
+            assert!(error.to_string().to_lowercase().contains("hash"), "{error}");
+            assert!(server.gets.load(Ordering::Relaxed) > 0);
+        }
+
+        #[tokio::test]
+        async fn remote_staging_rejects_unexpected_download_size_before_fetching_the_body() {
+            let server = ArtifactServer::new(vec![7_u8; 17]);
+            let (state, root) = remote_fixture(server.url.clone(), &[7_u8; 16]).await;
+            let error = stage_bit(state, &root, 32, None).await.err().unwrap();
+            assert!(
+                error.to_string().contains("Refusing to download"),
+                "{error}"
+            );
+            assert_eq!(server.gets.load(Ordering::Relaxed), 0);
+        }
     }
 }

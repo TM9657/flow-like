@@ -7,10 +7,12 @@ import {
 } from "../board/board-spec";
 import { createDirector } from "./beneath-director";
 import {
+	type ColumnWindows,
 	columnWindows,
 	followBeat,
 	followWindow,
 	pickWindow,
+	restWindow,
 } from "./beneath-follow";
 import {
 	HOLD,
@@ -19,6 +21,7 @@ import {
 	buildPlans,
 	planCycle,
 	planLocal,
+	storyBox,
 } from "./beneath-plan";
 import type { DescentScenarioEvent } from "./types";
 
@@ -30,6 +33,16 @@ const measure = (text: string, font: string) =>
 	Array.from(text).length * 0.55 * Number(/([\d.]+)px/.exec(font)?.[1] ?? 10);
 const layout = layoutBoard(board, { measure, fontFamily: "Inter" });
 const plans = buildPlans(board, layout);
+const phoneBoard = createBoard(strings, "portrait");
+const phoneLayout = layoutBoard(phoneBoard, { measure, fontFamily: "Inter" });
+const phonePlans = buildPlans(phoneBoard, phoneLayout);
+/** The route's nodes a frame centred at `centre` holds whole. */
+const held = (frames: ColumnWindows, plan: ScenarioPlan, centre: number) =>
+	plan.nodes.filter(
+		(n) =>
+			n.x >= centre - frames.span / 2 - 1 &&
+			n.x + n.width <= centre + frames.span / 2 + 1,
+	).length;
 
 const planById = (id: string): ScenarioPlan => {
 	const found = plans.find((p) => p.id === id);
@@ -227,11 +240,6 @@ describe("follow", () => {
 	});
 
 	test("the frame for a beat follows the run from its start, so it never depends on the previous frame", () => {
-		const flowpilot = planById("flowpilot");
-		const last = flowpilot.beats.length - 1;
-		const chained = followWindow(frames, flowpilot, last);
-		const atCalendar = followWindow(frames, flowpilot, last - 1);
-		expect(chained).toBe(atCalendar);
 		const approval = planById("approval");
 		const centers = approval.beats.map((_, i) =>
 			followWindow(frames, approval, i),
@@ -241,6 +249,62 @@ describe("follow", () => {
 		expect(centers[centers.length - 1]).toBe(
 			frames.centers[frames.centers.length - 1],
 		);
+	});
+
+	test("a run rests in the frame that holds its landing and the most of its story", () => {
+		for (const p of plans) {
+			const rest = restWindow(frames, p, Number.NaN);
+			expect(followWindow(frames, p, p.beats.length - 1)).toBe(rest);
+			const landing = p.beats[p.beats.length - 1].focus;
+			expect(Math.abs(landing - rest)).toBeLessThanOrEqual(frames.span / 2);
+			for (const c of frames.centers) {
+				if (Math.abs(landing - c) > frames.span / 2 - 8) continue;
+				expect(held(frames, p, c)).toBeLessThanOrEqual(held(frames, p, rest));
+			}
+		}
+	});
+
+	test("on the phone's grid each story's end frame shows its landing and the nodes that feed it", () => {
+		const narrow = columnWindows(
+			phoneLayout,
+			2 * phoneLayout.nodes[0].width + 60 + 24,
+		);
+		const shown = (id: string) => {
+			const p = phonePlans.find((entry) => entry.id === id);
+			if (!p) throw new Error(`no plan ${id}`);
+			const rest = restWindow(narrow, p, Number.NaN);
+			return phoneLayout.nodes
+				.filter(
+					(n) =>
+						p.nodes.some((r) => r.x === n.x && r.y === n.y) &&
+						n.x >= rest - narrow.span / 2 - 1 &&
+						n.x + n.width <= rest + narrow.span / 2 + 1,
+				)
+				.map((n) => n.id)
+				.sort();
+		};
+		expect(shown("insight")).toEqual(["data", "ontology"]);
+		expect(shown("flowpilot")).toEqual(["data", "email", "notes", "pilot"]);
+		expect(shown("approval")).toEqual(["approve", "enrich", "gov"]);
+	});
+});
+
+describe("story framing", () => {
+	test("each story's box holds exactly its route's nodes", () => {
+		for (const p of plans) {
+			const box = storyBox(p);
+			for (const n of layout.nodes) {
+				const inside =
+					n.x >= box.x &&
+					n.y >= box.y &&
+					n.x + n.width <= box.x + box.width &&
+					n.y + n.height <= box.y + box.height;
+				if (layout.routes[p.id].nodes.includes(n.id)) expect(inside).toBe(true);
+			}
+		}
+		const insight = storyBox(planById("insight"));
+		const approval = storyBox(planById("approval"));
+		expect(insight.height).toBeLessThan(approval.height / 2);
 	});
 });
 

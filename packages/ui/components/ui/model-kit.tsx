@@ -1,9 +1,9 @@
 "use client";
 
 import {
-	ChartNoAxesCombinedIcon,
 	ArrowRightIcon,
 	AudioLinesIcon,
+	ChartNoAxesCombinedIcon,
 	CloudIcon,
 	Grid2X2Icon,
 	HardDriveIcon,
@@ -351,7 +351,13 @@ const PROVIDER_NAMES: Record<string, string> = {
 
 /** Human-readable provider label for the byline under a model name. */
 export function providerLabel(bit: IBit): string {
-	if (bit.type === IBitTypes.Forecasting) return "Native forecasting";
+	if (bit.type === IBitTypes.Forecasting)
+		return (
+			bit.authors
+				?.map((author) => author.trim())
+				.filter(Boolean)
+				.join(", ") || "Native forecasting"
+		);
 	const params = bit.parameters as
 		| { provider?: { provider_name?: string } }
 		| undefined;

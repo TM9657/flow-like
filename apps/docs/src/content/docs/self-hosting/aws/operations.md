@@ -356,6 +356,32 @@ in the sending region before sending to arbitrary recipients. In the sandbox,
 recipients must be verified or use the SES mailbox simulator. Sender identities
 must remain verified after production access is granted.
 
+## Device archive lifecycle
+
+Device archive payloads use the private `device-archives/` prefix in the
+content bucket. Keep the API role's object read, write, and delete permissions
+for this prefix. Client and executor credentials do not need access. Archive
+metadata and quota accounting remain in the database.
+
+The `flow-like-deployment` repository manages expiration in
+`modules/aws/content-bucket/main.tf`. Its `device-archive-payloads` rule deletes
+current objects after 32 days and noncurrent versions after one day. This
+leaves a margin beyond the API's maximum 31-day retention.
+
+Before deploying archive object storage, review and apply the Terraform plan
+for your deployment using that repository's deployment tasks. Keep lifecycle
+changes in the shared content-bucket module so future deployments preserve
+them. If another infrastructure stack owns your bucket, add the same rule
+there and check that no overlapping rule expires archives earlier.
+
+Versioned buckets also need expired delete marker cleanup. An existing rule
+covering the whole bucket can handle this; retain it. Lifecycle deletion runs
+asynchronously, while the API refuses expired archives immediately. See
+[S3 expiration behavior](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-expire-general-considerations.html).
+
+Keep file tracker notifications scoped to `apps/` and `users/`, and media
+notifications scoped to `media/`. Archive usage is accounted for separately.
+
 ## Storage accounting
 
 The file tracker commits each object's accounting row and its aggregate size

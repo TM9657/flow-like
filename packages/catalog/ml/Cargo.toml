@@ -64,6 +64,7 @@ futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 chrono.workspace = true
+regex.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "fs", "io-util"] }
 uuid.workspace = true
 async-trait.workspace = true

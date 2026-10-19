@@ -28,6 +28,38 @@ pub struct EncryptedArchive {
     pub recipient_keys: Vec<ArchiveRecipientKey>,
 }
 
+/// Authenticate retained archive metadata without reading the encrypted payload.
+/// Callers separately enforce current access policy and retention. Downloaded
+/// objects still need [`verify_archive_content`] to validate their bytes.
+pub fn verify_archive_metadata(
+    manifest_jws: &str,
+    roster_jws: &str,
+    owner: &Ed25519PublicKey,
+    device: &Ed25519PublicKey,
+) -> Result<(ArchiveManifest, ArchiveRoster)> {
+    let manifest = verify_archive_manifest(manifest_jws, device)?;
+    if manifest.roster_digest != crate::compact_digest(roster_jws) || owner == device {
+        return Err(ProtocolError::BindingMismatch);
+    }
+    let roster = verify_historical_archive_roster(roster_jws, owner, manifest.created_at)?;
+    if manifest.device_id != roster.device_id
+        || manifest.scope != roster.scope
+        || manifest.kind != roster.kind
+        || manifest.recipients.len() != roster.recipients.len()
+    {
+        return Err(ProtocolError::BindingMismatch);
+    }
+    for (recipient, sealed) in roster.recipients.iter().zip(&manifest.recipients) {
+        if recipient.recipient_id != sealed.recipient_id
+            || recipient.public_key == owner.to_bytes()?
+            || recipient.public_key == device.to_bytes()?
+        {
+            return Err(ProtocolError::BindingMismatch);
+        }
+    }
+    Ok((manifest, roster))
+}
+
 /// Integrity validation for an opaque stored object. Callers separately enforce
 /// the active roster head, upload authority, sequence continuity, and quota.
 pub fn verify_archive_content(
@@ -35,30 +67,13 @@ pub fn verify_archive_content(
     owner: &Ed25519PublicKey,
     device: &Ed25519PublicKey,
 ) -> Result<(ArchiveManifest, ArchiveRoster)> {
-    let manifest = verify_archive_manifest(&bundle.manifest_jws, device)?;
-    if manifest.roster_digest != crate::compact_digest(&bundle.roster_jws) || owner == device {
+    let (manifest, roster) =
+        verify_archive_metadata(&bundle.manifest_jws, &bundle.roster_jws, owner, device)?;
+    if bundle.recipient_keys.len() != roster.recipients.len() {
         return Err(ProtocolError::BindingMismatch);
     }
-    let roster = verify_historical_archive_roster(&bundle.roster_jws, owner, manifest.created_at)?;
-    if manifest.device_id != roster.device_id
-        || manifest.scope != roster.scope
-        || manifest.kind != roster.kind
-        || bundle.recipient_keys.len() != roster.recipients.len()
-        || manifest.recipients.len() != roster.recipients.len()
-    {
-        return Err(ProtocolError::BindingMismatch);
-    }
-    for ((recipient, sealed), envelope) in roster
-        .recipients
-        .iter()
-        .zip(&manifest.recipients)
-        .zip(&bundle.recipient_keys)
-    {
-        if recipient.recipient_id != sealed.recipient_id
-            || recipient.recipient_id != envelope.recipient_id
-            || recipient.public_key == owner.to_bytes()?
-            || recipient.public_key == device.to_bytes()?
-        {
+    for (sealed, envelope) in manifest.recipients.iter().zip(&bundle.recipient_keys) {
+        if sealed.recipient_id != envelope.recipient_id {
             return Err(ProtocolError::BindingMismatch);
         }
         let key = decode_archive_bytes(&envelope.wrapped_key, 48)?;
@@ -278,4 +293,258 @@ pub fn verify_archive_manifest(
     let manifest = verify_pinned(compact, device, MANIFEST_TYPE)?;
     validate_archive_manifest(&manifest)?;
     Ok(manifest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Fixture {
+        owner: SigningKey,
+        device: SigningKey,
+        roster: ArchiveRoster,
+        manifest: ArchiveManifest,
+        bundle: EncryptedArchive,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let owner = SigningKey::generate();
+            let device = SigningKey::generate();
+            let roster = ArchiveRoster {
+                version: 1,
+                device_id: "device".into(),
+                scope: "placement".into(),
+                project_id: Some("project".into()),
+                kind: ArchiveKind::Logs,
+                policy_version: 1,
+                previous_policy_digest: None,
+                management_policy_digest: None,
+                recipients: vec![
+                    ArchiveRecipient {
+                        recipient_id: "reader-one".into(),
+                        user_id: "one".into(),
+                        public_key: [9; 32],
+                    },
+                    ArchiveRecipient {
+                        recipient_id: "reader-two".into(),
+                        user_id: "two".into(),
+                        public_key: [10; 32],
+                    },
+                ],
+                issued_at: 100,
+                expires_at: 200,
+            };
+            let roster_jws = sign_archive_roster(&roster, &owner).unwrap();
+            let ciphertext = [11; 32];
+            let wrapped_key = [12; 48];
+            let manifest = ArchiveManifest {
+                version: 1,
+                device_id: roster.device_id.clone(),
+                scope: roster.scope.clone(),
+                kind: roster.kind.clone(),
+                archive_id: "segment".into(),
+                sequence: 1,
+                previous_manifest_digest: None,
+                roster_digest: crate::compact_digest(&roster_jws),
+                created_at: 150,
+                nonce: [13; 24],
+                ciphertext_size: ciphertext.len() as u64,
+                ciphertext_digest: hash_archive_bytes(&ciphertext),
+                recipients: roster
+                    .recipients
+                    .iter()
+                    .map(|recipient| ArchiveWrappedKeyManifest {
+                        recipient_id: recipient.recipient_id.clone(),
+                        encapsulation: [14; 32],
+                        wrapped_key_digest: hash_archive_bytes(&wrapped_key),
+                    })
+                    .collect(),
+            };
+            let bundle = EncryptedArchive {
+                manifest_jws: sign_archive_manifest(&manifest, &device).unwrap(),
+                roster_jws,
+                ciphertext: URL_SAFE_NO_PAD.encode(ciphertext),
+                recipient_keys: roster
+                    .recipients
+                    .iter()
+                    .map(|recipient| ArchiveRecipientKey {
+                        recipient_id: recipient.recipient_id.clone(),
+                        wrapped_key: URL_SAFE_NO_PAD.encode(wrapped_key),
+                    })
+                    .collect(),
+            };
+            Self {
+                owner,
+                device,
+                roster,
+                manifest,
+                bundle,
+            }
+        }
+
+        fn verify_metadata(&self) -> Result<(ArchiveManifest, ArchiveRoster)> {
+            verify_archive_metadata(
+                &self.bundle.manifest_jws,
+                &self.bundle.roster_jws,
+                &self.owner.public_key(),
+                &self.device.public_key(),
+            )
+        }
+
+        fn sign_metadata(&mut self) {
+            self.bundle.roster_jws = sign_archive_roster(&self.roster, &self.owner).unwrap();
+            self.manifest.roster_digest = crate::compact_digest(&self.bundle.roster_jws);
+            self.bundle.manifest_jws = sign_archive_manifest(&self.manifest, &self.device).unwrap();
+        }
+    }
+
+    #[test]
+    fn metadata_authenticates_historical_roster_without_payload() {
+        let mut fixture = Fixture::new();
+        let expected = (fixture.manifest.clone(), fixture.roster.clone());
+        assert_eq!(fixture.verify_metadata().unwrap(), expected);
+        assert_eq!(
+            verify_archive_content(
+                &fixture.bundle,
+                &fixture.owner.public_key(),
+                &fixture.device.public_key(),
+            )
+            .unwrap(),
+            expected
+        );
+        fixture.bundle.ciphertext.clear();
+        fixture.bundle.recipient_keys.clear();
+        assert_eq!(fixture.verify_metadata().unwrap(), expected);
+        assert!(
+            verify_archive_content(
+                &fixture.bundle,
+                &fixture.owner.public_key(),
+                &fixture.device.public_key(),
+            )
+            .is_err()
+        );
+        fixture.manifest.created_at = fixture.roster.expires_at;
+        fixture.sign_metadata();
+        assert!(matches!(
+            fixture.verify_metadata(),
+            Err(ProtocolError::InvalidTime)
+        ));
+    }
+
+    #[test]
+    fn metadata_rejects_wrong_signers_and_substituted_rosters() {
+        let mut fixture = Fixture::new();
+        let other = SigningKey::generate().public_key();
+        assert!(
+            verify_archive_metadata(
+                &fixture.bundle.manifest_jws,
+                &fixture.bundle.roster_jws,
+                &other,
+                &fixture.device.public_key(),
+            )
+            .is_err()
+        );
+        assert!(
+            verify_archive_metadata(
+                &fixture.bundle.manifest_jws,
+                &fixture.bundle.roster_jws,
+                &fixture.owner.public_key(),
+                &other,
+            )
+            .is_err()
+        );
+        fixture.roster.recipients[0].user_id = "substituted-reader".into();
+        fixture.bundle.roster_jws = sign_archive_roster(&fixture.roster, &fixture.owner).unwrap();
+        assert!(matches!(
+            fixture.verify_metadata(),
+            Err(ProtocolError::BindingMismatch)
+        ));
+    }
+
+    #[test]
+    fn metadata_rejects_signed_manifest_rebinding() {
+        let fixture = Fixture::new();
+        let mut variants = Vec::new();
+        let mut changed = fixture.manifest.clone();
+        changed.device_id = "another-device".into();
+        variants.push(changed);
+        let mut changed = fixture.manifest.clone();
+        changed.scope = "another-placement".into();
+        variants.push(changed);
+        let mut changed = fixture.manifest.clone();
+        changed.kind = ArchiveKind::Metrics;
+        variants.push(changed);
+        let mut changed = fixture.manifest.clone();
+        changed.recipients.pop();
+        variants.push(changed);
+        let mut changed = fixture.manifest.clone();
+        changed.recipients.swap(0, 1);
+        variants.push(changed);
+        for manifest in variants {
+            let signed = sign_archive_manifest(&manifest, &fixture.device).unwrap();
+            assert!(matches!(
+                verify_archive_metadata(
+                    &signed,
+                    &fixture.bundle.roster_jws,
+                    &fixture.owner.public_key(),
+                    &fixture.device.public_key(),
+                ),
+                Err(ProtocolError::BindingMismatch)
+            ));
+        }
+    }
+
+    #[test]
+    fn metadata_keeps_signing_and_recipient_keys_separate() {
+        let mut fixture = Fixture::new();
+        for signing_key in [fixture.owner.public_key(), fixture.device.public_key()] {
+            fixture.roster.recipients[0].public_key = signing_key.to_bytes().unwrap();
+            fixture.sign_metadata();
+            assert!(matches!(
+                fixture.verify_metadata(),
+                Err(ProtocolError::BindingMismatch)
+            ));
+        }
+
+        let mut fixture = Fixture::new();
+        fixture.bundle.manifest_jws =
+            sign_archive_manifest(&fixture.manifest, &fixture.owner).unwrap();
+        assert!(matches!(
+            verify_archive_metadata(
+                &fixture.bundle.manifest_jws,
+                &fixture.bundle.roster_jws,
+                &fixture.owner.public_key(),
+                &fixture.owner.public_key(),
+            ),
+            Err(ProtocolError::BindingMismatch)
+        ));
+    }
+
+    #[test]
+    fn full_verification_still_rejects_payload_and_envelope_tampering() {
+        let fixture = Fixture::new();
+        let mut changed = fixture.bundle.clone();
+        changed.ciphertext = URL_SAFE_NO_PAD.encode([15; 32]);
+        let mut variants = vec![changed];
+        let mut changed = fixture.bundle.clone();
+        changed.recipient_keys[0].wrapped_key = URL_SAFE_NO_PAD.encode([16; 48]);
+        variants.push(changed);
+        let mut changed = fixture.bundle.clone();
+        changed.recipient_keys.swap(0, 1);
+        variants.push(changed);
+        let mut changed = fixture.bundle.clone();
+        changed.recipient_keys.pop();
+        variants.push(changed);
+        for bundle in variants {
+            assert!(matches!(
+                verify_archive_content(
+                    &bundle,
+                    &fixture.owner.public_key(),
+                    &fixture.device.public_key(),
+                ),
+                Err(ProtocolError::BindingMismatch)
+            ));
+        }
+    }
 }

@@ -85,6 +85,7 @@ jobs:
           backend-runtime-docker
           api-remote-catalog
           api-aws-catalog
+          api-aws-forecasting
           api-local-ml-catalog
           wasm-host
           api-runtime

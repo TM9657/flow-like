@@ -313,6 +313,54 @@ describe("board layout", () => {
 		);
 	});
 
+	test("on the phone's grid every story is drawn whole and clean, the insight story in two columns", () => {
+		const phone = createBoard(strings, "portrait");
+		const grid = layoutBoard(phone, { measure, fontFamily: "Inter" });
+		const column = (id: BoardNodeId) => grid.node(id).column;
+		expect(
+			phone.edges.filter(
+				(edge) => column(edge.source.node) >= column(edge.target.node),
+			),
+		).toEqual([]);
+		const stacked = grid.nodes.flatMap((a, i) =>
+			grid.nodes
+				.slice(i + 1)
+				.filter((b) => overlaps(a, b))
+				.map((b) => `${a.id} × ${b.id}`),
+		);
+		expect(stacked).toEqual([]);
+		// A phone draws only the running story, so only its own nodes may block it.
+		for (const route of Object.values(grid.routes)) {
+			const own = grid.nodes
+				.filter((n) => route.nodes.includes(n.id))
+				.map((n) => ({ id: n.id, rect: inset(n, 1) }));
+			const crossings = route.edges.flatMap((id) => {
+				const points = grid.edgePath(id);
+				return own
+					.filter((body) =>
+						points
+							.slice(1)
+							.some((p, i) => segmentHits(points[i], p, body.rect)),
+					)
+					.map((body) => `${route.id}: ${id} × ${body.id}`);
+			});
+			const blocked = route.threads.flatMap((id) => {
+				const thread = grid.threads.find((entry) => entry.id === id);
+				const anchor = grid.threadAnchor(id);
+				return own
+					.filter(
+						(body) =>
+							body.id !== thread?.node &&
+							segmentHits([anchor[0], grid.bounds.y], anchor, body.rect),
+					)
+					.map((body) => `${route.id}: ${id} × ${body.id}`);
+			});
+			expect([...crossings, ...blocked]).toEqual([]);
+		}
+		const insight = grid.routes.insight.nodes.map(column);
+		expect(Math.max(...insight) - Math.min(...insight)).toBe(1);
+	});
+
 	test("the pulse follows egui: sin fade, two samples of trail, gone at the end", () => {
 		const path = layout.edgePath("email-extract-exec");
 		const frame = pulseAt(path, 0.5);

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>Mistral Timestral 5M</title>
+  <rect width="64" height="64" rx="14" fill="#2b2008"/>
+  <path d="M20 39V25l6 7 6-12 6 12 6-7v14" fill="none" stroke="#ffc95b" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M17 46h13l7-5 10 2" fill="none" stroke="#fff8e3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="47" cy="43" r="3" fill="#fff8e3"/>
+  <path d="m45 16 3-4 3 4-3 4Z" fill="#ffc95b"/>
+</svg>

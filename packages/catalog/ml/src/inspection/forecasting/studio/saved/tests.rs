@@ -72,6 +72,7 @@ fn payload(name: &str, source: &str) -> CreateStudioForecast {
             params: json!({}),
             mapping: ForecastTableMapping {
                 timestamp: "time".into(),
+                timestamp_format: None,
                 series_id: None,
                 targets: vec!["target".into()],
                 past_covariates: vec![],
@@ -875,4 +876,22 @@ async fn invalid_snapshot_is_rejected_before_creating_storage() -> Result<()> {
     assert!(input_error_message(&error).is_some());
     assert!(connection.table_names().execute().await?.is_empty());
     Ok(())
+}
+
+#[test]
+fn saved_results_keep_normalized_timestamps_when_source_uses_an_explicit_format() {
+    use crate::inspection::forecasting::tables::ForecastTimestampFormat;
+    for format in [
+        ForecastTimestampFormat::Auto,
+        ForecastTimestampFormat::UnixSeconds,
+        ForecastTimestampFormat::DayFirst,
+    ] {
+        let mut snapshot = payload("Formatted dates", "history");
+        snapshot.request.mapping.timestamp_format = Some(format);
+        validation::payload(&snapshot).unwrap();
+        let decoded: CreateStudioForecast =
+            serde_json::from_value(serde_json::to_value(&snapshot).unwrap()).unwrap();
+        assert_eq!(decoded.request.mapping.timestamp_format, Some(format));
+        validation::payload(&decoded).unwrap();
+    }
 }

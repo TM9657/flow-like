@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>IBM Granite TinyTimeMixer R2</title>
+  <rect width="64" height="64" rx="14" fill="#102a2c"/>
+  <path d="m32 11 19 11v21L32 54 13 43V22Z" fill="none" stroke="#75d9d0" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m13 22 19 11 19-11M32 33v21" fill="none" stroke="#337d7a" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m17 37 8-10 8 13 8-14 6 7" fill="none" stroke="#e4fffa" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="47" cy="33" r="3" fill="#a7f3ce"/>
+</svg>

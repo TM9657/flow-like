@@ -1,10 +1,11 @@
-use super::{context, enabled, human_owner, management, repository};
+use super::{archive_payload, context, enabled, human_owner, management, repository};
 use crate::{
     db::{RetryPolicy, retry_transaction},
     error::ApiError,
     middleware::jwt::AppUser,
     state::AppState,
 };
+use archive_payload::StoredArchive;
 use axum::{
     Extension, Json, Router,
     extract::{Path, Query, State},
@@ -201,21 +202,33 @@ async fn upload(
         ));
     }
     let encoded = serde_json::to_string(&request.bundle)?;
-    if encoded.len() > 90 * 1024 {
+    if encoded.len() > archive_payload::MAX_ARCHIVE_BYTES {
         return Err(ApiError::bad_request("Archive exceeds the transfer limit"));
     }
     let digest = compact_digest(&request.bundle.manifest_jws);
     let response_digest = digest.clone();
     let response_id = manifest.archive_id.clone();
     let epoch = device.status.auth_epoch;
+    let limits = tier_limits(&state);
+    // Reject disabled plans before writing an object. The transaction below
+    // checks the tier again while holding the account's quota fence.
+    let tier = account_tier(&state.db, &device.status.owner_id).await?;
+    if tier_limit(&limits, &tier).is_none() {
+        return Err(storage_refused(
+            "ARCHIVE_TIER_WITHOUT_HISTORY",
+            "This account tier does not store device telemetry",
+        ));
+    }
+    let payload =
+        archive_payload::stage(&state.content_bucket, &manifest, &request.bundle, encoded).await?;
     let stored = retain_verified(
         &state.db,
         state.db_dialect,
-        tier_limits(&state),
+        limits,
         id,
         epoch,
         manifest,
-        encoded,
+        payload,
         digest,
     )
     .await?;
@@ -237,11 +250,11 @@ async fn retain_verified(
     id: String,
     epoch: u64,
     manifest: ArchiveManifest,
-    encoded: String,
+    payload: StoredArchive,
     digest: String,
 ) -> Result<bool, ApiError> {
     retry_transaction(db,dialect,None,&RetryPolicy::default(),move|tx|{
-        let id=id.clone();let manifest=manifest.clone();let encoded=encoded.clone();let digest=digest.clone();let limits=limits.clone();
+        let id=id.clone();let manifest=manifest.clone();let payload=payload.clone();let digest=digest.clone();let limits=limits.clone();
         Box::pin(async move{
             let device=repository::lock_active_device(tx,&id,epoch).await?;
             let owner=device.status.owner_id;
@@ -264,8 +277,8 @@ async fn retain_verified(
             if manifest.sequence!=sequence+1 || manifest.previous_manifest_digest!=previous{return Err(ApiError::conflict("Archive sequence does not extend the retained-history chain"));}
             let expires=manifest.created_at.saturating_add(retention_seconds as i64);
             if expires>now {
-                if used_bytes(tx,&owner,now).await?.saturating_add(encoded.len() as u64)>max_bytes{return Err(storage_refused("ARCHIVE_QUOTA_REACHED","Device telemetry storage quota reached"));}
-                tx.execute_raw(sql(r#"INSERT INTO "DeviceArchive"("deviceId","archiveId","ownerId",scope,kind,sequence,digest,bundle,"sizeBytes","createdAt","expiresAt") VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)"#,[id.clone().into(),manifest.archive_id.clone().into(),owner.into(),scope.clone().into(),kind.into(),(manifest.sequence as i64).into(),digest.clone().into(),encoded.clone().into(),(encoded.len() as i64).into(),manifest.created_at.into(),expires.into()])).await?;
+                if used_bytes(tx,&owner,now).await?.saturating_add(payload.size_bytes as u64)>max_bytes{return Err(storage_refused("ARCHIVE_QUOTA_REACHED","Device telemetry storage quota reached"));}
+                tx.execute_raw(sql(r#"INSERT INTO "DeviceArchive"("deviceId","archiveId","ownerId",scope,kind,sequence,digest,bundle,"sizeBytes","createdAt","expiresAt","payloadRef","manifestJws","rosterJws") VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)"#,[id.clone().into(),manifest.archive_id.clone().into(),owner.into(),scope.clone().into(),kind.into(),(manifest.sequence as i64).into(),digest.clone().into(),payload.bundle.into(),payload.size_bytes.into(),manifest.created_at.into(),expires.into(),payload.payload_ref.into(),payload.manifest_jws.into(),payload.roster_jws.into()])).await?;
             }
             tx.execute_raw(sql(r#"INSERT INTO "DeviceArchiveHead"("deviceId",scope,kind,sequence,digest) VALUES($1,$2,$3,$4,$5) ON CONFLICT("deviceId",scope,kind) DO UPDATE SET sequence=excluded.sequence,digest=excluded.digest"#,[id.into(),scope.into(),kind.into(),(manifest.sequence as i64).into(),digest.into()])).await?;
             Ok(expires>now)
@@ -360,7 +373,11 @@ enum ArchiveSelection {
 }
 
 struct VerifiedArchive {
-    bundle: EncryptedArchive,
+    bundle: Option<EncryptedArchive>,
+    payload_ref: Option<String>,
+    size_bytes: i64,
+    manifest_jws: String,
+    roster_jws: String,
     manifest: ArchiveManifest,
     roster: ArchiveRoster,
     expires_at: i64,
@@ -427,14 +444,14 @@ async fn load_reader_page(
             let now = chrono::Utc::now().timestamp();
             let (rows, mut next) = match &selection {
                 ArchiveSelection::One(archive) => (tx.query_all_raw(sql(
-                    r#"SELECT bundle,"expiresAt",sequence FROM "DeviceArchive" WHERE "deviceId"=$1 AND "archiveId"=$2 AND "expiresAt">$3"#,
+                    r#"SELECT bundle,"payloadRef","manifestJws","rosterJws","sizeBytes",digest,"expiresAt",sequence,"archiveId",scope,kind FROM "DeviceArchive" WHERE "deviceId"=$1 AND "archiveId"=$2 AND "expiresAt">$3"#,
                     [id.clone().into(), archive.clone().into(), now.into()],
                 )).await?, 0),
                 ArchiveSelection::Page(query) => {
                     validate_management_id(&query.scope).map_err(invalid)?;
                     let after = i64::try_from(query.after).map_err(invalid)?;
                     (tx.query_all_raw(sql(
-                        r#"SELECT bundle,"expiresAt",sequence FROM "DeviceArchive" WHERE "deviceId"=$1 AND scope=$2 AND kind=$3 AND sequence>$4 AND "expiresAt">$5 ORDER BY sequence LIMIT 32"#,
+                        r#"SELECT bundle,"payloadRef","manifestJws","rosterJws","sizeBytes",digest,"expiresAt",sequence,"archiveId",scope,kind FROM "DeviceArchive" WHERE "deviceId"=$1 AND scope=$2 AND kind=$3 AND sequence>$4 AND "expiresAt">$5 ORDER BY sequence LIMIT 32"#,
                         [id.clone().into(), query.scope.clone().into(), kind(&query.kind).into(), after.into(), now.into()],
                     )).await?, query.after)
                 }
@@ -445,15 +462,34 @@ async fn load_reader_page(
             for row in rows {
                 let sequence = u64::try_from(row.try_get::<i64>("", "sequence")?).map_err(invalid)?;
                 next = sequence;
-                let bundle: EncryptedArchive = serde_json::from_str(&row.try_get::<String>("", "bundle")?)?;
-                let (manifest, roster) = verify_archive_content(&bundle, &owner_key, &device.status.identity.telemetry_key)
-                    .map_err(|_| ApiError::internal("Retained archive signature or digest failed"))?;
-                let bound = manifest.device_id == id && manifest.sequence == sequence && match &selection {
-                    ArchiveSelection::One(archive) => &manifest.archive_id == archive,
-                    ArchiveSelection::Page(query) => manifest.scope == query.scope && manifest.kind == query.kind,
+                let payload_ref = row.try_get::<Option<String>>("", "payloadRef")?;
+                let (bundle, manifest_jws, roster_jws, manifest, roster) = match (
+                    row.try_get::<Option<String>>("", "manifestJws")?,
+                    row.try_get::<Option<String>>("", "rosterJws")?,
+                ) {
+                    (Some(manifest_jws), Some(roster_jws)) if payload_ref.is_some() => {
+                        let (manifest, roster) = verify_archive_metadata(&manifest_jws, &roster_jws, &owner_key, &device.status.identity.telemetry_key)
+                            .map_err(|_| ApiError::internal("Retained archive metadata signature failed"))?;
+                        (None, manifest_jws, roster_jws, manifest, roster)
+                    }
+                    (None, None) if payload_ref.is_none() => {
+                        let encoded = row.try_get::<Option<String>>("", "bundle")?
+                            .ok_or_else(|| ApiError::internal("Retained archive content is missing"))?;
+                        let bundle: EncryptedArchive = serde_json::from_str(&encoded)?;
+                        let (manifest, roster) = verify_archive_content(&bundle, &owner_key, &device.status.identity.telemetry_key)
+                            .map_err(|_| ApiError::internal("Retained archive signature or digest failed"))?;
+                        let manifest_jws = bundle.manifest_jws.clone();
+                        let roster_jws = bundle.roster_jws.clone();
+                        (Some(bundle), manifest_jws, roster_jws, manifest, roster)
+                    }
+                    _ => return Err(ApiError::internal("Retained archive storage metadata is incomplete")),
                 };
-                if !bound { return Err(ApiError::internal("Retained archive index binding failed")); }
-                archives.push(VerifiedArchive { bundle, manifest, roster, expires_at: row.try_get("", "expiresAt")? });
+                let bound = manifest.device_id == id && manifest.sequence == sequence
+                    && manifest.archive_id == row.try_get::<String>("", "archiveId")?
+                    && manifest.scope == row.try_get::<String>("", "scope")?
+                    && kind(&manifest.kind) == row.try_get::<String>("", "kind")?;
+                if !bound || compact_digest(&manifest_jws) != row.try_get::<String>("", "digest")? { return Err(ApiError::internal("Retained archive index binding failed")); }
+                archives.push(VerifiedArchive { bundle, payload_ref, size_bytes: row.try_get("", "sizeBytes")?, manifest_jws, roster_jws, manifest, roster, expires_at: row.try_get("", "expiresAt")? });
             }
             let mut page = ArchivePage { archives, next };
             filter_reader_page(&mut page, &user, &device.status.owner_id, policy.as_ref(), one)?;
@@ -487,7 +523,7 @@ async fn list(
         ArchiveSelection::Page(query),
     )
     .await?;
-    let archives: Vec<_> = page.archives.into_iter().map(|archive| json!({"archive_id":archive.manifest.archive_id,"sequence":archive.manifest.sequence,"created_at":archive.manifest.created_at,"expires_at":archive.expires_at,"manifest_jws":archive.bundle.manifest_jws,"roster_jws":archive.bundle.roster_jws})).collect();
+    let archives: Vec<_> = page.archives.into_iter().map(|archive| json!({"archive_id":archive.manifest.archive_id,"sequence":archive.manifest.sequence,"created_at":archive.manifest.created_at,"expires_at":archive.expires_at,"manifest_jws":archive.manifest_jws,"roster_jws":archive.roster_jws})).collect();
     Ok(Json(json!({"archives":archives,"next":page.next})))
 }
 
@@ -501,17 +537,79 @@ async fn read(
     let enrollment = super::repository(&context(&state))
         .enrollment(&device.receipt.enrollment_id)
         .await?;
+    Ok(Json(
+        read_retained(
+            &state.db,
+            state.db_dialect,
+            &state.content_bucket,
+            &device,
+            user,
+            enrollment.manifest.owner_invitation_key,
+            archive,
+        )
+        .await?,
+    ))
+}
+
+async fn read_retained(
+    db: &sea_orm::DatabaseConnection,
+    dialect: crate::db::DbDialect,
+    store: &flow_like_storage::files::store::FlowLikeStore,
+    device: &repository::Device,
+    user: String,
+    owner_key: Ed25519PublicKey,
+    archive: String,
+) -> Result<EncryptedArchive, ApiError> {
+    let id = device.status.device_id.clone();
     let mut page = load_reader_page(
-        &state.db,
-        state.db_dialect,
+        db,
+        dialect,
+        id.clone(),
+        device.status.auth_epoch,
+        user.clone(),
+        owner_key.clone(),
+        ArchiveSelection::One(archive.clone()),
+    )
+    .await?;
+    let retained = page.archives.pop().ok_or(ApiError::NOT_FOUND)?;
+    if let Some(bundle) = retained.bundle {
+        return Ok(bundle);
+    }
+    let reference = retained
+        .payload_ref
+        .as_deref()
+        .ok_or_else(|| ApiError::internal("Retained archive content reference is missing"))?;
+    let bundle =
+        archive_payload::load(store, &retained.manifest, reference, retained.size_bytes).await?;
+    verify_archive_content(&bundle, &owner_key, &device.status.identity.telemetry_key)
+        .map_err(|_| ApiError::internal("Retained archive signature or digest failed"))?;
+    if bundle.manifest_jws != retained.manifest_jws || bundle.roster_jws != retained.roster_jws {
+        return Err(ApiError::internal(
+            "Retained archive content differs from its metadata",
+        ));
+    }
+    // Object downloads happen outside the transaction. Fence revocation and
+    // expiration again before serving bytes obtained during a slow download.
+    let mut current = load_reader_page(
+        db,
+        dialect,
         id,
         device.status.auth_epoch,
         user,
-        enrollment.manifest.owner_invitation_key,
+        owner_key,
         ArchiveSelection::One(archive),
     )
     .await?;
-    Ok(Json(page.archives.pop().ok_or(ApiError::NOT_FOUND)?.bundle))
+    let current = current.archives.pop().ok_or(ApiError::NOT_FOUND)?;
+    if current.payload_ref.as_deref() != Some(reference)
+        || current.manifest_jws != bundle.manifest_jws
+        || current.roster_jws != bundle.roster_jws
+    {
+        return Err(ApiError::internal(
+            "Retained archive changed during download",
+        ));
+    }
+    Ok(bundle)
 }
 
 /// Bounded maintenance is safe to run concurrently on API replicas.
@@ -756,6 +854,9 @@ mod tests {
                 include_str!(
                     "../../prisma/migrations/20261002120000_device_schedules/migration.sql"
                 ),
+                include_str!(
+                    "../../prisma/migrations/20261019120000_device_archive_payload_store/migration.sql"
+                ),
             ] {
                 for statement in migration.split(';').filter(|part| !part.trim().is_empty()) {
                     db.execute_unprepared(statement).await.unwrap();
@@ -773,6 +874,363 @@ mod tests {
                 .unwrap();
             self.admin.close().await.unwrap();
         }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires FLOW_LIKE_DEVICE_TEST_DATABASE_URL pointing to a disposable PostgreSQL server"]
+    async fn offloaded_and_legacy_archives_share_reads_listing_and_quota() {
+        use flow_like_storage::{
+            files::store::FlowLikeStore,
+            object_store::{ObjectStoreExt, memory::InMemory, path::Path},
+        };
+        use std::sync::Arc;
+
+        let scratch = Scratch::with_accounts("('owner','PREMIUM')").await;
+        let db = scratch.db.clone();
+        let telemetry = device(&db, "shared").await;
+        let owner = SigningKey::generate();
+        let store = FlowLikeStore::Memory(Arc::new(InMemory::new()));
+        let bundle = signed_archive(&owner, &telemetry);
+        let (manifest, _) =
+            verify_archive_content(&bundle, &owner.public_key(), &telemetry.public_key()).unwrap();
+        let encoded = serde_json::to_string(&bundle).unwrap();
+        let digest = compact_digest(&bundle.manifest_jws);
+        let payload = archive_payload::stage(&store, &manifest, &bundle, encoded.clone())
+            .await
+            .unwrap();
+        let reference = payload.payload_ref.clone().unwrap();
+        assert!(
+            retain_verified(
+                &db,
+                DbDialect::Postgres,
+                limits(),
+                "shared".into(),
+                1,
+                manifest.clone(),
+                payload.clone(),
+                digest.clone(),
+            )
+            .await
+            .unwrap()
+        );
+        let row = db
+            .query_one_raw(sql(
+                r#"SELECT bundle,"payloadRef","manifestJws","rosterJws","sizeBytes" FROM "DeviceArchive" WHERE "deviceId"='shared' AND "archiveId"='segment'"#,
+                [],
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            row.try_get::<Option<String>>("", "bundle")
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(row.try_get::<String>("", "payloadRef").unwrap(), reference);
+        assert_eq!(
+            row.try_get::<String>("", "manifestJws").unwrap(),
+            bundle.manifest_jws
+        );
+        assert_eq!(
+            row.try_get::<String>("", "rosterJws").unwrap(),
+            bundle.roster_jws
+        );
+        assert_eq!(
+            row.try_get::<i64>("", "sizeBytes").unwrap(),
+            encoded.len() as i64
+        );
+
+        store
+            .as_generic()
+            .delete(&Path::from(reference.as_str()))
+            .await
+            .unwrap();
+        let page = download(&db, &owner, "owner", false).await.unwrap();
+        assert_eq!(page.next, 1);
+        assert_eq!(page.archives.len(), 1);
+        assert!(page.archives[0].bundle.is_none());
+        assert_eq!(page.archives[0].manifest_jws, bundle.manifest_jws);
+        let registered = repository::current_device(&db, "shared").await.unwrap();
+        assert_eq!(
+            read_retained(
+                &db,
+                DbDialect::Postgres,
+                &store,
+                &registered,
+                "owner".into(),
+                owner.public_key(),
+                "segment".into(),
+            )
+            .await
+            .unwrap_err()
+            .status(),
+            axum::http::StatusCode::SERVICE_UNAVAILABLE
+        );
+        let restored = archive_payload::stage(&store, &manifest, &bundle, encoded.clone())
+            .await
+            .unwrap();
+        assert_eq!(restored.payload_ref.as_deref(), Some(reference.as_str()));
+        let downloaded = read_retained(
+            &db,
+            DbDialect::Postgres,
+            &store,
+            &registered,
+            "owner".into(),
+            owner.public_key(),
+            "segment".into(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(serde_json::to_string(&downloaded).unwrap(), encoded);
+
+        let mut legacy_manifest = manifest.clone();
+        legacy_manifest.archive_id = "legacy".into();
+        legacy_manifest.sequence = 2;
+        legacy_manifest.previous_manifest_digest = Some(digest);
+        let mut legacy_bundle = bundle.clone();
+        legacy_bundle.manifest_jws = sign_archive_manifest(&legacy_manifest, &telemetry).unwrap();
+        let legacy_encoded = serde_json::to_string(&legacy_bundle).unwrap();
+        let legacy_digest = compact_digest(&legacy_bundle.manifest_jws);
+        let total = (encoded.len() + legacy_encoded.len()) as u64;
+        let exact_quota: TierLimits = [("PREMIUM".into(), (total, 3600))].into();
+        assert!(
+            retain_verified(
+                &db,
+                DbDialect::Postgres,
+                exact_quota.clone(),
+                "shared".into(),
+                1,
+                legacy_manifest.clone(),
+                StoredArchive::inline(legacy_encoded.clone()),
+                legacy_digest.clone(),
+            )
+            .await
+            .unwrap()
+        );
+        let legacy_read = read_retained(
+            &db,
+            DbDialect::Postgres,
+            &FlowLikeStore::Memory(Arc::new(InMemory::new())),
+            &registered,
+            "owner".into(),
+            owner.public_key(),
+            "legacy".into(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(serde_json::to_string(&legacy_read).unwrap(), legacy_encoded);
+        let page = download(&db, &owner, "owner", false).await.unwrap();
+        assert_eq!(page.next, 2);
+        assert_eq!(page.archives.len(), 2);
+        assert!(page.archives[0].bundle.is_none());
+        assert!(page.archives[1].bundle.is_some());
+        let usage = usage(&db, &exact_quota, "owner", chrono::Utc::now().timestamp())
+            .await
+            .unwrap();
+        assert_eq!(usage.used_bytes, total);
+        assert_eq!(usage.devices[0].segments, 2);
+
+        // A retry consumes no extra quota, while the next segment still needs room.
+        assert!(
+            retain_verified(
+                &db,
+                DbDialect::Postgres,
+                exact_quota.clone(),
+                "shared".into(),
+                1,
+                manifest,
+                payload.clone(),
+                compact_digest(&bundle.manifest_jws),
+            )
+            .await
+            .unwrap()
+        );
+        let next = ArchiveManifest {
+            archive_id: "next".into(),
+            sequence: 3,
+            previous_manifest_digest: Some(legacy_digest),
+            ..legacy_manifest
+        };
+        let refused = retain_verified(
+            &db,
+            DbDialect::Postgres,
+            exact_quota,
+            "shared".into(),
+            1,
+            next,
+            payload,
+            "next-digest".into(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(refused.public_code(), "ARCHIVE_QUOTA_REACHED");
+        assert_eq!(
+            used_bytes(&db, "owner", chrono::Utc::now().timestamp())
+                .await
+                .unwrap(),
+            total
+        );
+        scratch.discard().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires FLOW_LIKE_DEVICE_TEST_DATABASE_URL pointing to a disposable PostgreSQL server"]
+    async fn offloaded_download_rechecks_grants_after_object_storage_waits() {
+        use flow_like_storage::{files::store::FlowLikeStore, object_store as objects};
+        use futures::stream::BoxStream;
+        use std::sync::Arc;
+        use tokio::sync::Notify;
+
+        #[derive(Debug)]
+        struct PausedRead {
+            inner: Arc<dyn objects::ObjectStore>,
+            started: Arc<Notify>,
+            release: Arc<Notify>,
+        }
+        impl std::fmt::Display for PausedRead {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("PausedRead")
+            }
+        }
+        #[async_trait::async_trait]
+        impl objects::ObjectStore for PausedRead {
+            async fn put_opts(
+                &self,
+                path: &objects::path::Path,
+                payload: objects::PutPayload,
+                opts: objects::PutOptions,
+            ) -> objects::Result<objects::PutResult> {
+                self.inner.put_opts(path, payload, opts).await
+            }
+            async fn put_multipart_opts(
+                &self,
+                path: &objects::path::Path,
+                opts: objects::PutMultipartOptions,
+            ) -> objects::Result<Box<dyn objects::MultipartUpload>> {
+                self.inner.put_multipart_opts(path, opts).await
+            }
+            async fn get_opts(
+                &self,
+                path: &objects::path::Path,
+                opts: objects::GetOptions,
+            ) -> objects::Result<objects::GetResult> {
+                let result = self.inner.get_opts(path, opts).await?;
+                self.started.notify_one();
+                self.release.notified().await;
+                Ok(result)
+            }
+            fn delete_stream(
+                &self,
+                paths: BoxStream<'static, objects::Result<objects::path::Path>>,
+            ) -> BoxStream<'static, objects::Result<objects::path::Path>> {
+                self.inner.delete_stream(paths)
+            }
+            fn list(
+                &self,
+                prefix: Option<&objects::path::Path>,
+            ) -> BoxStream<'static, objects::Result<objects::ObjectMeta>> {
+                self.inner.list(prefix)
+            }
+            async fn list_with_delimiter(
+                &self,
+                prefix: Option<&objects::path::Path>,
+            ) -> objects::Result<objects::ListResult> {
+                self.inner.list_with_delimiter(prefix).await
+            }
+            async fn copy_opts(
+                &self,
+                from: &objects::path::Path,
+                to: &objects::path::Path,
+                opts: objects::CopyOptions,
+            ) -> objects::Result<()> {
+                self.inner.copy_opts(from, to, opts).await
+            }
+        }
+
+        let scratch = Scratch::with_accounts("('owner','PREMIUM'),('reader','FREE')").await;
+        let db = scratch.db.clone();
+        let telemetry = device(&db, "shared").await;
+        let owner = SigningKey::generate();
+        let now = chrono::Utc::now().timestamp();
+        let mut policy = ManagementPolicy {
+            version: 1,
+            device_id: "shared".into(),
+            policy_version: 1,
+            previous_policy_digest: None,
+            grants: vec![ManagementGrant {
+                grant_id: "reader".into(),
+                user_id: "reader".into(),
+                controller_key: SigningKey::generate().public_key(),
+                scope: ManagementScope::Device,
+                capabilities: vec![ManagementCapability::Logs],
+                expires_at: now + 600,
+                group_id: None,
+                group_version: None,
+            }],
+            issued_at: now - 1,
+            expires_at: now + 600,
+        };
+        let first_policy = insert_policy(&db, &policy, &owner).await;
+        let store = FlowLikeStore::Memory(Arc::new(objects::memory::InMemory::new()));
+        let bundle = signed_archive(&owner, &telemetry);
+        let (manifest, _) =
+            verify_archive_content(&bundle, &owner.public_key(), &telemetry.public_key()).unwrap();
+        let payload = archive_payload::stage(
+            &store,
+            &manifest,
+            &bundle,
+            serde_json::to_string(&bundle).unwrap(),
+        )
+        .await
+        .unwrap();
+        retain_verified(
+            &db,
+            DbDialect::Postgres,
+            limits(),
+            "shared".into(),
+            1,
+            manifest,
+            payload,
+            compact_digest(&bundle.manifest_jws),
+        )
+        .await
+        .unwrap();
+        let started = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let delayed = FlowLikeStore::Other(Arc::new(PausedRead {
+            inner: store.as_generic(),
+            started: started.clone(),
+            release: release.clone(),
+        }));
+        let registered = repository::current_device(&db, "shared").await.unwrap();
+        let mut read = Box::pin(read_retained(
+            &db,
+            DbDialect::Postgres,
+            &delayed,
+            &registered,
+            "reader".into(),
+            owner.public_key(),
+            "segment".into(),
+        ));
+        tokio::select! {
+            _ = started.notified() => {}
+            result = &mut read => panic!("download finished before the storage wait: {result:?}"),
+        }
+        let change = db.begin().await.unwrap();
+        repository::lock_active_device(&change, "shared", 1)
+            .await
+            .unwrap();
+        policy.policy_version = 2;
+        policy.previous_policy_digest = Some(compact_digest(&first_policy));
+        policy.grants[0].capabilities = vec![ManagementCapability::Status];
+        insert_policy(&change, &policy, &owner).await;
+        change.commit().await.unwrap();
+        release.notify_one();
+        assert_eq!(
+            read.await.unwrap_err().status(),
+            axum::http::StatusCode::FORBIDDEN
+        );
+        scratch.discard().await;
     }
 
     #[tokio::test]
@@ -820,7 +1278,7 @@ mod tests {
             "shared".into(),
             1,
             manifest,
-            serde_json::to_string(&bundle).unwrap(),
+            StoredArchive::inline(serde_json::to_string(&bundle).unwrap()),
             compact_digest(&bundle.manifest_jws),
         )
         .await
@@ -970,7 +1428,7 @@ mod tests {
             manifest.device_id.clone(),
             1,
             manifest,
-            "x".repeat(60000),
+            StoredArchive::inline("x".repeat(60000)),
             digest.into(),
         )
         .await
@@ -1109,7 +1567,7 @@ mod tests {
                 manifest.device_id.clone(),
                 1,
                 manifest,
-                "x".repeat(60_000),
+                StoredArchive::inline("x".repeat(60_000)),
                 digest,
             )
         };

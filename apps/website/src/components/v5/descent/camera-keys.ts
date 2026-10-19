@@ -5,22 +5,23 @@ import { TIMELINE } from "./shared";
 /**
  * The camera never leaves the light side of the floor. It rests inside the
  * window arc, then pulls back and rises a little while the floor turns to
- * glass, until the whole arc and the board beneath it are in view; from there
- * it holds while the layer comes alive and the copy settles.
+ * glass and the board fades up, until the whole arc and the board beneath it
+ * are in view; from there it holds while the layer comes alive and the copy
+ * settles.
  */
 export const cameraKeys: Record<LayoutKind, readonly CameraKey[]> = {
 	portrait: [
 		{ p: 0, pos: [0, 1.9, 10.4], at: [0, 1.85, 0], fov: 46 },
 		{ p: 0.06, pos: [0, 1.95, 10.45], at: [0, 1.78, 0.05], fov: 46 },
 		{ p: TIMELINE.rest, pos: [0, 2, 10.55], at: [0, 1.72, 0.08], fov: 46 },
-		{ p: TIMELINE.glass[1], pos: [0, 2.9, 16.5], at: [0, 0.35, 0], fov: 46 },
+		{ p: TIMELINE.pull[1], pos: [0, 2.9, 16.5], at: [0, 0.35, 0], fov: 46 },
 		{ p: 1, pos: [0, 2.9, 16.5], at: [0, 0.35, 0], fov: 46 },
 	],
 	landscape: [
 		{ p: 0, pos: [0, 2, 12.4], at: [0, 1.16, 0.4], fov: 36 },
 		{ p: 0.06, pos: [0, 2.07, 12.5], at: [0, 1.09, 0.45], fov: 36 },
 		{ p: TIMELINE.rest, pos: [0, 2.13, 12.68], at: [0, 1.03, 0.5], fov: 36 },
-		{ p: TIMELINE.glass[1], pos: [0, 3, 28], at: [0, 0.1, 0], fov: 36 },
+		{ p: TIMELINE.pull[1], pos: [0, 3, 28], at: [0, 0.1, 0], fov: 36 },
 		{ p: 1, pos: [0, 3, 28], at: [0, 0.1, 0], fov: 36 },
 	],
 };

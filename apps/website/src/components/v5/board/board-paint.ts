@@ -62,7 +62,7 @@ export interface BoardView {
  * supports a page rather than being worked on: unset, it dims like egui.
  */
 export interface BoardEmphasis {
-	/** Opacity of every node and wire off the active route (egui dims nodes to 0.45 and keeps wires). */
+	/** Opacity of every node and wire off the active route (egui dims nodes to 0.45 and keeps wires); 0 leaves them out. */
 	readonly inactive: number;
 	/** Opacity of all titles and labels, so text reads as texture rather than copy. */
 	readonly text: number;
@@ -762,6 +762,20 @@ function edgeLook(edge: PlacedEdge, state: BoardPaintState): EdgeLook {
 const nodeActive = (node: PlacedNode, state: BoardPaintState) =>
 	state.activeNodes ? state.activeNodes.has(node.id) : null;
 
+/** One node, card to pins; a node faded out entirely is not painted. */
+function paintNode(
+	ctx: BoardContext,
+	f: NodeFrame,
+	palette: BoardPalette,
+	family: string,
+) {
+	if (f.opacity <= 0) return;
+	paintCard(ctx, f, palette);
+	paintHeader(ctx, f, palette);
+	paintTitle(ctx, f, family);
+	paintPins(ctx, f, palette, family);
+}
+
 /** Paints the board like the product's egui canvas: every wire first, then every node on top. */
 export function paintBoard(
 	ctx: BoardContext,
@@ -785,10 +799,7 @@ export function paintBoard(
 	for (const node of layout.nodes) {
 		const active = nodeActive(node, state);
 		const f = nodeFrame(node, view, grid, palette, active, emphasis);
-		paintCard(ctx, f, palette);
-		paintHeader(ctx, f, palette);
-		paintTitle(ctx, f, layout.fontFamily);
-		paintPins(ctx, f, palette, layout.fontFamily);
+		paintNode(ctx, f, palette, layout.fontFamily);
 	}
 	ctx.restore();
 }

@@ -1,0 +1,67 @@
+---
+title: "From CAD models to video cuts, keep the work in Flow-Like"
+description: "Meet the new Craft browsers and editors: open CAD models, cut video, edit PowerPoint decks and Word documents, and connect the result to your workflows."
+date: 2026-10-19
+tags: ["craft", "editors", "cad", "video", "documents", "storage"]
+cover: "/images/craft-editors-hero.webp"
+draft: false
+---
+
+An inspection recording lands in your app, but the useful evidence occupies ten seconds of a much longer video. You need to find that moment, cut the clip, and save it with the job.
+
+The new **Craft browsers and editors** put those controls inside Flow-Like. They also open a supplier's CAD model, let you update a PowerPoint deck, and bring Word documents into the same workspace. Start from the app's shared **Storage** view. The editors run in the browser on web and desktop, and save through the app's existing storage connection.
+
+Your files can now be part of the working surface of an app, with a person making the final adjustment and a workflow deciding what happens next.
+
+## Open the model while the job is still in front of you
+
+**Flows CAD** gives engineering files a place in the same workspace as the process around them. It uses SolidCraft for 3D models and 2D sketches, with CADCraft handling DXF drawings.
+
+Bring in **STEP, IGES, STL, OBJ, 3MF, GLB, or glTF** files to inspect the model. Switch to **Edit** to work with sketches and modeling tools. You can draw a profile and extrude it into a solid, cut material away, or round an edge with a fillet. The editor also supports dimensions and constraints for defining how a sketch should behave.
+
+Saving an imported model creates a `.solidcraft` project, keeping the modeling edits together and leaving the original supplier file available. The incoming STEP file remains the reference; your working project carries the changes. Keep both beside the quotation or inspection results the app uses. Existing DXF drawings open in their own drawing editor and save as DXF.
+
+## Cut the clip where you found it
+
+**Flows Video**, powered by FilmCraft, opens supported media in a timeline. Split a clip at the playhead, trim its edges, or move clips to change the sequence. Set in and out points to remove a range; ripple deletion closes the resulting gap. You can also add subtitles, with the text rendered into the saved video at its timeline positions.
+
+Preview a recording from Storage, choose **Edit**, and make the cut. Supported inputs include **MP4, MOV, WebM, MKV, and AVI**. The video save path produces **MP4**; native `.fcproj` files preserve a video project instead.
+
+Import and export depend on the browser's available codecs. The editor reports an error when the required decoding or encoding path is unavailable.
+
+Once a repeatable edit belongs in automation, the [video processing nodes](/blog/video-nodes/) handle operations such as trimming, transcoding, subtitles, and packaging. Use the editor to make a visual decision; use the workflow to apply a defined operation to the next recording.
+
+## PowerPoint, Word, and the files around them
+
+CAD and video are part of a wider set of tools. The same Storage experience now covers documents, presentations, spreadsheets, and creative assets.
+
+| Work on | Open with | Formats to start with |
+| --- | --- | --- |
+| Word documents | **Flows Word** | DOCX |
+| PowerPoint decks | **Flows Slides** | PPTX; POTX and PPSX save as PPTX |
+| PDFs | **Flows PDF** | PDF, with browser reading and a separate edit mode |
+| Spreadsheets | **Flows Sheets** | XLSX, XLSM, CSV, TSV; XLS, XLSB, and ODS import to XLSX |
+| Vector artwork | **Flows Vector** | SVG, SVGZ, PDF-compatible AI, EPS, EMF, and WMF |
+| Photos and layered images | **Flows Photo** | PNG, JPEG, TIFF, PSD, PSB, and OpenRaster |
+| Audio | **Flows Audio** | WAV, AIFF, FLAC, MIDI; compressed audio such as MP3 converts to WAV |
+| Page layouts | **Flows Design** | IDML and DesignCraft |
+
+The office formats here are **DOCX and PPTX**. Legacy `.doc` and `.ppt` files need conversion before they can open in these editors. The [storage guide](https://docs.flow-like.com/apps/storage/#view-and-edit-files) lists the supported families, import behavior, and file size limits.
+
+## Preview first, save deliberately
+
+Selecting a PDF, common image, audio file, or video opens its inline preview beside the file list. Reading a PDF or playing a recording does not require entering the full editing workspace. Choose **Edit** to load the editor when your role allows writing files.
+
+**Save** updates the selected file in its current folder. When an editor imports a format but saves a different one, the button says so, for example **Save as .xlsx**. That action creates a distinctly named file beside the source. Further saves update the converted file while that editor stays open. Closing an editor with unsaved changes prompts you before discarding the draft.
+
+Editing is experimental. Complex formatting, layers, animations, or other unsupported features can change on save, and import warnings appear above the editor. Review important outputs in their original application before sharing them. Animated images currently open a single frame and save as PhotoCraft projects.
+
+## Put an editor inside your own app
+
+These tools also fit into the apps you build. Add a **File Preview** component for an existing file, or a **File Editor** component to open a file or create a new document. Choose the editor and attach a **Save** workflow.
+
+For a page component, saving exports the draft to temporary backend storage and passes its file metadata to that workflow. Your workflow chooses the permanent destination and the next action. You could save a reviewed document to the app's files, create a review record, or send a finished asset into another processing step. The temporary upload alone does not make that storage decision for you.
+
+An agent can work in the open editor too. **Register Editor MCP Tools** connects an agent to the editor's available tools, including the current unsaved draft. Target the page component directly or use **Agent target** from the editor toolbar. The flow runs in the same window, and **Save** remains the step that persists the changes. The [editor integration reference](https://docs.flow-like.com/reference/a2ui-components/#file-preview-and-editing) explains the components and save events; the [agent setup guide](https://docs.flow-like.com/apps/storage/#control-an-open-editor-with-an-agent) covers connecting an open session.
+
+Open your app's **Storage** tab and pick a file that usually makes you switch applications. Start there. The next step can stay in the same workspace as the workflow that needs it.

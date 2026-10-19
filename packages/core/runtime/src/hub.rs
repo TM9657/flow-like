@@ -1269,7 +1269,7 @@ impl Hub {
             .build()?;
         let mut bits = self
             .http_client()
-            .hashed_request::<Vec<Bit>>(request)
+            .revalidated_request::<Vec<Bit>>(request)
             .await?;
         let dependency_hubs = self.get_dependency_hubs().await?;
 

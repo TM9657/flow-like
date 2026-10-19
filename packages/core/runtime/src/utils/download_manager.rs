@@ -36,6 +36,8 @@ pub struct DownloadManager {
     pub download_list: HashMap<String, Bit>,
     resume: bool,
     #[serde(skip)]
+    ephemeral: bool,
+    #[serde(skip)]
     client: reqwest::Client,
 }
 
@@ -61,11 +63,23 @@ impl DownloadManager {
         DownloadManager {
             download_list: HashMap::new(),
             resume: false,
+            ephemeral: false,
             client: download_client(),
         }
     }
 
+    /// Track temporary server downloads without changing the desktop resume queue.
+    pub fn new_ephemeral() -> Self {
+        Self {
+            ephemeral: true,
+            ..Self::new()
+        }
+    }
+
     pub fn load(&mut self) -> HashMap<String, Bit> {
+        if self.ephemeral {
+            return HashMap::new();
+        }
         let dir = get_cache_dir();
         let dir = dir.join(DOWNLOAD_MANAGER_FILE);
         if !dir.exists() {
@@ -117,6 +131,9 @@ impl DownloadManager {
     }
 
     pub fn save(&self) {
+        if self.ephemeral {
+            return;
+        }
         let dir = get_cache_dir().join(DOWNLOAD_MANAGER_FILE);
         let data = match flow_like_types::json::to_string(self) {
             Ok(v) => v,
@@ -140,6 +157,26 @@ impl DownloadManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ephemeral_download_tracking_does_not_start_persistence_workers() {
+        // Persistence schedules a blocking Tokio worker. This test has no
+        // runtime, so adding or removing a temporary download must not start it.
+        let mut manager = DownloadManager::new_ephemeral();
+        let bit = Bit {
+            id: "forecast-weights".into(),
+            hash: "forecast-digest".into(),
+            file_name: Some("model.safetensors".into()),
+            ..Bit::default()
+        };
+        assert!(manager.add_download(&bit).is_some());
+        assert!(manager.download_exists(&bit));
+        assert!(manager.add_download(&bit).is_none());
+        assert!(manager.load().is_empty());
+        manager.remove_download(&bit);
+        assert!(!manager.download_exists(&bit));
+        manager.save();
+    }
 
     #[test]
     fn identical_content_at_different_paths_has_distinct_download_keys() {

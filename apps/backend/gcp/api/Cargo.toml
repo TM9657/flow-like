@@ -18,7 +18,7 @@ flow-like-api = { workspace = true, default-features = false, features = ["gcp",
 flow-like-secrets.workspace = true
 flow-like-gcp-data.workspace = true
 flow-like-storage.workspace = true
-# Match the remote-only executor catalog: no ONNX or desktop automation nodes.
+# Match the executor catalog: no ONNX or desktop automation nodes.
 flow-like-catalog = { workspace = true, features = ["remote-metadata"] }
 mimalloc.workspace = true
 axum.workspace = true

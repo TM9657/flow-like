@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BOARD_METRICS, type Point } from "../board/board-layout";
+import { BOARD_METRICS, type Point, type Rect } from "../board/board-layout";
 import { BOARD_PALETTE_DARK, type RGBA, edgeColor } from "../board/board-paint";
 import {
 	PULSE,
@@ -11,6 +11,7 @@ import {
 } from "../board/board-pulse";
 import {
 	BOARD_STRING_KEYS,
+	type BoardGrid,
 	type BoardStrings,
 	createBoard,
 } from "../board/board-spec";
@@ -27,6 +28,7 @@ import {
 	type ScenarioPlan,
 	buildPlans,
 	planLocal,
+	storyBox,
 } from "./beneath-plan";
 import {
 	type Srgb,
@@ -62,12 +64,29 @@ const THREAD_LEVEL = { base: 0.8, quiet: 0.5 } as const;
 const ROUTE_DIM = 0.45;
 /** CSS px from the frame's sides within which a thread end fades out; past the side it is gone. */
 const SIDE_FADE = 18;
-/** How fast (per second) a phone's board eases toward the beat it follows. */
-const FOLLOW_RATE = 2.2;
+/** How fast (per second) a phone's board eases toward the beat it follows: settled before the next beat leaves. */
+const FOLLOW_RATE = 3.6;
+/** How fast (per second) a wide screen's board eases to frame a changed story. */
+const STORY_RATE = 4;
 /** Board units of air beside the columns a phone keeps in view. */
 const FOLLOW_MARGIN = 12;
-/** Share of a phone's width over which the board fades out at each side. */
+/** Share of a phone's width over which the board fades out at each side, and the comets with it. */
 const EDGE_FADE = 0.1;
+/**
+ * The board below the story is not shown: it stays whole `keep` board units
+ * under the story's lowest node, then fades out over `feather`, before the
+ * next row.
+ */
+const STORY_CLIP = { keep: 8, feather: 40 } as const;
+/**
+ * On a phone the route is lit `clear` board units past its columns, then fades
+ * out over `feather`; the lit window moves ahead of the sliding board (`rate`
+ * per second), so nodes leaving the frame dim before its edge cuts them.
+ */
+const SPOT = { clear: 5, feather: 17, rate: 6 } as const;
+/** Opacity of the selected app's own thread when the story does not touch that app: a hint, never lit. */
+const OWN_THREAD = 0.14;
+const NO_THREADS: ReadonlySet<string> = new Set();
 /** Texture pixels per board unit: phones see the board closer, at a higher density. */
 const DENSITY: Record<LayoutKind, number> = { landscape: 2, portrait: 2.25 };
 /** Rates (per second) at which a changed route dims out and the new one lights. */
@@ -142,9 +161,9 @@ function boardStrings(strings: Record<string, string>): BoardStrings {
 	) as BoardStrings;
 }
 
-/** How far a phone's board eases toward its beat this frame (1 when dt ≤ 0). */
-const followEase = (dt: number) =>
-	dt <= 0 ? 1 : 1 - Math.exp(-dt * FOLLOW_RATE);
+/** How far the board eases toward where it should lie this frame (1 when dt ≤ 0). */
+const followEase = (dt: number, rate: number) =>
+	dt <= 0 ? 1 : 1 - Math.exp(-dt * rate);
 
 function cubic(p: readonly THREE.Vector3[], t: number, out: number[]) {
 	const u = 1 - t;
@@ -166,7 +185,9 @@ export function createBeneath(
 ): Beneath {
 	const { camera, under, data, stage, renderer, options } = ctx;
 	const res = createResources(ctx.maxAniso);
-	const spec = createBoard(boardStrings(data.strings));
+	const strings = boardStrings(data.strings);
+	let grid: BoardGrid = "landscape";
+	let spec = createBoard(strings, grid);
 	const board = createBoardSurface(
 		renderer,
 		spec,
@@ -174,6 +195,8 @@ export function createBeneath(
 	);
 	under.add(board.group);
 	let plans: ScenarioPlan[] = buildPlans(spec, board.layout());
+	/** Each scenario's route nodes as one box, in board units. */
+	let stories: Rect[] = plans.map(storyBox);
 
 	const view = createRibbonView();
 	const threadBatch = createRibbons(res, view, 4096);
@@ -247,7 +270,17 @@ export function createBeneath(
 	});
 
 	let kind: LayoutKind = "landscape";
-	let followC = Number.NaN;
+	/**
+	 * Where the board lies, eased toward its story: the board x under the
+	 * windows, the story's lowest edge and the room it leaves, and the centre of
+	 * a phone's lit window.
+	 */
+	const aim = {
+		x: Number.NaN,
+		bottom: Number.NaN,
+		slack: Number.NaN,
+		spot: Number.NaN,
+	};
 	let threadYaw = Number.NaN;
 	let geometryVersion = 0;
 	let threadsWritten = -1;
@@ -383,33 +416,87 @@ export function createBeneath(
 		return boardFrame;
 	}
 
-	/** Board x a phone centres under the selected window: the columns the beats land in. */
-	function followTarget(plan: ScenarioPlan | null, clock: ScenarioClock) {
+	/**
+	 * Board x a phone centres under the selected window: the columns the beats
+	 * land in once the layer runs, the first beat's before.
+	 */
+	function followTarget(
+		plan: ScenarioPlan,
+		clock: ScenarioClock,
+		alive: boolean,
+	) {
 		const frames = narrowFrames();
-		const { x, width } = board.layout().bounds;
-		if (!plan || !frames) return x + width / 2;
+		if (!frames) return frame().centre;
 		const local = planLocal(plan, clock.elapsed);
-		return followWindow(
-			frames,
-			plan,
-			followBeat(plan, local, stage.motion > 0),
-		);
+		const moving = stage.motion > 0;
+		const beat = alive || !moving ? followBeat(plan, local, moving) : 0;
+		return followWindow(frames, plan, beat);
 	}
 
-	// The board lies where the composition puts it; on a phone it slides
-	// sideways under the selected window to keep the beats' columns in view.
-	function follow(plan: ScenarioPlan | null, clock: ScenarioClock, dt: number) {
+	const target = { x: 0, bottom: 0, slack: 0 };
+	/**
+	 * Where the story should lie: centred under the windows, its lowest edge
+	 * where the board's foot was composed, and the board height it leaves free.
+	 */
+	function storyTarget(index: number, clock: ScenarioClock, alive: boolean) {
+		const content = board.content();
+		const foot = content.y + content.height;
+		const plan = plans[index];
+		const story = stories[index];
+		target.x = frame().centre;
+		target.bottom = foot;
+		target.slack = 0;
+		if (!plan || !story) return target;
+		const pad = BOARD_METRICS.reference / 2;
+		target.bottom = story.y + story.height + pad;
+		target.slack = Math.max(0, content.height - story.height - 2 * pad);
+		target.x =
+			kind === "portrait"
+				? followTarget(plan, clock, alive)
+				: story.x + story.width / 2;
+		return target;
+	}
+
+	// The board lies where the composition puts it, moved in its own plane so
+	// the story is what is framed: centred under the windows (on a phone, the
+	// columns the beats land in) and, with the copy band, its lowest edge at
+	// the board's composed foot, right above the band. Before the band a short
+	// story sits in the middle of that room instead, and settles to the foot as
+	// the windows rise for the band, so it stays put on screen. A changed story
+	// eases there while its route is dark; what lies below the story is not
+	// shown, and a phone lights only its columns.
+	function follow(clock: ScenarioClock, f: Frame) {
 		const placement = composer.get().board;
-		if (kind !== "portrait") {
-			place(placement);
+		const next = storyTarget(clock.index, clock, f.alive);
+		const k = followEase(f.dt, kind === "portrait" ? FOLLOW_RATE : STORY_RATE);
+		const toward = (from: number, to: number, rate = k) =>
+			Number.isNaN(from) ? to : lerp(from, to, rate);
+		aim.x = toward(aim.x, next.x);
+		aim.bottom = toward(aim.bottom, next.bottom);
+		aim.slack = toward(aim.slack, next.slack);
+		aim.spot = toward(aim.spot, next.x, followEase(f.dt, SPOT.rate));
+		const content = board.content();
+		const atFoot = aim.bottom + ((1 - f.reveal.band) * aim.slack) / 2;
+		const slide = (frame().centre - aim.x) * placement.unit;
+		const drop = (content.y + content.height - atFoot) * placement.unit;
+		place({
+			...placement,
+			x: placement.x + slide,
+			y: placement.y - drop * Math.cos(placement.tilt),
+			z: placement.z + drop * Math.sin(placement.tilt),
+		});
+		board.clip(aim.bottom + STORY_CLIP.keep, STORY_CLIP.feather);
+		const frames = narrowFrames();
+		if (!frames) {
+			board.spotlight(null);
 			return;
 		}
-		const target = followTarget(plan, clock);
-		followC = Number.isNaN(followC)
-			? target
-			: lerp(followC, target, followEase(dt));
-		const slide = (frame().centre - followC) * placement.unit;
-		place({ ...placement, x: placement.x + slide });
+		const half = frames.span / 2 + SPOT.clear;
+		board.spotlight({
+			left: aim.spot - half,
+			right: aim.spot + half,
+			feather: SPOT.feather,
+		});
 	}
 
 	function updateView() {
@@ -458,15 +545,34 @@ export function createBeneath(
 		return Math.max(target, from - dt * SWAP.out);
 	};
 
+	/**
+	 * On a wide screen, the selected app's own thread when the story leaves that
+	 * app out, so choosing it still shows where it meets the layer.
+	 */
+	function ownThread(plan: ScenarioPlan | null) {
+		if (kind === "portrait" || !plan) return null;
+		for (const id of plan.threads) {
+			if (threadById.get(id)?.app === stage.app) return null;
+		}
+		return threads.find((t) => t.app === stage.app) ?? null;
+	}
+
+	/** The story's threads once its route is painted, so a changed story's threads never meet the old one's. */
+	const storyThreads = (plan: ScenarioPlan | null) =>
+		plan && board.painted() === plan.id ? plan.threads : NO_THREADS;
+
 	// Only the scenario's own threads, from the app it starts in and to the
 	// apps it delivers to, are drawn; they light with the route.
 	function threadProgress(frame: Frame, plan: ScenarioPlan | null) {
 		const drawIn = frame.reveal.threads;
+		const drawn = storyThreads(plan);
+		const own = ownThread(plan);
 		for (const t of threads) {
 			const start = t.order * THREAD_STAGGER;
 			t.length = ease((drawIn - start) / (1 - THREAD_STAGGER));
-			const story = plan?.threads.has(t.id) ?? false;
-			t.show = storyStep(t.show, story ? 1 : 0, frame.dt);
+			const story = drawn.has(t.id);
+			const hint = t === own ? OWN_THREAD : 0;
+			t.show = storyStep(t.show, story ? 1 : hint, frame.dt);
 			t.lit = story ? frame.reveal.lit * swap : 0;
 		}
 	}
@@ -563,6 +669,20 @@ export function createBeneath(
 	const hopTint = (hop: PlanHop): Srgb =>
 		hop.kind === "edge" ? (edgeTints.get(hop.id) ?? threadTint) : threadTint;
 	const isHot = (hop: PlanHop) => hop.kind === "edge" && execEdges.has(hop.id);
+	/** How much a hop's wire or thread shows, which its comet never outshines. */
+	function hopPresence(hop: PlanHop) {
+		if (hop.kind === "edge") return swap;
+		const t = threadById.get(hop.id);
+		return t ? presence(t) : 0;
+	}
+	/** 1 inside a phone's frame, fading out at its sides like the board; 1 on a wide screen. */
+	function sideFade(p: WorldPoint) {
+		if (kind !== "portrait") return 1;
+		const v = tmpB.set(p[0], p[1], p[2]).project(camera);
+		const x = ((v.x + 1) / 2) * stage.width;
+		const edge = stage.width * EDGE_FADE;
+		return smooth(0, edge, x) * smooth(stage.width, stage.width - edge, x);
+	}
 
 	function head(p: WorldPoint, width: number, tint: Srgb, o: number) {
 		pulseBatch.disc(p, width * HEAD.halo, tint, HEAD.haloAlpha * o, "soft");
@@ -586,10 +706,10 @@ export function createBeneath(
 	}
 
 	// egui's activation pulse: a short trail behind the head, with a soft glow.
-	function comet(f: PulseFrame, tint: Srgb, hot: boolean) {
+	function comet(f: PulseFrame, tint: Srgb, hot: boolean, shown: number) {
 		const zoom = view.zoom.value;
 		const px = Math.max(pulseWidth(zoom), COMET_MIN_PX);
-		const o = f.opacity;
+		const o = f.opacity * shown * sideFade(f.head);
 		pulseBatch.stroke(
 			f.trail,
 			hot ? primaryTint : tint,
@@ -613,14 +733,18 @@ export function createBeneath(
 		const px = Math.max(pulseWidth(zoom), COMET_MIN_PX);
 		const last = Math.max(1, path.length - 1);
 		const glow = path.map(
-			(_, i) => (0.3 + 0.7 * Math.sin((Math.PI * i) / last)) * PULSE.glowAlpha,
+			(p, i) =>
+				(0.3 + 0.7 * Math.sin((Math.PI * i) / last)) *
+				PULSE.glowAlpha *
+				sideFade(p),
 		);
 		const trail = glow.map((v) => (v / PULSE.glowAlpha) * PULSE.trailAlpha);
 		const glowWidth = (px + PULSE.glowExtraWidth) / zoom;
 		pulseBatch.stroke(path, hot ? primaryTint : tint, glow, glowWidth);
 		pulseBatch.stroke(path, hot ? hotTrail : tint, trail, px / zoom);
-		if (hot) hotHead(path[last], px / zoom, 1);
-		else head(path[last], px / zoom, tint, 1);
+		const end = sideFade(path[last]);
+		if (hot) hotHead(path[last], px / zoom, end);
+		else head(path[last], px / zoom, tint, end);
 	}
 
 	// While a thread draws in, a small light rides its tip.
@@ -650,13 +774,14 @@ export function createBeneath(
 		const local = planLocal(plan, clock.elapsed);
 		for (const hop of plan.hops) {
 			const path = hopPath(hop);
-			if (!path) continue;
+			const shown = hopPresence(hop);
+			if (!path || shown < 0.01) continue;
 			if (!stage.motion) {
 				exposure(path, hopTint(hop), isHot(hop));
 				continue;
 			}
 			const f = pulseAt(path, (local - hop.start) / hop.duration, cometFrame);
-			if (f) comet(f, hopTint(hop), isHot(hop));
+			if (f) comet(f, hopTint(hop), isHot(hop), shown);
 		}
 	}
 
@@ -697,13 +822,33 @@ export function createBeneath(
 		writeThreads();
 	}
 
+	/** Everything read from the board's layout, after it was laid out again. */
+	function relaid() {
+		plans = buildPlans(spec, board.layout());
+		stories = plans.map(storyBox);
+		readEdges();
+		edgePaths.clear();
+		composer.invalidate();
+	}
+
+	// A phone lays the board out on its own grid, where each story fits its frame best.
 	function applyLayout(portrait: boolean) {
 		kind = portrait ? "portrait" : "landscape";
 		board.density(DENSITY[kind]);
+		if (grid !== kind) {
+			grid = kind;
+			spec = createBoard(strings, grid);
+			board.regrid(spec, grid);
+			relaid();
+		}
 		anchorsAndOffsets();
-		followC = Number.NaN;
+		aim.x = Number.NaN;
+		aim.bottom = Number.NaN;
+		aim.slack = Number.NaN;
+		aim.spot = Number.NaN;
 		threadYaw = Number.NaN;
 		geometryVersion++;
+		writeEdgePaths();
 	}
 
 	const raise = (app: number, v: number) =>
@@ -744,7 +889,7 @@ export function createBeneath(
 			under.visible = f.reveal.board > 0.002 || f.reveal.threads > 0;
 			direct(active, clock);
 			paintRoute(plan, f);
-			follow(plan, clock, f.dt);
+			follow(clock, f);
 			updateView();
 			rewriteThreads();
 			threadWeights();
@@ -754,12 +899,8 @@ export function createBeneath(
 		},
 		redraw() {
 			board.relayout();
-			plans = buildPlans(spec, board.layout());
-			readEdges();
-			edgePaths.clear();
-			composer.invalidate();
+			relaid();
 			applyLayout(kind === "portrait");
-			writeEdgePaths();
 		},
 		frame,
 		onArrive(cb) {
