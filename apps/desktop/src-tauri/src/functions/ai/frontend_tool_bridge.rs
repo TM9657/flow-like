@@ -232,7 +232,7 @@ impl std::fmt::Debug for FrontendToolBridge {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FrontendToolContext {
-    /// Profile selected by the owning Home run. Model-authored arguments cannot replace it.
+    /// Profile selected by the owning run. Model-authored arguments cannot replace it.
     #[serde(default)]
     pub profile_id: Option<String>,
     pub app_id: Option<String>,
@@ -2153,6 +2153,24 @@ mod tests {
             defaulted.get("overlay_id").and_then(Value::as_str),
             Some("seed-overlay")
         );
+    }
+
+    #[test]
+    fn forecasting_defaults_the_app_without_inheriting_an_ontology_target() {
+        let context = FrontendToolContext {
+            app_id: Some("seed-app".into()),
+            overlay_id: Some("ontology".into()),
+            ..Default::default()
+        };
+        let mut args = json!({"operation":"run"});
+        apply_tool_context("forecast_tool", &mut args, Some(&context));
+        assert_eq!(args["app_id"], "seed-app");
+        assert!(args.get("overlay_id").is_none());
+
+        let mut args = json!({"operation":"get", "app_id":"accessible-app"});
+        apply_tool_context("forecast_tool", &mut args, Some(&context));
+        assert_eq!(args["app_id"], "accessible-app");
+        assert!(args.get("overlay_id").is_none());
     }
 
     #[test]

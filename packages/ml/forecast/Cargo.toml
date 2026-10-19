@@ -1,0 +1,29 @@
+[package]
+name = "flow-like-ml-forecast"
+version = "0.1.0"
+edition = "2024"
+license = "MIT AND Apache-2.0"
+
+[features]
+default = ["cpu"]
+engine = ["dep:burn", "dep:safetensors", "dep:half"]
+cpu = ["engine", "burn/flex"]
+wgpu = ["engine", "burn/wgpu"]
+cuda = ["engine", "burn/cuda"]
+rocm = ["engine", "burn/rocm"]
+
+[dependencies]
+burn = { version = "=0.22.0", optional = true, default-features = false, features = ["std"] }
+safetensors = { version = "0.8", optional = true }
+half = { version = "2", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[[example]]
+name = "forecast"
+required-features = ["cpu"]

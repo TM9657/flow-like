@@ -1369,6 +1369,7 @@ const FAILURE_TOOL_KINDS: Record<string, FlowPilotFailureKind | undefined> = {
 	navigate_view: "page_apply",
 	data_studio_agent: "data_apply",
 	database_tool: "data_apply",
+	forecast_tool: "data_apply",
 	storage_tool: "data_apply",
 	graph_element_tool: "data_apply",
 	graph_overlay_tool: "data_apply",

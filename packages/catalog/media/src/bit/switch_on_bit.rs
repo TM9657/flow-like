@@ -31,7 +31,7 @@ impl NodeLogic for SwitchOnBitNode {
         node.set_flowscript_name("ai", "switchOnBit");
 
         node.add_icon("/flow/icons/bit.svg");
-        node.set_version(5);
+        node.set_version(6);
 
         node.add_input_pin(
             "exec_in",
@@ -60,6 +60,12 @@ impl NodeLogic for SwitchOnBitNode {
             "systemone",
             "Decisions",
             "Execution if the Bit is a SystemOne decision model",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "forecasting",
+            "Forecasting",
+            "Execution if the Bit is a time series forecasting model",
             VariableType::Execution,
         );
         node.add_output_pin(
@@ -222,6 +228,7 @@ impl NodeLogic for SwitchOnBitNode {
             BitTypes::Llm => "llm",
             BitTypes::Vlm => "vlm",
             BitTypes::SystemOne => "systemone",
+            BitTypes::Forecasting => "forecasting",
             BitTypes::Tts => "tts",
             BitTypes::Stt => "stt",
             BitTypes::Embedding => "embedding",

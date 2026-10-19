@@ -102,6 +102,33 @@ describe("dispatchSpecialistToolRequest", () => {
 		);
 	});
 
+	it("pins forecast fallback app and profile to the specialist launch", async () => {
+		const onToolRequest = vi.fn(async (request: WebToolRequest) => ({
+			requestId: request.requestId,
+			approved: true,
+		}));
+		await dispatchSpecialistToolRequest({
+			data: JSON.stringify({
+				...JSON.parse(toolRequest()),
+				toolName: "forecast_tool",
+				arguments: { operation: "list" },
+				context: { appId: "wrong-app", profileId: "wrong-profile" },
+			}),
+			appId: "launch-app",
+			profileId: "launch-profile",
+			parentRequestId: "data-studio-parent",
+			onToolRequest,
+		});
+		expect(onToolRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				context: expect.objectContaining({
+					appId: "launch-app",
+					profileId: "launch-profile",
+				}),
+			}),
+		);
+	});
+
 	it.each([
 		{
 			name: "executes Data Studio reads in their launching profile",

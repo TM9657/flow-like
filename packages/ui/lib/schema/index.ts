@@ -178,3 +178,9 @@ export type {
 	ISystemOneAnswer,
 	ISystemOneUsage,
 } from "./bit/bit/systemone-response";
+
+export { IForecastingModelType } from "./bit/bit/forecasting-parameters";
+export type {
+	IForecastingModelParameters,
+	IForecastingAssetRef,
+} from "./bit/bit/forecasting-parameters";

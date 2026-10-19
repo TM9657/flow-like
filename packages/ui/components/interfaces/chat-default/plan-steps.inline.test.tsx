@@ -92,6 +92,35 @@ describe("InlineStepGroup", () => {
 });
 
 describe("InlineStepGroup during a live turn", () => {
+	test("keeps each website visible once when completed steps collapse", async () => {
+		const { InlineStepGroup } = await import("./plan-steps");
+		const { container } = await mount(
+			<InlineStepGroup
+				steps={["a", "b"].map((id) =>
+					step({
+						id,
+						detail: {
+							kind: "tool_activity",
+							category: "web",
+							label: "Fetching URL",
+							sources: [
+								{
+									url: `https://github.com/${id}`,
+									hostname: "github.com",
+									path: `/${id}`,
+								},
+							],
+						},
+					}),
+				)}
+			/>,
+		);
+		const trigger = container.querySelector("button");
+		expect(trigger?.getAttribute("data-state")).toBe("closed");
+		expect(trigger?.textContent?.match(/github\.com/g)).toHaveLength(1);
+		expect(container.querySelector("a")).toBeNull();
+	});
+
 	test("a settled group stays open while the turn is still generating", async () => {
 		const { InlineStepGroup } = await import("./plan-steps");
 		// This group's own steps are all done and it does not own the active step,

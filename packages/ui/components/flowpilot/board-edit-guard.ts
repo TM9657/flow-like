@@ -1358,6 +1358,8 @@ export function isCreatedAppBuildTargetMismatch(
 			return options.mode !== "inspect";
 		case "database_tool":
 			return DATABASE_MUTATION_OPERATIONS.has(options.operation ?? "");
+		case "forecast_tool":
+			return options.operation === "save";
 		case "upsert_event":
 		case "delete_event":
 		case "set_page_load_event":

@@ -239,6 +239,9 @@ pub async fn upsert_user_bit(
     validate_bit_id(&bit_id)?;
     let mut bit = body.bit;
     bit.id = bit_id.clone();
+    if bit.bit_type == BitTypes::Forecasting {
+        bit.hub = state.platform_config.domain.clone();
+    }
 
     let bit_type = checked_user_bit(&state, &sub, &bit, body.secrets.as_ref()).await?;
 
@@ -261,7 +264,9 @@ pub async fn upsert_user_bit(
         .map(|model| user_bit_to_core(model, &state, false));
     bit.normalize_edited_user_local_artifact_identity(previous_bit.as_ref());
 
-    let secrets_encrypted = if extracted_secrets.is_empty() {
+    let secrets_encrypted = if bit.bit_type == BitTypes::Forecasting {
+        None
+    } else if extracted_secrets.is_empty() {
         existing.as_ref().and_then(|e| e.secrets_encrypted.clone())
     } else {
         let previous_secrets = existing
@@ -439,6 +444,11 @@ async fn checked_user_bit(
     secrets: Option<&HashMap<String, Value>>,
 ) -> Result<BitType, ApiError> {
     let (bit_type, device) = validated_bit(bit)?;
+    if bit.bit_type == BitTypes::Forecasting && secrets.is_some_and(|values| !values.is_empty()) {
+        return Err(ApiError::bad_request(
+            "Forecasting Bits use public checkpoint files and carry no credentials",
+        ));
+    }
     let Some(target) = device else {
         return Ok(bit_type);
     };
@@ -452,19 +462,22 @@ async fn checked_user_bit(
     Ok(bit_type)
 }
 
-/// A user bit must be a well-formed LLM/VLM bit with a provider the local
-/// model factory can instantiate from per-bit params. Standard provider names
+/// Forecasting Bits use public native checkpoints. Other user model Bits need
+/// a provider the model factory can instantiate from per-bit params. Standard provider names
 /// ("openai", "azure", …) are rejected because they would resolve against the
 /// server's own env credentials; "hosted[:*]" is rejected because the factory
 /// overwrites its api_key with the caller's JWT.
 fn validate_user_bit(bit: &Bit) -> Result<BitType, ApiError> {
+    if bit.bit_type == BitTypes::Forecasting {
+        return validate_forecasting_bit(bit);
+    }
     let bit_type = match bit.bit_type {
         BitTypes::Llm => BitType::Llm,
         BitTypes::Vlm => BitType::Vlm,
         BitTypes::SystemOne => BitType::SystemOne,
         _ => {
             return Err(ApiError::bad_request(
-                "Custom bits must be language, vision, or SystemOne decision models",
+                "Custom bits must be language, vision, SystemOne decision, or forecasting models",
             ));
         }
     };
@@ -629,6 +642,134 @@ fn validate_user_bit(bit: &Bit) -> Result<BitType, ApiError> {
     Ok(bit_type)
 }
 
+fn validate_forecasting_bit(bit: &Bit) -> Result<BitType, ApiError> {
+    let parameters = bit.try_to_forecasting().ok_or_else(|| {
+        ApiError::bad_request(
+            "Forecasting Bits require a supported model_type and checkpoint assets",
+        )
+    })?;
+    parameters
+        .validate()
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let filename = bit.file_name.as_deref().ok_or_else(|| {
+        ApiError::bad_request("Forecasting Bits require a primary checkpoint filename")
+    })?;
+    if !matches!(
+        filename,
+        "model.safetensors" | "model.safetensors.index.json"
+    ) {
+        return Err(ApiError::bad_request(
+            "Forecasting primary files must be model.safetensors or model.safetensors.index.json",
+        ));
+    }
+    if bit
+        .size
+        .is_none_or(|size| size == 0 || size > i64::MAX as u64)
+    {
+        return Err(ApiError::bad_request(
+            "Forecasting checkpoint size must be positive and fit in a signed 64-bit integer",
+        ));
+    }
+    let link = bit.download_link.as_deref().ok_or_else(|| {
+        ApiError::bad_request("Forecasting Bits require a pinned public checkpoint download link")
+    })?;
+    validate_forecasting_download_url(link, filename)?;
+    let mut has_shard = false;
+    for asset in &parameters.assets {
+        let is_root = asset
+            .matches_reference(bit, &bit.hub)
+            .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        if asset.relative_path == filename {
+            if !is_root {
+                return Err(ApiError::bad_request(
+                    "A forecasting asset cannot replace the primary checkpoint file",
+                ));
+            }
+        } else if is_root {
+            return Err(ApiError::bad_request(
+                "The forecasting root cannot supply a different checkpoint asset",
+            ));
+        }
+        if asset.relative_path.ends_with(".safetensors") && asset.relative_path != filename {
+            has_shard = true;
+        }
+        if filename == "model.safetensors"
+            && asset.relative_path != "config.json"
+            && asset.relative_path != filename
+        {
+            return Err(ApiError::bad_request(
+                "An unsharded forecasting model only needs its primary weights and config.json",
+            ));
+        }
+    }
+    if filename == "model.safetensors.index.json" && !has_shard {
+        return Err(ApiError::bad_request(
+            "A sharded forecasting model requires SafeTensors shard assets",
+        ));
+    }
+    let references: std::collections::HashSet<_> = parameters
+        .assets
+        .iter()
+        .map(|asset| asset.bit.as_str())
+        .collect();
+    if bit
+        .dependencies
+        .iter()
+        .any(|reference| !references.contains(reference.as_str()))
+    {
+        return Err(ApiError::bad_request(
+            "Forecasting dependencies must be declared in parameters.assets",
+        ));
+    }
+    Ok(BitType::Forecasting)
+}
+
+fn validate_forecasting_download_url(value: &str, filename: &str) -> Result<(), ApiError> {
+    let invalid = || {
+        ApiError::bad_request(
+            "Forecasting download_link must be a public HTTPS huggingface.co resolve URL pinned to a full commit SHA and the primary filename",
+        )
+    };
+    let url = reqwest::Url::parse(value).map_err(|_| invalid())?;
+    if value.trim() != value
+        || url.scheme() != "https"
+        || url.host_str() != Some(HUGGING_FACE_HOST)
+        || url.port().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+        || url.query().is_some_and(|query| query != "download=true")
+    {
+        return Err(invalid());
+    }
+    let parts = url
+        .path_segments()
+        .ok_or_else(invalid)?
+        .map(|part| {
+            urlencoding::decode(part)
+                .map(|value| value.into_owned())
+                .map_err(|_| invalid())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if parts.len() < 5
+        || !valid_huggingface_repo_component(&parts[0])
+        || !valid_huggingface_repo_component(&parts[1])
+        || parts[2] != "resolve"
+        || !(40..=64).contains(&parts[3].len())
+        || !parts[3].bytes().all(|byte| byte.is_ascii_hexdigit())
+        || parts.last().map(String::as_str) != Some(filename)
+        || parts.iter().any(|part| {
+            part.is_empty()
+                || matches!(part.as_str(), "." | "..")
+                || part.contains(['/', '\\'])
+                || part.chars().any(char::is_control)
+        })
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
 /// A `device` bit names a language, vision, embedding, or decision model hosted on a Flow-Like device. Its
 /// provider params hold the device and the model. It carries no file, link or credential;
 /// whoever runs it unlocks the device on their own computer.
@@ -777,6 +918,7 @@ pub(crate) fn user_bit_to_core(
     let mut parameters = model.parameters.unwrap_or_default();
 
     if include_secrets
+        && model.r#type != BitType::Forecasting
         && let Some(encrypted) = model.secrets_encrypted.as_deref()
         && let Some(decrypted) = decrypt_secret(encrypted, &state.encryption_key)
         && let Ok(secrets) = flow_like_types::json::from_str::<HashMap<String, Value>>(&decrypted)
@@ -810,6 +952,7 @@ pub(crate) fn user_bit_to_core(
         model_slug: None,
         model_evaluation: None,
     };
+    restore_forecasting_dependencies(&mut bit);
     // Migrate legacy `hash == id` rows on read as well as new writes. This is
     // intentionally computed from public source fields, so no database
     // migration or secret material is required.
@@ -817,9 +960,106 @@ pub(crate) fn user_bit_to_core(
     bit
 }
 
+fn restore_forecasting_dependencies(bit: &mut Bit) {
+    if let Some(parameters) = bit.try_to_forecasting() {
+        let mut references = std::collections::BTreeSet::new();
+        for asset in parameters.assets {
+            if !asset.matches_reference(bit, &bit.hub).unwrap_or(false) {
+                references.insert(asset.bit);
+            }
+        }
+        bit.dependencies = references.into_iter().collect();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn forecasting_bit() -> Bit {
+        Bit {
+            id: "forecast-model".into(),
+            hub: "api.flow-like.com".into(),
+            bit_type: BitTypes::Forecasting,
+            parameters: serde_json::json!({
+                "model_type": "chronos2",
+                "assets": [{"bit": "config-bit", "relative_path": "config.json"}]
+            }),
+            download_link: Some(format!(
+                "https://huggingface.co/amazon/chronos-2/resolve/{}/model.safetensors",
+                "a".repeat(40)
+            )),
+            file_name: Some("model.safetensors".into()),
+            size: Some(1000),
+            ..Bit::default()
+        }
+    }
+
+    #[test]
+    fn forecasting_user_bits_validate_native_checkpoints_without_chat_parameters() {
+        let mut bit = forecasting_bit();
+        assert_eq!(validate_user_bit(&bit).unwrap(), BitType::Forecasting);
+        assert!(bit.try_to_provider().is_none());
+        restore_forecasting_dependencies(&mut bit);
+        assert_eq!(bit.dependencies, ["config-bit"]);
+        assert_eq!(validate_user_bit(&bit).unwrap(), BitType::Forecasting);
+
+        bit.file_name = Some("model.safetensors.index.json".into());
+        bit.download_link = bit.download_link.map(|link| format!("{link}.index.json"));
+        assert!(validate_user_bit(&bit).is_err());
+        bit.parameters["assets"].as_array_mut().unwrap().push(serde_json::json!({"bit":"shard-bit", "relative_path":"model-00001-of-00001.safetensors"}));
+        restore_forecasting_dependencies(&mut bit);
+        assert_eq!(bit.dependencies, ["config-bit", "shard-bit"]);
+        assert_eq!(validate_user_bit(&bit).unwrap(), BitType::Forecasting);
+    }
+
+    #[test]
+    fn forecasting_user_bits_reject_credentials_unpinned_sources_and_inconsistent_assets() {
+        for provider in ["Local", "device", "custom:openai", "hosted"] {
+            let mut bit = forecasting_bit();
+            bit.parameters["provider"] = serde_json::json!({"provider_name":provider});
+            assert!(
+                validate_user_bit(&bit).is_err(),
+                "accepted provider {provider}"
+            );
+        }
+        let mut bit = forecasting_bit();
+        bit.parameters["provider"] =
+            serde_json::json!({"provider_name":"local:forecast", "params":{"api_key":"secret"}});
+        assert!(validate_user_bit(&bit).is_err());
+        for source in [
+            "https://huggingface.co/amazon/chronos-2/resolve/main/model.safetensors".to_string(),
+            format!(
+                "https://example.com/amazon/chronos-2/resolve/{}/model.safetensors",
+                "a".repeat(40)
+            ),
+            format!(
+                "https://user:secret@huggingface.co/amazon/chronos-2/resolve/{}/model.safetensors",
+                "a".repeat(40)
+            ),
+            format!(
+                "https://huggingface.co/amazon/chronos-2/resolve/{}/model.safetensors?token=secret",
+                "a".repeat(40)
+            ),
+            format!(
+                "https://huggingface.co/amazon/chronos-2/resolve/{}/other.safetensors",
+                "a".repeat(40)
+            ),
+        ] {
+            let mut bit = forecasting_bit();
+            bit.download_link = Some(source);
+            assert!(validate_user_bit(&bit).is_err());
+        }
+        let mut bit = forecasting_bit();
+        bit.dependencies.push("undeclared-bit".into());
+        assert!(validate_user_bit(&bit).is_err());
+        let mut bit = forecasting_bit();
+        bit.parameters["assets"][0]["bit"] = Value::String(bit.id.clone());
+        assert!(validate_user_bit(&bit).is_err());
+        let mut bit = forecasting_bit();
+        bit.size = Some(u64::MAX);
+        assert!(validate_user_bit(&bit).is_err());
+    }
 
     #[test]
     fn editing_one_credential_preserves_the_others() {
@@ -1230,7 +1470,7 @@ mod tests {
     fn other_embedding_providers_stay_refused() {
         let mut bit = device_bit(BitTypes::Embedding, device_params("embedding"));
         bit.parameters["provider"]["provider_name"] = Value::String(LOCAL_PROVIDER.into());
-        assert!(rejection(&bit).contains("Custom bits must be language, vision, or SystemOne"));
+        assert!(rejection(&bit).contains("Custom bits must be language, vision, SystemOne"));
     }
 
     #[test]

@@ -1,9 +1,14 @@
 import type {
 	CreateSavedQueryPayload,
+	CreateStudioForecastPayload,
 	ExecuteSqlPayload,
 	ExecuteSqlResult,
 	IQueryState,
 	SavedQuery,
+	SavedStudioForecast,
+	StudioForecastPayload,
+	StudioForecastResult,
+	StudioForecastSummary,
 	UpdateSavedQueryPayload,
 } from "@flow-like/flow-like-ui";
 import { asArray, isRecord } from "@flow-like/flow-like-ui/lib/response-shape";
@@ -36,6 +41,138 @@ export function normalizeExecuteSqlResult(
 export class QueryState implements IQueryState {
 	constructor(private readonly backend: TauriBackend) {}
 
+	private requireProfile() {
+		const profile = this.backend.profile;
+		if (!profile) throw new Error("Select a profile before using Data Studio.");
+		return profile;
+	}
+
+	async listForecasts(
+		appId: string,
+		userScoped?: boolean,
+		maximum = 1000,
+	): Promise<StudioForecastSummary[]> {
+		if (!Number.isInteger(maximum) || maximum < 1 || maximum > 1000)
+			throw new Error("Prediction list size must be between 1 and 1000.");
+		const offline = await this.backend.isOffline(appId);
+		const forecasts = new Map<string, StudioForecastSummary>();
+		for (let offset = 0; offset < maximum; offset += 100) {
+			const limit = Math.min(100, maximum - offset);
+			const page = offline
+				? await invoke<StudioForecastSummary[]>("studio_forecast_list", {
+						appId,
+						userScoped: userScoped ?? false,
+						limit,
+						offset,
+					})
+				: await fetcher<StudioForecastSummary[]>(
+						this.requireProfile(),
+						appendScope(
+							`apps/${encodeURIComponent(appId)}/db/forecasts?limit=${limit}&offset=${offset}`,
+							userScoped,
+						),
+						{ method: "GET" },
+						this.backend.auth,
+					);
+			for (const forecast of asArray(page))
+				forecasts.set(forecast.id, forecast);
+			if (asArray(page).length < limit) break;
+		}
+		return [...forecasts.values()];
+	}
+
+	async getForecast(
+		appId: string,
+		forecastId: string,
+		userScoped?: boolean,
+	): Promise<SavedStudioForecast> {
+		if (!(await this.backend.isOffline(appId))) {
+			return fetcher<SavedStudioForecast>(
+				this.requireProfile(),
+				appendScope(
+					`apps/${encodeURIComponent(appId)}/db/forecasts/${encodeURIComponent(forecastId)}`,
+					userScoped,
+				),
+				{ method: "GET" },
+				this.backend.auth,
+			);
+		}
+		return invoke<SavedStudioForecast>("studio_forecast_get", {
+			appId,
+			forecastId,
+			userScoped: userScoped ?? false,
+		});
+	}
+
+	async createForecast(
+		appId: string,
+		payload: CreateStudioForecastPayload,
+		userScoped?: boolean,
+	): Promise<SavedStudioForecast> {
+		if (!(await this.backend.isOffline(appId))) {
+			return fetcher<SavedStudioForecast>(
+				this.requireProfile(),
+				appendScope(
+					`apps/${encodeURIComponent(appId)}/db/forecasts`,
+					userScoped,
+				),
+				{ method: "POST", body: JSON.stringify(payload) },
+				this.backend.auth,
+			);
+		}
+		return invoke<SavedStudioForecast>("studio_forecast_create", {
+			appId,
+			payload,
+			userScoped: userScoped ?? false,
+		});
+	}
+
+	async deleteForecast(
+		appId: string,
+		forecastId: string,
+		userScoped?: boolean,
+	): Promise<void> {
+		if (!(await this.backend.isOffline(appId))) {
+			await fetcher(
+				this.requireProfile(),
+				appendScope(
+					`apps/${encodeURIComponent(appId)}/db/forecasts/${encodeURIComponent(forecastId)}`,
+					userScoped,
+				),
+				{ method: "DELETE" },
+				this.backend.auth,
+			);
+			return;
+		}
+		await invoke("studio_forecast_delete", {
+			appId,
+			forecastId,
+			userScoped: userScoped ?? false,
+		});
+	}
+
+	async forecast(
+		appId: string,
+		payload: StudioForecastPayload,
+		userScoped?: boolean,
+	): Promise<StudioForecastResult> {
+		if (!(await this.backend.isOffline(appId))) {
+			const profile = this.backend.profile;
+			if (!profile) throw new Error("Select a profile before forecasting.");
+			return fetcher<StudioForecastResult>(
+				profile,
+				appendScope(`apps/${appId}/db/queries/forecast`, userScoped),
+				{ method: "POST", body: JSON.stringify(payload) },
+				this.backend.auth,
+			);
+		}
+		return invoke<StudioForecastResult>("query_forecast", {
+			appId,
+			payload,
+			userScoped: userScoped ?? false,
+		});
+	}
+
 	async executeSql(
 		appId: string,
 		payload: ExecuteSqlPayload,
@@ -45,7 +182,7 @@ export class QueryState implements IQueryState {
 		if (!isOffline) {
 			return normalizeExecuteSqlResult(
 				await fetcher<ExecuteSqlResult>(
-					this.backend.profile!,
+					this.requireProfile(),
 					appendScope(`apps/${appId}/db/queries/execute`, userScoped),
 					{ method: "POST", body: JSON.stringify(payload) },
 					this.backend.auth,
@@ -68,7 +205,7 @@ export class QueryState implements IQueryState {
 		if (!isOffline) {
 			return asArray(
 				await fetcher<SavedQuery[]>(
-					this.backend.profile!,
+					this.requireProfile(),
 					appendScope(`apps/${appId}/db/queries`, userScoped),
 					{ method: "GET" },
 					this.backend.auth,
@@ -89,7 +226,7 @@ export class QueryState implements IQueryState {
 		const isOffline = await this.backend.isOffline(appId);
 		if (!isOffline) {
 			return await fetcher(
-				this.backend.profile!,
+				this.requireProfile(),
 				appendScope(
 					`apps/${appId}/db/queries/${encodeURIComponent(queryId)}`,
 					userScoped,
@@ -113,7 +250,7 @@ export class QueryState implements IQueryState {
 		const isOffline = await this.backend.isOffline(appId);
 		if (!isOffline) {
 			return await fetcher(
-				this.backend.profile!,
+				this.requireProfile(),
 				appendScope(`apps/${appId}/db/queries`, userScoped),
 				{ method: "POST", body: JSON.stringify(payload) },
 				this.backend.auth,
@@ -135,7 +272,7 @@ export class QueryState implements IQueryState {
 		const isOffline = await this.backend.isOffline(appId);
 		if (!isOffline) {
 			return await fetcher(
-				this.backend.profile!,
+				this.requireProfile(),
 				appendScope(
 					`apps/${appId}/db/queries/${encodeURIComponent(queryId)}`,
 					userScoped,
@@ -160,7 +297,7 @@ export class QueryState implements IQueryState {
 		const isOffline = await this.backend.isOffline(appId);
 		if (!isOffline) {
 			await fetcher(
-				this.backend.profile!,
+				this.requireProfile(),
 				appendScope(
 					`apps/${appId}/db/queries/${encodeURIComponent(queryId)}`,
 					userScoped,

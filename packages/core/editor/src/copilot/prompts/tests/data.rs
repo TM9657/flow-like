@@ -81,6 +81,30 @@ fn data_studio_guidance_normalizes_human_table_labels() {
 }
 
 #[test]
+fn forecasting_guidance_requires_real_runs_and_distinguishes_history_from_the_outlook() {
+    let prompt = data_studio_system_prompt("");
+    for required in [
+        "`forecast_tool`",
+        "`list_models`",
+        "`backtest_offset`",
+        "N-horizon-offset",
+        "separate future outlook still uses full history",
+        "MAE/RMSE use target units",
+        "MAPE/WAPE are",
+        "host saves its cached request/result",
+        "never recreate forecast arrays",
+        "project scope",
+        "Personal scope",
+        "Never invent predictions",
+    ] {
+        assert!(
+            prompt.contains(required),
+            "missing forecasting guidance: {required}"
+        );
+    }
+}
+
+#[test]
 fn data_studio_guidance_imports_forwarded_geojson_files() {
     let prompt = data_studio_system_prompt("");
     assert!(prompt.contains("import_geojson"));

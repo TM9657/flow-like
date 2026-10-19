@@ -17,6 +17,7 @@ import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { EditorField, EditorSection, StringList } from "./bit-editor-fields";
 import { record } from "./bit-editor-model";
+import { ForecastingConfiguration } from "./forecasting-configuration";
 import { HostedEmbeddingConfiguration } from "./hosted-embedding-configuration";
 import { HostedPricing } from "./hosted-model-pricing";
 import { SystemOneConfiguration } from "./systemone-configuration";
@@ -437,6 +438,7 @@ export function BitParametersEditor({
 	const [mode, setMode] = useState<"form" | "json">("form");
 	const params = record(value);
 	const isSystemOne = bitType === IBitTypes.SystemOne;
+	const isForecasting = bitType === IBitTypes.Forecasting;
 	const isModel = [IBitTypes.Llm, IBitTypes.Vlm, IBitTypes.SystemOne].includes(
 		bitType,
 	);
@@ -520,6 +522,12 @@ export function BitParametersEditor({
 					</div>
 				) : (
 					<div className="space-y-5">
+						{isForecasting && (
+							<ForecastingConfiguration
+								parameters={params}
+								onChange={onChange}
+							/>
+						)}
 						{isSystemOne && (
 							<SystemOneConfiguration
 								parameters={params}
@@ -544,9 +552,9 @@ export function BitParametersEditor({
 								Add context length
 							</Button>
 						)}
-						{typeof value === "object" &&
-						value !== null &&
-						!Array.isArray(value) ? (
+						{isForecasting ? null : typeof value === "object" &&
+							value !== null &&
+							!Array.isArray(value) ? (
 							<ParameterObject
 								value={params}
 								onChange={onChange}

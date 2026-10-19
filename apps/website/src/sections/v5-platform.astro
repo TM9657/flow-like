@@ -43,7 +43,6 @@ const featuresJson = JSON.stringify(
     <div class="story-sticky">
       <header class="story-top">
         <span class="eyebrow">02 / {t("v5.platform.eyebrow")}</span>
-        <i><b data-progress style="width:0%"></b></i>
         <span data-counter>01 — 07</span>
       </header>
       <h2><span>{t("v5.platform.title.w1")}</span><span>{t("v5.platform.title.w2")}</span><span>{t("v5.platform.title.w3")}</span></h2>
@@ -105,9 +104,8 @@ const featuresJson = JSON.stringify(
     padding: 24px var(--story-gutter);
     background: radial-gradient(circle at 52% 50%, color-mix(in oklab, var(--primary) 8%, transparent), transparent 34%), var(--background);
   }
-  .story-top { grid-column: 1/-1; display: grid; grid-template-columns: var(--story-left) minmax(0, 1fr) var(--story-right); align-items: center; padding-bottom: 14px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font: 9px var(--mono); letter-spacing: .12em; }
-  .story-top > i { height: 1px; margin-right: 26px; background: var(--border); }
-  .story-top > i b { display: block; height: 1px; background: var(--accent); transition: width .1s linear; }
+  .story-top { grid-column: 1/-1; display: grid; grid-template-columns: var(--story-left) minmax(0, 1fr) var(--story-right); align-items: center; padding-bottom: 14px; color: var(--muted-foreground); font: 9px var(--mono); letter-spacing: .12em; }
+  .story-top > [data-counter] { grid-column: 3; }
   .story-sticky > h2 { position: absolute; top: 100px; left: var(--story-gutter); display: grid; margin: 0; font-size: clamp(45px, 4.4vw, 72px); line-height: .88; letter-spacing: -.065em; }
   .story-sticky > h2 span:nth-child(2) { color: var(--muted-foreground); }
   .story-sticky > nav { grid-column: 1; grid-row: 2; align-self: end; display: grid; margin-bottom: 18px; border-top: 1px solid var(--border); }
@@ -254,7 +252,6 @@ const featuresJson = JSON.stringify(
     const features: { kicker: string; title: string; text: string; tags: string[] }[] = raw ? JSON.parse(raw) : [];
     const n = features.length || 7;
 
-    const bar = story.querySelector<HTMLElement>("[data-progress]");
     const counter = story.querySelector<HTMLElement>("[data-counter]");
     const navButtons = [...story.querySelectorAll<HTMLButtonElement>("[data-nav]")];
     const items = [...story.querySelectorAll<HTMLElement>("[data-mock]")];
@@ -302,8 +299,7 @@ const featuresJson = JSON.stringify(
     let ticking = false;
     const pad = (i: number) => String(i + 1).padStart(2, "0");
 
-    const render = (active: number, p: number) => {
-      if (bar) bar.style.width = `${p * 100}%`;
+    const render = (active: number) => {
       if (counter) counter.textContent = `${pad(active)} — 07`;
       navButtons.forEach((b, i) => b.classList.toggle("active", i === active));
       if (active === current) return;
@@ -331,7 +327,7 @@ const featuresJson = JSON.stringify(
       const len = Math.max(1, rect.height - window.innerHeight);
       const p = Math.max(0, Math.min(1, -rect.top / len));
       const active = Math.min(n - 1, Math.floor(p * n));
-      render(active, p);
+      render(active);
       ticking = false;
     };
 

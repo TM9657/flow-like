@@ -63,11 +63,21 @@ import {
 	updateSystemOneBit,
 	validateSystemOneBit,
 } from "@flow-like/flow-like-ui/lib/bit/systemone-model";
+import { ForecastingAssetsConfiguration } from "@flow-like/flow-like-ui/components/bits/forecasting-assets-configuration";
+import {
+	type ForecastingAssetDraft,
+	buildForecastingRootBit,
+	createForecastingParameters,
+	registerForecastingAssets,
+	validateForecastingAssets,
+	validateForecastingBit,
+} from "@flow-like/flow-like-ui/lib/bit/forecasting-model";
 import { useTranslation } from "@flow-like/locales";
 import { createId } from "@paralleldrive/cuid2";
 import {
 	AudioLines,
 	Binary,
+	ChartNoAxesCombined,
 	Cpu,
 	Eye,
 	FileTextIcon,
@@ -132,6 +142,7 @@ const HOSTED_PROVIDER_OPTIONS = [
 ] as const;
 
 type BitMode =
+	| "forecasting"
 	| "systemone"
 	| "local-llm"
 	| "hosted-llm"
@@ -746,6 +757,11 @@ function HostedLLMForm({
 
 const MODES: { id: BitMode; label: string; icon: React.ReactNode }[] = [
 	{
+		id: "forecasting",
+		label: "Forecasting",
+		icon: <ChartNoAxesCombined className="h-4 w-4" />,
+	},
+	{
 		id: "systemone",
 		label: "SystemOne",
 		icon: <ListChecks className="h-4 w-4" />,
@@ -812,6 +828,10 @@ export default function Page() {
 	const [imageEmbeddingConfig, setImageEmbeddingConfig] = useState<
 		IBit | undefined
 	>(undefined);
+	const [forecastingAssets, setForecastingAssets] = useState<
+		ForecastingAssetDraft[]
+	>([]);
+	const completedForecastingAssets = useRef(new Map<string, string>());
 	const [ttsAssets, setTtsAssets] = useState<TtsAssetDraft[]>([]);
 	const [sttAssets, setSttAssets] = useState<SttAssetDraft[]>([]);
 	const [mlxAssets, setMlxAssets] = useState<IBit[]>([]);
@@ -836,6 +856,7 @@ export default function Page() {
 	const bitType: IBitTypes = (() => {
 		if (mode === "local-llm" || mode === "hosted-llm") return IBitTypes.Llm;
 		if (mode === "systemone") return IBitTypes.SystemOne;
+		if (mode === "forecasting") return IBitTypes.Forecasting;
 		if (mode === "vlm") return IBitTypes.Vlm;
 		if (mode === "tts") return IBitTypes.Tts;
 		if (mode === "image-generation") return IBitTypes.ImageGeneration;
@@ -1290,6 +1311,27 @@ export default function Page() {
 		completedGenerationAssets.current.clear();
 		setProgress(0);
 		setProgressLabel(null);
+		setForecastingAssets([]);
+		completedForecastingAssets.current.clear();
+		if (bitType === IBitTypes.Forecasting) {
+			const asset = getDefaultBit(IBitTypes.File);
+			setForecastingAssets([
+				{
+					key: asset.id,
+					relativePath: "config.json",
+					bit: { ...asset, file_name: "config.json" },
+				},
+			]);
+			setBit({
+				...getDefaultBit(bitType),
+				file_name: "model.safetensors",
+				parameters: createForecastingParameters(),
+			});
+			setMlxAssets([]);
+			setGenerationAssets([]);
+			setDefaultDependencies(bitType);
+			return;
+		}
 		const providerName = isHostedMode ? "Hosted" : "Local";
 		const generationPreset = generationKind
 			? defaultGenerationPreset(generationKind)
@@ -1316,7 +1358,9 @@ export default function Page() {
 			bitType === IBitTypes.Tts || isLocalStt || !!generationKind;
 		setBit((old) => {
 			const nextBit = {
-				...(generationKind || isGenerationModelBit(old)
+				...(generationKind ||
+				isGenerationModelBit(old) ||
+				old.type === IBitTypes.Forecasting
 					? getDefaultBit(bitType)
 					: old),
 				id: createId(),
@@ -1452,6 +1496,41 @@ export default function Page() {
 			}
 			let dependencies: IBit[] = [];
 			if (isGenerationModelBit(bit)) await registerGenerationModel();
+			if (bit.type === IBitTypes.Forecasting) {
+				const draft = buildForecastingRootBit(bit, forecastingAssets);
+				const error =
+					validateForecastingBit(draft) ??
+					validateForecastingAssets(forecastingAssets);
+				if (error) throw new Error(error);
+				const registered = await registerForecastingAssets({
+					assets: forecastingAssets,
+					completed: completedForecastingAssets.current,
+					uploadBit,
+					onRegistered: (asset) =>
+						setForecastingAssets((current) =>
+							current.map((item) => (item.key === asset.key ? asset : item)),
+						),
+					onProgress: (asset) => {
+						setProgress(0);
+						setProgressDownloaded(null);
+						setProgressTotal(null);
+						setProgressLabel(
+							`Uploading checkpoint asset: ${asset.relativePath}`,
+						);
+						setProgressBit(asset.bit);
+					},
+				});
+				const root = buildForecastingRootBit(bit, registered);
+				setBit(root);
+				setProgressLabel("Uploading forecasting checkpoint");
+				setProgressBit(root);
+				const response = await uploadBit(root);
+				await backend.apiState.put(
+					profile.data,
+					`admin/bit/${response.id}/en`,
+					root.meta.en,
+				);
+			}
 			const isLocalSttBit =
 				bit.type === IBitTypes.Stt &&
 				(bit.parameters as ILlmParameters | undefined)?.provider
@@ -1738,8 +1817,14 @@ export default function Page() {
 			setSttAssets([]);
 			setMlxAssets([]);
 			setGenerationAssets([]);
+			setForecastingAssets([]);
+			completedForecastingAssets.current.clear();
 			completedGenerationAssets.current.clear();
-			if (isGenerationModelBit(bit) || bit.type === IBitTypes.SystemOne)
+			if (
+				isGenerationModelBit(bit) ||
+				bit.type === IBitTypes.SystemOne ||
+				bit.type === IBitTypes.Forecasting
+			)
 				setMode("local-llm");
 		} catch (error: unknown) {
 			toast.error(
@@ -1768,6 +1853,7 @@ export default function Page() {
 		tokenizerConfig,
 		uploadBit,
 		registerGenerationModel,
+		forecastingAssets,
 	]);
 
 	// ── render ─────────────────────────────────────────────────────────────
@@ -1864,6 +1950,16 @@ export default function Page() {
 							) : null}
 
 							{/* model-type-specific configuration */}
+							{bit.type === IBitTypes.Forecasting && (
+								<ForecastingAssetsConfiguration
+									bit={bit}
+									setBit={setBit}
+									assets={forecastingAssets}
+									setAssets={setForecastingAssets}
+									createAssetBit={() => getDefaultBit(IBitTypes.File)}
+									disabled={loading}
+								/>
+							)}
 							{isHostedSystemOne(bit) && (
 								<HostedPricing
 									parameters={bit.parameters ?? {}}

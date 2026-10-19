@@ -51,6 +51,24 @@ export default defineConfig({
 		// after asset hashes are assigned, so it must not rewrite hashed assets.
 		(await import("@playform/compress")).default({
 			CSS: false,
+			HTML: {
+				"html-minifier-terser": {
+					// The defaults (replaced, not merged) plus /^\s*$/: React's empty
+					// `<!-- -->` text separators must survive, or islands that render
+					// `{expr} text` siblings fail hydration with error #418.
+					ignoreCustomComments: [
+						/^\s*#/,
+						/.*\$.*/,
+						/^\s*\[/,
+						/^\s*\]/,
+						/^\s*!/,
+						/^\s*\//,
+						/^\s*astro:.*/,
+						/^\s*astro:end/,
+						/^\s*$/,
+					],
+				},
+			},
 			Exclude: (file) => /\/_astro(?:-[^/]+)?\//.test(file),
 		}),
 	],
@@ -67,6 +85,19 @@ export default defineConfig({
 			"process.env.NEXT_PUBLIC_MAPLIBRE_WORKER_URL": JSON.stringify(
 				prepareMapLibreAssets(new URL("./public/", import.meta.url)),
 			),
+		},
+		// The apps section loads three behind a lazy import(), which the dependency
+		// scan cannot see. Pre-bundle it so dev never re-optimizes mid-session and
+		// force-reloads every open tab (a reload storm the workerd runner can't take).
+		optimizeDeps: {
+			include: [
+				"three",
+				"three/addons/geometries/RoundedBoxGeometry.js",
+				"three/addons/postprocessing/EffectComposer.js",
+				"three/addons/postprocessing/RenderPass.js",
+				"three/addons/postprocessing/ShaderPass.js",
+				"three/addons/postprocessing/UnrealBloomPass.js",
+			],
 		},
 		resolve: {
 			dedupe: ["react", "react-dom"],

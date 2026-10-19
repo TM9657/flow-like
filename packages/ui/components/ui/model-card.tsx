@@ -2,6 +2,7 @@
 import { i18n as i18next, useTranslation } from "@flow-like/locales";
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
+	ChartNoAxesCombinedIcon,
 	ArrowRightIcon,
 	AudioLinesIcon,
 	BrainIcon,
@@ -183,6 +184,7 @@ export function ModelCard({
 	// the bit itself never names (inline MLX manifests, llama.cpp projectors).
 	// Only fall back to the bit's own fields while that size is still loading.
 	const isVirtualBit = useMemo(() => {
+		if (bit.type === IBitTypes.Forecasting) return false;
 		if (bitSize.isSuccess) return (bitSize.data ?? 0) === 0;
 		return (
 			(bit.dependencies?.length ?? 0) === 0 &&
@@ -321,12 +323,14 @@ export function ModelCard({
 	const modality = getModelModality(bit);
 	const params = bit.parameters as ILlmParameters | IEmbeddingModelParameters;
 	const contextLength = (params as ILlmParameters)?.context_length;
-	const isHosted = bitSize.data === 0 || isVirtualBit;
+	const isHosted =
+		bit.type !== IBitTypes.Forecasting && (bitSize.data === 0 || isVirtualBit);
 	const canRunRemotely = supportsRemoteEmbeddingExecution(bit);
 	const isEmbeddingModel =
 		isEmbeddingBit(bit) ||
 		bit.type === IBitTypes.Tts ||
 		bit.type === IBitTypes.Stt ||
+		bit.type === IBitTypes.Forecasting ||
 		((bit.type === IBitTypes.ImageGeneration ||
 			bit.type === IBitTypes.VideoGeneration) &&
 			bit.parameters?.provider?.provider_name === "local:stablediffusion" &&
@@ -544,7 +548,15 @@ function ModelCardGridVariant({
 					</>
 				) : null}
 				<DeploymentLabel
-					kind={isHosted ? "hosted" : canRunRemotely ? "remote" : "local"}
+					kind={
+						bit.type === IBitTypes.Forecasting
+							? "native"
+							: isHosted
+								? "hosted"
+								: canRunRemotely
+									? "remote"
+									: "local"
+					}
 				/>
 				{!isHosted && isInstalled && (
 					<>
@@ -709,7 +721,9 @@ function ModelCardListVariant({
 						variant="outline"
 						className="text-[10px] px-1.5 py-0 h-5 bg-zinc-500/10 text-zinc-600 border-zinc-500/30"
 					>
-						{t("localOnly", "Local only")}
+						{bit.type === IBitTypes.Forecasting
+							? "Workflow runtime"
+							: t("localOnly", "Local only")}
 					</Badge>
 				)}
 				{isRestricted && requiredTier && (
@@ -918,6 +932,8 @@ export function ModelTypeIcon({
 	const { t } = useTranslation("common");
 	const cn = `h-4 w-4 ${className}`;
 	switch (type) {
+		case IBitTypes.Forecasting:
+			return <ChartNoAxesCombinedIcon className={cn} />;
 		case IBitTypes.SystemOne:
 			return <ListChecksIcon className={cn} />;
 		case IBitTypes.Llm:
@@ -951,6 +967,7 @@ export function ModalityIcons({
 	switch (type) {
 		case IBitTypes.ImageGeneration:
 		case IBitTypes.VideoGeneration:
+		case IBitTypes.Forecasting:
 		case IBitTypes.SystemOne:
 			return <ModalityFlow type={type} compact />;
 		case IBitTypes.Llm:
@@ -1015,6 +1032,8 @@ export function ModalityIcons({
 
 export function getModelModality(bit: IBit): string {
 	switch (bit.type) {
+		case IBitTypes.Forecasting:
+			return "Time series → Forecast";
 		case IBitTypes.SystemOne:
 			return "Text → Decisions";
 		case IBitTypes.Llm:

@@ -2718,6 +2718,71 @@ declare namespace inspection {
      */
     function windowFeatures({ request: Struct }): Struct;
 
+    // === AI/ML/Forecasting ===
+
+    /**
+     * Forecast regularly spaced series from a table and write future points and quantiles to a table
+     * @node ml_forecast @alias mlForecast
+     * @param source — Historical rows with timestamps, targets and optional covariates
+     * @param model — Loaded forecasting model
+     * @param mapping — Timestamp, series ID, target and covariate columns; no automatic resampling
+     * @param horizon (optional) — Number of future steps at the historical interval
+     * @param quantileLevels (optional) — Increasing quantiles between zero and one; empty selects the model's native levels
+     * @param futureSource (optional) — Required for known covariates: exactly horizon future rows per series, with the same timestamp and ID columns
+     * @param destination (optional) — Optional writable table with the complete forecast schema; otherwise create a fresh table beside the source
+     * @param budget (optional) — Limits on combined input rows, input bytes, output rows, output bytes and tensor elements
+     * @returns table — Pinned table with series_id, timestamp_ms, target, point, q_* quantiles and model provenance
+     * @returns metadata — Source/output versions, model provenance, row counts and quantile column names
+     * @impure has side effects / drives control flow
+     */
+    function forecast({ source: Struct, model: Struct, mapping: Struct, horizon?: int, quantileLevels?: float[], futureSource?: Struct, destination?: Struct, budget?: Struct }): { table: Struct, metadata: Struct };
+
+    /**
+     * Read the loaded checkpoint's context, horizon, quantile and covariate capabilities
+     * @node ml_forecast_model_info @alias mlForecastModelInfo
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function forecastModelInfo({ request: Struct }): Struct;
+
+    /**
+     * Forecast from arrays of equally spaced historical targets and optional numeric covariates
+     * @node ml_forecast_values @alias mlForecastValues
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function forecastValues({ request: Struct }): Struct;
+
+    /**
+     * Load a supported SafeTensors forecasting checkpoint from storage for native Rust inference
+     * @node ml_load_forecast_model @alias mlLoadForecastModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function loadForecastModel({ request: Struct }): Struct;
+
+    /**
+     * Load a Forecasting Bit and its checkpoint assets for native Rust inference
+     * @node ml_load_forecasting_bit @alias mlLoadForecastingBit
+     * @param bit — A Forecasting Bit from the model catalog
+     * @param maximumBytes (optional) — Maximum checkpoint bytes to stage for inference
+     * @returns model — Loaded forecast model for this execution
+     * @impure has side effects / drives control flow
+     */
+    function loadForecastingBit({ bit: Struct, maximumBytes?: int }): Struct;
+
+    /**
+     * Download a supported public forecasting checkpoint at a pinned revision and load it for native Rust inference
+     * @node ml_load_huggingface_forecast_model @alias mlLoadHuggingfaceForecastModel
+     * @param request — Inputs and configuration
+     * @returns result — Operation result
+     * @impure has side effects / drives control flow
+     */
+    function loadHuggingFaceForecastModel({ request: Struct }): Struct;
+
     // === AI/ML/Fusion ===
 
     /**

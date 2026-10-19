@@ -1,0 +1,29 @@
+Flow-Like native forecasting implementations
+
+The Timestral, Chronos-2, Toto 2, TimesFM 2.5 and TinyTimeMixer modules adapt the
+following Apache-2.0 implementations to Rust and Burn. The changes include
+native tensor execution, checkpoint loading, a shared forecasting contract
+and validation tests.
+
+Timestral: https://github.com/mistralai/timestral
+Source revision: a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff
+
+Chronos-2: https://github.com/amazon-science/chronos-forecasting
+Source revision: 1224fafa91e1ecd6674f5204066b159e40b5e4a1
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+Datadog Toto: https://github.com/DataDog/toto
+Source revision: 9213d2c86f716c43010a0a3b2b6a0e3f440e6743
+Copyright [2005-Present] Datadog, Inc.
+This product includes software developed at Datadog (https://www.datadoghq.com/).
+
+Google TimesFM: https://github.com/google-research/timesfm
+Source revision: e51928e27119cb17bebc005be2696b75e0a9e688
+Copyright 2025 Google LLC.
+
+IBM Granite TinyTimeMixer: https://github.com/ibm-granite/granite-tsfm
+Source revision: 3d92535ca4138648b9d1e2f3f1421b5dec4dc3aa
+Copyright contributors to the TSFM project.
+
+The upstream model weights are distributed separately under their respective
+checkpoint licenses. No model weights are included in this crate.

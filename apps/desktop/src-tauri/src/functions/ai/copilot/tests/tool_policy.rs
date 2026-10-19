@@ -256,6 +256,7 @@ fn specialist_capabilities_follow_exact_tool_policy() {
     }
     assert!(!board_names.contains("emit_ui"));
     assert!(!board_names.contains("graph_overlay_tool"));
+    assert!(!board_names.contains("forecast_tool"));
     assert!(!board_names.contains("internet_search"));
     assert!(!board_names.contains("open_url"));
     assert!(!board_names.contains("archive_lookup"));
@@ -273,6 +274,7 @@ fn specialist_capabilities_follow_exact_tool_policy() {
     );
     for data_tool in [
         "database_tool",
+        "forecast_tool",
         "graph_overlay_tool",
         "graph_query_tool",
         "graph_element_tool",

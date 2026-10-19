@@ -26,6 +26,139 @@ export interface ExecuteSqlResult {
 	truncated: boolean;
 }
 
+export interface StudioForecastMapping {
+	timestamp: string;
+	series_id?: string;
+	targets: string[];
+	past_covariates?: string[];
+	known_covariates?: string[];
+	frequency_ms?: number;
+}
+
+export interface StudioForecastPayload {
+	profile_id: string;
+	model_bit_id: string;
+	sql: string;
+	params?: Record<string, unknown>;
+	mapping: StudioForecastMapping;
+	horizon: number;
+	quantile_levels?: number[];
+	future_sql?: string;
+	future_params?: Record<string, unknown>;
+	backtest_horizon?: number;
+	/** Historical observations after the evaluated window; zero uses the final window. */
+	backtest_offset?: number;
+	budget?: {
+		maximum_rows?: number;
+		maximum_bytes?: number;
+		maximum_tensor_elements?: number;
+	};
+}
+
+export interface StudioHistoryPoint {
+	series_id: string;
+	timestamp_ms: number;
+	target: string;
+	value: number | null;
+}
+
+export interface StudioForecastPoint {
+	series_id: string;
+	timestamp_ms: number;
+	target: string;
+	point: number;
+	/** Values follow StudioForecastResult.quantile_levels. */
+	quantiles: number[];
+	actual: number | null;
+}
+
+export interface StudioCovariatePoint {
+	series_id: string;
+	timestamp_ms: number;
+	name: string;
+	kind: "past" | "known";
+	value: number;
+	future: boolean;
+}
+
+export interface StudioBacktestMetric {
+	series_id: string;
+	target: string;
+	observations: number;
+	mae: number | null;
+	rmse: number | null;
+	/** Absent when an observed actual is zero; otherwise a percentage. */
+	mape: number | null;
+	/** Total absolute error / total absolute actuals, as a percentage. */
+	wape?: number | null;
+}
+
+export type StudioForecastFamily =
+	| "timestral"
+	| "chronos2"
+	| "toto2"
+	| "timesfm2_5"
+	| "tiny_time_mixer";
+
+export interface StudioForecastResult {
+	run_id: string;
+	model: {
+		bit_id: string;
+		family: StudioForecastFamily;
+		repository: string | null;
+		revision: string | null;
+	};
+	capabilities: {
+		family: StudioForecastFamily;
+		max_context: number;
+		max_horizon: number | null;
+		native_horizon: number;
+		quantile_levels: number[];
+		joint_multivariate: boolean;
+		past_covariates: boolean;
+		known_covariates: boolean;
+	};
+	input_rows: number;
+	horizon: number;
+	quantile_levels: number[];
+	point_statistic: "mean" | "median";
+	history: StudioHistoryPoint[];
+	forecasts: StudioForecastPoint[];
+	covariates: StudioCovariatePoint[];
+	backtest: {
+		horizon: number;
+		offset?: number;
+		forecasts: StudioForecastPoint[];
+		metrics: StudioBacktestMetric[];
+	} | null;
+}
+
+/** A completed prediction retains the request that produced its saved result. */
+export interface SavedStudioForecast {
+	id: string;
+	app_id: string;
+	name: string;
+	description?: string | null;
+	created_by: string;
+	created_at: string;
+	request: Omit<StudioForecastPayload, "profile_id">;
+	result: StudioForecastResult;
+}
+
+export interface StudioForecastSummary
+	extends Omit<SavedStudioForecast, "request" | "result"> {
+	model_bit_id: string;
+	horizon: number;
+	run_id: string;
+}
+
+export interface CreateStudioForecastPayload {
+	name: string;
+	description?: string | null;
+	request: SavedStudioForecast["request"];
+	result: StudioForecastResult;
+}
+
 // ─── Result visualization config (persisted with a saved query) ───
 
 export type VizView = "table" | "chart" | "graph" | "json";
@@ -104,6 +237,31 @@ export interface UpdateSavedQueryPayload
 }
 
 export interface IQueryState {
+	listForecasts(
+		appId: string,
+		userScoped?: boolean,
+		maximum?: number,
+	): Promise<StudioForecastSummary[]>;
+	getForecast(
+		appId: string,
+		forecastId: string,
+		userScoped?: boolean,
+	): Promise<SavedStudioForecast>;
+	createForecast(
+		appId: string,
+		payload: CreateStudioForecastPayload,
+		userScoped?: boolean,
+	): Promise<SavedStudioForecast>;
+	deleteForecast(
+		appId: string,
+		forecastId: string,
+		userScoped?: boolean,
+	): Promise<void>;
+	forecast(
+		appId: string,
+		payload: StudioForecastPayload,
+		userScoped?: boolean,
+	): Promise<StudioForecastResult>;
 	executeSql(
 		appId: string,
 		payload: ExecuteSqlPayload,

@@ -14975,6 +14975,33 @@
     "class": null,
     "category": "AI/ML/Dataset"
   },
+  "ml_forecast": {
+    "qualified": "inspection::forecast",
+    "namespace": "inspection",
+    "alias": "forecast",
+    "flat": "mlForecast",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Forecasting"
+  },
+  "ml_forecast_model_info": {
+    "qualified": "inspection::forecastModelInfo",
+    "namespace": "inspection",
+    "alias": "forecastModelInfo",
+    "flat": "mlForecastModelInfo",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Forecasting"
+  },
+  "ml_forecast_values": {
+    "qualified": "inspection::forecastValues",
+    "namespace": "inspection",
+    "alias": "forecastValues",
+    "flat": "mlForecastValues",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Forecasting"
+  },
   "ml_get_auto_training": {
     "qualified": "inspection::getAutoTraining",
     "namespace": "inspection",
@@ -15091,6 +15118,33 @@
     "receiver": null,
     "class": null,
     "category": "AI/ML/Training"
+  },
+  "ml_load_forecast_model": {
+    "qualified": "inspection::loadForecastModel",
+    "namespace": "inspection",
+    "alias": "loadForecastModel",
+    "flat": "mlLoadForecastModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Forecasting"
+  },
+  "ml_load_forecasting_bit": {
+    "qualified": "inspection::loadForecastingBit",
+    "namespace": "inspection",
+    "alias": "loadForecastingBit",
+    "flat": "mlLoadForecastingBit",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Forecasting"
+  },
+  "ml_load_huggingface_forecast_model": {
+    "qualified": "inspection::loadHuggingFaceForecastModel",
+    "namespace": "inspection",
+    "alias": "loadHuggingFaceForecastModel",
+    "flat": "mlLoadHuggingfaceForecastModel",
+    "receiver": null,
+    "class": null,
+    "category": "AI/ML/Forecasting"
   },
   "ml_loss_drift": {
     "qualified": "inspection::lossDrift",

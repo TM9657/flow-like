@@ -4,6 +4,7 @@ import type {
 	IPlanStep,
 	PlanStepStatus,
 } from "../../components/interfaces/chat-default/chat-db";
+import { buildToolActivity, toolActivityText } from "./tool-step-activity";
 
 // Turns the FlowPilot copilot stream protocol (plan_step / tool_start / tool_call / …) into an
 // ordered IPlanStep list. Shared by the global chat's own response stream and by nested sub-agent
@@ -143,7 +144,14 @@ export function readPlanStep(
 			toolName,
 		};
 	}
-	return { id, title, description, status, reasoning, toolName };
+	return {
+		id,
+		title,
+		description: toolName ? toolActivityText(description) : description,
+		status,
+		reasoning,
+		toolName,
+	};
 }
 
 export interface StreamAccumulator {
@@ -215,7 +223,13 @@ function toolFieldName(data: unknown): string {
 function toolFieldSummary(data: unknown): string | undefined {
 	const record = (data ?? {}) as Record<string, unknown>;
 	const summary = record.summary ?? record.message;
-	return typeof summary === "string" && summary.trim() ? summary : undefined;
+	return toolActivityText(summary);
+}
+
+function toolActivityDetail(name: string, data: unknown, existing?: IPlanStep) {
+	if (existing?.detail?.kind === "build_lane") return existing.detail;
+	if (name === "think") return undefined;
+	return buildToolActivity(name, data, existing?.detail);
 }
 
 export function applyStreamEvent(
@@ -245,13 +259,20 @@ export function applyStreamEvent(
 				step.description = undefined;
 			}
 			const existing = acc.steps.get(step.id);
+			const data =
+				(event.data as { PlanStep?: unknown }).PlanStep ?? event.data;
 			upsertStep({
 				...step,
 				description: step.description ?? existing?.description,
 				reasoning: step.reasoning ?? existing?.reasoning,
+				detail: toolName
+					? toolActivityDetail(toolName, data, existing)
+					: existing?.detail,
 				// Kept on the step so the orb can tell research from code generation.
 				toolName: toolName ?? existing?.toolName,
 				timestamp: existing?.timestamp ?? Date.now(),
+				startTime: existing?.startTime,
+				endTime: existing?.endTime,
 				content_offset: existing?.content_offset ?? acc.content.length,
 			});
 			acc.currentStepId =
@@ -264,13 +285,17 @@ export function applyStreamEvent(
 			const id = toolFieldId(event.data, `tool-${acc.stepOrder.length}`);
 			const name = toolFieldName(event.data);
 			const existing = acc.steps.get(id);
+			const now = Date.now();
 			upsertStep({
+				...existing,
 				id,
 				title: `Using ${name}`,
-				description: toolFieldSummary(event.data),
+				description: toolFieldSummary(event.data) ?? existing?.description,
 				status: "progress",
 				toolName: name,
-				timestamp: existing?.timestamp ?? Date.now(),
+				detail: toolActivityDetail(name, event.data, existing),
+				timestamp: existing?.timestamp ?? now,
+				startTime: existing?.startTime ?? now,
 				content_offset: existing?.content_offset ?? acc.content.length,
 			});
 			acc.currentStepId = id;
@@ -281,19 +306,30 @@ export function applyStreamEvent(
 			const existing = acc.steps.get(id);
 			const message = toolFieldSummary(event.data);
 			if (existing) {
-				if (message) acc.steps.set(id, { ...existing, description: message });
+				acc.steps.set(id, {
+					...existing,
+					description: message ?? existing.description,
+					detail: toolActivityDetail(
+						existing.toolName ?? toolFieldName(event.data),
+						event.data,
+						existing,
+					),
+				});
 				break;
 			}
 			// External backends (codex/claude-code, some copilot phases) emit tool_progress
 			// WITHOUT a preceding tool_start — create the step or their activity is invisible.
 			const name = toolFieldName(event.data);
+			const now = Date.now();
 			upsertStep({
 				id,
 				title: name === "tool" ? "Working" : `Using ${name}`,
 				description: message,
 				status: "progress",
 				toolName: name,
-				timestamp: Date.now(),
+				detail: toolActivityDetail(name, event.data),
+				timestamp: now,
+				startTime: now,
 				content_offset: acc.content.length,
 			});
 			acc.currentStepId = id;
@@ -306,6 +342,12 @@ export function applyStreamEvent(
 				acc.steps.set(id, {
 					...existing,
 					status: toolEndPlanStepStatus(event.data),
+					detail: toolActivityDetail(
+						existing.toolName ?? toolFieldName(event.data),
+						event.data,
+						existing,
+					),
+					endTime: Date.now(),
 				});
 			}
 			acc.currentStepId = undefined;

@@ -89,3 +89,171 @@ describe("toolEndPlanStepStatus", () => {
 		});
 	});
 });
+
+describe("tool activity lifecycle", () => {
+	test("keeps thinking steps in the reasoning viewer", () => {
+		const acc = createStreamAccumulator();
+		applyStreamEvent(acc, {
+			type: "plan_step",
+			data: {
+				id: "thinking-1",
+				tool_name: "think",
+				description: "Review the available context.",
+				status: "progress",
+			},
+		});
+		expect(acc.steps.get("thinking-1")).toMatchObject({
+			title: "Thinking",
+			reasoning: "Review the available context.",
+		});
+		expect(acc.steps.get("thinking-1")?.detail).toBeUndefined();
+	});
+
+	test("retains request context and timing through progress, completion and plan updates", () => {
+		const acc = createStreamAccumulator();
+		applyStreamEvent(acc, { type: "text", text: "Checking the license. " });
+		applyStreamEvent(acc, {
+			type: "tool_start",
+			data: {
+				tool_call_id: "request-1",
+				tool: "http_request",
+				arguments_preview: JSON.stringify({
+					url: "https://example.com/LICENSE?token=secret",
+				}),
+			},
+		});
+		const initial = acc.steps.get("request-1");
+		applyStreamEvent(acc, { type: "text", text: "More context. " });
+		applyStreamEvent(acc, {
+			type: "tool_progress",
+			data: { tool_call_id: "request-1", message: "Waiting for the response" },
+		});
+		applyStreamEvent(acc, {
+			type: "tool_end",
+			data: {
+				tool_call_id: "request-1",
+				status: "completed",
+				result_preview: JSON.stringify({
+					http_status: 200,
+					body: "private response",
+				}),
+			},
+		});
+		applyStreamEvent(acc, {
+			type: "plan_step",
+			data: {
+				id: "request-1",
+				tool_name: "http_request",
+				title: "Using http_request",
+				status: "completed",
+			},
+		});
+		expect(acc.steps.get("request-1")).toMatchObject({
+			title: "Using http_request",
+			status: "done",
+			content_offset: initial?.content_offset,
+			startTime: initial?.startTime,
+			endTime: expect.any(Number),
+			detail: {
+				kind: "tool_activity",
+				label: "Fetching a URL",
+				method: "GET",
+				sources: [
+					{
+						url: "https://example.com/LICENSE",
+						hostname: "example.com",
+						path: "/LICENSE",
+						linkable: false,
+					},
+				],
+				outcome: "HTTP 200",
+			},
+		});
+		expect(acc.stepOrder).toEqual(["request-1"]);
+		expect(acc.currentStepId).toBeUndefined();
+		expect(JSON.stringify(acc.steps.get("request-1"))).not.toContain("secret");
+		expect(JSON.stringify(acc.steps.get("request-1"))).not.toContain(
+			"private response",
+		);
+	});
+
+	test("learns context from progress after a start without arguments", () => {
+		const acc = createStreamAccumulator();
+		applyStreamEvent(acc, {
+			type: "tool_start",
+			data: { tool_call_id: "search-1", tool: "internet_search" },
+		});
+		applyStreamEvent(acc, {
+			type: "tool_progress",
+			data: {
+				tool_call_id: "search-1",
+				arguments: { query: "license terms" },
+			},
+		});
+		expect(acc.steps.get("search-1")?.detail).toMatchObject({
+			query: "license terms",
+			category: "search",
+		});
+	});
+
+	test("reads activity context from a wrapped plan step", () => {
+		const acc = createStreamAccumulator();
+		applyStreamEvent(acc, {
+			type: "plan_step",
+			data: {
+				PlanStep: {
+					id: "plan-1",
+					tool_name: "open_url",
+					status: "progress",
+					arguments: { url: "https://example.com/license" },
+				},
+			},
+		});
+		expect(acc.steps.get("plan-1")?.detail).toMatchObject({
+			sources: [
+				{
+					url: "https://example.com/license",
+					hostname: "example.com",
+					path: "/license",
+				},
+			],
+		});
+	});
+
+	test("does not keep JSON argument dumps as step descriptions", () => {
+		const acc = createStreamAccumulator();
+		applyStreamEvent(acc, {
+			type: "tool_start",
+			data: {
+				tool_call_id: "request-1",
+				tool: "http_request",
+				summary: '{"headers":{"Authorization":"Bearer private"}}',
+			},
+		});
+		expect(acc.steps.get("request-1")?.description).toBeUndefined();
+	});
+
+	test("preserves richer build lane details", () => {
+		const acc = createStreamAccumulator();
+		acc.steps.set("build-1", {
+			id: "build-1",
+			title: "Building a workflow",
+			status: "progress",
+			toolName: "flowpilot_board",
+			detail: {
+				kind: "build_lane",
+				lane: "workflow",
+				target: "Order processing",
+			},
+		});
+		applyStreamEvent(acc, {
+			type: "tool_end",
+			data: { tool_call_id: "build-1", status: "completed" },
+		});
+		expect(acc.steps.get("build-1")?.detail).toEqual({
+			kind: "build_lane",
+			lane: "workflow",
+			target: "Order processing",
+		});
+	});
+});

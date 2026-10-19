@@ -51,6 +51,7 @@ use super::external_stream::{
 };
 use super::global_chat::{
     GLOBAL_CHAT_RUN_MAX_BUFFER_BYTES, GLOBAL_CHAT_RUN_MAX_CHUNKS, GlobalChatRunBuffer,
+    global_run_tool_context,
 };
 use super::mcp::{
     McpToolActivityState, McpToolCompletion, flowpilot_mcp_server_config,

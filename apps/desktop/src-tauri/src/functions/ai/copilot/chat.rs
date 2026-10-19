@@ -793,19 +793,12 @@ pub async fn copilot_chat(
 /// same context wording.
 pub(super) async fn build_global_agent_context(
     app_handle: &AppHandle,
+    active_profile: Option<&flow_like::profile::Profile>,
     user_context: Option<&str>,
     open_board: Option<&GlobalOpenBoardContext>,
     open_data_studio: Option<&GlobalDataStudioContext>,
     attachments: &[AttachmentManifestEntry],
 ) -> String {
-    let active = TauriSettingsState::current_profile(app_handle)
-        .await
-        .ok()
-        .map(|current| {
-            let profile = &current.hub_profile;
-            (profile.name.clone(), profile.id.clone())
-        });
-
     let switchable: Vec<String> =
         match crate::functions::settings::profiles::get_profiles(app_handle.clone()).await {
             Ok(profiles) => profiles
@@ -824,9 +817,7 @@ pub(super) async fn build_global_agent_context(
 
     build_platform_context(PlatformContextInput {
         user_context,
-        active_profile: active
-            .as_ref()
-            .map(|(name, id)| (name.as_str(), id.as_str())),
+        active_profile: active_profile.map(|profile| (profile.name.as_str(), profile.id.as_str())),
         switchable_profiles: &switchable,
         open_board,
         open_data_studio,

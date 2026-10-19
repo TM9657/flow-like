@@ -172,6 +172,9 @@ const builtInRenderers = {
 	nivoChart: lazyRenderer(() =>
 		import("./display/NivoChart").then(named("A2UINivoChart")),
 	),
+	forecastChart: lazyRenderer(() =>
+		import("./display/ForecastChart").then(named("A2UIForecastChart")),
+	),
 	boundingBoxOverlay: A2UIBoundingBoxOverlay as ComponentRenderer,
 	geoMap: lazyRenderer(() =>
 		import("./display/GeoMap").then(named("A2UIGeoMap")),

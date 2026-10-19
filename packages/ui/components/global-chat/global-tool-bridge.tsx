@@ -2400,6 +2400,37 @@ export function GlobalToolBridge() {
 						},
 					);
 				}
+				case "forecast_tool": {
+					const result = await executeRuntimeTool(request.toolName, args, {
+						forecast: {
+							appId: request.context?.appId ?? request.context?.app_id,
+							profileId:
+								request.context?.profileId ?? request.context?.profile_id,
+							assertActive: () =>
+								assertRequestActive(request, "forecast tool execution"),
+						},
+					});
+					if (args.operation === "save") {
+						void queryClient.invalidateQueries({
+							queryKey: [backend.queryState.listForecasts.name],
+						});
+						void queryClient.invalidateQueries({
+							queryKey: [backend.queryState.getForecast.name],
+						});
+						window.dispatchEvent(
+							new CustomEvent("flow-like:forecast-saved", {
+								detail: {
+									appId:
+										args.app_id ??
+										request.context?.appId ??
+										request.context?.app_id,
+									userScoped: args.user_scoped === true,
+								},
+							}),
+						);
+					}
+					return result;
+				}
 				case "database_tool":
 					return executeRuntimeTool(request.toolName, args, {
 						attachments: scope.runId
