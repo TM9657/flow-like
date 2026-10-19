@@ -739,16 +739,25 @@ export function toNivoData(input: ChartInput): {
 		const colors = normalizeNivoColors(chartType, input.config.colors);
 		if (colors) props.colors = colors;
 	}
-	if (input.config.xLabel) {
+	const horizontalBar =
+		chartType === "bar" && input.config.layout === "horizontal";
+	const xLabel =
+		input.config.xLabel ??
+		(horizontalBar && csvData.headers.length === 2
+			? csvData.headers[1]
+			: undefined);
+	const yLabel =
+		input.config.yLabel ?? (horizontalBar ? csvData.headers[0] : undefined);
+	if (xLabel) {
 		props.axisBottom = {
-			legend: input.config.xLabel,
+			legend: xLabel,
 			legendOffset: 44,
 			legendPosition: "middle",
 		};
 	}
-	if (input.config.yLabel) {
+	if (yLabel) {
 		props.axisLeft = {
-			legend: input.config.yLabel,
+			legend: yLabel,
 			legendOffset: -52,
 			legendPosition: "middle",
 		};
@@ -761,7 +770,7 @@ export function toNivoData(input: ChartInput): {
 	if (input.config.animate !== undefined) {
 		props.animate = input.config.animate;
 	}
-	props.margin = nivoMargin(input.config);
+	props.margin = nivoMargin({ ...input.config, xLabel, yLabel });
 
 	return { data, chartType, props };
 }

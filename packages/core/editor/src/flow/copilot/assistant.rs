@@ -52,6 +52,10 @@ pub struct GlobalDataStudioContext {
     #[serde(default)]
     pub selected_table: Option<String>,
     #[serde(default)]
+    pub view: Option<String>,
+    #[serde(default)]
+    pub forecast_id: Option<String>,
+    #[serde(default)]
     pub user_scoped: bool,
     #[serde(default)]
     pub overlay_names: Vec<String>,
@@ -408,6 +412,21 @@ pub fn data_studio_section(context: &GlobalDataStudioContext) -> String {
     }
     if context.user_scoped {
         lines.push("- Storage scope: current user's private data".to_string());
+    }
+    if context.view.as_deref() == Some("forecast") {
+        lines.push("- Visible tab: Forecast".to_string());
+        if let Some(forecast_id) = context
+            .forecast_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            lines.push(format!("- Open saved prediction: {forecast_id}"));
+        }
+        lines.push(format!(
+            "Forecast setup, model discovery, historical evaluation and saved predictions belong to data_studio_agent. Forward user_scoped={} and any open forecast_id in its instruction; the specialist uses forecast_tool and must retrieve the saved setup before changing it.",
+            context.user_scoped
+        ));
     }
     let overlays: Vec<&str> = context
         .overlay_names
@@ -853,6 +872,7 @@ mod tests {
             selected_table: Some("customers".to_string()),
             user_scoped: false,
             overlay_names: vec!["CRM".to_string()],
+            ..Default::default()
         });
 
         assert!(section.contains("app_id: sales-app"));
@@ -861,6 +881,26 @@ mod tests {
         assert!(section.contains("any question or change about this app's data"));
         assert!(section.contains("use a configured Event instead when one already performs"));
         assert!(!section.contains("route the request to data_studio_agent"));
+    }
+
+    #[test]
+    fn open_data_studio_forecast_context_preserves_prediction_and_scope() {
+        let mut context = GlobalDataStudioContext {
+            app_id: "sales-app".into(),
+            view: Some("forecast".into()),
+            forecast_id: Some("saved-sales".into()),
+            user_scoped: true,
+            ..Default::default()
+        };
+        let section = data_studio_section(&context);
+        assert!(section.contains("Visible tab: Forecast"));
+        assert!(section.contains("Open saved prediction: saved-sales"));
+        assert!(section.contains("user_scoped=true"));
+        assert!(section.contains("retrieve the saved setup"));
+        context.user_scoped = false;
+        assert!(data_studio_section(&context).contains("user_scoped=false"));
+        context.view = Some("queries".into());
+        assert!(!data_studio_section(&context).contains("saved-sales"));
     }
 
     #[test]

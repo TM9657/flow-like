@@ -70,6 +70,7 @@ import type {
 	TableColumn,
 } from "../a2ui/types";
 import { WidgetConsentStatus } from "../store/widget-permissions";
+import { SavedForecastPicker } from "../settings/data-studio/forecasting/saved-forecast-picker";
 import { Button } from "../ui/button";
 import {
 	Collapsible,
@@ -408,6 +409,7 @@ function PropertyEditor({ component, onUpdate }: PropertyEditorProps) {
 	const props =
 		componentType === "model3d" ||
 		componentType === "excalidraw" ||
+		componentType === "forecastChart" ||
 		componentType === "fileEditor"
 			? { ...getDefaultProps(componentType), ...rawProps }
 			: componentType === "filePreview"
@@ -557,6 +559,7 @@ function PropertyEditor({ component, onUpdate }: PropertyEditorProps) {
 						isAssetProperty={Boolean(assetAccept)}
 						assetAccept={assetAccept}
 						componentType={componentType}
+						componentProps={props}
 						enumOptions={schema?.[key]?.enum}
 					/>
 				);
@@ -3539,7 +3542,54 @@ interface PropertyFieldProps {
 	isAssetProperty?: boolean;
 	assetAccept?: AssetAccept;
 	componentType?: string;
+	componentProps?: Record<string, unknown>;
 	enumOptions?: string[];
+}
+
+function ForecastIdField({
+	appId,
+	userScoped,
+	value,
+	onChange,
+}: {
+	appId: string;
+	userScoped: boolean;
+	value: BoundValue;
+	onChange: (value: unknown) => void;
+}) {
+	const bound = "path" in value;
+	return (
+		<div className={INSPECTOR_FIELD_CLASS}>
+			{bound ? (
+				<BoundValueEditor
+					name="forecastId"
+					value={value}
+					onChange={onChange}
+					componentType="forecastChart"
+				/>
+			) : (
+				<SavedForecastPicker
+					appId={appId}
+					userScoped={userScoped}
+					value={"literalString" in value ? value.literalString : undefined}
+					onChange={(id) => onChange({ literalString: id })}
+				/>
+			)}
+			<Button
+				type="button"
+				variant="link"
+				size="sm"
+				className="h-auto p-0 text-xs"
+				onClick={() =>
+					onChange(
+						bound ? { literalString: "" } : { path: "$.data.forecastId" },
+					)
+				}
+			>
+				{bound ? "Choose a saved forecast" : "Bind forecast ID to data"}
+			</Button>
+		</div>
+	);
 }
 
 /** Picks one of the project's ontologies by name instead of pasting its id. */
@@ -3600,11 +3650,47 @@ function PropertyField({
 	isAssetProperty,
 	assetAccept = "all",
 	componentType,
+	componentProps,
 	enumOptions,
 }: PropertyFieldProps) {
 	const { t } = useTranslation("flow");
 	const { actionContext } = useBuilder();
 	const appId = actionContext?.appId;
+	if (componentType === "forecastChart" && name === "forecastId") {
+		const app = componentProps?.appId;
+		const scope = componentProps?.userScoped;
+		const appLiteral =
+			typeof app === "object" &&
+			app !== null &&
+			"literalString" in app &&
+			typeof app.literalString === "string"
+				? app.literalString
+				: undefined;
+		const scopeLiteral =
+			typeof scope === "object" &&
+			scope !== null &&
+			"literalBool" in scope &&
+			typeof scope.literalBool === "boolean"
+				? scope.literalBool
+				: undefined;
+		const fixedApp = app === undefined || appLiteral !== undefined;
+		const fixedScope = scope === undefined || scopeLiteral !== undefined;
+		const selectedApp = appLiteral?.trim() || appId;
+		if (fixedApp && fixedScope && selectedApp) {
+			const selection =
+				typeof value === "object" && value !== null
+					? (value as BoundValue)
+					: { literalString: typeof value === "string" ? value : "" };
+			return (
+				<ForecastIdField
+					appId={selectedApp}
+					userScoped={scopeLiteral ?? false}
+					value={selection}
+					onChange={onChange}
+				/>
+			);
+		}
+	}
 
 	// The ontology element is a link to existing project data — pick it by name.
 	// A path-bound id keeps the generic editor so bindings stay editable.

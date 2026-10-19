@@ -62,6 +62,45 @@ describe("camera audio configuration", () => {
 	});
 });
 
+describe("saved forecast components", () => {
+	test("preserves saved references and display bindings through builder and generation", () => {
+		const props = {
+			forecastId: { path: "$.data.savedForecastId" },
+			appId: { literalString: "owning-project" },
+			userScoped: { literalBool: false },
+			target: { literalString: "sales" },
+			seriesId: { literalString: "region-a" },
+			view: { literalString: "evaluation" },
+			showCovariates: { literalBool: false },
+			showMetrics: { literalBool: true },
+			showControls: { literalBool: false },
+			showHeader: { literalBool: true },
+			compact: { literalBool: true },
+			height: { literalNumber: 220 },
+		};
+		const component = normalizeComponent({
+			id: "saved-outlook",
+			type: "forecastChart",
+			...props,
+		});
+		expect(component).toMatchObject({ type: "forecastChart", ...props });
+		const validated = validateComponents([{ id: "saved-outlook", component }]);
+		expect(validated.components[0]?.component).toMatchObject({
+			type: "forecastChart",
+			...props,
+		});
+		expect(validated.warnings).toEqual([]);
+	});
+
+	test("new components start without a fabricated saved forecast ID", () => {
+		expect(createDefaultComponent("forecastChart")).toMatchObject({
+			type: "forecastChart",
+			forecastId: { literalString: "" },
+			userScoped: { literalBool: false },
+		});
+	});
+});
+
 describe("Excalidraw generated components", () => {
 	test("preserves scene bindings, autosave settings, and exact handlers through both validators", () => {
 		const props = {

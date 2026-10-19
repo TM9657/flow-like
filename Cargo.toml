@@ -80,6 +80,7 @@ members = [
     "packages/industrial",
     "packages/ml/core",
     "packages/ml/native",
+    "packages/ml/forecast",
     "packages/ml/burn",
     "packages/ml/platform",
     "packages/ml/runtime",
@@ -198,6 +199,7 @@ flow-like-industrial = { path = "packages/industrial", default-features = false 
 flow-like-ml-core = { path = "packages/ml/core" }
 flow-like-ml-native = { path = "packages/ml/native" }
 flow-like-ml-burn = { path = "packages/ml/burn", default-features = false }
+flow-like-ml-forecast = { path = "packages/ml/forecast", default-features = false }
 flow-like-ml-runtime = { path = "packages/ml/runtime", default-features = false }
 flow-like-ml-sensors = { path = "packages/ml/sensors", default-features = false }
 flow-like-ordinal = { path = "packages/ordinal" }

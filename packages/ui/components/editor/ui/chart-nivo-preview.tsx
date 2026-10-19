@@ -51,7 +51,7 @@ const CHART_PACKAGES: Record<string, ChartInfo> = {
 	bar: {
 		pkg: "@nivo/bar",
 		component: "ResponsiveBar",
-		loader: () => loadChart("ResponsiveBar", () => import("@nivo/bar")),
+		loader: () => loadChart("default", () => import("./chart-nivo-bar")),
 	},
 	line: {
 		pkg: "@nivo/line",
@@ -215,15 +215,21 @@ function NivoChartPreview({ input, height = 350 }: NivoChartPreviewProps) {
 			case "bar":
 				return {
 					...baseProps,
+					colors: props.colors ?? [...tokens.palette],
 					padding: 0.3,
 					enableLabel: true,
-					labelTextColor,
 					labelSkipWidth: 12,
 					labelSkipHeight: 12,
-					enableGridY: true,
 					axisBottom: { tickRotation: 0 },
 					axisLeft: {},
 					...props,
+					autoLeftMargin:
+						input.mode === "csv" ||
+						(props.margin as { left?: number } | undefined)?.left === undefined,
+					autoLeftLegendOffset:
+						input.mode === "csv" ||
+						(props.axisLeft as { legendOffset?: number } | undefined)
+							?.legendOffset === undefined,
 				};
 			case "line":
 				return {
@@ -320,6 +326,7 @@ function NivoChartPreview({ input, height = 350 }: NivoChartPreviewProps) {
 		chartType,
 		props,
 		input.config.animate,
+		input.mode,
 		defaultTheme,
 		isDark,
 		tokens,
@@ -367,7 +374,7 @@ function NivoChartPreview({ input, height = 350 }: NivoChartPreviewProps) {
 			) : null}
 			<div
 				ref={setThemeNode}
-				className="w-full overflow-hidden rounded-md"
+				className="w-full min-w-0 rounded-md"
 				style={{ height: input.config.height || height }}
 			>
 				{ChartComponent && isRenderable ? (

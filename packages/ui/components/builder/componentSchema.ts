@@ -284,6 +284,31 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 		showLegend: { type: "boundValue" },
 		legendPosition: { type: "boundValue" },
 	},
+	forecastChart: {
+		type: { type: "string", required: true },
+		forecastId: { type: "boundValue", required: true },
+		appId: {
+			type: "boundValue",
+			description:
+				"Project that owns the saved prediction; defaults to the running project",
+		},
+		userScoped: {
+			type: "boundValue",
+			description: "Read from the current viewer's personal database",
+		},
+		target: { type: "boundValue" },
+		seriesId: { type: "boundValue" },
+		view: { type: "boundValue", enum: ["forecast", "evaluation"] },
+		showCovariates: { type: "boundValue" },
+		showMetrics: { type: "boundValue" },
+		showControls: { type: "boundValue" },
+		showHeader: { type: "boundValue" },
+		compact: { type: "boundValue" },
+		height: {
+			type: "boundValue",
+			description: "Chart height in pixels, from 120 to 1200",
+		},
+	},
 	nivoChart: {
 		type: { type: "string", required: true },
 		chartType: { type: "boundValue" },

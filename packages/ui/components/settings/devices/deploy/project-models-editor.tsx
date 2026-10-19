@@ -16,6 +16,7 @@ const MODEL_TYPES = [
 	IBitTypes.Llm,
 	IBitTypes.Vlm,
 	IBitTypes.SystemOne,
+	IBitTypes.Forecasting,
 	IBitTypes.Embedding,
 	IBitTypes.ImageEmbedding,
 	IBitTypes.ImageGeneration,

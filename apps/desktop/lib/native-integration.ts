@@ -18,6 +18,7 @@ import {
 	nativeEventSettings,
 } from "@flow-like/flow-like-ui/lib/native-event";
 import type { NativeCustomWidget } from "@flow-like/flow-like-ui/lib/native-widget";
+import { publicWebOrigin as nativeWebOrigin } from "@flow-like/flow-like-ui/lib/public-web-origin";
 import type { RecentAppUse } from "@flow-like/flow-like-ui/lib/recent-apps";
 import { asArray } from "@flow-like/flow-like-ui/lib/response-shape";
 import { routePathsEqual } from "@flow-like/flow-like-ui/lib/route-path";
@@ -936,24 +937,7 @@ export function withNativeActiveRuns(
 	};
 }
 
-export function nativeWebOrigin(hubApp: unknown): string | undefined {
-	if (typeof hubApp !== "string" || !hubApp.trim()) return;
-	try {
-		const url = new URL(hubApp.includes("://") ? hubApp : `https://${hubApp}`);
-		if (
-			url.protocol !== "https:" ||
-			url.username ||
-			url.password ||
-			url.search ||
-			url.hash ||
-			url.pathname !== "/"
-		)
-			return;
-		return url.origin;
-	} catch {
-		return;
-	}
-}
+export { nativeWebOrigin };
 
 export function withNativeActivePage(
 	snapshot: NativeSnapshot,

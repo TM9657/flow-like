@@ -4,6 +4,7 @@ import { useTranslation } from "@flow-like/locales";
 import {
 	AudioLines,
 	Boxes,
+	ChartNoAxesCombined,
 	Brain,
 	Code2,
 	Cpu,
@@ -91,16 +92,24 @@ type SortOption =
 	| "reasoning"
 	| "coding";
 type ViewMode = "grid" | "list";
-type InputModality = "text" | "image" | "speech";
+type InputModality = "text" | "image" | "speech" | "series";
+const ALL_INPUT_MODALITIES: InputModality[] = [
+	"text",
+	"image",
+	"speech",
+	"series",
+];
 type OutputModality =
 	| "text"
 	| "embedding"
 	| "speech"
 	| "image"
 	| "video"
-	| "decision";
+	| "decision"
+	| "forecast";
 const ALL_OUTPUT_MODALITIES: OutputModality[] = [
 	"decision",
+	"forecast",
 	"text",
 	"embedding",
 	"speech",
@@ -113,6 +122,8 @@ function getBitModality(type: IBitTypes): {
 	output: OutputModality;
 } {
 	switch (type) {
+		case IBitTypes.Forecasting:
+			return { input: "series", output: "forecast" };
 		case IBitTypes.SystemOne:
 			return { input: "text", output: "decision" };
 		case IBitTypes.Llm:
@@ -212,7 +223,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 	const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
 	const [selectedModel, setSelectedModel] = useState<IBit | null>(null);
 	const [inputModalities, setInputModalities] = useState<Set<InputModality>>(
-		new Set(["text", "image", "speech"]),
+		new Set(ALL_INPUT_MODALITIES),
 	);
 	const [outputModalities, setOutputModalities] = useState<Set<OutputModality>>(
 		new Set(ALL_OUTPUT_MODALITIES),
@@ -248,6 +259,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 				IBitTypes.Llm,
 				IBitTypes.Vlm,
 				IBitTypes.SystemOne,
+				IBitTypes.Forecasting,
 				IBitTypes.Tts,
 				IBitTypes.Stt,
 				IBitTypes.Embedding,
@@ -428,7 +440,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 		}
 
 		if (
-			inputModalities.size < 3 ||
+			inputModalities.size < ALL_INPUT_MODALITIES.length ||
 			outputModalities.size < ALL_OUTPUT_MODALITIES.length
 		) {
 			models = models.filter((m) => {
@@ -561,6 +573,13 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 				match: (b) => b.type === IBitTypes.SystemOne,
 			},
 			{
+				id: "rail-forecasting",
+				label: "Forecasting",
+				icon: ChartNoAxesCombined,
+				color: "var(--m-embed)",
+				match: (b) => b.type === IBitTypes.Forecasting,
+			},
+			{
 				id: "rail-stt",
 				label: t("speechtotext", "Speech-to-text"),
 				icon: Mic,
@@ -691,7 +710,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 		if (showDownloadedOnly) count++;
 		if (contextLengthFilter[0] > 0 || contextLengthFilter[1] < maxContextLength)
 			count++;
-		if (inputModalities.size < 2) count++;
+		if (inputModalities.size < ALL_INPUT_MODALITIES.length) count++;
 		if (outputModalities.size < ALL_OUTPUT_MODALITIES.length) count++;
 		if (Object.values(capabilityFilters).some((v) => v > 0)) count++;
 		return count;
@@ -729,7 +748,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 		setShowInProfileOnly(false);
 		setShowDownloadedOnly(false);
 		setContextLengthFilter([0, maxContextLength]);
-		setInputModalities(new Set(["text", "image", "speech"]));
+		setInputModalities(new Set(ALL_INPUT_MODALITIES));
 		setOutputModalities(new Set(ALL_OUTPUT_MODALITIES));
 		setCapabilityFilters({
 			reasoning: 0,
@@ -1111,6 +1130,12 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 					<div className="flex items-center gap-1.5">
 						<FilterGroupLabel>{t("accepts", "Accepts")}</FilterGroupLabel>
 						<ModalityChip
+							active={inputModalities.has("series")}
+							onClick={() => toggleInputModality("series")}
+							icon={ChartNoAxesCombined}
+							label="Time series"
+						/>
+						<ModalityChip
 							active={inputModalities.has("text")}
 							onClick={() => toggleInputModality("text")}
 							icon={Type}
@@ -1134,6 +1159,12 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 
 					<div className="flex flex-wrap items-center gap-1.5">
 						<FilterGroupLabel>{t("produces", "Produces")}</FilterGroupLabel>
+						<ModalityChip
+							active={outputModalities.has("forecast")}
+							onClick={() => toggleOutputModality("forecast")}
+							icon={ChartNoAxesCombined}
+							label="Forecast"
+						/>
 						<ModalityChip
 							active={outputModalities.has("decision")}
 							onClick={() => toggleOutputModality("decision")}

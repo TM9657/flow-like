@@ -1413,7 +1413,8 @@ export class WebBoardState implements IBoardState {
 							data,
 							onToolRequest: runGlobalChatTool,
 							parentRequestId: toolContext?.parentRequestId,
-							profileId: toolContext?.profileId,
+							profileId,
+							appId: contextAppId,
 						}).catch((error) => {
 							// The specialist is blocked on this request; failing the stream beats
 							// leaving it to time out with no explanation.

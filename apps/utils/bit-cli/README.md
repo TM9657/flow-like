@@ -36,9 +36,9 @@ blake3 verification behave exactly as they do in the desktop app.
 | `hub push <spec> [--dry-run]` | Write a spec: dependencies first, then metadata |
 | `hub delete <bit-id>… [--yes]` | Remove entries from the catalog |
 
-Writes need a personal access token whose user holds `WriteBits` (or `Admin`),
-passed as `--token` or `FLOW_LIKE_PAT`. Mint one under settings, or through
-`PUT /user/pat`.
+Writes need an Admin-level personal access token whose user holds `WriteBits`
+(or `Admin`), passed as `--token` or `FLOW_LIKE_PAT`. Mint one under settings,
+or through `PUT /user/pat`.
 
 ### Spec format
 
@@ -79,3 +79,47 @@ get a correct starting point for either kind.
 The hub fetches, hashes and mirrors every artifact itself, so a spec only ever
 names source URLs. Dependencies are stored as `hub:id`; the tool writes each
 dependency first and builds the reference from what the hub stored.
+
+Forecasting entries also accept aliases in `parameters.assets[].bit`:
+
+```json
+{
+  "model_type": "chronos2",
+  "provider": { "provider_name": "local:forecast" },
+  "assets": [
+    { "bit": "@config", "relative_path": "config.json" },
+    { "bit": "@shard", "relative_path": "model-00001-of-00002.safetensors" },
+    { "bit": "models.example:existing-shard", "relative_path": "model-00002-of-00002.safetensors" }
+  ]
+}
+```
+
+Use `type: "Forecasting"` on the model entry and publish its config and shards
+as separate `Config` or `File` entries. Asset references automatically become
+dependencies, so they do not need to be repeated in `dependencies`. The tool
+resolves aliases using the IDs returned by the Hub, including when the Hub
+reuses an existing artifact. Qualified remote references stay unchanged;
+bare IDs use the target Hub.
+
+The model entry's own `file_name` supplies `model.safetensors` or
+`model.safetensors.index.json`. Omit that file from `assets`; a self-reference
+using the same filename is accepted and removed as redundant. Other asset
+filenames must refer to a separate Bit. `hub pull --with-dependencies`
+preserves local asset aliases for later publication.
+
+### Publish the forecasting catalog
+
+The checked-in bundle contains the supported forecasting checkpoints and their
+config and license assets, with source revisions pinned. From the repository
+root, inspect its dependency plan before publishing to a Hub that supports
+Forecasting Bits:
+
+```bash
+cargo run -p bit-cli -- --hub api.flow-like.com hub push apps/utils/bit-cli/specs/forecasting.json --dry-run
+cargo run -p bit-cli -- --hub api.flow-like.com hub push apps/utils/bit-cli/specs/forecasting.json
+```
+
+The second command uses the catalog-write credentials described above and
+publishes the artifacts. Review each checkpoint's license before using it;
+the Timestral entries include a revenue restriction in their metadata and
+license files.

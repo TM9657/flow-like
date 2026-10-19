@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { useHub } from "../../hooks/use-hub";
 import { useInvoke } from "../../hooks/use-invoke";
 import { isMlxModelBit } from "../../lib/bit/mlx-model-pack";
-import type { IBit } from "../../lib/schema/bit/bit";
+import { type IBit, IBitTypes } from "../../lib/schema/bit/bit";
 import type { IEmbeddingModelParameters } from "../../lib/schema/bit/bit/embedding-model-parameters";
 import type {
 	IBitModelClassification,
@@ -180,6 +180,7 @@ export function ModelDetailSheet({
 	// The backend-resolved pack size is authoritative: it accounts for artifacts
 	// the bit itself never names (inline MLX manifests, llama.cpp projectors).
 	const isVirtualBit = useMemo(() => {
+		if (displayBit?.type === IBitTypes.Forecasting) return false;
 		if (bitSize.isSuccess) return (bitSize.data ?? 0) === 0;
 		return (
 			(displayBit?.dependencies?.length ?? 0) === 0 &&
@@ -321,7 +322,9 @@ export function ModelDetailSheet({
 	const classification = (params as ILlmParameters)?.model_classification;
 	const contextLength = (params as ILlmParameters)?.context_length;
 	const embeddingParams = params as IEmbeddingModelParameters;
-	const isHosted = bitSize.data === 0 || isVirtualBit;
+	const isHosted =
+		displayBit.type !== IBitTypes.Forecasting &&
+		(bitSize.data === 0 || isVirtualBit);
 	const canRunRemotely = supportsRemoteEmbeddingExecution(displayBit);
 	const isEmbeddingModel = isEmbeddingBit(displayBit);
 
@@ -375,7 +378,9 @@ export function ModelDetailSheet({
 
 					{/* Status Badges */}
 					<div className="flex flex-wrap gap-2">
-						{isHosted ? (
+						{displayBit.type === IBitTypes.Forecasting && webMode ? (
+							<Badge variant="outline">Workflow runtime</Badge>
+						) : isHosted ? (
 							<Badge className="bg-sky-500/10 text-sky-600 border-sky-500/30">
 								{t("hosted", "Hosted")}
 							</Badge>

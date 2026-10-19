@@ -56,6 +56,7 @@ const modelTypes = [
 	IBitTypes.Llm,
 	IBitTypes.Vlm,
 	IBitTypes.SystemOne,
+	IBitTypes.Forecasting,
 	IBitTypes.Embedding,
 	IBitTypes.ImageEmbedding,
 	IBitTypes.ObjectDetection,

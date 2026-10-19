@@ -65,6 +65,8 @@ import {
 	formatContextLength,
 } from "../../ui";
 
+import { AddForecastingModelDialog } from "./add-forecasting-model-dialog";
+
 const LOCAL_PROVIDER_NAME = "Local";
 const MLX_PROVIDER_NAME = "MLX";
 const DEFAULT_CONTEXT_LENGTH = "128000";
@@ -673,6 +675,7 @@ export interface AddCustomModelDialogProps {
 export function AddCustomModelDialog(
 	props: Readonly<AddCustomModelDialogProps>,
 ) {
+	const [forecasting, setForecasting] = useState(false);
 	if (props.existingBit) {
 		return (
 			<BitEditorDialog
@@ -683,7 +686,23 @@ export function AddCustomModelDialog(
 			/>
 		);
 	}
-	return <AddCustomModelWizard {...props} />;
+	if (forecasting)
+		return (
+			<AddForecastingModelDialog
+				open={props.open}
+				onOpenChange={(open) => {
+					props.onOpenChange(open);
+					if (!open) setForecasting(false);
+				}}
+				onBack={() => setForecasting(false)}
+			/>
+		);
+	return (
+		<AddCustomModelWizard
+			{...props}
+			onChooseForecasting={() => setForecasting(true)}
+		/>
+	);
 }
 
 function AddCustomModelWizard({
@@ -691,7 +710,8 @@ function AddCustomModelWizard({
 	onOpenChange,
 	existingBit,
 	webMode = false,
-}: Readonly<AddCustomModelDialogProps>) {
+	onChooseForecasting,
+}: Readonly<AddCustomModelDialogProps & { onChooseForecasting: () => void }>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
@@ -1645,14 +1665,23 @@ function AddCustomModelWizard({
 				</DialogHeader>
 
 				{step === "pick" ? (
-					<SourcePickStep
-						providers={availableProviders}
-						canHostLocal={canHostLocal}
-						canHostLlamaCPP={canHostLlamaCPP}
-						canHostMLX={canHostMLX}
-						onPickProvider={pickProvider}
-						onPickHuggingFace={pickHuggingFace}
-					/>
+					<div className="space-y-4">
+						<SourcePickStep
+							providers={availableProviders}
+							canHostLocal={canHostLocal}
+							canHostLlamaCPP={canHostLlamaCPP}
+							canHostMLX={canHostMLX}
+							onPickProvider={pickProvider}
+							onPickHuggingFace={pickHuggingFace}
+						/>
+						<Button
+							variant="outline"
+							className="w-full"
+							onClick={onChooseForecasting}
+						>
+							Add a forecasting checkpoint
+						</Button>
+					</div>
 				) : (
 					<div className="space-y-6">
 						{source === "provider" && providerDef && (

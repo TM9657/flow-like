@@ -80,8 +80,12 @@ afterAll(() => {
 	}
 });
 
-async function renderSteps(steps: IPlanStep[]) {
+async function renderSteps(
+	steps: IPlanStep[],
+	interact?: (container: HTMLElement) => void,
+) {
 	const window = new Window();
+	Object.assign(window, { SyntaxError, TypeError });
 	Object.assign(globalThis, {
 		document: window.document,
 		HTMLElement: window.HTMLElement,
@@ -103,6 +107,7 @@ async function renderSteps(steps: IPlanStep[]) {
 	await act(async () => {
 		root.render(<InlineStepGroup steps={steps} />);
 	});
+	if (interact) await act(async () => interact(container));
 	const text = container.textContent ?? "";
 	const html = container.innerHTML;
 	await act(async () => root.unmount());
@@ -306,5 +311,140 @@ describe("build lane steps", () => {
 
 		expect(text).toContain("Using flowpilot_board");
 		expect(text).toContain("Running...");
+	});
+});
+
+describe("tool activity context", () => {
+	const webStep: IPlanStep = {
+		id: "web",
+		title: "Using http_request",
+		toolName: "http_request",
+		status: "done",
+		detail: {
+			kind: "tool_activity",
+			category: "web",
+			label: "Fetching page",
+			method: "GET",
+			outcome: "HTTP 200",
+			sources: [
+				{
+					url: "https://github.com/flow-like/flow-like/blob/main/LICENSE",
+					hostname: "github.com",
+					path: "/flow-like/flow-like/blob/main/LICENSE",
+				},
+			],
+		},
+	};
+
+	test("shows the website, resource and outcome with a source link outside buttons", async () => {
+		const { text, html } = await renderSteps([webStep], (container) => {
+			const link = container.querySelector("a");
+			expect(link?.getAttribute("href")).toBe(
+				"https://github.com/flow-like/flow-like/blob/main/LICENSE",
+			);
+			expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+			expect(link?.closest("button")).toBeNull();
+			expect(link?.querySelector("img")?.getAttribute("src")).toBe(
+				"https://www.google.com/s2/favicons?domain=github.com&sz=32",
+			);
+			expect(link?.querySelector("img")?.getAttribute("referrerpolicy")).toBe(
+				"no-referrer",
+			);
+		});
+		expect(text).toContain("Fetching page");
+		expect(text).toContain("github.com");
+		expect(text).toContain("/flow-like/flow-like/blob/main/LICENSE");
+		expect(text).toContain("GET");
+		expect(text).toContain("HTTP 200");
+		expect(text).not.toContain("Using http_request");
+		expect(html).toContain('aria-label="Completed"');
+	});
+
+	test("falls back to a globe when a favicon fails", async () => {
+		const { html } = await renderSteps([webStep], (container) => {
+			expect(container.querySelector("a img")).not.toBeNull();
+			for (const icon of container.querySelectorAll("img")) {
+				icon.dispatchEvent(new window.Event("error"));
+			}
+		});
+		expect(html).not.toContain("<img");
+		expect(html).toContain("lucide-globe");
+	});
+
+	test("keeps private hostnames out of the favicon service", async () => {
+		const { html, text } = await renderSteps([
+			{
+				...webStep,
+				detail: {
+					kind: "tool_activity",
+					category: "web",
+					label: "Fetching page",
+					sources: [
+						{
+							url: "http://dashboard.internal/report",
+							hostname: "dashboard.internal",
+							path: "/report",
+						},
+					],
+				},
+			},
+		]);
+		expect(text).toContain("dashboard.internal");
+		expect(html).not.toContain("google.com");
+	});
+
+	test("keeps authored step titles and avoids links to redacted destinations", async () => {
+		const { text, html } = await renderSteps([
+			{
+				...webStep,
+				title: "Check the archived license",
+				detail: {
+					kind: "tool_activity",
+					category: "web",
+					label: "Fetching URL",
+					sources: [
+						{
+							url: "https://en.wikipedia.org/w/index.php",
+							hostname: "en.wikipedia.org",
+							path: "/w/index.php",
+							linkable: false,
+						},
+					],
+				},
+			},
+		]);
+		expect(text).toContain("Check the archived license");
+		expect(text).toContain("en.wikipedia.org");
+		expect(text).not.toContain("Fetching URL");
+		expect(html).not.toContain("href=");
+	});
+
+	test("shows search queries and file targets as context", async () => {
+		const { text } = await renderSteps([
+			{
+				id: "search",
+				title: "Using web_search",
+				status: "progress",
+				detail: {
+					kind: "tool_activity",
+					category: "search",
+					label: "Searching the web",
+					query: "Flow-Like license terms",
+				},
+			},
+			{
+				id: "file",
+				title: "Using read_file",
+				status: "done",
+				detail: {
+					kind: "tool_activity",
+					category: "files",
+					label: "Reading file",
+					target: "reports/revenue.csv",
+				},
+			},
+		]);
+		expect(text).toContain("Flow-Like license terms");
+		expect(text).toContain("reports/revenue.csv");
 	});
 });

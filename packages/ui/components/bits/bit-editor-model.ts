@@ -1,4 +1,5 @@
 import { externalModelProviders } from "../../lib/bit/external-model-providers";
+import { validateForecastingBit } from "../../lib/bit/forecasting-model";
 import { validateSystemOneParameters } from "../../lib/bit/systemone-model";
 import type { IBit, IMetadata } from "../../lib/schema/bit/bit";
 import { IBitTypes } from "../../lib/schema/bit/bit";
@@ -265,6 +266,10 @@ export function validateBitDraft(
 	if (scope === "custom" && !bit.meta.en?.name.trim())
 		return "Add an English display name before saving.";
 	const params = record(bit.parameters);
+	if (bit.type === IBitTypes.Forecasting) {
+		const error = validateForecastingBit(bit, scope);
+		if (error) return error;
+	}
 	if (bit.type === IBitTypes.SystemOne) {
 		const error = validateSystemOneParameters(params, scope);
 		if (error) return error;

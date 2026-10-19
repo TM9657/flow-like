@@ -259,6 +259,7 @@ export function SpotlightWrapper({ children }: SpotlightWrapperProps) {
 								IBitTypes.Llm,
 								IBitTypes.Vlm,
 								IBitTypes.SystemOne,
+								IBitTypes.Forecasting,
 								IBitTypes.Tts,
 								IBitTypes.Stt,
 								IBitTypes.Embedding,

@@ -1081,7 +1081,7 @@ fn web_research_session_key(user_prompt: &str, run_id: Option<&str>) -> String {
 
 /// Tool set for the nested Data Studio specialist. It reuses the shipped `database_tool` (table/DB
 /// setup) and cross-app discovery tools (`list_apps`/`describe_app_interface`), then adds the
-/// graph/ontology/action tools generated from the shared Data Studio specs. Public-web research is
+/// graph, forecasting and action tools generated from the shared Data Studio specs. Public-web research is
 /// intentionally available only to the top-level FlowPilot orchestrator.
 pub fn create_data_studio_tools(bridge: FrontendToolBridge) -> Vec<(Tool, ToolHandler)> {
     // `database_tool` keeps a hand-written handler for its per-operation approval and delete
@@ -3456,7 +3456,7 @@ Layout: column, row, grid, stack, scrollArea, absolute, aspectRatio, overlay, bo
 Display: text, image, icon, video, lottie, badge, avatar, userProfile, progress, spinner, skeleton, divider, markdown, diffView, filePreview, fileEditor, geoMap
 Interactive: button, textField (multiline for textarea), select, slider, checkbox, switch, radioGroup, dateTimeInput, fileInput, imageInput, voiceInput (audio recording/dictation), feedback (thumbs rating), appLink, link
 Container: card, modal, tabs, accordion, drawer, tooltip, popover
-Data: table, plotlyChart, nivoChart, calendar, gantt, graph (own nodes/edges), ontologyGraph (this project's ontology, loads itself)
+Data: table, plotlyChart, nivoChart, forecastChart (existing saved prediction, loads itself with viewer permissions), calendar, gantt, graph (own nodes/edges), ontologyGraph (this project's ontology, loads itself)
 Vision: boundingBoxOverlay, imageLabeler, imageHotspot
 Game: canvas2d, sprite, shape, scene3d, model3d, dialogue, characterPortrait, choiceMenu, inventoryGrid, healthBar, miniMap
 Embeds: iframe
@@ -3775,6 +3775,20 @@ fn known_props_for_type(component_type: &str) -> Option<&'static [&'static str]>
             "responsive",
             "showLegend",
             "legendPosition",
+        ]),
+        "forecastChart" => Some(&[
+            "forecastId",
+            "appId",
+            "userScoped",
+            "target",
+            "seriesId",
+            "view",
+            "showCovariates",
+            "showMetrics",
+            "showControls",
+            "showHeader",
+            "compact",
+            "height",
         ]),
         "nivoChart" => Some(&[
             "chartType",
@@ -4309,6 +4323,7 @@ fn required_props_for_type(component_type: &str) -> &'static [&'static str] {
         "miniMap" => &["width", "height"],
         "aspectRatio" => &["ratio"],
         "nivoChart" => &["chartType"],
+        "forecastChart" => &["forecastId"],
         "boundingBoxOverlay" => &["src", "boxes"],
         "imageLabeler" => &["src", "labels"],
         "imageHotspot" => &["src", "hotspots"],

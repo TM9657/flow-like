@@ -1258,6 +1258,11 @@ pub fn run() {
             functions::app::saved_queries::query_saved_update,
             functions::app::saved_queries::query_saved_delete,
             functions::app::saved_queries::query_execute_sql,
+            functions::app::forecasting::query_forecast,
+            functions::app::saved_forecasts::studio_forecast_list,
+            functions::app::saved_forecasts::studio_forecast_get,
+            functions::app::saved_forecasts::studio_forecast_create,
+            functions::app::saved_forecasts::studio_forecast_delete,
             functions::tmp::post_process_local_file,
             functions::tmp::stage_form_file,
             functions::bit::get_bit,
@@ -1523,6 +1528,19 @@ pub fn run() {
         .join()
         .expect("context thread");
 
+    #[cfg(all(debug_assertions, desktop))]
+    if tauri::is_dev()
+        && let Some(url) = context.config().build.dev_url.as_ref()
+    {
+        // Tauri's CLI checks the TCP port before launching. Next can accept
+        // connections while its first compile exceeds WebKit's navigation timeout.
+        eprintln!("Waiting for the desktop frontend at {url}...");
+        match prepare_dev_frontend(url) {
+            Ok(status) => eprintln!("Desktop frontend responded with {status}"),
+            Err(error) => eprintln!("Could not prepare the desktop frontend: {error}"),
+        }
+    }
+
     let app = frontend_assets::register(builder, &context)
         .build(context)
         .expect("error while building tauri application");
@@ -1547,6 +1565,20 @@ pub fn run() {
         #[cfg(desktop)]
         window_layout::on_event(_app, &_event);
     });
+}
+
+#[cfg(all(debug_assertions, desktop))]
+fn prepare_dev_frontend(url: &tauri::Url) -> reqwest::Result<reqwest::StatusCode> {
+    let response = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(180))
+        .build()?
+        .get(url.clone())
+        .send()?;
+    let status = response.status();
+    // Next streams HTML, so headers alone do not mean the page is ready.
+    response.bytes()?;
+    Ok(status)
 }
 
 pub(crate) fn application_context() -> tauri::Context<tauri::Wry> {

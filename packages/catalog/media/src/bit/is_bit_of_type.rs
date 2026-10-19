@@ -33,7 +33,7 @@ impl NodeLogic for IsBitOfTypeNode {
         );
         node.set_flowscript_name("ai", "isBitOfType");
         node.add_icon("/flow/icons/bit.svg");
-        node.set_version(5);
+        node.set_version(6);
 
         // Input Pins
         node.add_input_pin(
@@ -57,6 +57,7 @@ impl NodeLogic for IsBitOfTypeNode {
                     "Vlm".to_string(),
                     "Tts".to_string(),
                     "Stt".to_string(),
+                    "Forecasting".to_string(),
                     "Embedding".to_string(),
                     "ImageEmbedding".to_string(),
                     "File".to_string(),

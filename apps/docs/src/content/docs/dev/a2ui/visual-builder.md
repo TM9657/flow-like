@@ -59,6 +59,31 @@ Examples include:
 - form values and placeholders;
 - container children and layout options.
 
+#### Saved forecasts
+
+Use **Saved Forecast** (`forecastChart`) to display a prediction already saved in
+[Data Studio](/apps/data-studio/). Opening the component reads that snapshot;
+it does not run the model again.
+
+1. Add **Saved Forecast** from the **Display** palette.
+2. In **Props**, leave `appId` empty to use the current project, or enter the
+   owning project's ID. Leave `userScoped` off for shared project predictions;
+   turn it on for your personal predictions.
+3. Choose a prediction by name in **Saved prediction**.
+4. Set `view` to `forecast` for the outlook or `evaluation` for saved holdout
+   results. Optionally select a target and series, show covariates or metrics,
+   and adjust the chart height. `compact` reduces spacing for dashboard cards.
+
+For dynamic selection, choose **Bind forecast ID to data** and enter a path
+such as `$.data.savedForecastId`. Display options also support bindings. The
+named picker is available when the project and scope use fixed values.
+
+Viewers need access to the selected database and the prediction's source
+columns. Sharing a Page does not grant that access. Personal scope always
+uses the current viewer's database, so choose project scope when collaborators
+should see the same prediction. Deleted snapshots or changed access display an
+unavailable message.
+
 ### Style
 
 Style controls include dimensions, spacing, positioning, background, border, shadow, transforms, typography, overflow, and responsive overrides. Prefer semantic theme classes when the interface should work in both light and dark mode.

@@ -51,6 +51,14 @@ import {
 	updateSystemOneBit,
 	validateSystemOneBit,
 } from "@flow-like/flow-like-ui/lib/bit/systemone-model";
+import {
+	type ForecastingAssetDraft,
+	buildForecastingRootBit,
+	createForecastingParameters,
+	registerForecastingAssets,
+	validateForecastingAssets,
+	validateForecastingBit,
+} from "@flow-like/flow-like-ui/lib/bit/forecasting-model";
 import { useTranslation } from "@flow-like/locales";
 import { createId } from "@paralleldrive/cuid2";
 import {
@@ -76,6 +84,7 @@ import {
 } from "../utils";
 import { DependencyConfiguration } from "./dependency";
 import { EmbeddingConfiguration } from "./embedding";
+import { ForecastingAssetsConfiguration } from "@flow-like/flow-like-ui/components/bits/forecasting-assets-configuration";
 import { GenerationConfiguration } from "./generation";
 import { registerGenerationAssets } from "./generation-upload";
 import { LLMConfiguration } from "./llm";
@@ -243,6 +252,10 @@ export default function Page() {
 	const [imageEmbeddingConfig, setImageEmbeddingConfig] = useState<
 		IBit | undefined
 	>(undefined);
+	const [forecastingAssets, setForecastingAssets] = useState<
+		ForecastingAssetDraft[]
+	>([]);
+	const completedForecastingAssets = useRef(new Map<string, string>());
 	const [ttsAssets, setTtsAssets] = useState<TtsAssetDraft[]>([]);
 	const [sttAssets, setSttAssets] = useState<SttAssetDraft[]>([]);
 	const [mlxAssets, setMlxAssets] = useState<IBit[]>([]);
@@ -736,6 +749,26 @@ export default function Page() {
 		setProgress(0);
 		setProgressLabel(null);
 		setGenerationAssets([]);
+		setForecastingAssets([]);
+		completedForecastingAssets.current.clear();
+		if (type === IBitTypes.Forecasting) {
+			const asset = getDefaultBit(IBitTypes.File);
+			setForecastingAssets([
+				{
+					key: asset.id,
+					relativePath: "config.json",
+					bit: { ...asset, file_name: "config.json" },
+				},
+			]);
+			setBit({
+				...getDefaultBit(type),
+				file_name: "model.safetensors",
+				parameters: createForecastingParameters(),
+			});
+			setMlxAssets([]);
+			setDefaultDependencies(type);
+			return;
+		}
 		if (generationKind) {
 			const preset = defaultGenerationPreset(generationKind);
 			const assets = createGenerationAssetDrafts(preset.id, () =>
@@ -757,7 +790,7 @@ export default function Page() {
 				parameters: createSystemOneParameters(),
 			}));
 		}
-		if (isGenerationModelBit(bit)) {
+		if (isGenerationModelBit(bit) || bit.type === IBitTypes.Forecasting) {
 			setBit(getDefaultBit(type));
 		}
 		if (
@@ -950,6 +983,13 @@ export default function Page() {
 					>
 						{t("classification", "Classification")}
 					</button>
+					<Button
+						variant="outline"
+						className={`p-4 ${type === IBitTypes.Forecasting ? "border-primary" : ""}`}
+						onClick={() => setType(IBitTypes.Forecasting)}
+					>
+						Forecasting
+					</Button>
 					{(
 						[IBitTypes.ImageGeneration, IBitTypes.VideoGeneration] as const
 					).map((generationType) => (
@@ -1031,6 +1071,16 @@ export default function Page() {
 						<Separator className="my-4" />
 					</>
 				) : null}
+				{bit.type === IBitTypes.Forecasting && (
+					<ForecastingAssetsConfiguration
+						bit={bit}
+						setBit={setBit}
+						assets={forecastingAssets}
+						setAssets={setForecastingAssets}
+						createAssetBit={() => getDefaultBit(IBitTypes.File)}
+						disabled={loading}
+					/>
+				)}
 				{generationKind ? (
 					<GenerationConfiguration
 						bit={bit}
@@ -1216,6 +1266,43 @@ export default function Page() {
 							}
 							let dependencies: IBit[] = [];
 							if (isGenerationModelBit(bit)) await registerGenerationModel();
+							if (bit.type === IBitTypes.Forecasting) {
+								const draft = buildForecastingRootBit(bit, forecastingAssets);
+								const error =
+									validateForecastingBit(draft) ??
+									validateForecastingAssets(forecastingAssets);
+								if (error) throw new Error(error);
+								const registered = await registerForecastingAssets({
+									assets: forecastingAssets,
+									completed: completedForecastingAssets.current,
+									uploadBit,
+									onRegistered: (asset) =>
+										setForecastingAssets((current) =>
+											current.map((item) =>
+												item.key === asset.key ? asset : item,
+											),
+										),
+									onProgress: (asset) => {
+										setProgress(0);
+										setProgressDownloaded(null);
+										setProgressTotal(null);
+										setProgressLabel(
+											`Uploading checkpoint asset: ${asset.relativePath}`,
+										);
+										setProgressBit(asset.bit);
+									},
+								});
+								const root = buildForecastingRootBit(bit, registered);
+								setBit(root);
+								setProgressLabel("Uploading forecasting checkpoint");
+								setProgressBit(root);
+								const response = await uploadBit(root);
+								await backend.apiState.put(
+									profile.data,
+									`admin/bit/${response.id}/en`,
+									root.meta.en,
+								);
+							}
 							if (isMlxModel) {
 								const manifestErrors = validateMlxModelAssets(
 									mlxAssets,
@@ -1525,6 +1612,8 @@ export default function Page() {
 							setSttAssets([]);
 							setMlxAssets([]);
 							setGenerationAssets([]);
+							setForecastingAssets([]);
+							completedForecastingAssets.current.clear();
 							completedGenerationAssets.current.clear();
 							setLocalStt(false);
 							setType(IBitTypes.Llm);

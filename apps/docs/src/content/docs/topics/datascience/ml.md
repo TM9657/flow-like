@@ -44,6 +44,99 @@ Ordinal trainers need to know which level is lowest. Numeric labels order numeri
 
 The [ONNX inference](/nodes/ai/ml/onnx/) family runs compatible models that were trained elsewhere and exported to ONNX. Validate the model's expected tensors and reproduce its preprocessing exactly.
 
+### Forecast with pretrained time-series models
+
+Timestral, Chronos-2, Toto 2, TimesFM 2.5 and IBM Granite TinyTimeMixer can forecast numeric series without training a model in your flow. Their inference runs in Rust with Burn. The forecasting nodes use the CPU and require a build with forecasting support; no Python installation is needed.
+
+Choose a **Forecasting** Bit in the model catalog and connect it to **Load Forecasting Bit** in `AI/ML/Forecasting`. Connect its `model` output and a Lance table to **Forecast**. The supported architectures are:
+
+| Family | Example repository |
+|--------|--------------------|
+| `timestral` | `mistralai/Timestral-209M` or the smaller `mistralai/Timestral-5M` |
+| `chronos2` | `amazon/chronos-2` |
+| `toto2` | `Datadog/Toto-2.0-22m` |
+| `timesfm2_5` | `google/timesfm-2.5-200m-pytorch` |
+| `tiny_time_mixer` | `ibm-granite/granite-timeseries-ttm-r2`, 512-context, 96-step MSE checkpoint |
+
+Check the checkpoint's license before using its weights. Timestral's Modified MIT terms require a separate commercial license when your company or employer's global consolidated revenue exceeded US$20 million, or its equivalent, in the preceding month. This restriction covers derivatives, modifications and combined works; see the pinned [209M license](https://huggingface.co/mistralai/Timestral-209M/resolve/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE) and [5M license](https://huggingface.co/mistralai/Timestral-5M/resolve/bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f/LICENSE). These weight licenses are separate from the inference source code's license.
+
+A Forecasting Bit records `model_type`, the native `local:forecast` provider and its checkpoint assets. Its primary file is `model.safetensors`, or `model.safetensors.index.json` for sharded weights. Map a Config Bit to `config.json` in `parameters.assets`, and map every shard to the filename listed in the index. For example, an asset entry can be `{"bit":"your-hub:config-bit-id","relative_path":"config.json"}`. Optional `LICENSE` and `NOTICE` assets keep the checkpoint's terms with its files. These files use the existing Bit download cache. Custom model Bits can reference published asset Bits; administrators can publish the config and shards with the model.
+
+TimesFM 2.5 and the supported TinyTimeMixer checkpoints accept one target per series and no covariates. TimesFM returns a median and quantiles from 0.1 through 0.9. TinyTimeMixer's MSE checkpoints return a mean point forecast without quantiles. Other families' joint-target and covariate support depends on the checkpoint; inspect **Forecast Model Info** before choosing inputs.
+
+The default checkpoint limit is 2 GiB. Increase `maximum_bytes` when loading a larger checkpoint on a host with enough memory. Weights are loaded as FP32, so their runtime memory can exceed their download size.
+
+#### Forecast from a table
+
+The **Forecast** node accepts the existing Lance table handle, `NodeDBConnection`, on its `source` pin. Set `horizon` to the number of future steps and map the table columns on `mapping`:
+
+```json
+{
+  "timestamp": "time",
+  "series_id": "sensor_id",
+  "targets": ["reading"],
+  "past_covariates": [],
+  "known_covariates": [],
+  "frequency_ms": 60000
+}
+```
+
+Each historical row contains a timestamp and one value per target column. Rows sharing `sensor_id` form one independent series. Multiple target columns within that series require a checkpoint with joint-target support. Omit `series_id` to treat the whole table as one series. The node pins the source table version and sorts each series chronologically. Timestamps must be Arrow timestamps/dates or integer epoch milliseconds with whole-millisecond precision. Omit `frequency_ms` to infer spacing from at least two rows per series. Each series can have its own interval and final timestamp; the same forecast horizon applies to all groups. Duplicate timestamps and irregular spacing return an error. Fill missing time positions explicitly before forecasting; null target cells become missing-observation masks.
+
+Use a machine ID column to forecast every machine from one table. The mapping accepts one ID column; derive a unique composite key in SQL when grouping by several columns. To forecast an overall total, aggregate the history by timestamp first and forecast the resulting single series. Grouping alone does not aggregate values or model interactions between groups. Summing per-group quantiles does not produce a calibrated uncertainty band for the total.
+
+Map numeric auxiliary columns with `past_covariates` or `known_covariates`. Known covariates also require a `future_source` table containing exactly `horizon` future rows per series, with matching ID and timestamp columns and aligned covariate values. Covariate cells must be finite numbers. The node does not encode categories.
+
+The `table` output is a separate, pinned Lance table with one row per series, target and future timestamp:
+
+| Column | Meaning |
+|--------|---------|
+| `series_id` | Historical series identifier, represented as a string |
+| `timestamp_ms` | Future timestamp in epoch milliseconds |
+| `target` | Target column name |
+| `point` | Mean for TinyTimeMixer MSE checkpoints; median for the other supported families |
+| `point_statistic` | Identifies the point estimate as `mean` or `median` |
+| `q_0_1`, `q_0_5`, `q_0_9` | Example columns for requested quantiles 0.1, 0.5 and 0.9 |
+| `run_id`, `sample_id`, `model_*` | Forecast run and model provenance |
+
+Point-only output has no quantile columns. Leave `destination` empty to create a new table beside the source. An explicit destination must be writable, distinct from both input tables, and contain the complete forecast output schema. The node adds the forecast rows there and returns a pinned view. Its `metadata` output records source and output versions, row counts, model details, the point statistic and quantile column names. The `budget` pin bounds input and output rows, bytes and tensor elements.
+
+#### Pass values directly
+
+Use **Forecast Values** when your flow already has arrays. Its `request` contains the loaded `model` handle and a `forecast` object. Set `forecast` to:
+
+```json
+{
+  "series": [
+    {
+      "id": "sensor-a",
+      "targets": [[12.0, 13.5, 0.0, 15.0, 14.5, 16.0]],
+      "observed_mask": [[true, true, false, true, true, true]]
+    }
+  ],
+  "horizon": 3,
+  "quantile_levels": []
+}
+```
+
+Each target row is one variable, ordered from oldest to newest at a fixed sampling interval. Multiple rows within one series require joint-target support; separate series entries are independent and may have different history lengths. `horizon` counts future steps at the same interval. The example requests three steps after the sixth historical position. The masked zero is a missing observation, not a measured zero. All supplied numbers must be finite, and each target needs at least one observed value.
+
+Optional `past_covariates` rows contain numeric auxiliary values for the historical window. `known_covariates` rows cover that window followed by the entire future horizon. These rows must align with the targets. Direct values carry no timestamps.
+
+The result preserves each series ID. `point[variable][step]` holds the forecast identified by `point_statistic`, and `quantiles[variable][step][level]` follows the returned `quantile_levels`. Leave requested levels empty to receive native output. TinyTimeMixer requires empty levels and returns an empty quantile vector at every step. Timestral and TimesFM accept subsets of their native levels without interpolation. TimesFM's native levels run from 0.1 through 0.9 in increments of 0.1. Chronos-2 and Toto 2 can interpolate within their supported range. A quantile describes a marginal forecast at one step, rather than a sampled trajectory across the horizon.
+
+#### Load a checkpoint without a Bit
+
+**Load Hugging Face Forecast Model** accepts a public repository from the table above. It resolves the requested branch or tag to a commit before downloading and records that commit in the model handle. This loader downloads files for the current execution. **Load Forecast Model** accepts a storage folder as a `FlowPath`; put `config.json` and the weights there, including the index and every named shard for a sharded checkpoint. Either loader returns a handle usable by Forecast and Forecast Values.
+
+Use **Forecast Model Info** to inspect context, horizon and covariate capabilities. Timestral and Chronos-2 retain recent history when it exceeds their context limits and extend longer horizons using their model-specific decoding. Toto 2 uses single-pass decoding and requires context plus forecast to fit its 8,192-patch position window. Model handles belong to the current execution; loading more than four models evicts the oldest handle. Original Chronos, Chronos-Bolt and Toto 1 checkpoints use different architectures and are not accepted by these loaders.
+
+The TimesFM 2.5 adapter accepts up to 15,360 historical steps and a horizon of 1,024, using its continuous quantile head. The TinyTimeMixer 512-context, 96-step checkpoint accepts up to 96 forecast steps. This R2 checkpoint targets minutely to hourly observations; use 512 historical steps where possible, as the [model card](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2/blob/d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f/README.md) advises against padding short histories. Its native adapter pads shorter histories and retains the most recent 512 steps of longer inputs. The loader supports MSE checkpoints with common-channel processing, standard scaling and LayerNorm; other TinyTimeMixer variants are not interchangeable.
+
+Data Studio rejects histories longer than a model's context limit so you can choose the retained period explicitly in SQL. Neither the TimesFM nor the TinyTimeMixer adapter includes XReg or forecast-channel mixing workflows.
+
+Requests are capped at 65,536 forecast steps and 16,777,216 numeric input or output values. Native attention and intermediate tensors have a separate 67,108,864-element limit, so requests with long histories or many variables can reach that limit earlier. The loader and forecast return an error when a limit is exceeded; reduce the history, variables or horizon before retrying.
+
 ## Choose models and transforms
 
 Start with the simplest model that matches the target and constraints. Compare alternatives on the same untouched evaluation set; a more complex model earns its place only when it improves the metric that matters.

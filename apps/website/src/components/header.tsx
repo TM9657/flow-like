@@ -110,6 +110,80 @@ interface HeaderProps {
 	darkHero?: boolean;
 }
 
+function coversLine(surfaces: NodeListOf<Element>, y: number) {
+	const x = document.documentElement.clientWidth / 2;
+	for (const surface of surfaces) {
+		const r = surface.getBoundingClientRect();
+		if (r.top <= y && r.bottom > y && r.left <= x && r.right > x) return true;
+	}
+	return false;
+}
+
+// The header takes the theme of the surface under its bottom edge: a dark hero
+// or section, or a dark view that sets html[data-header-theme="dark"] while it
+// covers the 64px header line. The scrolled header ends 8px above that line, so
+// a dark header holds until the dark surface clears the line too; otherwise
+// the hand-off from such a view to a dark section below it flashes light.
+function useHeaderSurface(darkHero: boolean) {
+	const [surface, setSurface] = useState({ scrolled: false, dark: darkHero });
+
+	useEffect(() => {
+		const darkSurfaces =
+			'[data-dark-hero], section.dark, [data-header-surface="dark"]';
+		const scrollThreshold = 20;
+		const headerLine = 64;
+		const scrolledHeaderLine = 56;
+		const root = document.documentElement;
+		let surfaces = document.querySelectorAll(darkSurfaces);
+		let dark = darkHero;
+		let frame = 0;
+
+		const update = () => {
+			frame = 0;
+			const scrolled = window.scrollY > scrollThreshold;
+			const line = scrolled ? scrolledHeaderLine : headerLine;
+			dark =
+				root.dataset.headerTheme === "dark" ||
+				coversLine(surfaces, line - 0.5) ||
+				(dark && coversLine(surfaces, headerLine));
+			setSurface((prev) =>
+				prev.scrolled === scrolled && prev.dark === dark
+					? prev
+					: { scrolled, dark },
+			);
+		};
+		const schedule = () => {
+			if (!frame) frame = window.requestAnimationFrame(update);
+		};
+		const refresh = () => {
+			surfaces = document.querySelectorAll(darkSurfaces);
+			schedule();
+		};
+
+		update();
+		const signal = new MutationObserver(schedule);
+		signal.observe(root, {
+			attributes: true,
+			attributeFilter: ["data-header-theme"],
+		});
+		const layout = new ResizeObserver(schedule);
+		layout.observe(document.body);
+		window.addEventListener("scroll", schedule, { passive: true });
+		window.addEventListener("resize", schedule);
+		document.addEventListener("readystatechange", refresh);
+		return () => {
+			window.cancelAnimationFrame(frame);
+			signal.disconnect();
+			layout.disconnect();
+			window.removeEventListener("scroll", schedule);
+			window.removeEventListener("resize", schedule);
+			document.removeEventListener("readystatechange", refresh);
+		};
+	}, [darkHero]);
+
+	return surface;
+}
+
 interface DropdownItem {
 	label: string;
 	href: string;
@@ -363,6 +437,18 @@ function LanguageSelector({
 	);
 }
 
+function wrapTabFocus(event: KeyboardEvent, container: HTMLElement) {
+	const focusable = container.querySelectorAll<HTMLElement>(
+		':is(a[href], button:not([disabled]), select:not([disabled]), [tabindex]):not([tabindex="-1"])',
+	);
+	if (!focusable.length) return;
+	const first = focusable[0];
+	const last = focusable[focusable.length - 1];
+	if (document.activeElement !== (event.shiftKey ? first : last)) return;
+	event.preventDefault();
+	(event.shiftKey ? last : first)?.focus();
+}
+
 function MobileMenu({
 	open,
 	onClose,
@@ -390,8 +476,6 @@ function MobileMenu({
 		if (!open) return;
 		const previouslyFocused = document.activeElement as HTMLElement | null;
 		document.body.style.overflow = "hidden";
-		const focusableSelector =
-			'a[href], button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 		const frame = window.requestAnimationFrame(() => {
 			dialogRef.current
 				?.querySelector<HTMLElement>("[data-mobile-menu-close]")
@@ -401,22 +485,8 @@ function MobileMenu({
 			if (event.key === "Escape") {
 				event.preventDefault();
 				onCloseRef.current();
-				return;
-			}
-			if (event.key !== "Tab") return;
-			const focusable = Array.from(
-				dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ??
-					[],
-			);
-			if (!focusable.length) return;
-			const first = focusable[0];
-			const last = focusable[focusable.length - 1];
-			if (event.shiftKey && document.activeElement === first) {
-				event.preventDefault();
-				last?.focus();
-			} else if (!event.shiftKey && document.activeElement === last) {
-				event.preventDefault();
-				first?.focus();
+			} else if (event.key === "Tab" && dialogRef.current) {
+				wrapTabFocus(event, dialogRef.current);
 			}
 		};
 		document.addEventListener("keydown", handleKeyDown);
@@ -698,7 +768,7 @@ function MobileMenu({
 						className="w-full group flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors duration-300"
 					>
 						<LuDownload className="w-4 h-4" />
-						{t("header.download")} Studio
+						{`${t("header.download")} Studio`}
 						<LuArrowRight className="w-4 h-4 ml-auto transition-transform duration-300 group-hover:translate-x-1" />
 					</a>
 				</div>
@@ -748,27 +818,10 @@ export function Header({ pathname, darkHero = false }: HeaderProps) {
 	const path = usePathname(pathname);
 	const { t, lang } = useTranslation(path);
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-	const [scrolled, setScrolled] = useState(false);
-	// Pages with a dark hero (e.g. the landing) mark it with [data-dark-hero];
-	// while the transparent header sits over it, invert the header tokens. The
-	// layout declares it up front so the server-rendered header already has the
-	// right palette; the DOM probe covers pages that only mark the hero.
-	const [heroDark, setHeroDark] = useState(darkHero);
+	// Layouts with a dark hero declare it, so the server-rendered header already
+	// has the dark palette; the probe takes over after hydration.
+	const { scrolled, dark } = useHeaderSurface(darkHero);
 	const stars = useGitHubStars();
-
-	useEffect(() => {
-		const handleScroll = () => setScrolled(window.scrollY > 20);
-		handleScroll();
-		window.addEventListener("scroll", handleScroll, { passive: true });
-		return () => window.removeEventListener("scroll", handleScroll);
-	}, []);
-
-	useEffect(() => {
-		if (darkHero) return;
-		setHeroDark(!!document.querySelector("[data-dark-hero]"));
-	}, [darkHero]);
-
-	const overDarkHero = heroDark && !scrolled;
 
 	const solutionsGroups: SolutionsGroup[] = [
 		{
@@ -901,7 +954,7 @@ export function Header({ pathname, darkHero = false }: HeaderProps) {
 					scrolled
 						? "h-14 bg-background/60 backdrop-blur-xl border-b border-border/20"
 						: "h-16 bg-transparent"
-				} ${overDarkHero ? "dark" : ""}`}
+				} ${dark ? "dark" : ""}`}
 			>
 				<div className="max-w-7xl mx-auto h-full px-4 flex items-center justify-between">
 					{/* Logo */}
@@ -926,7 +979,7 @@ export function Header({ pathname, darkHero = false }: HeaderProps) {
 						>
 							Pricing
 						</a>
-						<div className="flex items-center border-l border-border/40 ml-1 pl-1 gap-0.5">
+						<div className="flex items-center border-l border-border/40 ml-1 pl-1 gap-0.5 transition-colors duration-300">
 							<a
 								href="https://github.com/Rheosoph/flow-like"
 								target="_blank"
@@ -967,7 +1020,7 @@ export function Header({ pathname, darkHero = false }: HeaderProps) {
 							title={studioName}
 						>
 							<LuDownload className="w-4 h-4" />
-							{t("header.download")} Studio
+							{`${t("header.download")} Studio`}
 						</a>
 					</div>
 

@@ -3,6 +3,7 @@ import type { IBackendState } from "../../state/backend-state";
 import type { Nullable } from "../schema/auto-import";
 import { type IBit, IBitTypes, type IMetadata } from "../schema/bit/bit";
 import type { IEmbeddingModelParameters } from "../schema/bit/bit/embedding-model-parameters";
+import type { IForecastingModelParameters } from "../schema/bit/bit/forecasting-parameters";
 import type { IImageEmbeddingModelParameters } from "../schema/bit/bit/image-embedding-model-parameters";
 import type { ILlmParameters } from "../schema/bit/bit/llm-parameters";
 import type { ISystemOneParameters } from "../schema/bit/bit/systemone-parameters";
@@ -118,6 +119,7 @@ export class Bit implements IBit {
 	parameters:
 		| IImageEmbeddingModelParameters
 		| IEmbeddingModelParameters
+		| IForecastingModelParameters
 		| ILlmParameters
 		| ISystemOneParameters
 		| IVlmParameters

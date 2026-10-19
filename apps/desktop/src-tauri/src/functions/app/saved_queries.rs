@@ -178,7 +178,7 @@ async fn validate_saved_query(
     Ok(())
 }
 
-async fn collect_views(
+pub(super) async fn collect_views(
     connection: &Connection,
     surface: SavedQuerySurface,
     overlay_id: Option<&str>,

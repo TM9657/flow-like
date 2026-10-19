@@ -6,6 +6,8 @@ pub mod cancellation;
 pub mod compute;
 pub mod data;
 pub mod feature_engineering;
+pub mod forecasting;
+pub mod forecasting_bit;
 pub mod image;
 pub mod learning;
 pub mod ledger_transfer;

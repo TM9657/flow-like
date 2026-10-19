@@ -5,9 +5,11 @@ edition = "2024"
 
 [features]
 default = []
+studio = ["flow-like-storage/graph"]
+forecasting = ["execute", "studio", "flow-like-ml-forecast/cpu", "dep:tempfile"]
 local-ml = ["flow-like-catalog-core/local-ml"]
 # Runs published models (Burn CPU, no GPU crates); training adds the device-local ledger.
-inference = ["execute", "flow-like-ml-runtime/execution", "flow-like-ml-runtime/native", "flow-like-ml-runtime/burn", "flow-like-ml-burn/engine", "flow-like-ml-burn/cpu"]
+inference = ["forecasting", "flow-like-ml-runtime/execution", "flow-like-ml-runtime/native", "flow-like-ml-runtime/burn", "flow-like-ml-burn/engine", "flow-like-ml-burn/cpu", "dep:tempfile"]
 training = ["inference", "dep:tempfile"]
 training-cpu = ["training", "flow-like-ml-burn/cpu"]
 training-auto = ["training-cpu", "flow-like-ml-runtime/training-auto"]
@@ -44,6 +46,7 @@ execute = [
 [dependencies]
 flow-like-ml-core.workspace = true
 flow-like-ml-native.workspace = true
+flow-like-ml-forecast.workspace = true
 flow-like-catalog-industrial.workspace = true
 flow-like-ml-runtime = { workspace = true, default-features = false }
 flow-like-ml-burn = { workspace = true, default-features = false }
@@ -59,7 +62,9 @@ tracing.workspace = true
 schemars.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+chrono.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "fs", "io-util"] }
 uuid.workspace = true
 async-trait.workspace = true
 tempfile = { version = "3", optional = true }

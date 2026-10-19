@@ -67,6 +67,7 @@ export function AdminBitsPage() {
 									IBitTypes.Llm,
 									IBitTypes.Vlm,
 									IBitTypes.SystemOne,
+									IBitTypes.Forecasting,
 									IBitTypes.Tts,
 									IBitTypes.Stt,
 								]

@@ -136,6 +136,8 @@ pub enum BitType {
     Vlm,
     #[sea_orm(string_value = "SYSTEM_ONE")]
     SystemOne,
+    #[sea_orm(string_value = "FORECASTING")]
+    Forecasting,
     #[sea_orm(string_value = "EMBEDDING")]
     Embedding,
     #[sea_orm(string_value = "IMAGE_EMBEDDING")]

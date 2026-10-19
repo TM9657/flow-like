@@ -1193,6 +1193,23 @@ export interface PlotlyChartComponent extends ComponentBase {
 	legendPosition?: BoundValue; // "top" | "bottom" | "left" | "right"
 }
 
+/** Displays a saved Data Studio prediction through the viewer's existing access. */
+export interface ForecastChartComponent extends ComponentBase {
+	type: "forecastChart";
+	forecastId: BoundValue;
+	appId?: BoundValue;
+	userScoped?: BoundValue;
+	target?: BoundValue;
+	seriesId?: BoundValue;
+	view?: BoundValue; // "forecast" | "evaluation"
+	showCovariates?: BoundValue;
+	showMetrics?: BoundValue;
+	showControls?: BoundValue;
+	showHeader?: BoundValue;
+	compact?: BoundValue;
+	height?: BoundValue; // Chart height in pixels, clamped to 120..1200.
+}
+
 // FilePreview - Generic file preview component
 export interface FilePreviewComponent extends ComponentBase {
 	type: "filePreview";
@@ -1918,6 +1935,7 @@ export type A2UIComponent =
 	| MiniMapComponent
 	| IframeComponent
 	| PlotlyChartComponent
+	| ForecastChartComponent
 	| FilePreviewComponent
 	| FileEditorComponent
 	| DiffViewComponent

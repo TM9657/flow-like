@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::{Result, anyhow, bail};
 use flow_like::{
-    bit::{Bit, Metadata},
+    bit::{Bit, BitTypes, ForecastingAssetRef, ForecastingModelParameters, Metadata},
     flow_like_types::create_id,
 };
 use serde::{Deserialize, Serialize};
@@ -23,15 +23,58 @@ pub struct Planned {
     pub bit_type: String,
     pub payload: Value,
     pub dependencies: Vec<Dependency>,
+    forecasting_assets: Vec<Dependency>,
     pub meta: BTreeMap<String, Metadata>,
 }
 
 /// A dependency is stored as `hub:id`, and the hub half is only known once the
 /// dependency itself has been written, so the reference is resolved at push
 /// time rather than while planning.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Dependency {
     Local(String),
     Remote(String),
+}
+
+impl Planned {
+    /// Use the identities returned by the Hub, which may differ from the IDs
+    /// submitted in the spec when a file already exists or an entry is new.
+    pub fn push_payload(&self, stored: &BTreeMap<String, Bit>, hub: &str) -> Result<Value> {
+        let mut payload = self.payload.clone();
+        let dependencies = self
+            .dependencies
+            .iter()
+            .map(|dependency| reference(dependency, stored, hub).map(Value::String))
+            .collect::<Result<Vec<_>>>()?;
+        payload["dependencies"] = Value::Array(dependencies);
+        if !self.forecasting_assets.is_empty() {
+            let assets = payload
+                .pointer_mut("/parameters/assets")
+                .and_then(Value::as_array_mut)
+                .ok_or_else(|| anyhow!("entry {} has no forecasting assets", self.id))?;
+            if assets.len() != self.forecasting_assets.len() {
+                bail!("entry {} has inconsistent forecasting assets", self.id);
+            }
+            for (asset, dependency) in assets.iter_mut().zip(&self.forecasting_assets) {
+                asset["bit"] = Value::String(reference(dependency, stored, hub)?);
+            }
+        }
+        Ok(payload)
+    }
+}
+
+fn reference(dependency: &Dependency, stored: &BTreeMap<String, Bit>, hub: &str) -> Result<String> {
+    match dependency {
+        Dependency::Local(id) => {
+            let bit = stored
+                .get(id)
+                .ok_or_else(|| anyhow!("dependency {id} was not written before its dependent"))?;
+            let bit_hub = if bit.hub.is_empty() { hub } else { &bit.hub };
+            Ok(format!("{bit_hub}:{}", bit.id))
+        }
+        Dependency::Remote(reference) if reference.contains(':') => Ok(reference.clone()),
+        Dependency::Remote(id) => Ok(format!("{hub}:{id}")),
+    }
 }
 
 impl Dependency {
@@ -95,7 +138,7 @@ pub fn plan(spec: &Spec, hub: &str) -> Result<Vec<Planned>> {
             }
         }
 
-        let dependencies = resolve_dependencies(&payload, &aliases, id)?;
+        let mut dependencies = resolve_dependencies(&payload, &aliases, id)?;
         payload.remove("dependencies");
 
         if payload
@@ -106,9 +149,11 @@ pub fn plan(spec: &Spec, hub: &str) -> Result<Vec<Planned>> {
             payload.insert("hub".to_string(), Value::String(hub.to_string()));
         }
 
-        let payload = merge(serde_json::to_value(Bit::default())?, &payload);
+        let mut payload = merge(serde_json::to_value(Bit::default())?, &payload);
         let bit: Bit = serde_json::from_value(payload.clone())
             .map_err(|err| anyhow!("entry {id} is not a valid bit: {err}"))?;
+        let forecasting_assets =
+            resolve_forecasting_assets(&mut payload, &bit, &aliases, &mut dependencies)?;
 
         planned.push(Planned {
             id: id.clone(),
@@ -119,6 +164,7 @@ pub fn plan(spec: &Spec, hub: &str) -> Result<Vec<Planned>> {
                 .to_string(),
             payload,
             dependencies,
+            forecasting_assets,
             meta,
         });
     }
@@ -167,6 +213,30 @@ pub fn from_bits(bits: &[Bit]) -> Spec {
                     let id = reference.split_once(':').map_or(reference, |(_, id)| id);
                     if known.contains(id) {
                         *dependency = Value::String(format!("@{}", aliases[id]));
+                    }
+                }
+            }
+            if bit.bit_type == BitTypes::Forecasting
+                && let Some(Value::Array(assets)) = body
+                    .get_mut("parameters")
+                    .and_then(|parameters| parameters.get_mut("assets"))
+            {
+                for asset in assets {
+                    let Some(reference) = asset.get("bit").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    let reference = ForecastingAssetRef {
+                        bit: reference.to_string(),
+                        relative_path: String::new(),
+                    };
+                    if let Some((index, dependency)) =
+                        bits.iter().enumerate().find(|(_, candidate)| {
+                            reference
+                                .matches_reference(candidate, &bit.hub)
+                                .unwrap_or(false)
+                        })
+                    {
+                        asset["bit"] = Value::String(format!("@{}", alias_for(dependency, index)));
                     }
                 }
             }
@@ -235,17 +305,86 @@ fn resolve_dependencies(
             let Some(dependency) = dependency.as_str() else {
                 bail!("every dependency of {id} must be a bit id or an @alias");
             };
-            match dependency.strip_prefix('@') {
-                Some(alias) => aliases
-                    .get(alias)
-                    .map(|id| Dependency::Local(id.clone()))
-                    .ok_or_else(|| {
-                        anyhow!("{id} depends on @{alias}, which the spec never defines")
-                    }),
-                None => Ok(Dependency::Remote(dependency.to_string())),
-            }
+            resolve_reference(dependency, aliases, id)
         })
         .collect()
+}
+
+fn resolve_reference(
+    reference: &str,
+    aliases: &HashMap<String, String>,
+    id: &str,
+) -> Result<Dependency> {
+    match reference.strip_prefix('@') {
+        Some(alias) => aliases
+            .get(alias)
+            .map(|id| Dependency::Local(id.clone()))
+            .ok_or_else(|| anyhow!("{id} depends on @{alias}, which the spec never defines")),
+        None => Ok(Dependency::Remote(reference.to_string())),
+    }
+}
+
+fn resolve_forecasting_assets(
+    payload: &mut Value,
+    bit: &Bit,
+    aliases: &HashMap<String, String>,
+    dependencies: &mut Vec<Dependency>,
+) -> Result<Vec<Dependency>> {
+    if bit.bit_type != BitTypes::Forecasting {
+        return Ok(Vec::new());
+    }
+    let mut parameters: ForecastingModelParameters = serde_json::from_value(bit.parameters.clone())
+        .map_err(|error| {
+            anyhow!(
+                "entry {} has invalid forecasting parameters: {error}",
+                bit.id
+            )
+        })?;
+    let assets = payload
+        .pointer_mut("/parameters/assets")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| anyhow!("entry {} must list forecasting assets", bit.id))?;
+    let mut resolved = Vec::new();
+    let mut kept = Vec::new();
+    let mut validated_assets = Vec::new();
+    for (mut asset, authored) in parameters.assets.into_iter().zip(std::mem::take(assets)) {
+        let dependency = resolve_reference(&asset.bit, aliases, &bit.id)?;
+        let is_root = match &dependency {
+            Dependency::Local(id) => id == &bit.id,
+            Dependency::Remote(_) => asset.matches_reference(bit, &bit.hub)?,
+        };
+        if is_root {
+            if bit.file_name.as_deref() != Some(asset.relative_path.as_str()) {
+                bail!(
+                    "entry {} maps itself to {}; a self asset must use the root file_name",
+                    bit.id,
+                    asset.relative_path
+                );
+            }
+            // The runtime already stages the root file. Omitting this redundant
+            // mapping also avoids predicting the ID assigned during publication.
+            continue;
+        }
+        asset.bit = match &dependency {
+            Dependency::Local(id) => format!("{}:{id}", bit.hub),
+            Dependency::Remote(reference) => reference.clone(),
+        };
+        validated_assets.push(asset);
+        kept.push(authored);
+        if !dependencies.contains(&dependency) {
+            dependencies.push(dependency.clone());
+        }
+        resolved.push(dependency);
+    }
+    parameters.assets = validated_assets;
+    parameters.validate().map_err(|error| {
+        anyhow!(
+            "entry {} has invalid forecasting parameters: {error}",
+            bit.id
+        )
+    })?;
+    *assets = kept;
+    Ok(resolved)
 }
 
 fn order(planned: Vec<Planned>) -> Result<Vec<Planned>> {
@@ -308,3 +447,6 @@ fn bit_fields() -> HashSet<&'static str> {
         .map(String::as_str)
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

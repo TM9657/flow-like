@@ -12,6 +12,7 @@ export enum IBitTypes {
 	Course = "Course",
 	Embedding = "Embedding",
 	File = "File",
+	Forecasting = "Forecasting",
 	ImageEmbedding = "ImageEmbedding",
 	ImageGeneration = "ImageGeneration",
 	Llm = "Llm",

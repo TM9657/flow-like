@@ -30,6 +30,7 @@ pub mod db_update;
 pub mod drop_columns;
 pub mod drop_index;
 pub mod drop_table;
+pub mod forecasting;
 pub mod get_db_schema;
 pub mod get_indices;
 pub mod list_tables;
@@ -37,6 +38,7 @@ pub mod list_tables_user;
 pub mod optimize;
 pub mod presign_db_access;
 pub mod references;
+pub mod saved_forecasts;
 pub mod saved_queries;
 pub mod set_column_metadata;
 pub mod set_primary_key;
@@ -284,6 +286,12 @@ pub fn routes() -> Router<AppState> {
             get(saved_queries::list_saved_queries).post(saved_queries::create_saved_query),
         )
         .route("/queries/execute", post(saved_queries::execute_query))
+        .route("/queries/forecast", post(forecasting::forecast_query))
+        .route("/forecasts", saved_forecasts::collection_routes())
+        .route(
+            "/forecasts/{forecast_id}",
+            get(saved_forecasts::get_saved_forecast).delete(saved_forecasts::delete_saved_forecast),
+        )
         .route(
             "/queries/{query_id}",
             get(saved_queries::get_saved_query)

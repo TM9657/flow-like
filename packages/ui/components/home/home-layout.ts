@@ -153,6 +153,7 @@ export function moveHomeWidget(
 }
 
 export function minimumHomeWidgetRows(widget: IHomeWidget): number {
+	if (widget.type === "saved-forecast") return 4;
 	if (widget.type === "data")
 		return ["stat", "metricstrip", "progress", "bullet"].includes(
 			String(widget.config.visualization),

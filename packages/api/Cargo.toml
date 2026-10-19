@@ -20,6 +20,7 @@ flow-like = { workspace = true, features = ["app-runtime", "openapi", "remote-ml
 flow-like-types.workspace = true
 flow-like-storage = { workspace = true, features = ["graph"] }
 flow-like-catalog-core.workspace = true
+flow-like-catalog-ml = { workspace = true, default-features = false, features = ["studio"] }
 flow-like-catalog = { workspace = true, default-features = false, features = ["draft-testing"] }
 uuid.workspace = true
 flow-like-sinks.workspace = true
@@ -124,6 +125,7 @@ aws-sdk-s3 = { workspace = true, optional = true }
 # -----
 
 [features]
+forecasting = ["flow-like-catalog-ml/forecasting"]
 otel = ["dep:opentelemetry", "dep:tracing-opentelemetry"]
 default = ["aws", "cognito", "ses", "smtp", "sendgrid"]
 secrets-aws = ["flow-like-secrets/aws"]

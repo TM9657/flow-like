@@ -10502,6 +10502,7 @@ dependencies = [
  "flow-like-azure-data",
  "flow-like-catalog",
  "flow-like-catalog-core",
+ "flow-like-catalog-ml",
  "flow-like-channels",
  "flow-like-db",
  "flow-like-device-protocol",
@@ -11227,12 +11228,14 @@ version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
  "async-trait",
+ "chrono",
  "flow-like-catalog-build-helper",
  "flow-like-catalog-core",
  "flow-like-catalog-industrial",
  "flow-like-catalog-macros",
  "flow-like-ml-burn",
  "flow-like-ml-core",
+ "flow-like-ml-forecast",
  "flow-like-ml-native",
  "flow-like-ml-runtime",
  "flow-like-model-provider",
@@ -11263,6 +11266,7 @@ dependencies = [
  "rmp-serde",
  "schemars 1.2.1",
  "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tracing",
@@ -11657,6 +11661,7 @@ dependencies = [
  "flow-like-bots",
  "flow-like-browser",
  "flow-like-catalog",
+ "flow-like-catalog-ml",
  "flow-like-device-client",
  "flow-like-device-crypto",
  "flow-like-device-protocol",
@@ -12047,6 +12052,20 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "flow-like-ml-forecast"
+version = "0.1.0"
+dependencies = [
+ "burn",
+ "half",
+ "safetensors 0.8.0",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 

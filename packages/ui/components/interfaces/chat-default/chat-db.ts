@@ -83,7 +83,31 @@ export interface IBuildLaneDetail {
 	gaps?: IBuildLaneGap[];
 }
 
-export type IPlanStepDetail = IBuildLaneDetail;
+export interface IToolActivityDetail {
+	kind: "tool_activity";
+	category:
+		| "web"
+		| "search"
+		| "apps"
+		| "files"
+		| "database"
+		| "workflow"
+		| "tool";
+	label: string;
+	target?: string;
+	query?: string;
+	method?: string;
+	sources?: Array<{
+		url: string;
+		hostname: string;
+		path?: string;
+		/** Removing query parameters can change the resource, so display it without a link. */
+		linkable?: boolean;
+	}>;
+	outcome?: string;
+}
+
+export type IPlanStepDetail = IBuildLaneDetail | IToolActivityDetail;
 
 export interface IPlanStep {
 	id: string;

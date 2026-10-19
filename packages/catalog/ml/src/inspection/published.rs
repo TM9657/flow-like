@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use super::lifecycle::{
     CachedPredictor, CatalogLoadedPredictor, FeatureExtractorRef, InspectionContext,
 };
-#[cfg(feature = "inference")]
+#[cfg(any(feature = "inference", feature = "forecasting"))]
 use flow_like::flow::execution::context::ExecutionContext;
 #[cfg(feature = "inference")]
 use flow_like_catalog_core::found_or_missing;
@@ -36,10 +36,17 @@ use flow_like_storage::{
 };
 #[cfg(feature = "inference")]
 use flow_like_types::{Bytes, Result, anyhow, json};
+#[cfg(all(feature = "forecasting", not(feature = "inference")))]
+use flow_like_types::{Result, anyhow};
 #[cfg(feature = "inference")]
 use std::{
     collections::VecDeque,
     sync::{Arc, LazyLock, Mutex, PoisonError},
+};
+#[cfg(all(feature = "forecasting", not(feature = "inference")))]
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex, PoisonError},
 };
 
 pub const INFERENCE_UNAVAILABLE: &str = "Running trained models needs a build with ML inference. The desktop app, device placements and the AWS, Kubernetes, local and Docker Compose executors include it; Azure and GCP executors and the mobile apps do not in this version.";
@@ -712,10 +719,10 @@ fn object_identity(path: &FlowPath, file: &StoredFile) -> String {
 }
 
 /// Per-run values in the run cache, oldest first.
-#[cfg(feature = "inference")]
+#[cfg(any(feature = "inference", feature = "forecasting"))]
 pub(crate) struct RunMap<T>(Arc<Mutex<VecDeque<(String, T)>>>);
 
-#[cfg(feature = "inference")]
+#[cfg(any(feature = "inference", feature = "forecasting"))]
 impl<T: Clone> RunMap<T> {
     pub(crate) fn get(&self, key: &str) -> Option<T> {
         self.0
@@ -737,7 +744,7 @@ impl<T: Clone> RunMap<T> {
     }
 }
 
-#[cfg(feature = "inference")]
+#[cfg(any(feature = "inference", feature = "forecasting"))]
 impl<T: std::any::Any + Send> flow_like_types::Cacheable for RunMap<T> {
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -748,7 +755,7 @@ impl<T: std::any::Any + Send> flow_like_types::Cacheable for RunMap<T> {
 }
 
 /// The run's map under `key`, created on first use.
-#[cfg(feature = "inference")]
+#[cfg(any(feature = "inference", feature = "forecasting"))]
 pub(crate) async fn run_map<T: Clone + Send + std::any::Any>(
     context: &ExecutionContext,
     key: &str,

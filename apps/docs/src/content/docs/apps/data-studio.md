@@ -22,6 +22,7 @@ Enable [Developer Mode](/start/developer-mode/) to see this workspace in the App
 | **Sharing** | Expose ontologies to connected projects, and install ontologies published by others |
 | **Sources** | Create and inspect project or personal native tables, plus object types from installed remote ontologies |
 | **Queries** | Run SQL over native tables, local ontologies, or installed remote contracts and view the result as a table, chart, relationship graph, or JSON |
+| **Forecast** | Run a Forecasting Bit against native tables, or open a saved prediction |
 
 ## Explore ontology objects
 
@@ -70,6 +71,64 @@ On top of those tables you can define an **ontology**: object types, link types,
 The **Queries** tab provides one SQL workbench for project tables, personal tables, local ontology overlays, and installed remote contracts. Local statements can be saved as stored queries or — when they have no parameters — reusable views. Remote statements are read-only previews and cannot be saved in the consuming project.
 
 Results can be inspected as a data table, a configurable chart, a relationship graph, or raw JSON. The workbench preserves the query and visualization configuration together when you save a local query.
+
+## Forecast table data
+
+Add a [Forecasting Bit](/topics/datascience/ml/#forecast-with-pretrained-time-series-models) to your active profile to reveal the **Forecast** tab. New predictions open a setup wizard. Choose a project or personal data scope, select a table or SQL query, map its columns, then choose a model and forecast horizon. The final step lets you review the configuration before running it. **Edit setup** returns to those settings without discarding the previous result.
+
+For data spread across several tables, switch to SQL and join them in one read-only query. SQL runs through DataFusion against tables in the selected scope.
+
+Preview the input and map its timestamp, numeric targets, and optional series identifier. Each series needs evenly spaced timestamps. Use SQL to aggregate or align observations before forecasting; duplicate timestamps and irregular intervals produce an error. Numeric covariates are additional inputs, such as promotions or whether a store is open. Their availability depends on the selected model. Known future covariates also need a future query with one row per forecast step and series.
+
+Set the forecast horizon and run the model. New predictions use each checkpoint's native output. The chart places observed values and forecasts on a shared timeline, with an orange forecast line and a quantile band when the model provides quantiles. TinyTimeMixer displays a mean **Point forecast only**, without a band. Saved predictions retain any explicitly requested quantiles. Covariate tracks share the same timeline; changing their selection requires a new run.
+
+Supported models include Timestral, Chronos-2, Toto 2, TimesFM 2.5 and IBM Granite TinyTimeMixer. TimesFM 2.5 and the supported TinyTimeMixer checkpoints accept one target per series and no covariates. TimesFM supports horizons up to 1,024 steps. The included TinyTimeMixer R2 MSE checkpoint predicts up to 96 steps and targets minutely to hourly observations; provide 512 historical steps where possible. Other TinyTimeMixer variants have different requirements. Choose the model's supported history range in SQL if your table contains more rows per series than it accepts.
+
+### Forecast machines from one table
+
+Set **Series ID** to a column such as `machine_id` to forecast each machine independently in one run. Each group needs one row per timestamp, with values in numeric target columns. If several sensors share a machine and timestamp, use SQL to aggregate their readings or place them in separate target columns first. Multiple targets require a model with joint-target support. A composite group such as site plus machine needs one unique derived ID column in SQL.
+
+For an overall forecast, aggregate the history before running the model. For example, this query produces a total at each aligned timestamp; map `total_power` as the target and choose **Single series**:
+
+```sql
+SELECT "time", SUM("power") AS total_power
+FROM sensors
+GROUP BY "time"
+```
+
+The chart and saved prediction viewers show one selected target and series at a time. Use the series selector to inspect another machine; simultaneous group overlays and highlighting are not available. Saving keeps every group's results. An overall forecast and independent machine forecasts are separate runs. Adding machine quantiles together does not give a valid quantile band for the overall total.
+
+Each series can have its own time interval and last observed timestamp. The horizon is the same number of steps for every series. Future covariates must contain exactly that many rows for each group, continuing its own interval with matching ID types. Extra groups, missing groups and missing future values are rejected.
+
+### Evaluate a historical window
+
+Enable **Evaluate on held-out data** and choose how many observed steps to predict. After a run, move the **Forecast as of** slider back through history. Releasing it runs a new evaluation from that cutoff. The chart overlays predictions and actual values for the selected window; **Latest window** returns to the most recent complete window. Keyboard arrow keys also move the cutoff.
+
+The model receives targets and past covariates only through the cutoff. Inputs marked as known future covariates remain available for the evaluation window. Each series uses the same number of steps back from its own end, and the slider dates follow the selected series. The shortest series limits how far back you can move.
+
+Accuracy metrics describe the selected series, target and historical window. MAE measures average absolute error in the target's units, while RMSE gives larger errors more weight. WAPE divides total absolute error by total absolute actual values; MAPE averages percentage errors for individual observations. Both percentage metrics appear as percentages, and lower errors are better. Missing actuals are excluded. MAPE is unavailable when an actual is zero; WAPE is unavailable when the total absolute actual value is zero. These measurements do not guarantee future accuracy.
+
+Forecasting reads your source tables without changing them. Queries that exceed the input budget are rejected rather than forecasting from an incomplete preview. Native inference runs in Rust on the desktop or a server built with forecasting support.
+
+### Set up a forecast with FlowPilot
+
+Choose **Ask FlowPilot** in the Forecast tab, or describe the forecast in the assistant. Include what you want to predict, the time interval, how far ahead to look, and whether you want to evaluate an earlier period. FlowPilot can inspect the tables, prepare a query across several tables, discover the forecasting models active in your profile, and run a forecast with historical evaluation.
+
+FlowPilot uses the same forecast settings and saved predictions as the wizard. When a saved prediction is open, the assistant receives its ID and data scope so it can retrieve that setup. Ask it to save a completed run to keep the result in Data Studio and use it in a widget or app page. Saving follows your existing approval settings and data permissions. The assistant saves the actual completed run, including its evaluation metrics, and returns a link to it.
+
+### Save and share predictions
+
+After a run, choose **Save prediction** and give it a name. Each save keeps the completed results, source query, column mappings, model reference, and forecast settings together, including the historical cutoff and its evaluation metrics. You can keep several predictions and switch between them in the saved prediction picker. Changing the setup or running again leaves earlier saves intact.
+
+Predictions saved in **Project** scope are shared with project users who have permission to read their source data. Choose **Share**, then **Copy link** to open the same saved prediction with a collaborator. **Personal** predictions stay in your own database. Saving and deleting require permission to write data; opening a saved result does not require its model to be installed. The Forecast tab also appears when saved predictions are available.
+
+### Show saved predictions on other pages
+
+On the home page, add a **Saved forecast** widget from the **Data** category. In its settings, choose the project, scope, and saved prediction. You can set its initial metric, series, and outlook or holdout view. Add several widgets to keep different predictions visible together.
+
+In an app page, add the **Saved Forecast** component from the [visual builder](/dev/a2ui/visual-builder/). Select a saved prediction in its properties, or bind its prediction ID to page data. Display options control the chart height, covariate tracks, metrics, and viewer controls.
+
+Both displays read the saved result and check each viewer's access. They keep a reference to the prediction, so opening a page does not run a model. Personal predictions remain personal even when their widget appears on a shared page. Save a new run in Data Studio and select it in the widget or component when you want to show a newer prediction.
 
 ## Ask FlowPilot (Data Studio agent)
 

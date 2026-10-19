@@ -1926,11 +1926,13 @@ function HomeWidgetFrame({
 			? Math.max(360, homeWidgetHeight(widget))
 			: undefined;
 	const minHeight =
-		widget.type === "app-embed"
-			? 240
-			: widget.type === "data" && !metric
-				? 220
-				: 96;
+		widget.type === "saved-forecast"
+			? 360
+			: widget.type === "app-embed"
+				? 240
+				: widget.type === "data" && !metric
+					? 220
+					: 96;
 	const height = autoHeight
 		? Math.max(56, contentHeight)
 		: Math.max(minHeight, homeWidgetHeight({ ...widget, size }));

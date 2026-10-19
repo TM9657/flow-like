@@ -63,6 +63,7 @@ const COMPONENT_ICONS: Record<string, string> = {
 	geoMap: "🌍",
 	graph: "🕸",
 	ontologyGraph: "🕸",
+	forecastChart: "↗",
 };
 
 const COMPONENT_COLORS: Record<
@@ -321,6 +322,11 @@ const COMPONENT_COLORS: Record<
 		bg: "bg-indigo-50",
 		border: "border-indigo-200",
 		text: "text-indigo-600",
+	},
+	forecastChart: {
+		bg: "bg-muted",
+		border: "border-border",
+		text: "text-foreground",
 	},
 };
 

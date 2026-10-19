@@ -4,7 +4,7 @@ use crate::{
     state::{TauriFlowLikeState, TauriSettingsState},
 };
 use flow_like::{
-    bit::Bit,
+    bit::{Bit, BitTypes, ForecastingAssetRef},
     hub::Hub,
     profile::{Profile, ProfileApp, ProfileShortcut},
     utils::{cache::get_cache_dir, hash::hash_file, http::HTTPClient},
@@ -231,9 +231,11 @@ pub async fn get_bits_in_current_profile(
     let mut tasks: Vec<JoinHandle<Option<Bit>>> = vec![];
 
     for bit_id in profile.hub_profile.bits.iter() {
-        let (hub, bit) = bit_id.split_once(':').unwrap_or(("", bit_id));
+        let (hub, bit) = bit_id
+            .rsplit_once(':')
+            .unwrap_or((&profile.hub_profile.hub, bit_id));
         if hub.is_empty() {
-            continue; // Skip bits without a hub
+            continue;
         }
         let hub = hub.to_string();
         let bit = bit.to_string();
@@ -252,16 +254,42 @@ pub async fn get_bits_in_current_profile(
         .filter_map(|res| res.ok().flatten())
         .collect();
 
-    // Custom bits this profile activated resolve locally, not over a hub.
+    // Custom bits resolve locally. Forecasting discovery also requires activation.
     found_bits.extend(
         profile
             .hub_profile
             .custom_bits
-            .into_iter()
-            .map(|custom| custom.0),
+            .iter()
+            .map(|custom| custom.0.clone()),
     );
+    found_bits.retain(|bit| profile_discovery_bit_visible(&profile.hub_profile, bit));
 
     Ok(found_bits)
+}
+
+fn profile_discovery_bit_visible(profile: &Profile, bit: &Bit) -> bool {
+    if bit.bit_type != BitTypes::Forecasting {
+        return true;
+    }
+    let mut matching = profile
+        .bits
+        .iter()
+        .filter(|reference| {
+            reference
+                .rsplit_once(':')
+                .map_or(reference.as_str(), |(_, id)| id)
+                == bit.id
+        })
+        .peekable();
+    matching.peek().is_some()
+        && matching.all(|reference| {
+            ForecastingAssetRef {
+                bit: reference.clone(),
+                relative_path: String::new(),
+            }
+            .matches_reference(bit, &profile.hub)
+            .unwrap_or(false)
+        })
 }
 
 #[instrument(skip_all)]
@@ -929,6 +957,38 @@ pub async fn get_profile_icon_path(
 #[cfg(test)]
 mod profile_settings_tests {
     use super::*;
+
+    #[test]
+    fn forecasting_discovery_requires_an_unambiguous_activated_hub() {
+        let bit = Bit {
+            id: "forecast".into(),
+            hub: "hub.example".into(),
+            bit_type: BitTypes::Forecasting,
+            ..Default::default()
+        };
+        let mut profile = Profile {
+            hub: "hub.example".into(),
+            bits: vec!["forecast".into(), "https://HUB.example:443:forecast".into()],
+            ..Default::default()
+        };
+        assert!(profile_discovery_bit_visible(&profile, &bit));
+        for references in [
+            vec![],
+            vec!["other.example:forecast"],
+            vec!["hub.example:forecast", "other.example:forecast"],
+            vec!["hub.example:forecast", "https://hub.example/path:forecast"],
+        ] {
+            profile.bits = references.into_iter().map(String::from).collect();
+            assert!(!profile_discovery_bit_visible(&profile, &bit));
+        }
+        assert!(profile_discovery_bit_visible(
+            &profile,
+            &Bit {
+                bit_type: BitTypes::Llm,
+                ..bit
+            }
+        ));
+    }
 
     #[test]
     fn settings_patch_preserves_newer_membership_and_media() {
