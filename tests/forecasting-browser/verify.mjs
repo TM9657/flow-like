@@ -91,6 +91,43 @@ const chartColors = () =>
 		const style = getComputedStyle(element);
 		return { background: style.backgroundColor, foreground: style.color };
 	});
+const verifyForecastTransition = async (scope = chart()) => {
+	const transitions = await scope
+		.locator(".forecast-transition")
+		.evaluateAll((groups) =>
+			groups.map((group) => {
+				const line = group.querySelector("line");
+				const paths = group
+					.closest("svg")
+					.querySelectorAll(".recharts-line-curve");
+				const history = paths[0].getPointAtLength(paths[0].getTotalLength());
+				const forecast = paths[paths.length - 1].getPointAtLength(0);
+				return {
+					dash: line.getAttribute("stroke-dasharray"),
+					startGap: Math.hypot(
+						Number(line.getAttribute("x1")) - history.x,
+						Number(line.getAttribute("y1")) - history.y,
+					),
+					endGap: Math.hypot(
+						Number(line.getAttribute("x2")) - forecast.x,
+						Number(line.getAttribute("y2")) - forecast.y,
+					),
+				};
+			}),
+		);
+	assert.equal(
+		transitions.length,
+		2,
+		"The main chart and overview include a forecast transition",
+	);
+	for (const transition of transitions) {
+		assert.equal(transition.dash, "3 3");
+		assert.ok(
+			transition.startGap < 0.02 && transition.endGap < 0.02,
+			`Transition joins the observed and forecast path endpoints: ${JSON.stringify(transition)}`,
+		);
+	}
+};
 
 try {
 	await page.goto("http://127.0.0.1:4344/", { waitUntil: "networkidle" });
@@ -132,6 +169,7 @@ try {
 		0,
 	);
 	await select("Chart series", "Machine B");
+	await verifyForecastTransition();
 	await fits();
 	await capture("05-grouped-forecast");
 	await page
@@ -238,6 +276,7 @@ try {
 		.getByRole("button", { name: "Focus forecast", exact: true })
 		.click();
 	const focusedRange = await visibleRange();
+	await verifyForecastTransition();
 	await page.getByRole("button", { name: "Edit setup", exact: true }).click();
 	assert.deepEqual(
 		await visibleRange(),
@@ -278,6 +317,23 @@ try {
 		`Full screen uses the viewport: ${JSON.stringify(dialogBox)}`,
 	);
 	await capture("05a-fullscreen-forecast", false);
+	await verifyForecastTransition(page.getByRole("dialog"));
+	const transitionBox = await page
+		.getByRole("dialog")
+		.locator(".forecast-transition line")
+		.first()
+		.boundingBox();
+	assert.ok(transitionBox);
+	await page.screenshot({
+		path: `${output}/05c-forecast-boundary-detail.png`,
+		clip: {
+			x: Math.max(0, transitionBox.x - 90),
+			y: Math.max(0, transitionBox.y - 80),
+			width: transitionBox.width + 180,
+			height: transitionBox.height + 160,
+		},
+		animations: "disabled",
+	});
 	await page.keyboard.press("Escape");
 	await page.getByRole("dialog").waitFor({ state: "hidden" });
 	assert.deepEqual(

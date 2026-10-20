@@ -39,6 +39,7 @@ import {
 import { Switch } from "../../../ui/switch";
 import {
 	type ForecastPlotPoint,
+	forecastBoundarySegment,
 	formatForecastNumber,
 	formatForecastTick,
 	formatForecastTime,
@@ -175,6 +176,14 @@ export function ForecastChart({
 			: "Quantiles";
 	const lastObserved = points.findLast((point) => point.history !== null);
 	const latestForecast = points.findLast((point) => point.forecast !== null);
+	const transition = forecastBoundarySegment(points, cutoff);
+	const visibleTransition =
+		transition &&
+		visiblePoints.length > 0 &&
+		visiblePoints[0].timestamp <= transition[0].x &&
+		visiblePoints[visiblePoints.length - 1].timestamp >= transition[1].x
+			? transition
+			: undefined;
 	const groupCount =
 		typeof seriesCount === "number" && Number.isFinite(seriesCount)
 			? Math.max(1, Math.floor(seriesCount))
@@ -524,7 +533,7 @@ export function ForecastChart({
 										x={cutoff}
 										stroke="var(--muted-foreground)"
 										label={{
-											value: backtest ? "Holdout starts" : "Forecast starts",
+											value: backtest ? "Holdout cutoff" : "History ends",
 											position: "insideTopRight",
 											fill: "var(--muted-foreground)",
 											fontSize: 10,
@@ -548,6 +557,17 @@ export function ForecastChart({
 										fill={`url(#${gradientId})`}
 										isAnimationActive={false}
 										connectNulls={false}
+									/>
+								)}
+								{visibleTransition && (
+									<ReferenceLine
+										segment={visibleTransition}
+										className="forecast-transition"
+										stroke={FORECAST_COLOR}
+										strokeWidth={2}
+										strokeDasharray="3 3"
+										strokeOpacity={0.7}
+										aria-label="Transition from last observation to first forecast"
 									/>
 								)}
 								<Line
@@ -630,6 +650,16 @@ export function ForecastChart({
 											domain={["dataMin", "dataMax"]}
 										/>
 										<YAxis hide domain={["auto", "auto"]} />
+										{transition && (
+											<ReferenceLine
+												segment={transition}
+												className="forecast-transition"
+												stroke={FORECAST_COLOR}
+												strokeWidth={1.5}
+												strokeDasharray="3 3"
+												strokeOpacity={0.7}
+											/>
+										)}
 										<Line
 											dataKey="history"
 											stroke="var(--muted-foreground)"
