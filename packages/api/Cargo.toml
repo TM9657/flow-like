@@ -21,7 +21,7 @@ flow-like-types.workspace = true
 flow-like-storage = { workspace = true, features = ["graph"] }
 flow-like-catalog-core.workspace = true
 flow-like-catalog-ml = { workspace = true, default-features = false, features = ["studio"] }
-flow-like-catalog = { workspace = true, default-features = false, features = ["draft-testing"] }
+flow-like-catalog = { workspace = true, default-features = false, features = ["draft-testing", "local-only-metadata"] }
 uuid.workspace = true
 flow-like-sinks.workspace = true
 flow-like-secrets.workspace = true

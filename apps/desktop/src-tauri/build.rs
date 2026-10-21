@@ -20,9 +20,8 @@ fn stage_ios_frontend() -> Result<(), Box<dyn std::error::Error>> {
             frontend_dist = Some(value.clone());
         }
     }
-    let mut overrides: serde_json::Value = serde_json::from_str(
-        &std::env::var("TAURI_CONFIG").unwrap_or_else(|_| "{}".into()),
-    )?;
+    let mut overrides: serde_json::Value =
+        serde_json::from_str(&std::env::var("TAURI_CONFIG").unwrap_or_else(|_| "{}".into()))?;
     if let Some(value) = overrides.pointer("/build/frontendDist") {
         frontend_dist = Some(value.clone());
     }

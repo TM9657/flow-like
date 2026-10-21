@@ -29,6 +29,7 @@ import { useCopilotSDK, useInvoke } from "../../hooks";
 import { copilotBackendConnectionCoordinator } from "../../hooks/copilot-backend-coordinator";
 import { useFrontendRuntimeToolExecutor } from "../../hooks/use-frontend-runtime-tool-executor";
 import {
+	type IBit,
 	IBitTypes,
 	deviceOfModelBit,
 	isFreeLlmModel,
@@ -66,6 +67,7 @@ import {
 	deliverBoardEditJobReceipt,
 	isDirectFlowPilotBoardEditJob,
 } from "../../lib/flowpilot/board-edit-job-delivery";
+import { listenInCurrentWindow } from "../../lib/flowpilot/window-scoped-listen";
 import { WorkspaceSearchSession } from "../../lib/flowpilot/workspace-search";
 import {
 	type FrontendToolApprovalScope,
@@ -440,15 +442,11 @@ type FrontendToolDialogState =
 
 interface FrontendToolQueuedDialog {
 	dialog: FrontendToolDialogState;
-	resolve: (value: any) => void;
+	/** Approval dialogs settle with `{ approved, remember }`, ask dialogs with the answer or null. */
+	resolve(value: unknown): void;
 }
 
-type TauriEventModule = {
-	listen: <T = unknown>(
-		event: string,
-		handler: (event: { payload: T }) => void | Promise<void>,
-	) => Promise<() => void>;
-};
+type FrontendToolDialogResolve = FrontendToolQueuedDialog["resolve"];
 
 const FLOWPILOT_FRONTEND_TOOL_EVENT = "flowpilot://frontend-tool-request";
 const FLOWPILOT_FRONTEND_TOOL_CANCEL_EVENT = "flowpilot://frontend-tool-cancel";
@@ -457,10 +455,6 @@ function isTauriRuntime(): boolean {
 	if (typeof window === "undefined") return false;
 	const w = window as unknown as Record<string, unknown>;
 	return Boolean(w.__TAURI__ || w.__TAURI_IPC__ || w.__TAURI_INTERNALS__);
-}
-
-async function importTauriEvent(): Promise<TauriEventModule> {
-	return import("@tauri-apps/api/event") as Promise<TauriEventModule>;
 }
 
 function getArgString(
@@ -1127,9 +1121,8 @@ function FlowPilotImpl({
 	const approvedFrontendToolKeysRef = useRef<Set<string>>(new Set());
 	const frontendToolRequestGuardRef = useRef(new FrontendToolRequestGuard());
 	const workspaceSearchRef = useRef(new WorkspaceSearchSession());
-	const frontendToolDialogResolverRef = useRef<((value: any) => void) | null>(
-		null,
-	);
+	const frontendToolDialogResolverRef =
+		useRef<FrontendToolDialogResolve | null>(null);
 	const frontendToolDialogRef = useRef<FrontendToolDialogState | null>(null);
 	const frontendToolDialogQueueRef = useRef<FrontendToolQueuedDialog[]>([]);
 	const [frontendToolDialog, setFrontendToolDialog] =
@@ -1197,7 +1190,7 @@ function FlowPilotImpl({
 	);
 
 	const openFrontendToolDialog = useCallback(
-		(dialog: FrontendToolDialogState, resolve: (value: any) => void) => {
+		(dialog: FrontendToolDialogState, resolve: FrontendToolDialogResolve) => {
 			if (frontendToolDialogResolverRef.current) {
 				frontendToolDialogQueueRef.current.push({ dialog, resolve });
 				return;
@@ -1450,10 +1443,8 @@ function FlowPilotImpl({
 
 		async function installListener() {
 			try {
-				const eventApi = await importTauriEvent();
-
 				const [stop, stopCancellation] = await Promise.all([
-					eventApi.listen<FrontendToolRequest>(
+					listenInCurrentWindow<FrontendToolRequest>(
 						FLOWPILOT_FRONTEND_TOOL_EVENT,
 						async (event) => {
 							if (disposed) return;
@@ -1502,7 +1493,7 @@ function FlowPilotImpl({
 							}
 						},
 					),
-					eventApi.listen<{ requestId?: string }>(
+					listenInCurrentWindow<{ requestId?: string }>(
 						FLOWPILOT_FRONTEND_TOOL_CANCEL_EVENT,
 						(event) => {
 							const requestId = event.payload?.requestId;
@@ -1742,6 +1733,7 @@ function FlowPilotImpl({
 		setUserScrolledUp(!isAtBottom);
 	}, []);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `messages` is the trigger that follows new output to the bottom.
 	useEffect(() => {
 		if (!userScrolledUp) {
 			scrollToBottom();
@@ -1836,12 +1828,12 @@ function FlowPilotImpl({
 			const files = e.target.files;
 			if (!files) return;
 
-			Array.from(files).forEach((file) => {
+			for (const file of Array.from(files)) {
 				if (!canAttachImage(file)) {
 					console.warn(
 						`Skipped unsupported or oversized FlowPilot image: ${file.name}`,
 					);
-					return;
+					continue;
 				}
 
 				const reader = new FileReader();
@@ -1869,7 +1861,7 @@ function FlowPilotImpl({
 					});
 				};
 				reader.readAsDataURL(file);
-			});
+			}
 
 			if (imageInputRef.current) {
 				imageInputRef.current.value = "";
@@ -3687,6 +3679,7 @@ function FlowPilotImpl({
 			agentMode,
 			messages,
 			board,
+			catalogNodes,
 			selectedNodeIds,
 			selectedModelId,
 			selectedReasoningEffort,
@@ -3698,18 +3691,16 @@ function FlowPilotImpl({
 			onComponentsGenerated,
 			backendContext.boardState,
 			captureScreenshot,
-			provider,
+			executeRuntimeTool,
 			normalizedProvider,
 			copilotSDK.isRunning,
 			copilotSDK.diagnostic,
 			currentConversationId,
 			flowscriptWorkspace,
-			flowscriptWorkspaceStatus,
 			loading,
 			pendingFlowIrCommit,
 			resolveFlowIrCommit,
 			dismissFlowIrCommitWithRetry,
-			activeAppId,
 		],
 	);
 
@@ -4011,6 +4002,7 @@ function FlowPilotImpl({
 									if (!isLastMessage) {
 										return (
 											<MessageBubble
+												// biome-ignore lint/suspicious/noArrayIndexKey: messages carry no id and the transcript only grows, so position is identity.
 												key={index}
 												message={message}
 												agentMode={agentMode}
@@ -4028,6 +4020,7 @@ function FlowPilotImpl({
 											: message;
 									return (
 										<MessageBubble
+											// biome-ignore lint/suspicious/noArrayIndexKey: messages carry no id and the transcript only grows, so position is identity.
 											key={index}
 											message={renderedMessage}
 											isLoading={loading}
@@ -4122,7 +4115,11 @@ function FlowPilotImpl({
 						{attachedImages.length > 0 && (
 							<div className="mb-2 flex flex-wrap gap-1.5">
 								{attachedImages.map((img, idx) => (
-									<div key={idx} className="group relative">
+									<div
+										// biome-ignore lint/suspicious/noArrayIndexKey: attachments have no id and are removed by position.
+										key={idx}
+										className="group relative"
+									>
 										<img
 											src={img.preview}
 											alt={`Attached ${idx + 1}`}
@@ -4526,7 +4523,7 @@ interface HeaderProps {
 	) => Promise<void>;
 	onStopCopilot: () => Promise<void>;
 	// Model props
-	bitsModels: any[];
+	bitsModels: IBit[];
 	selectedModelId: string;
 	setSelectedModelId: (id: string) => void;
 	selectedReasoningEffort: string;
@@ -4937,6 +4934,7 @@ const ProcessTimeline = memo(function ProcessTimeline({
 		shouldStickToBottomRef.current = distanceFromBottom < 32;
 	}, []);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `events` is the trigger that keeps the timeline pinned to its newest row.
 	useEffect(() => {
 		if (!shouldStickToBottomRef.current) return;
 		const container = scrollRef.current;
@@ -5200,6 +5198,7 @@ const ProcessTimelineRow = memo(function ProcessTimelineRow({
 										<div className="min-w-0 max-w-full space-y-1 overflow-hidden rounded-md border border-border/40 bg-background/70 p-2">
 											{event.commands.slice(0, 12).map((command, index) => (
 												<div
+													// biome-ignore lint/suspicious/noArrayIndexKey: a read-only command preview; commands carry no id.
 													key={index}
 													className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground"
 												>
@@ -5308,7 +5307,7 @@ interface MessageBubbleProps {
 	currentToolCall?: string | null;
 	currentStep?: UnifiedPlanStep;
 	agentMode: AgentMode;
-	board?: any;
+	board?: FlowPilotProps["board"];
 	onFocusNode?: (nodeId: string) => void;
 	onSelectNodes?: (nodeIds: string[]) => void;
 	liveFlowScriptPreview?: InlineFlowScriptPreviewValue;
@@ -5389,9 +5388,7 @@ const MessageBubble = memo(function MessageBubble({
 					{currentToolCall
 						? `Using ${currentToolCall.replace(/_/g, " ")}...`
 						: loadingPhase && loadingPhase !== "idle"
-							? loadingPhase.charAt(0).toUpperCase() +
-								loadingPhase.slice(1) +
-								"..."
+							? `${loadingPhase.charAt(0).toUpperCase()}${loadingPhase.slice(1)}...`
 							: "Processing..."}
 				</span>
 			</div>
@@ -5431,6 +5428,7 @@ const MessageBubble = memo(function MessageBubble({
 					<div className="flex gap-1.5 mb-2 flex-wrap">
 						{message.images.map((img, idx) => (
 							<img
+								// biome-ignore lint/suspicious/noArrayIndexKey: a sent message's images are fixed and carry no id.
 								key={idx}
 								src={img.preview}
 								alt={`Attached ${idx + 1}`}

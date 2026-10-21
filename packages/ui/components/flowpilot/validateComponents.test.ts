@@ -8,7 +8,7 @@ import {
 	COMPONENT_BASE_PROPS,
 	COMPONENT_PROPS,
 } from "../a2ui/component-prop-manifest";
-import type { SurfaceComponent } from "../a2ui/types";
+import type { FileEditorComponent, SurfaceComponent } from "../a2ui/types";
 import {
 	createDefaultComponent,
 	normalizeComponent,
@@ -150,15 +150,18 @@ describe("File Editor generated components", () => {
 
 	test("preserves the selected editor, optional source, and exact Save workflow", () => {
 		const component = {
-			type: "fileEditor" as const,
+			type: "fileEditor",
 			editor: { literalString: "solidcraft" },
 			url: { path: "$.file.url" },
 			eventHandlers: {
 				save: [{ name: "workflow_event", context: { nodeId: "save" } }],
 			},
-		};
-		const result = validateComponents([{ id: "editor", component }]);
-		expect(result.components[0]?.component).toEqual(component);
+		} satisfies Omit<FileEditorComponent, "id">;
+		const result = validateComponents([
+			{ id: "editor", component: { id: "editor", ...component } },
+		]);
+		// The surface entry owns the id; the validated component body carries none.
+		expect<unknown>(result.components[0]?.component).toEqual(component);
 		expect(result.warnings).toEqual([]);
 	});
 });

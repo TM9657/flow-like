@@ -8,6 +8,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -49,6 +50,10 @@ import {
 import type { ElementSource } from "./element-materializer";
 import { handleElementsRequestMessage } from "./elements-request-handler";
 import { resolveEventActions } from "./event-handlers";
+import {
+	type FlowValueBaseline,
+	collectFlowValueWrites,
+} from "./flow-value-sync";
 import {
 	EMPTY_FRONTEND_STATE_RECORD,
 	getFrontendStateStore,
@@ -373,6 +378,21 @@ export function ActionProvider({
 		},
 		[putElementValue, storeElementValue],
 	);
+
+	// A flow's write to an input supersedes the user's edit of it. Synchronous, so an action
+	// fired right after the write already sends the new value, and through the same setter so
+	// a pending debounced store of the old edit is replaced rather than landing afterwards.
+	const flowValueBaselineRef = useRef<FlowValueBaseline | null>(null);
+	useLayoutEffect(() => {
+		const { baseline, writes } = collectFlowValueWrites(
+			flowValueBaselineRef.current,
+			JSON.stringify([appId, surfaceId]),
+			components,
+			surfaceId,
+		);
+		flowValueBaselineRef.current = baseline;
+		for (const [elementId, value] of writes) setElementValue(elementId, value);
+	}, [appId, components, surfaceId, setElementValue]);
 
 	// Ref-counted set of components that are currently triggering an async action.
 	// Components consume this to render a loading state for the duration of their action.

@@ -19,12 +19,16 @@ use axum::{
 use chrono::{DateTime, Utc};
 use flow_like::flow_like_model_provider::provider::ModelApiSurface;
 use flow_like_storage::Path as StorePath;
+use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::Bytes;
 use futures_util::StreamExt;
 use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const POLL_MS: u64 = 500;
@@ -84,6 +88,8 @@ struct StreamHead {
     chunks: u64,
     status: u16,
     content_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    retry_after: Option<String>,
     done: bool,
     error: Option<String>,
 }
@@ -119,12 +125,15 @@ async fn read_json<T: for<'de> Deserialize<'de>>(
     id: &str,
     suffix: &str,
 ) -> Result<Option<T>, ApiError> {
-    let response = match state
-        .meta_bucket
-        .as_generic()
-        .get(&job_path(id, suffix)?)
-        .await
-    {
+    read_stored_json(&state.meta_bucket, id, suffix).await
+}
+
+async fn read_stored_json<T: for<'de> Deserialize<'de>>(
+    bucket: &FlowLikeStore,
+    id: &str,
+    suffix: &str,
+) -> Result<Option<T>, ApiError> {
+    let response = match bucket.as_generic().get(&job_path(id, suffix)?).await {
         Ok(response) => response,
         Err(flow_like_storage::object_store::Error::NotFound { .. }) => return Ok(None),
         Err(error) => return Err(ApiError::internal_error(error.into())),
@@ -396,17 +405,17 @@ pub(crate) async fn dispatch(state: AppState, job: HostedAiJob) -> Result<Respon
         )
         .await?;
     invoke(&state, &job.operation_id).await?;
-    read_response(state, job.operation_id, job.deadline).await
+    read_response(state.meta_bucket.clone(), job.operation_id, job.deadline).await
 }
 
 async fn read_response(
-    state: AppState,
+    bucket: Arc<FlowLikeStore>,
     id: String,
     deadline: DateTime<Utc>,
 ) -> Result<Response, ApiError> {
     let reader_deadline = deadline + chrono::Duration::seconds(30);
     let head = loop {
-        if let Some(head) = read_json::<StreamHead>(&state, &id, "head.json").await? {
+        if let Some(head) = read_stored_json::<StreamHead>(&bucket, &id, "head.json").await? {
             break head;
         }
         if Utc::now() >= reader_deadline {
@@ -418,6 +427,7 @@ async fn read_response(
     };
     let status = StatusCode::from_u16(head.status).unwrap_or(StatusCode::BAD_GATEWAY);
     let content_type = head.content_type.clone();
+    let retry_after = head.retry_after.clone();
     let operation_header = id.clone();
     let stream = async_stream::stream! {
         let mut next = 0;
@@ -426,7 +436,7 @@ async fn read_response(
             while next < head.chunks {
                 let chunk = async {
                     let path = job_path(&id, &format!("chunks/{next:08}"))?;
-                    Ok::<_, ApiError>(state.meta_bucket.as_generic().get(&path).await?.bytes().await?)
+                    Ok::<_, ApiError>(bucket.as_generic().get(&path).await?.bytes().await?)
                 }.await;
                 match chunk {
                     Ok(chunk) => yield Ok::<Bytes, std::io::Error>(chunk),
@@ -443,17 +453,21 @@ async fn read_response(
                 break;
             }
             flow_like_types::tokio::time::sleep(Duration::from_millis(POLL_MS)).await;
-            match read_json::<StreamHead>(&state, &id, "head.json").await {
+            match read_stored_json::<StreamHead>(&bucket, &id, "head.json").await {
                 Ok(Some(updated)) => head = updated,
                 Ok(None) => {},
                 Err(error) => { yield Err(std::io::Error::other(error.to_string())); break; }
             }
         }
     };
-    Ok(Response::builder()
+    let mut response = Response::builder()
         .status(status)
         .header("content-type", content_type)
-        .header("x-flow-like-operation-id", operation_header)
+        .header("x-flow-like-operation-id", operation_header);
+    if let Some(retry_after) = retry_after {
+        response = response.header("retry-after", retry_after);
+    }
+    Ok(response
         .body(Body::from_stream(stream))
         .map_err(|error| ApiError::internal(error.to_string()))?)
 }
@@ -707,6 +721,11 @@ async fn execute(
             .and_then(|value| value.to_str().ok())
             .unwrap_or("application/json")
             .into(),
+        retry_after: response
+            .headers()
+            .get("retry-after")
+            .and_then(|value| value.to_str().ok())
+            .map(ToOwned::to_owned),
         ..Default::default()
     };
     write_json(state, &job.operation_id, "head.json", &head).await?;
@@ -748,6 +767,84 @@ async fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn retained_rejections_reach_the_caller_without_an_interrupted_stream() {
+        for (status, body, retry_after) in [
+            (
+                404,
+                r#"{"error":{"code":404,"message":"No endpoints available","metadata":{"reason":"free-model-training-violation-by-account"}}}"#,
+                None,
+            ),
+            (
+                429,
+                r#"{"error":{"code":429,"message":"Rate limit exceeded"}}"#,
+                Some("30"),
+            ),
+        ] {
+            let bucket = Arc::new(FlowLikeStore::Memory(Arc::new(
+                flow_like_storage::object_store::memory::InMemory::new(),
+            )));
+            let id = "rejected-request";
+            let head = StreamHead {
+                chunks: 1,
+                status,
+                content_type: "application/json".into(),
+                retry_after: retry_after.map(ToOwned::to_owned),
+                done: true,
+                error: None,
+            };
+            bucket
+                .put(
+                    &job_path(id, "head.json").unwrap(),
+                    Bytes::from(serde_json::to_vec(&head).unwrap()),
+                )
+                .await
+                .unwrap();
+            bucket
+                .put(
+                    &job_path(id, "chunks/00000000").unwrap(),
+                    Bytes::from_static(body.as_bytes()),
+                )
+                .await
+                .unwrap();
+            let response =
+                read_response(bucket, id.into(), Utc::now() + chrono::Duration::seconds(5))
+                    .await
+                    .unwrap();
+            assert_eq!(response.status().as_u16(), status);
+            assert_eq!(response.headers()["content-type"], "application/json");
+            assert_eq!(response.headers()["x-flow-like-operation-id"], id);
+            assert_eq!(
+                response
+                    .headers()
+                    .get("retry-after")
+                    .map(|value| value.to_str().unwrap()),
+                retry_after
+            );
+            assert_eq!(
+                axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap(),
+                body
+            );
+        }
+    }
+
+    #[test]
+    fn retained_response_heads_without_retry_after_remain_readable() {
+        let legacy: StreamHead = serde_json::from_value(serde_json::json!({
+            "chunks": 1,
+            "status": 404,
+            "content_type": "application/json",
+            "done": true,
+            "error": null,
+        }))
+        .unwrap();
+        assert_eq!(legacy.status, 404);
+        assert!(legacy.retry_after.is_none());
+        assert!(legacy.error.is_none());
+    }
 
     #[test]
     fn legacy_chat_jobs_do_not_acquire_a_catalog_identity() {

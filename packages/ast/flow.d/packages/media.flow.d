@@ -227,7 +227,7 @@ declare namespace ai {
          * @param kind (optional) — Which media input to prepare
          * @param maxFrames (optional) — Maximum uniformly sampled video frames
          * @param includeAudio (optional) — Include the video's audio track; missing audio returns an error
-         * @returns content — Decoded media for Embed Content
+         * @returns content — Content parts for Embed Content
          * @impure has side effects / drives control flow
          */
         function prepareMedia({ source: Struct, encoded?: bool, kind?: string, maxFrames?: int, includeAudio?: bool }): Struct;

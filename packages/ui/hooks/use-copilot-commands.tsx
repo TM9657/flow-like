@@ -717,12 +717,13 @@ export function useCopilotCommands({
 							const moveTarget = command.target ?? undefined;
 							if (moveIds.length === 0) break;
 
-							const targetsAModule = moveTarget
-								? latestBoardLayers[moveTarget]?.type === ILayerType.Module
-								: true;
-							if (!targetsAModule) {
+							const targetType = moveTarget
+								? latestBoardLayers[moveTarget]?.type
+								: ILayerType.Module;
+							const targetsAFunction = targetType === ILayerType.Function;
+							if (targetType !== ILayerType.Module && !targetsAFunction) {
 								console.warn(
-									`[FlowPilot] MoveToLayer target ${moveTarget} is not an existing Module layer, skipping the move`,
+									`[FlowPilot] MoveToLayer target ${moveTarget} is not an existing Module or Function layer, skipping the move`,
 								);
 								break;
 							}
@@ -763,6 +764,12 @@ export function useCopilotCommands({
 
 								const layer = latestBoardLayers[id];
 								if (layer) {
+									if (targetsAFunction) {
+										console.warn(
+											`[FlowPilot] MoveToLayer skipping layer ${id} — layers do not nest inside a Function layer`,
+										);
+										continue;
+									}
 									if (
 										moveTarget &&
 										(moveTarget === id || isLayerAncestor(id, moveTarget))

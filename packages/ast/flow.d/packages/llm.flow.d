@@ -90,6 +90,16 @@ declare namespace agent {
     function lazyRegisterFunctionTools(this: Agent, { agentIn: Struct, model: Struct }): Struct;
 
     /**
+     * Gives the agent the tools exposed by the document open in a page's file editor. Reopening the document requires registering its new session.
+     * @node agent_register_editor_mcp_tools @receiver agent_in @alias agentRegisterEditorMcpTools
+     * @param agentIn — Agent to receive the editor tools (receiver: `this` in `x.registerEditorMcpTools(...)`)
+     * @param elementRef — Connect Element from Get Element, select the file editor, or use its full surface/component reference
+     * @param tools (optional) — Exact MCP tool names to expose. Leave empty to expose all tools provided by this editor.
+     * @returns agentOut — Agent connected to this live editor document
+     */
+    function registerEditorMcpTools(this: Agent, { agentIn: Struct, elementRef: any, tools?: string[] }): Struct;
+
+    /**
      * Adds referenced Flow-Like functions as callable tool references to an Agent
      * @node agent_register_function_tools @receiver agent_in @alias agentRegisterFunctionTools
      * @param agentIn — Agent object to add function references to (receiver: `this` in `x.registerFunctionTools(...)`)

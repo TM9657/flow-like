@@ -39,6 +39,10 @@ export const generatedNodeSidebar = [
                 "slug": "nodes/ai/agents/builder/agent-lazy-register-function-tools"
               },
               {
+                "label": "Register Editor MCP Tools",
+                "slug": "nodes/ai/agents/builder/agent-register-editor-mcp-tools"
+              },
+              {
                 "label": "Register Function Tools",
                 "slug": "nodes/ai/agents/builder/agent-register-function-tools"
               },
@@ -1323,6 +1327,40 @@ export const generatedNodeSidebar = [
             ]
           },
           {
+            "label": "Forecasting",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ai/ml/forecasting"
+              },
+              {
+                "label": "Forecast",
+                "slug": "nodes/ai/ml/forecasting/ml-forecast"
+              },
+              {
+                "label": "Forecast Model Info",
+                "slug": "nodes/ai/ml/forecasting/ml-forecast-model-info"
+              },
+              {
+                "label": "Forecast Values",
+                "slug": "nodes/ai/ml/forecasting/ml-forecast-values"
+              },
+              {
+                "label": "Load Forecast Model",
+                "slug": "nodes/ai/ml/forecasting/ml-load-forecast-model"
+              },
+              {
+                "label": "Load Forecasting Bit",
+                "slug": "nodes/ai/ml/forecasting/ml-load-forecasting-bit"
+              },
+              {
+                "label": "Load Hugging Face Forecast Model",
+                "slug": "nodes/ai/ml/forecasting/ml-load-huggingface-forecast-model"
+              }
+            ]
+          },
+          {
             "label": "Fusion",
             "collapsed": true,
             "items": [
@@ -2331,6 +2369,10 @@ export const generatedNodeSidebar = [
           {
             "label": "Summarize Document",
             "slug": "nodes/ai/processing/ai-processing-summarize-document"
+          },
+          {
+            "label": "Summarize File",
+            "slug": "nodes/ai/processing/ai-processing-summarize-file"
           },
           {
             "label": "YAKE Keywords",
@@ -7061,6 +7103,20 @@ export const generatedNodeSidebar = [
         ]
       },
       {
+        "label": "HTTP",
+        "collapsed": true,
+        "items": [
+          {
+            "label": "Overview",
+            "slug": "nodes/events/http"
+          },
+          {
+            "label": "Stream HTTP Response",
+            "slug": "nodes/events/http/events-http-stream-response"
+          }
+        ]
+      },
+      {
         "label": "Remote",
         "collapsed": true,
         "items": [
@@ -8919,6 +8975,20 @@ export const generatedNodeSidebar = [
             ]
           },
           {
+            "label": "Excalidraw",
+            "collapsed": true,
+            "items": [
+              {
+                "label": "Overview",
+                "slug": "nodes/ui/elements/excalidraw"
+              },
+              {
+                "label": "Set Excalidraw Scene",
+                "slug": "nodes/ui/elements/excalidraw/a2ui-set-excalidraw-scene"
+              }
+            ]
+          },
+          {
             "label": "Files",
             "collapsed": true,
             "items": [
@@ -8929,6 +8999,10 @@ export const generatedNodeSidebar = [
               {
                 "label": "Get File Input Files",
                 "slug": "nodes/ui/elements/files/a2ui-get-file-input-files"
+              },
+              {
+                "label": "Uploaded File to Path",
+                "slug": "nodes/ui/elements/files/a2ui-uploaded-file-to-path"
               }
             ]
           },

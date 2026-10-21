@@ -54,6 +54,7 @@ import {
 	createFlowScriptGenerationTrace,
 	updateFlowScriptGenerationRunReceipt,
 } from "../../lib/flowpilot/flowscript-generation-receipt";
+import { listenInCurrentWindow } from "../../lib/flowpilot/window-scoped-listen";
 import { WorkspaceSearchSession } from "../../lib/flowpilot/workspace-search";
 import {
 	attachmentDisplayName,
@@ -8124,10 +8125,9 @@ Completion contract: build complete helper logic first and add the Event entry l
 
 		void (async () => {
 			try {
-				const { listen } = await import("@tauri-apps/api/event");
 				const [stopRequests, stopCancellation, stopLifecycle] =
 					await Promise.all([
-						listen<FrontendToolRequest>(
+						listenInCurrentWindow<FrontendToolRequest>(
 							GLOBAL_FRONTEND_TOOL_EVENT,
 							async (event) => {
 								const request = event.payload;
@@ -8225,7 +8225,7 @@ Completion contract: build complete helper logic first and add the Event entry l
 								}
 							},
 						),
-						listen<{
+						listenInCurrentWindow<{
 							requestId?: string;
 							reason?: string;
 							toolName?: string;
@@ -8278,7 +8278,7 @@ Completion contract: build complete helper logic first and add the Event entry l
 									);
 							}
 						}),
-						listen<Record<string, unknown>>(
+						listenInCurrentWindow<Record<string, unknown>>(
 							GLOBAL_FRONTEND_TOOL_LIFECYCLE_EVENT,
 							(event) => {
 								const payload = event.payload ?? {};

@@ -421,15 +421,27 @@ fn typed_const_bindings_preserve_values_and_node_anchors() {
         "}\n",
     );
     let ast = parse(source).expect("typed const bindings parse");
-    let canonical = concat!(
-        "eventsSimple() {\n",
-        "    let count = 0\n",
-        "    const rows = readRows()   //@n:READ_ROWS\n",
-        "    let selected = rows.first\n",
-        "}\n",
+    let declared: Vec<Option<String>> = ast.events[0]
+        .body
+        .stmts
+        .iter()
+        .map(|stmt| match stmt {
+            flow_like_ast::Stmt::Let { ty, .. } | flow_like_ast::Stmt::LocalAlias { ty, .. } => {
+                ty.as_ref().map(flow_like_ast::render_type_ref)
+            }
+            other => panic!("expected a binding, got {other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        declared,
+        [Some("int"), Some("Row[]"), Some("Row")].map(|ty| ty.map(str::to_string)),
+        "the annotation is the binding's declared type, which reconcile checks"
     );
-    assert_eq!(render(&ast, &anchored_opts()), canonical);
-    assert_idempotent(canonical, &anchored_opts());
+    assert_eq!(render(&ast, &anchored_opts()), source);
+    assert_idempotent(
+        "eventsSimple() {\n    let count = 0\n    const rows = readRows()   //@n:READ_ROWS\n}\n",
+        &anchored_opts(),
+    );
     for declaration in [
         "const count: int",
         "const count: = 0",

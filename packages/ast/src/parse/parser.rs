@@ -1181,7 +1181,7 @@ impl Parser<'_> {
 
     /// `const name = call(...)` — an SSA binding of an impure node output.
     /// `const name = expr` is accepted as model-authored alias sugar and canonicalizes to
-    /// `let name = expr` when rendered.
+    /// `let name = expr` when rendered, unless it carries a type annotation.
     fn let_stmt(&mut self) -> Result<Stmt, ParseError> {
         self.bump(); // const
         if let Some(stmt) = self.destructure_stmt()? {
@@ -1189,11 +1189,13 @@ impl Parser<'_> {
         }
         let name_token = self.cur_token().clone();
         let name = self.ident()?;
-        // `const count: int = 0` is how most authors write a typed binding. The value's own type
-        // is what wires, so the annotation is accepted and the canonical render drops it.
-        if self.eat(&Tok::Colon) {
-            self.type_ref()?;
-        }
+        // `const id: string = ctx.id` is how authors make an untyped value (a struct field, a map
+        // value) concrete, so reconcile types the binding with it.
+        let ty = if self.eat(&Tok::Colon) {
+            Some(self.type_ref()?)
+        } else {
+            None
+        };
         if !self.eat(&Tok::Assign) {
             return Err(ParseError::new(
                 format!(
@@ -1206,11 +1208,17 @@ impl Parser<'_> {
         let value = self.expr()?;
         let anchor = self.take_anchor();
         match value {
-            Expr::Call(call) => Ok(Stmt::Let { name, call, anchor }),
+            Expr::Call(call) => Ok(Stmt::Let {
+                name,
+                call,
+                anchor,
+                ty,
+            }),
             value => Ok(Stmt::LocalAlias {
                 name,
                 value,
                 anchor,
+                ty,
             }),
         }
     }
@@ -1306,6 +1314,7 @@ impl Parser<'_> {
                 name,
                 value,
                 anchor,
+                ty: None,
             });
         }
 

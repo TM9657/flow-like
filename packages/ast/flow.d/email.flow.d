@@ -16,11 +16,12 @@ declare namespace email {
      * @param message — Received message reference from an inbound email event
      * @param text (optional) — Plain text reply body
      * @param html (optional) — HTML reply body
+     * @param attachments (optional) — Files to attach: at most 10, together at most 3 MiB
      * @returns requestId — Server identifier for this submission
      * @returns sessionOut — Mail session used for this submission
      * @impure has side effects / drives control flow
      */
-    function replyPlatform(this: MailSession, { session: Struct, message: Struct, text?: string, html?: string }): { requestId: string, sessionOut: Struct };
+    function replyPlatform(this: MailSession, { session: Struct, message: Struct, text?: string, html?: string, attachments?: Struct[] }): { requestId: string, sessionOut: Struct };
 
     /**
      * Send email from an authorized event's address
@@ -32,11 +33,12 @@ declare namespace email {
      * @param subject (optional) — Email subject
      * @param text (optional) — Plain text body
      * @param html (optional) — HTML body
+     * @param attachments (optional) — Files to attach: at most 10, together at most 3 MiB
      * @returns requestId — Server identifier for this submission
      * @returns sessionOut — Mail session used for this submission
      * @impure has side effects / drives control flow
      */
-    function sendPlatform(this: MailSession, { session: Struct, to?: string[], cc?: string[], bcc?: string[], subject?: string, text?: string, html?: string }): { requestId: string, sessionOut: Struct };
+    function sendPlatform(this: MailSession, { session: Struct, to?: string[], cc?: string[], bcc?: string[], subject?: string, text?: string, html?: string, attachments?: Struct[] }): { requestId: string, sessionOut: Struct };
 
     // === Email/Access ===
 

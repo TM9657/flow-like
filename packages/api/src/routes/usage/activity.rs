@@ -16,6 +16,7 @@ use crate::{
 use axum::{
     Extension, Json,
     extract::{Query, State},
+    http::HeaderMap,
 };
 use chrono::{DateTime, Duration, FixedOffset, NaiveDate, Utc};
 use sea_orm::{
@@ -48,7 +49,7 @@ fn default_days() -> u32 {
     7
 }
 
-#[derive(Clone, Debug, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct ExecutionActivityBucket {
     /// UTC calendar day, `YYYY-MM-DD`.
     pub day: String,
@@ -56,7 +57,7 @@ pub struct ExecutionActivityBucket {
     pub attention_count: i64,
 }
 
-#[derive(Clone, Debug, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct ExecutionActivityApp {
     /// `None` for records recorded without an app.
     pub app_id: Option<String>,
@@ -64,12 +65,12 @@ pub struct ExecutionActivityApp {
     pub attention_count: i64,
 }
 
-#[derive(Clone, Debug, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct ExecutionActivityResponse {
     pub days: u32,
     /// Inclusive window start, midnight UTC of the first day.
     pub from: String,
-    /// Instant the window was evaluated at.
+    /// Instant the window was evaluated at. Snapshots are reused for up to five minutes.
     pub to: String,
     /// One entry per UTC day in the window, oldest first, zeros included.
     pub buckets: Vec<ExecutionActivityBucket>,
@@ -166,10 +167,27 @@ fn fold_counts<K: std::hash::Hash + Eq>(
 pub async fn get_execution_activity(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
-    Query(params): Query<ActivityParams>,
+    Query(mut params): Query<ActivityParams>,
+    headers: HeaderMap,
 ) -> Result<Json<ExecutionActivityResponse>, ApiError> {
     let sub = user.sub()?;
-    execution_activity(&state.db, &sub, params, Utc::now().fixed_offset())
+    params.days = params.days.clamp(1, MAX_DAYS);
+    let now = Utc::now().fixed_offset();
+    let key = super::cache::cache_key((
+        "activity",
+        &sub,
+        &params.app_id,
+        params.days,
+        now.date_naive(),
+    ));
+    state
+        .execution_usage_cache
+        .get_or_compute(
+            &state.cache,
+            key,
+            super::cache::CacheMode::from_headers(&headers),
+            execution_activity(&state.db, &sub, params, now),
+        )
         .await
         .map(Json)
 }

@@ -233,13 +233,13 @@ eventsGeneric indexPath(path: string, payload: Struct) {
             const pages2 = extractDocumentAi({ file: userDir({ nodeScope: false }).child(path), model: smallModel, extractImages: true, imagesPerMessage: 1, pagesPerBatch: 4, temperature: 0.1, maxTokens: 0 })
             const summary2 = summarizeDocument({ pages: pages2, model: smallModel, detailLevel: "Medium", includeToc: true, strategy: "Refine", densification: "None", maxContextTokens: 8000, chunkOverlap: 10, trackEntities: false, parallelRequests: 4, densitySteps: 3 })
             const pathOut = userDir({ nodeScope: false }).child(path).setExtension("flow_summary")
-            pathOut.writeString(summary2.summary)
+            pathOut.writeString(summary2.summary.summary)
             const markdown2 = pagesToMarkdown({ pages: pages2 })
             const pathOut7 = userDir({ nodeScope: false }).child(path).setExtension("flow_md")
             pathOut7.writeString(markdown2)
-            const vector3 = embedDocument({ queryString: summary2.summary, model: embeddingModel })
+            const vector3 = embedDocument({ queryString: summary2.summary.summary, model: embeddingModel })
             let row2 = set({ structIn: {}, field: "vector", value: vector3 }).structOut
-            row2.content = summary2.summary
+            row2.content = summary2.summary.summary
             const date3 = now()
             row2.indexed = date3
             row2.path = userDir({ nodeScope: false }).child(path).rawPath()

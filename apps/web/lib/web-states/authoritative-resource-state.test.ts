@@ -17,10 +17,15 @@ vi.mock("./api-utils", () => ({
 	apiPut: vi.fn(),
 }));
 
-import { WebPageState } from "./page-state";
+vi.mock("../oauth-db", () => ({
+	oauthConsentStore: {},
+	oauthTokenStore: {},
+}));
+
 import { WebBoardState } from "./board-state";
 import { WebDatabaseState } from "./database-state";
 import { WebEventState } from "./event-state";
+import { WebPageState } from "./page-state";
 import { WebRouteState } from "./route-state";
 import { WebWidgetState } from "./widget-state";
 

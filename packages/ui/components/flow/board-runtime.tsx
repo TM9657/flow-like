@@ -119,6 +119,22 @@ function sameMeasuredHandles(a: HandleBounds, b: HandleBounds): boolean {
 	return true;
 }
 
+/** Rescales a camera to `zoom` while keeping the world point under the screen centre fixed. */
+export function zoomAboutCenter(
+	viewport: Viewport,
+	zoom: number,
+	width: number,
+	height: number,
+): Viewport {
+	if (zoom === viewport.zoom || !(viewport.zoom > 0)) return viewport;
+	const ratio = zoom / viewport.zoom;
+	return {
+		x: width / 2 - (width / 2 - viewport.x) * ratio,
+		y: height / 2 - (height / 2 - viewport.y) * ratio,
+		zoom,
+	};
+}
+
 export function createBoardRuntime(): BoardRuntime {
 	const listeners = new Set<Listener>();
 	const keyed = new Set<{
@@ -296,7 +312,20 @@ export function createBoardRuntime(): BoardRuntime {
 		next,
 		options = {},
 	) => {
-		if (legacy) return legacy.flow.setViewport(next, options);
+		if (legacy) {
+			// React Flow's setViewport skips its own zoom limits, and below them it
+			// mounts every node of a large board (restored native cameras go to 0.02).
+			const { minZoom, maxZoom, width, height } = legacy.store.getState();
+			return legacy.flow.setViewport(
+				zoomAboutCenter(
+					next,
+					Math.max(minZoom, Math.min(maxZoom, next.zoom)),
+					width,
+					height,
+				),
+				options,
+			);
+		}
 		if (![next.x, next.y, next.zoom].every(Number.isFinite) || next.zoom <= 0)
 			return false;
 		cancelAnimation();
@@ -594,14 +623,13 @@ export function createBoardRuntime(): BoardRuntime {
 		},
 		zoomTo: (zoom, options) => {
 			if (legacy) return legacy.flow.zoomTo(zoom, options);
-			const next = Math.max(state.minZoom, Math.min(state.maxZoom, zoom));
-			const ratio = next / state.transform[2];
 			return setViewport(
-				{
-					x: state.width / 2 - (state.width / 2 - state.transform[0]) * ratio,
-					y: state.height / 2 - (state.height / 2 - state.transform[1]) * ratio,
-					zoom: next,
-				},
+				zoomAboutCenter(
+					viewport(),
+					Math.max(state.minZoom, Math.min(state.maxZoom, zoom)),
+					state.width,
+					state.height,
+				),
 				options,
 			);
 		},

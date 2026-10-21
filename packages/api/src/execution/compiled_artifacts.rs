@@ -45,6 +45,58 @@ pub struct EnsuredArtifact {
     pub registry_fingerprint: [u8; 32],
 }
 
+/// A board the server must not run because its catalog marks some of its nodes
+/// `only_offline`. The executor rejects such a board before its first node, so
+/// dispatch answers it as a client error instead of compiling it.
+#[derive(Debug)]
+pub struct LocalOnlyBoard {
+    pub board_name: String,
+    pub nodes: Vec<String>,
+}
+
+impl std::fmt::Display for LocalOnlyBoard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Board \"{}\" can't run on the server because these nodes only run in the Flow-Like desktop app: {}",
+            self.board_name,
+            self.nodes.join(", ")
+        )
+    }
+}
+
+impl std::error::Error for LocalOnlyBoard {}
+
+/// The flag comes from the registry, as the executor's check does: a board can
+/// alter its own copy of node metadata.
+pub(crate) fn ensure_server_runnable(
+    board: &Board,
+    registry: &FlowNodeRegistryInner,
+) -> flow_like_types::Result<()> {
+    let mut nodes: Vec<String> = board
+        .nodes
+        .values()
+        .chain(board.layers.values().flat_map(|layer| layer.nodes.values()))
+        .filter(|node| {
+            registry
+                .registry
+                .get(&node.name)
+                .is_some_and(|(catalog, _)| catalog.only_offline)
+        })
+        .map(|node| node.friendly_name.clone())
+        .collect();
+    if nodes.is_empty() {
+        return Ok(());
+    }
+    nodes.sort_unstable();
+    nodes.dedup();
+    Err(LocalOnlyBoard {
+        board_name: board.name.clone(),
+        nodes,
+    }
+    .into())
+}
+
 fn require_selected_draft_etag(
     board_id: &str,
     selected_etag: Option<&str>,
@@ -225,6 +277,7 @@ pub async fn ensure_compiled_artifact(
         board
     };
 
+    ensure_server_runnable(&board, &registry)?;
     let compiled_board = compiled::compile::compile_board_with_catalog(&board, &registry)?;
     let bytes = compiled::encode_artifact(&compiled_board, &fingerprint)?;
     compiled::persist_artifact(&meta_store, &artifact_path, purge_prefix, bytes).await?;
@@ -303,7 +356,75 @@ async fn rehydrate_with_registry(
 
 #[cfg(test)]
 mod tests {
-    use super::require_selected_draft_etag;
+    use super::{LocalOnlyBoard, ensure_server_runnable, require_selected_draft_etag};
+    use crate::execution::wasm_node_stubs::WasmNodeStub;
+    use flow_like::flow::board::{Board, Layer, LayerType};
+    use flow_like::flow::node::Node;
+    use flow_like::state::FlowNodeRegistryInner;
+    use flow_like_storage::Path;
+    use std::sync::Arc;
+
+    fn node(name: &str, friendly_name: &str, only_offline: bool) -> Node {
+        let mut node = Node::new(name, friendly_name, "", "Test");
+        node.set_only_offline(only_offline);
+        node
+    }
+
+    fn registry(nodes: &[Node]) -> FlowNodeRegistryInner {
+        let mut registry = FlowNodeRegistryInner::new(nodes.len());
+        for node in nodes {
+            registry.insert(node.clone(), Arc::new(WasmNodeStub::new(node.clone())));
+        }
+        registry
+    }
+
+    fn board(root: Vec<Node>, layered: Vec<Node>) -> Board {
+        let mut board = Board::new_detached(Some("board-1".into()), Path::from("apps/app-1"));
+        board.name = "Scraper".into();
+        board.nodes = root.into_iter().map(|n| (n.id.clone(), n)).collect();
+        let mut layer = Layer::new("layer-1".into(), "Login".into(), LayerType::Function);
+        layer.nodes = layered.into_iter().map(|n| (n.id.clone(), n)).collect();
+        board.layers.insert(layer.id.clone(), layer);
+        board
+    }
+
+    #[test]
+    fn local_only_nodes_are_refused_by_the_catalog_flag_not_the_stored_one() {
+        let registry = registry(&[
+            node("browser_click", "Click", true),
+            node("selector_build", "Build Selector", true),
+            node("log_info", "Log", false),
+        ]);
+        let board = board(
+            vec![
+                node("browser_click", "Click", false),
+                node("log_info", "Log", true),
+            ],
+            vec![
+                node("selector_build", "Build Selector", false),
+                node("browser_click", "Click", false),
+            ],
+        );
+
+        let error = ensure_server_runnable(&board, &registry)
+            .expect_err("a board holding local-only nodes must not compile for the server");
+        let refusal = error
+            .downcast_ref::<LocalOnlyBoard>()
+            .expect("the dispatcher maps only this type to a client error");
+        assert_eq!(refusal.board_name, "Scraper");
+        assert_eq!(refusal.nodes, vec!["Build Selector", "Click"]);
+    }
+
+    #[test]
+    fn boards_without_local_only_catalog_nodes_compile() {
+        let registry = registry(&[node("log_info", "Log", false)]);
+        let board = board(
+            vec![node("log_info", "Log", true), node("unknown", "Gone", true)],
+            Vec::new(),
+        );
+        ensure_server_runnable(&board, &registry)
+            .expect("only catalog restrictions refuse; unknown nodes fail later as before");
+    }
 
     #[test]
     fn a_draft_load_may_not_be_written_under_an_older_head_etag() {

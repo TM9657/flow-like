@@ -233,13 +233,13 @@ eventsGeneric indexPath(path: string, payload: Struct) {   //@n:mrnr16nfnggz0g8f
             const pages2 = extractDocumentAi({ file: userDir({ nodeScope: false }).child(path), model: smallModel, extractImages: true, imagesPerMessage: 1, pagesPerBatch: 4, temperature: 0.1, maxTokens: 0 })   //@n:ybwen1ecwc3cpqx69gq3a9qm
             const summary2 = summarizeDocument({ pages: pages2, model: smallModel, detailLevel: "Medium", includeToc: true, strategy: "Refine", densification: "None", maxContextTokens: 8000, chunkOverlap: 10, trackEntities: false, parallelRequests: 4, densitySteps: 3 })   //@n:e14oowubmkkmm8nlewy3ivlu
             const pathOut = userDir({ nodeScope: false }).child(path).setExtension("flow_summary")   //@n:fj9c2ry7o4ad16kges3shwkc
-            pathOut.writeString(summary2.summary)   //@n:eydk566pkivy859uphxqscup
+            pathOut.writeString(summary2.summary.summary)   //@n:eydk566pkivy859uphxqscup
             const markdown2 = pagesToMarkdown({ pages: pages2 })   //@n:l2xclkqnwuwx4496nn4yic2f
             const pathOut7 = userDir({ nodeScope: false }).child(path).setExtension("flow_md")   //@n:v14hfegxczlpf2rhuldc254a
             pathOut7.writeString(markdown2)   //@n:ieeqjtlukoozasxoxbzezp2g
-            const vector3 = embedDocument({ queryString: summary2.summary, model: embeddingModel })   //@n:tt2szytgiqxdo82vh4amz5ol
+            const vector3 = embedDocument({ queryString: summary2.summary.summary, model: embeddingModel })   //@n:tt2szytgiqxdo82vh4amz5ol
             let row2 = set({ structIn: {}, field: "vector", value: vector3 }).structOut   //@n:e9kpfkp5ivihjbtmims8fy9r
-            row2.content = summary2.summary   //@n:ql9k0oc83lxycuiyizqz3wk3
+            row2.content = summary2.summary.summary   //@n:ql9k0oc83lxycuiyizqz3wk3
             const date3 = now()   //@n:q2cbltadjb08t1j1ba9519n2
             row2.indexed = date3   //@n:a22a1br0nmgqkpwov1pz7p2x
             row2.path = userDir({ nodeScope: false }).child(path).rawPath()   //@n:rf3rktm1f4ftyrwf0e16s8ft

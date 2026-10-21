@@ -285,7 +285,10 @@ import {
 } from "../../lib/realtime/presence-locations";
 import type { PingEmoji } from "../../lib/realtime/presence-signals";
 import { asArray, isRecord } from "../../lib/response-shape";
-import { getRuntimeConfiguredVariables } from "../../lib/runtime-vars-utils";
+import {
+	getRuntimeConfiguredVariables,
+	hasOfflineOnlyNodes,
+} from "../../lib/runtime-vars-utils";
 import { IAppVisibility } from "../../lib/schema/app/app";
 import type { IBit } from "../../lib/schema/bit/bit";
 import { IExecutionMode } from "../../lib/schema/flow/board";
@@ -3421,16 +3424,19 @@ function FlowBoardContent({
 	// What each event entry node may do, for the FlowScript run lenses. Same
 	// derivation as the canvas play button (deriveRunCapabilities), so the two
 	// surfaces can never disagree.
+	const canExecuteLocally = backend.capabilities().canExecuteLocally;
 	const runnableEventNodes = useMemo(() => {
 		if (!board.data) return undefined;
 		const map = new Map<string, FlowScriptRunCapability>();
+		const boardOnlyOffline = hasOfflineOnlyNodes(board.data);
 		for (const node of Object.values(board.data.nodes)) {
 			if (!node.start) continue;
 			const capabilities = deriveRunCapabilities({
 				executionMode: board.data.execution_mode,
 				isOffline,
 				hasRemoteExecute: hasRemoteExecution,
-				onlyOffline: node.only_offline,
+				onlyOffline: boardOnlyOffline,
+				canExecuteLocally,
 			});
 			map.set(node.id, {
 				local: capabilities.canLocalExecute,
@@ -3438,7 +3444,7 @@ function FlowBoardContent({
 			});
 		}
 		return map;
-	}, [board.data, isOffline, hasRemoteExecution]);
+	}, [board.data, isOffline, hasRemoteExecution, canExecuteLocally]);
 
 	// FlowScript "▶ Run" lens controller. Payload-less events run through the
 	// exact gates the canvas play button uses (executeBoard/executeBoardRemote:

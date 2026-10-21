@@ -54,6 +54,7 @@ use super::db::get_event_from_db;
 fn sync_dispatch_failure_message(error: &DispatchError) -> String {
     match error {
         DispatchError::Artifact(_) => format!("Failed exact artifact preflight: {error}"),
+        DispatchError::LocalOnly(_) => error.to_string(),
         _ => format!("Failed to dispatch job: {error}"),
     }
 }

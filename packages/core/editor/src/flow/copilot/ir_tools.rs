@@ -5246,7 +5246,9 @@ impl<'a> FlowScriptAcceptanceProjection<'a> {
         for (index, statement) in block.stmts.iter().enumerate() {
             let statement_path = format!("{path}/stmts/{index}");
             match statement {
-                AstStmt::Let { name, call, anchor } => {
+                AstStmt::Let {
+                    name, call, anchor, ..
+                } => {
                     let step = self.project_call_step(
                         call,
                         name.clone(),

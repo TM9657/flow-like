@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
 	canApplyFlowScript,
+	flowScriptApplyReport,
+	isRejectedFlowScriptDraft,
 	resolveFlowScriptScope,
 	resolveJoinableScopeNodeIds,
 	sameScopeNodeIds,
@@ -35,11 +37,55 @@ describe("FlowScript apply state", () => {
 			{ dirty: false },
 			{ applying: true },
 			{ loading: true },
+			{ rejectedDraft: true },
 		]) {
 			expect(canApplyFlowScript({ ...editableDirtyState, ...override })).toBe(
 				false,
 			);
 		}
+	});
+});
+
+describe("FlowScript apply report", () => {
+	const draft = { text: "edited", baseline: "rendered" };
+
+	test("a clean apply reports nothing", () => {
+		expect(
+			flowScriptApplyReport({ commandCount: 3, diagnostics: [] }, draft),
+		).toBeUndefined();
+	});
+
+	test("diagnostics with no executed command reject the draft", () => {
+		const report = flowScriptApplyReport(
+			{ commandCount: 0, diagnostics: ["removing `A` leaves `B` unrun"] },
+			draft,
+		);
+		expect(report?.rejected).toEqual(draft);
+		expect(isRejectedFlowScriptDraft(report, draft)).toBe(true);
+	});
+
+	test("diagnostics alongside executed commands stay warnings", () => {
+		const report = flowScriptApplyReport(
+			{ commandCount: 2, diagnostics: ["advisory"] },
+			draft,
+		);
+		expect(report?.diagnostics).toEqual(["advisory"]);
+		expect(report?.rejected).toBeUndefined();
+		expect(isRejectedFlowScriptDraft(report, draft)).toBe(false);
+	});
+
+	test("editing the draft or refreshing the baseline lifts the rejection", () => {
+		const report = flowScriptApplyReport(
+			{ commandCount: 0, diagnostics: ["blocked"] },
+			draft,
+		);
+		expect(isRejectedFlowScriptDraft(report, { ...draft, text: "fixed" })).toBe(
+			false,
+		);
+		expect(
+			isRejectedFlowScriptDraft(report, { ...draft, baseline: "newer" }),
+		).toBe(false);
+		expect(isRejectedFlowScriptDraft(undefined, draft)).toBe(false);
 	});
 });
 

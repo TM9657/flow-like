@@ -18,6 +18,7 @@ import { buildImportCommands } from "./importer/import-commands";
 import { translateImport } from "./importer/translate";
 import { toastSuccess } from "./messages";
 import { isWebkitLite } from "./platform";
+import { hasOfflineOnlyNodes } from "./runtime-vars-utils";
 import type { IGenericCommand, IValueType, IVariable } from "./schema";
 import { parseSchemaText, schemaCovers } from "./schema-coverage";
 import {
@@ -610,6 +611,7 @@ export function parseBoard(
 	const boardContentToken = boardContentVersion(board);
 	const isOffline = remoteBoardExecution?.isOffline ?? true;
 	const hasRemoteExecute = remoteBoardExecution?.onRemoteExecute !== undefined;
+	const boardOnlyOffline = hasOfflineOnlyNodes(board);
 
 	// Hash only nodes that actually reference functions (sorted — serde HashMap
 	// order is unstable), so adding/removing unrelated nodes doesn't force every
@@ -704,6 +706,7 @@ export function parseBoard(
 			oldNode.data?.isUnavailable === isUnavailable &&
 			oldNode.data?.executionMode === board.execution_mode &&
 			oldNode.data?.isOffline === isOffline &&
+			oldNode.data?.boardOnlyOffline === boardOnlyOffline &&
 			(oldNode.data?.onRemoteExecute !== undefined) === hasRemoteExecute &&
 			oldNode.data?.fnRefsHash === fnRefsHash &&
 			oldNode.data?.boardDataVersion === boardVersionToken &&
@@ -740,6 +743,7 @@ export function parseBoard(
 					boardContentVersion: boardContentToken,
 					executionMode: board.execution_mode,
 					isOffline,
+					boardOnlyOffline,
 					onRemoteExecute: hasRemoteExecute
 						? (oldNode.data?.onRemoteExecute ??
 							(async (node: INode, payload?: object) => {
@@ -799,6 +803,7 @@ export function parseBoard(
 							}
 						: undefined,
 					isOffline,
+					boardOnlyOffline,
 					onCopy: async () => {
 						handleCopy();
 					},

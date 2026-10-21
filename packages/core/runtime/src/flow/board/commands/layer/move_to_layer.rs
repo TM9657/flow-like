@@ -64,18 +64,20 @@ impl Command for MoveToLayerCommand {
         // A stale `previous` from an earlier execute must never survive into this run's undo,
         // including when the early return below skips the move entirely.
         self.previous.clear();
+        // Nodes and comments may also move into a Function layer (FlowScript extract-function);
+        // layers only ever nest under modules.
+        let mut targets_a_function = false;
         if let Some(target) = &self.target {
-            let targets_a_module = matches!(
-                board.layers.get(target).map(|layer| &layer.r#type),
-                Some(LayerType::Module)
-            );
-
-            if !targets_a_module {
-                tracing::warn!(
-                    "MoveToLayer target {} is not an existing Module layer, skipping the move",
-                    target
-                );
-                return Ok(());
+            match board.layers.get(target).map(|layer| &layer.r#type) {
+                Some(LayerType::Module) => {}
+                Some(LayerType::Function) => targets_a_function = true,
+                _ => {
+                    tracing::warn!(
+                        "MoveToLayer target {} is not an existing Module or Function layer, skipping the move",
+                        target
+                    );
+                    return Ok(());
+                }
             }
         }
 
@@ -100,6 +102,13 @@ impl Command for MoveToLayerCommand {
             }
 
             if board.layers.contains_key(id) {
+                if targets_a_function {
+                    tracing::warn!(
+                        "MoveToLayer skipping layer {} — layers do not nest inside a Function layer",
+                        id
+                    );
+                    continue;
+                }
                 if let Some(target) = &target
                     && (target == id || is_ancestor(board, id, target))
                 {
@@ -311,6 +320,35 @@ mod tests {
 
         assert_eq!(board.layers["mod_parent"].parent_id, None);
         assert!(command.previous.is_empty());
+    }
+
+    #[flow_like_types::tokio::test]
+    async fn a_node_moves_into_a_function_and_back_via_undo() {
+        let mut board = Board::new_detached(Some("b".into()), Path::default());
+        function_layer(&mut board, "fn1", None);
+        let node_id = insert_node(&mut board);
+
+        let mut command = MoveToLayerCommand::new(vec![node_id.clone()], Some("fn1".into()));
+        command.execute(&mut board, state()).await.expect("move");
+        assert_eq!(board.nodes[&node_id].layer.as_deref(), Some("fn1"));
+
+        command.undo(&mut board, state()).await.expect("undo");
+        assert_eq!(board.nodes[&node_id].layer, None);
+    }
+
+    #[flow_like_types::tokio::test]
+    async fn a_layer_never_nests_inside_a_function() {
+        let mut board = Board::new_detached(Some("b".into()), Path::default());
+        function_layer(&mut board, "fn1", None);
+        module(&mut board, "mod", None);
+        let node_id = insert_node(&mut board);
+
+        let mut command =
+            MoveToLayerCommand::new(vec!["mod".into(), node_id.clone()], Some("fn1".into()));
+        command.execute(&mut board, state()).await.expect("move");
+
+        assert_eq!(board.layers["mod"].parent_id, None);
+        assert_eq!(board.nodes[&node_id].layer.as_deref(), Some("fn1"));
     }
 
     #[flow_like_types::tokio::test]

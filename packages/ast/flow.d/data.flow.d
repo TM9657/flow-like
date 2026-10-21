@@ -5964,12 +5964,13 @@ declare namespace microsoft {
          * @param subject — Email subject
          * @param body — Email body content
          * @param isHtml (optional) — Whether the body is HTML content
-         * @param attachments — Optional file attachments to include in the message
+         * @param attachments — Outlook attachments to include, such as those from Get Message Attachments
          * @param saveToSentItems (optional) — Save the message to Sent Items folder
+         * @param files (optional) — Files to attach, together at most 3 MiB
          * @returns errorMessage
          * @impure has side effects / drives control flow
          */
-        function sendMessage({ provider: Struct, to: string, cc?: string, subject: string, body: string, isHtml?: bool, attachments: Struct[], saveToSentItems?: bool }): string;
+        function sendMessage({ provider: Struct, to: string, cc?: string, subject: string, body: string, isHtml?: bool, attachments: Struct[], saveToSentItems?: bool, files?: Struct[] }): string;
 
         /**
          * Update an existing Outlook calendar event

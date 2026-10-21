@@ -6,13 +6,16 @@ export interface FlowScriptApplyState {
 	boardChangedBehindEdits: boolean;
 	/** Statement-merge conflicts awaiting a keep-mine/take-theirs decision. */
 	unresolvedConflicts?: boolean;
+	/** The buffer is the exact draft the last apply rejected, over the same baseline. */
+	rejectedDraft?: boolean;
 }
 
 /**
  * Keep every FlowScript apply entry point behind the same state gate. In
  * particular, a dirty script based on an older board snapshot must be refreshed
- * before it can be reconciled safely, and a half-resolved statement merge must
- * never be applied over the statements still in conflict.
+ * before it can be reconciled safely, a half-resolved statement merge must
+ * never be applied over the statements still in conflict, and a rejected draft
+ * would only be rejected again.
  */
 export function canApplyFlowScript({
 	readOnly,
@@ -21,6 +24,7 @@ export function canApplyFlowScript({
 	loading,
 	boardChangedBehindEdits,
 	unresolvedConflicts,
+	rejectedDraft,
 }: FlowScriptApplyState): boolean {
 	return (
 		dirty &&
@@ -28,7 +32,47 @@ export function canApplyFlowScript({
 		!applying &&
 		!loading &&
 		!boardChangedBehindEdits &&
-		!(unresolvedConflicts ?? false)
+		!(unresolvedConflicts ?? false) &&
+		!(rejectedDraft ?? false)
+	);
+}
+
+export interface FlowScriptDraft {
+	text: string;
+	baseline: string;
+}
+
+/** What the last apply reported. */
+export interface FlowScriptApplyReport {
+	diagnostics: string[];
+	/**
+	 * The draft the apply executed nothing for. The backend applies a reconcile
+	 * all-or-nothing, so every diagnostic of a rejected apply is an error.
+	 */
+	rejected?: FlowScriptDraft;
+}
+
+export function flowScriptApplyReport(
+	{
+		commandCount,
+		diagnostics,
+	}: { commandCount: number; diagnostics: string[] },
+	draft: FlowScriptDraft,
+): FlowScriptApplyReport | undefined {
+	if (diagnostics.length === 0) return undefined;
+	return {
+		diagnostics,
+		rejected: commandCount === 0 ? draft : undefined,
+	};
+}
+
+/** Reconcile is deterministic: the same draft over the same board render fails identically. */
+export function isRejectedFlowScriptDraft(
+	report: FlowScriptApplyReport | undefined,
+	{ text, baseline }: FlowScriptDraft,
+): boolean {
+	return (
+		report?.rejected?.text === text && report.rejected.baseline === baseline
 	);
 }
 

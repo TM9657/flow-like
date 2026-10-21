@@ -228,6 +228,7 @@ fn bind(value: Expr) -> Stmt {
         name: "bound".to_string(),
         value,
         anchor: Some("alias-node".to_string()),
+        ty: None,
     }
 }
 
@@ -302,6 +303,7 @@ const POSITIONS: &[Position] = &[
                 name: s.to_string(),
                 call: call("log"),
                 anchor: Some("call-node".to_string()),
+                ty: None,
             }])
         },
     },
@@ -313,6 +315,7 @@ const POSITIONS: &[Position] = &[
                 name: s.to_string(),
                 value: Expr::Literal(Literal::Int(1)),
                 anchor: None,
+                ty: None,
             }])
         },
     },
