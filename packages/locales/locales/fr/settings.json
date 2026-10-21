@@ -987,7 +987,6 @@
 	"invitePeople": "",
 	"invitePeopleIn": "",
 	"invitesLinks": "",
-	"inviteSomeoneDirectly": "",
 	"inYourProfile": "",
 	"inYourProfile2": "",
 	"irreversibleActionsThatAffectYourProfile": "",
@@ -1098,7 +1097,6 @@
 	"markDoneTitle": "",
 	"markdownSupported": "",
 	"markThisRequestAsHighPriority": "",
-	"matchingAccountsShowUpAsYouTypeAUsernameOrEmailPickTheRightOneAndItGetsTheInvitationStraightAwayAddAPersonalMessageAndItTravelsWithTheInvite": "",
 	"maxContextSize": "",
 	"maximumUses": "",
 	"maxUsesOptional": "",
@@ -1779,7 +1777,6 @@
 	"schemasLoadOnlyAfterYouContinue": "",
 	"scope": "",
 	"sdkInstallation": "",
-	"searchAFlowlikeAccountAndSendItAnInvitationWithANote": "",
 	"searchAndInspectGeneratedObjectViews": "",
 	"searchAppsOrPasteAnAppId": "",
 	"searchByNameEmailOrCompany": "",
@@ -2374,5 +2371,9 @@
 	"confirmComp": "",
 	"grantComp": "",
 	"zoomIn": "",
-	"zoomOut": ""
+	"zoomOut": "",
+	"workflowEditor": "",
+	"boardRendererDefaultDescription": "",
+	"useWasmBoardPreview": "",
+	"boardRendererLocalPreference": ""
 }

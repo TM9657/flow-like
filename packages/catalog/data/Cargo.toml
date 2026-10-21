@@ -90,6 +90,7 @@ flow-like-storage-contracts = { workspace = true, features = ["graph", "database
 flow-like-catalog-macros.workspace = true
 ahash.workspace = true
 blake3.workspace = true
+sha2 = "0.10"
 tracing.workspace = true
 schemars.workspace = true
 jsonschema.workspace = true

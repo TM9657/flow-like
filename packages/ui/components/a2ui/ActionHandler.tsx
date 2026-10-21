@@ -53,6 +53,7 @@ import { resolveEventActions } from "./event-handlers";
 import {
 	type FlowValueBaseline,
 	collectFlowValueWrites,
+	hiddenRestoredInputs,
 } from "./flow-value-sync";
 import {
 	EMPTY_FRONTEND_STATE_RECORD,
@@ -323,8 +324,10 @@ export function ActionProvider({
 
 	// What the surface's inputs are currently holding, and what `_elements` carries into a
 	// workflow. Backed by storage so a surface that comes back from cache and the payload its
-	// workflows receive describe the same screen.
+	// workflows receive describe the same screen. A restored input value only counts while
+	// the input shows it; `restoredKeysRef` holds the restored values not edited since.
 	const elementValuesRef = useRef<Record<string, unknown>>(Object.create(null));
+	const restoredKeysRef = useRef(new Set<string>());
 	const { storeElementValue, restoreSurfaceValues } = useElementStorage(appId);
 	const elementValueScopeKey = useMemo(
 		() => JSON.stringify(elementValueScopeIds(components, surfaceId)),
@@ -337,8 +340,24 @@ export function ActionProvider({
 	const putElementValue = useCallback((elementId: unknown, value: unknown) => {
 		if (!isSafeStateKey(elementId)) return false;
 		elementValuesRef.current[elementId] = value;
+		restoredKeysRef.current.delete(elementId);
 		return true;
 	}, []);
+
+	const dropHiddenRestoredValues = useCallback(() => {
+		const restoredKeys = restoredKeysRef.current;
+		if (restoredKeys.size === 0) return;
+		const values = elementValuesRef.current;
+		for (const elementId of hiddenRestoredInputs(
+			values,
+			restoredKeys,
+			componentsRef.current,
+			surfaceId,
+		)) {
+			delete values[elementId];
+			restoredKeys.delete(elementId);
+		}
+	}, [surfaceId]);
 
 	useEffect(() => {
 		if (!appId || !surfaceId) return;
@@ -350,18 +369,28 @@ export function ActionProvider({
 				if (cancelled) return;
 				// Anything the user has already touched on this mount is newer than what was
 				// stored, so restoration fills gaps rather than overwriting.
-				elementValuesRef.current = Object.assign(
-					Object.create(null),
-					...restoredByScope,
-					elementValuesRef.current,
-				);
+				const current = elementValuesRef.current;
+				const restored = Object.assign(Object.create(null), ...restoredByScope);
+				for (const elementId of Object.keys(restored)) {
+					if (!Object.hasOwn(current, elementId)) {
+						restoredKeysRef.current.add(elementId);
+					}
+				}
+				elementValuesRef.current = Object.assign(restored, current);
+				dropHiddenRestoredValues();
 			})
 			.catch(() => undefined);
 
 		return () => {
 			cancelled = true;
 		};
-	}, [appId, surfaceId, elementValueScopeKey, restoreSurfaceValues]);
+	}, [
+		appId,
+		surfaceId,
+		elementValueScopeKey,
+		restoreSurfaceValues,
+		dropHiddenRestoredValues,
+	]);
 
 	// Getter for element values (used by useExecuteAction)
 	const getElementValues = useCallback(() => {
@@ -392,7 +421,8 @@ export function ActionProvider({
 		);
 		flowValueBaselineRef.current = baseline;
 		for (const [elementId, value] of writes) setElementValue(elementId, value);
-	}, [appId, components, surfaceId, setElementValue]);
+		dropHiddenRestoredValues();
+	}, [appId, components, surfaceId, setElementValue, dropHiddenRestoredValues]);
 
 	// Ref-counted set of components that are currently triggering an async action.
 	// Components consume this to render a loading state for the duration of their action.

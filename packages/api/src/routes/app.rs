@@ -30,6 +30,7 @@ pub mod fork;
 pub mod graph;
 pub mod groups;
 pub mod invoke;
+pub mod locked;
 pub mod mail;
 pub mod meta;
 pub mod notifications;
@@ -144,6 +145,7 @@ pub fn routes() -> Router<AppState> {
         .nest("/{app_id}/publication", publication::routes())
         .nest("/{app_id}/packages", packages::routes())
         .nest("/{app_id}/data", data::routes())
+        .nest("/{app_id}/locked", locked::routes())
         .nest("/{app_id}/invoke", invoke::routes())
         .nest("/{app_id}/db", db::routes())
         .nest("/{app_id}/graph", graph::routes())

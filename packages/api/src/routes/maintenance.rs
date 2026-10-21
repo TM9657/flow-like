@@ -103,6 +103,11 @@ async fn run_maintenance_job(
                 }
             }
 
+            // Needs no cache backend, so it runs before the cache store is required.
+            if let Err(error) = crate::locked_storage::sweep_abandoned_uploads(&state).await {
+                tracing::error!(%error, "Scheduled abandoned locked upload sweep failed");
+            }
+
             let store = require_cache_store(&state.cache).await?;
 
             if let Err(error) = crate::upload_lifecycle::cleanup_expired(&state).await {
@@ -162,6 +167,7 @@ async fn run_maintenance_job(
             if let Err(error) = crate::devices::certificates::sweep(&state).await {
                 tracing::warn!(error = %error, "Device certificate reminder pass incomplete");
             }
+            crate::execution_usage_rollup::run_pass(&state).await;
             // Last: it walks every project with a lapsed pin, and nothing
             // above may wait for that.
             if let Err(error) = crate::package_license::sweep(&state).await {

@@ -987,7 +987,6 @@
 	"invitePeople": "Invitar personas",
 	"invitePeopleIn": "Invitar personas",
 	"invitesLinks": "Invitaciones y enlaces",
-	"inviteSomeoneDirectly": "Invitar a alguien directamente",
 	"inYourProfile": "en tu perfil",
 	"inYourProfile2": "En tu perfil",
 	"irreversibleActionsThatAffectYourProfile": "Acciones irreversibles que afectan a tu perfil",
@@ -1098,7 +1097,6 @@
 	"markDoneTitle": "Marcar como hecho: {{title}}",
 	"markdownSupported": "Se admite Markdown",
 	"markThisRequestAsHighPriority": "Marcar esta solicitud como prioritaria",
-	"matchingAccountsShowUpAsYouTypeAUsernameOrEmailPickTheRightOneAndItGetsTheInvitationStraightAwayAddAPersonalMessageAndItTravelsWithTheInvite": "Las cuentas coincidentes aparecen mientras escribes un nombre de usuario o correo: elige la correcta y recibirá la invitación al instante. Añade un mensaje personal y viajará con la invitación.",
 	"maxContextSize": "Tamaño máximo de contexto",
 	"maximumUses": "Usos máximos",
 	"maxUsesOptional": "Usos máximos (opcional)",
@@ -1779,7 +1777,6 @@
 	"schemasLoadOnlyAfterYouContinue": "Los esquemas solo se cargan después de continuar.",
 	"scope": "Alcance",
 	"sdkInstallation": "Instalación del SDK",
-	"searchAFlowlikeAccountAndSendItAnInvitationWithANote": "Busca una cuenta de Flow-Like y envíale una invitación con una nota.",
 	"searchAndInspectGeneratedObjectViews": "Busca e inspecciona las vistas de objetos generadas",
 	"searchAppsOrPasteAnAppId": "Busca apps o pega un ID de app",
 	"searchByNameEmailOrCompany": "Buscar por nombre, correo electrónico o empresa...",
@@ -2374,5 +2371,9 @@
 	"confirmComp": "",
 	"grantComp": "",
 	"zoomIn": "",
-	"zoomOut": ""
+	"zoomOut": "",
+	"workflowEditor": "",
+	"boardRendererDefaultDescription": "",
+	"useWasmBoardPreview": "",
+	"boardRendererLocalPreference": ""
 }

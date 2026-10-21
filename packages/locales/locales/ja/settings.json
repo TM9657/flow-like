@@ -965,7 +965,6 @@
 	"invitePeople": "ユーザーを招待",
 	"invitePeopleIn": "ユーザーを招待",
 	"invitesLinks": "招待とリンク",
-	"inviteSomeoneDirectly": "直接招待する",
 	"inYourProfile": "プロファイル内",
 	"inYourProfile2": "プロファイル内",
 	"irreversibleActionsThatAffectYourProfile": "プロファイルに影響する取り消せない操作",
@@ -1074,7 +1073,6 @@
 	"markDoneTitle": "完了にする: {{title}}",
 	"markdownSupported": "Markdown対応",
 	"markThisRequestAsHighPriority": "このリクエストを優先度高としてマーク",
-	"matchingAccountsShowUpAsYouTypeAUsernameOrEmailPickTheRightOneAndItGetsTheInvitationStraightAwayAddAPersonalMessageAndItTravelsWithTheInvite": "ユーザー名やメールアドレスを入力すると一致するアカウントが表示されます。正しいものを選ぶとすぐに招待されます。メッセージを追加すると招待と一緒に届きます。",
 	"maxContextSize": "最大コンテキストサイズ",
 	"maximumUses": "最大利用回数",
 	"maxUsesOptional": "最大利用回数(任意)",
@@ -1754,7 +1752,6 @@
 	"schemasLoadOnlyAfterYouContinue": "スキーマは続行後にのみ読み込まれます。",
 	"scope": "範囲",
 	"sdkInstallation": "SDKのインストール",
-	"searchAFlowlikeAccountAndSendItAnInvitationWithANote": "Flow-Likeアカウントを検索し、メッセージ付きの招待を送信します。",
 	"searchAndInspectGeneratedObjectViews": "生成されたオブジェクトビューを検索・検査",
 	"searchAppsOrPasteAnAppId": "アプリを検索、またはアプリIDを貼り付け",
 	"searchByNameEmailOrCompany": "名前、メールアドレス、または会社名で検索...",
@@ -2341,5 +2338,9 @@
 	"confirmComp": "",
 	"grantComp": "",
 	"zoomIn": "",
-	"zoomOut": ""
+	"zoomOut": "",
+	"workflowEditor": "",
+	"boardRendererDefaultDescription": "",
+	"useWasmBoardPreview": "",
+	"boardRendererLocalPreference": ""
 }

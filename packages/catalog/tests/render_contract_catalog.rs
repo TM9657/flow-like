@@ -988,7 +988,8 @@ fn anchored_text(board: &Board) -> String {
 }
 
 /// A module layer's own variable (what a `let` in a module event creates), written by two of the
-/// module's events: one renders its declaration, the other reads it through the module scope.
+/// module's events: the text declares it in one, and the other's anchored assignment resolves it
+/// through the module scope.
 async fn board_with_module_variable_in_two_events() -> Board {
     let mut board = Board::new_detached(Some("module-variable".to_string()), Path::default());
     apply_source(
@@ -1006,7 +1007,7 @@ async fn board_with_module_variable_in_two_events() -> Board {
     let text = anchored_text(&board);
     let close = text.rfind("\n}").expect("the module block closes");
     let both = format!(
-        "{}\n    eventsSimple leaReset() {{\n        changed = \"reset\"\n    }}{}",
+        "{}\n    eventsSimple leaReset() {{\n        let changed: string = \"\"\n        changed = \"reset\"\n    }}{}",
         &text[..close],
         &text[close..]
     );

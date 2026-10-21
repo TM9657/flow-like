@@ -14174,6 +14174,87 @@
     "class": null,
     "category": "AI/ML/ONNX"
   },
+  "locked_download_item": {
+    "qualified": "lockedFiles::download",
+    "namespace": "lockedFiles",
+    "alias": "download",
+    "flat": "lockedDownloadItem",
+    "receiver": null,
+    "class": null,
+    "category": "Data/Files/Locked"
+  },
+  "locked_extend_retention": {
+    "qualified": "lockedFiles::extendRetention",
+    "namespace": "lockedFiles",
+    "alias": "extendRetention",
+    "flat": "lockedExtendRetention",
+    "receiver": null,
+    "class": null,
+    "category": "Data/Files/Locked"
+  },
+  "locked_get_item": {
+    "qualified": "lockedFiles::get",
+    "namespace": "lockedFiles",
+    "alias": "get",
+    "flat": "lockedGetItem",
+    "receiver": null,
+    "class": null,
+    "category": "Data/Files/Locked"
+  },
+  "locked_list_items": {
+    "qualified": "lockedFiles::list",
+    "namespace": "lockedFiles",
+    "alias": "list",
+    "flat": "lockedListItems",
+    "receiver": null,
+    "class": null,
+    "category": "Data/Files/Locked"
+  },
+  "locked_purge": {
+    "qualified": "lockedFiles::purge",
+    "namespace": "lockedFiles",
+    "alias": "purge",
+    "flat": "lockedPurge",
+    "receiver": null,
+    "class": null,
+    "category": "Data/Files/Locked"
+  },
+  "locked_set_legal_hold": {
+    "qualified": "lockedFiles::setLegalHold",
+    "namespace": "lockedFiles",
+    "alias": "setLegalHold",
+    "flat": "lockedSetLegalHold",
+    "receiver": null,
+    "class": null,
+    "category": "Data/Files/Locked"
+  },
+  "locked_storage_status": {
+    "qualified": "lockedFiles::status",
+    "namespace": "lockedFiles",
+    "alias": "status",
+    "flat": "lockedStorageStatus",
+    "receiver": null,
+    "class": null,
+    "category": "Data/Files/Locked"
+  },
+  "locked_upload_item": {
+    "qualified": "lockedFiles::upload",
+    "namespace": "lockedFiles",
+    "alias": "upload",
+    "flat": "lockedUploadItem",
+    "receiver": null,
+    "class": null,
+    "category": "Data/Files/Locked"
+  },
+  "locked_upload_version": {
+    "qualified": "lockedFiles::uploadVersion",
+    "namespace": "lockedFiles",
+    "alias": "uploadVersion",
+    "flat": "lockedUploadVersion",
+    "receiver": null,
+    "class": null,
+    "category": "Data/Files/Locked"
+  },
   "log_error": {
     "qualified": "log::error",
     "namespace": "log",

@@ -131,7 +131,7 @@ default = ["aws", "cognito", "ses", "smtp", "sendgrid"]
 secrets-aws = ["flow-like-secrets/aws"]
 secrets-gcp = ["flow-like-secrets/gcp"]
 secrets-azure = ["flow-like-secrets/azure"]
-aws = ["aws-config", "aws-credential-types", "aws-sigv4", "aws-sdk-sts", "aws-sdk-sns", "aws-sdk-cloudwatch", "flow-like-sinks/aws"]
+aws = ["aws-config", "aws-credential-types", "aws-sigv4", "aws-sdk-s3", "aws-sdk-sts", "aws-sdk-sns", "aws-sdk-cloudwatch", "flow-like-sinks/aws"]
 azure = [
     "urlencoding",
     "dep:azure_core",

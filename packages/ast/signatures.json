@@ -61448,6 +61448,15 @@
           "optional": true,
           "doc": "Files to attach: at most 10, together at most 3 MiB",
           "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"FlowPath\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]}"
+        },
+        {
+          "name": "sender_name",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Name recipients see as the sender, at most 64 characters; empty uses the email event's name"
         }
       ],
       "outputs": [
@@ -61556,6 +61565,15 @@
           "optional": true,
           "doc": "Files to attach: at most 10, together at most 3 MiB",
           "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"FlowPath\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]}"
+        },
+        {
+          "name": "sender_name",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Name recipients see as the sender, at most 64 characters; empty uses the email event's name"
         }
       ],
       "outputs": [
@@ -90399,6 +90417,608 @@
       "doc": "Load ONNX Model from Path",
       "namespace": "onnx",
       "alias": "load"
+    },
+    {
+      "node_type": "locked_download_item",
+      "display": "lockedDownloadItem",
+      "friendly": "Download Locked File",
+      "category": "Data/Files/Locked",
+      "inputs": [
+        {
+          "name": "item_id",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "ID of the locked file to download"
+        },
+        {
+          "name": "version",
+          "ty": {
+            "base": "int",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Version number to download; 0 downloads the newest locked version"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "path",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The downloaded bytes in the run's cache",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"FlowPath\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]}"
+        },
+        {
+          "name": "file",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The downloaded version with its lock details",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedFile\",\"description\":\"A locked (write-once, revision-safe) file: the file's identity together with one of its\\nversions, flattened into a single record.\",\"type\":\"object\",\"properties\":{\"item_id\":{\"description\":\"Locked file ID, used by the other Locked File nodes.\",\"type\":\"string\"},\"app_id\":{\"description\":\"App the file belongs to.\",\"type\":\"string\"},\"scope\":{\"description\":\"Whether the file is shared by the project or private to a user.\",\"$ref\":\"#/$defs/LockedScope\"},\"owner_id\":{\"description\":\"Owning user for user-scoped files; null for project files.\",\"type\":[\"string\",\"null\"]},\"name\":{\"description\":\"Display name, unique within its folder.\",\"type\":\"string\"},\"folder\":{\"description\":\"Virtual folder without leading or trailing slash; empty for the root.\",\"type\":\"string\"},\"path\":{\"description\":\"Folder and name joined with \\\"/\\\", without a leading slash.\",\"type\":\"string\"},\"file_name\":{\"description\":\"File name the bytes of this version were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of this version.\",\"type\":[\"string\",\"null\"]},\"size\":{\"description\":\"Size of this version.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"version\":{\"description\":\"Version number starting at 1; null while pending or when the file has no version.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"version_id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":[\"string\",\"null\"]},\"status\":{\"description\":\"Lifecycle state of this version: pending, locked or purged.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedVersionStatus\"},{\"type\":\"null\"}]},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":[\"string\",\"null\"]},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedRetentionMode\"},{\"type\":\"null\"}]},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedEnforcement\"},{\"type\":\"null\"}]},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"purgeable\":{\"description\":\"Whether this version's bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given when this version was uploaded.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata of the file.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"version_metadata\":{\"description\":\"Metadata given when this version was uploaded.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of whoever uploaded this version.\",\"type\":[\"string\",\"null\"]},\"locked_at\":{\"description\":\"When this version was committed and locked (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When this version's bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"latest_version\":{\"description\":\"Highest committed version number of the file.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_versions\":{\"description\":\"Number of committed versions whose bytes are still stored.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_size\":{\"description\":\"Bytes of all stored versions, charged to the storage quota.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"created_by\":{\"description\":\"User ID of whoever created the file.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the file was created (RFC 3339).\",\"type\":\"string\"},\"updated_at\":{\"description\":\"When the file last changed (RFC 3339).\",\"type\":\"string\"}},\"required\":[\"item_id\",\"app_id\",\"scope\",\"name\",\"folder\",\"path\",\"file_name\",\"size\",\"checksum_verified\",\"legal_hold\",\"purgeable\",\"latest_version\",\"live_versions\",\"live_size\",\"created_by\",\"created_at\",\"updated_at\"],\"$defs\":{\"LockedScope\":{\"description\":\"Who a locked file belongs to.\",\"oneOf\":[{\"description\":\"Shared by the whole project.\",\"type\":\"string\",\"const\":\"project\"},{\"description\":\"Private to one user.\",\"type\":\"string\",\"const\":\"user\"}]},\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        },
+        {
+          "name": "verified",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "True when the storage provider also confirmed the SHA-256 when the version was locked; the downloaded bytes always match the recorded SHA-256"
+        }
+      ],
+      "impure": true,
+      "doc": "Downloads one version of a write-once, revision-safe file into the run's cache and checks its size and SHA-256 against the record",
+      "namespace": "lockedFiles",
+      "alias": "download"
+    },
+    {
+      "node_type": "locked_extend_retention",
+      "display": "lockedExtendRetention",
+      "friendly": "Extend Locked File Retention",
+      "category": "Data/Files/Locked",
+      "inputs": [
+        {
+          "name": "item_id",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "ID of the locked file"
+        },
+        {
+          "name": "version_id",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "ID of the version to extend; empty extends the newest locked version"
+        },
+        {
+          "name": "retain_until",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "New retention date as RFC 3339 date-time (2036-12-31T00:00:00Z) or date (2036-12-31); leave empty when using Retain Days From Now"
+        },
+        {
+          "name": "extend_days",
+          "ty": {
+            "base": "int",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Retain until this many days from now instead of a fixed date; 0 uses Retain Until"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "version",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The version with its new retention date",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedItemVersion\",\"description\":\"One immutable, write-once version of a locked file.\",\"type\":\"object\",\"properties\":{\"id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":\"string\"},\"item_id\":{\"description\":\"ID of the locked file this version belongs to.\",\"type\":\"string\"},\"version\":{\"description\":\"Version number starting at 1, assigned at commit; null while pending.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"status\":{\"description\":\"Lifecycle state: pending, locked or purged.\",\"$ref\":\"#/$defs/LockedVersionStatus\"},\"file_name\":{\"description\":\"File name the bytes were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of the stored bytes.\",\"type\":\"string\"},\"size\":{\"description\":\"Size of the stored bytes.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":\"string\"},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"$ref\":\"#/$defs/LockedRetentionMode\"},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":\"string\"},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"$ref\":\"#/$defs/LockedEnforcement\"},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given at upload.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata given at upload.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of the uploader.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the upload was started (RFC 3339).\",\"type\":\"string\"},\"locked_at\":{\"description\":\"When the version was committed and locked (RFC 3339); null while pending.\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When the stored bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_by\":{\"description\":\"User ID of whoever deleted the stored bytes.\",\"type\":[\"string\",\"null\"]},\"purgeable\":{\"description\":\"Whether the bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"item_id\",\"status\",\"file_name\",\"content_type\",\"size\",\"sha256\",\"checksum_verified\",\"retention_mode\",\"retain_until\",\"enforcement\",\"legal_hold\",\"uploaded_by\",\"created_at\"],\"$defs\":{\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        }
+      ],
+      "impure": true,
+      "doc": "Moves the retention date of a locked version further into the future. Retention can only be extended, never shortened; needs app admin rights and per-object locks",
+      "namespace": "lockedFiles",
+      "alias": "extendRetention"
+    },
+    {
+      "node_type": "locked_get_item",
+      "display": "lockedGetItem",
+      "friendly": "Get Locked File",
+      "category": "Data/Files/Locked",
+      "inputs": [
+        {
+          "name": "item_id",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "ID of the locked file; leave empty to look it up by scope, folder and name"
+        },
+        {
+          "name": "scope",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "project: shared with everyone in the project; user: private to the user running the flow"
+        },
+        {
+          "name": "folder",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Folder of the file when looking it up by name; empty for the root"
+        },
+        {
+          "name": "name",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Name of the file when looking it up without an ID"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "file",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The file with its newest locked version",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedFile\",\"description\":\"A locked (write-once, revision-safe) file: the file's identity together with one of its\\nversions, flattened into a single record.\",\"type\":\"object\",\"properties\":{\"item_id\":{\"description\":\"Locked file ID, used by the other Locked File nodes.\",\"type\":\"string\"},\"app_id\":{\"description\":\"App the file belongs to.\",\"type\":\"string\"},\"scope\":{\"description\":\"Whether the file is shared by the project or private to a user.\",\"$ref\":\"#/$defs/LockedScope\"},\"owner_id\":{\"description\":\"Owning user for user-scoped files; null for project files.\",\"type\":[\"string\",\"null\"]},\"name\":{\"description\":\"Display name, unique within its folder.\",\"type\":\"string\"},\"folder\":{\"description\":\"Virtual folder without leading or trailing slash; empty for the root.\",\"type\":\"string\"},\"path\":{\"description\":\"Folder and name joined with \\\"/\\\", without a leading slash.\",\"type\":\"string\"},\"file_name\":{\"description\":\"File name the bytes of this version were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of this version.\",\"type\":[\"string\",\"null\"]},\"size\":{\"description\":\"Size of this version.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"version\":{\"description\":\"Version number starting at 1; null while pending or when the file has no version.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"version_id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":[\"string\",\"null\"]},\"status\":{\"description\":\"Lifecycle state of this version: pending, locked or purged.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedVersionStatus\"},{\"type\":\"null\"}]},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":[\"string\",\"null\"]},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedRetentionMode\"},{\"type\":\"null\"}]},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedEnforcement\"},{\"type\":\"null\"}]},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"purgeable\":{\"description\":\"Whether this version's bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given when this version was uploaded.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata of the file.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"version_metadata\":{\"description\":\"Metadata given when this version was uploaded.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of whoever uploaded this version.\",\"type\":[\"string\",\"null\"]},\"locked_at\":{\"description\":\"When this version was committed and locked (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When this version's bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"latest_version\":{\"description\":\"Highest committed version number of the file.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_versions\":{\"description\":\"Number of committed versions whose bytes are still stored.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_size\":{\"description\":\"Bytes of all stored versions, charged to the storage quota.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"created_by\":{\"description\":\"User ID of whoever created the file.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the file was created (RFC 3339).\",\"type\":\"string\"},\"updated_at\":{\"description\":\"When the file last changed (RFC 3339).\",\"type\":\"string\"}},\"required\":[\"item_id\",\"app_id\",\"scope\",\"name\",\"folder\",\"path\",\"file_name\",\"size\",\"checksum_verified\",\"legal_hold\",\"purgeable\",\"latest_version\",\"live_versions\",\"live_size\",\"created_by\",\"created_at\",\"updated_at\"],\"$defs\":{\"LockedScope\":{\"description\":\"Who a locked file belongs to.\",\"oneOf\":[{\"description\":\"Shared by the whole project.\",\"type\":\"string\",\"const\":\"project\"},{\"description\":\"Private to one user.\",\"type\":\"string\",\"const\":\"user\"}]},\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        },
+        {
+          "name": "versions",
+          "ty": {
+            "base": "Struct",
+            "container": "Array"
+          },
+          "optional": false,
+          "doc": "Every version of the file, newest first, including purged ones",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedItemVersion\",\"description\":\"One immutable, write-once version of a locked file.\",\"type\":\"object\",\"properties\":{\"id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":\"string\"},\"item_id\":{\"description\":\"ID of the locked file this version belongs to.\",\"type\":\"string\"},\"version\":{\"description\":\"Version number starting at 1, assigned at commit; null while pending.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"status\":{\"description\":\"Lifecycle state: pending, locked or purged.\",\"$ref\":\"#/$defs/LockedVersionStatus\"},\"file_name\":{\"description\":\"File name the bytes were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of the stored bytes.\",\"type\":\"string\"},\"size\":{\"description\":\"Size of the stored bytes.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":\"string\"},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"$ref\":\"#/$defs/LockedRetentionMode\"},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":\"string\"},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"$ref\":\"#/$defs/LockedEnforcement\"},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given at upload.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata given at upload.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of the uploader.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the upload was started (RFC 3339).\",\"type\":\"string\"},\"locked_at\":{\"description\":\"When the version was committed and locked (RFC 3339); null while pending.\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When the stored bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_by\":{\"description\":\"User ID of whoever deleted the stored bytes.\",\"type\":[\"string\",\"null\"]},\"purgeable\":{\"description\":\"Whether the bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"item_id\",\"status\",\"file_name\",\"content_type\",\"size\",\"sha256\",\"checksum_verified\",\"retention_mode\",\"retain_until\",\"enforcement\",\"legal_hold\",\"uploaded_by\",\"created_at\"],\"$defs\":{\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        },
+        {
+          "name": "found",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Whether the file exists and is visible to this run"
+        }
+      ],
+      "impure": true,
+      "doc": "Looks up a write-once, revision-safe file by its ID, or by scope, folder and name, with every version and its lock details",
+      "namespace": "lockedFiles",
+      "alias": "get"
+    },
+    {
+      "node_type": "locked_list_items",
+      "display": "lockedListItems",
+      "friendly": "List Locked Files",
+      "category": "Data/Files/Locked",
+      "inputs": [
+        {
+          "name": "scope",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "project: shared with everyone in the project; user: private to the user running the flow"
+        },
+        {
+          "name": "folder",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Folder to list, such as invoices/2026; empty lists the root"
+        },
+        {
+          "name": "recursive",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Also list files in all subfolders"
+        },
+        {
+          "name": "search",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Only files whose name contains this text, ignoring case; empty lists all"
+        },
+        {
+          "name": "limit",
+          "ty": {
+            "base": "int",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Maximum number of files to return"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "files",
+          "ty": {
+            "base": "Struct",
+            "container": "Array"
+          },
+          "optional": false,
+          "doc": "Files in the folder, ordered by name",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedFile\",\"description\":\"A locked (write-once, revision-safe) file: the file's identity together with one of its\\nversions, flattened into a single record.\",\"type\":\"object\",\"properties\":{\"item_id\":{\"description\":\"Locked file ID, used by the other Locked File nodes.\",\"type\":\"string\"},\"app_id\":{\"description\":\"App the file belongs to.\",\"type\":\"string\"},\"scope\":{\"description\":\"Whether the file is shared by the project or private to a user.\",\"$ref\":\"#/$defs/LockedScope\"},\"owner_id\":{\"description\":\"Owning user for user-scoped files; null for project files.\",\"type\":[\"string\",\"null\"]},\"name\":{\"description\":\"Display name, unique within its folder.\",\"type\":\"string\"},\"folder\":{\"description\":\"Virtual folder without leading or trailing slash; empty for the root.\",\"type\":\"string\"},\"path\":{\"description\":\"Folder and name joined with \\\"/\\\", without a leading slash.\",\"type\":\"string\"},\"file_name\":{\"description\":\"File name the bytes of this version were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of this version.\",\"type\":[\"string\",\"null\"]},\"size\":{\"description\":\"Size of this version.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"version\":{\"description\":\"Version number starting at 1; null while pending or when the file has no version.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"version_id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":[\"string\",\"null\"]},\"status\":{\"description\":\"Lifecycle state of this version: pending, locked or purged.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedVersionStatus\"},{\"type\":\"null\"}]},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":[\"string\",\"null\"]},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedRetentionMode\"},{\"type\":\"null\"}]},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedEnforcement\"},{\"type\":\"null\"}]},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"purgeable\":{\"description\":\"Whether this version's bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given when this version was uploaded.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata of the file.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"version_metadata\":{\"description\":\"Metadata given when this version was uploaded.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of whoever uploaded this version.\",\"type\":[\"string\",\"null\"]},\"locked_at\":{\"description\":\"When this version was committed and locked (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When this version's bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"latest_version\":{\"description\":\"Highest committed version number of the file.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_versions\":{\"description\":\"Number of committed versions whose bytes are still stored.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_size\":{\"description\":\"Bytes of all stored versions, charged to the storage quota.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"created_by\":{\"description\":\"User ID of whoever created the file.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the file was created (RFC 3339).\",\"type\":\"string\"},\"updated_at\":{\"description\":\"When the file last changed (RFC 3339).\",\"type\":\"string\"}},\"required\":[\"item_id\",\"app_id\",\"scope\",\"name\",\"folder\",\"path\",\"file_name\",\"size\",\"checksum_verified\",\"legal_hold\",\"purgeable\",\"latest_version\",\"live_versions\",\"live_size\",\"created_by\",\"created_at\",\"updated_at\"],\"$defs\":{\"LockedScope\":{\"description\":\"Who a locked file belongs to.\",\"oneOf\":[{\"description\":\"Shared by the whole project.\",\"type\":\"string\",\"const\":\"project\"},{\"description\":\"Private to one user.\",\"type\":\"string\",\"const\":\"user\"}]},\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        },
+        {
+          "name": "folders",
+          "ty": {
+            "base": "string",
+            "container": "Array"
+          },
+          "optional": false,
+          "doc": "Names of the folder's direct subfolders; empty for recursive listings"
+        }
+      ],
+      "impure": true,
+      "doc": "Lists the write-once, revision-safe files of this app in a folder, with their newest locked version",
+      "namespace": "lockedFiles",
+      "alias": "list"
+    },
+    {
+      "node_type": "locked_purge",
+      "display": "lockedPurge",
+      "friendly": "Delete Expired Locked File",
+      "category": "Data/Files/Locked",
+      "inputs": [
+        {
+          "name": "item_id",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "ID of the locked file"
+        },
+        {
+          "name": "version_id",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "ID of the one version to delete; empty deletes every version of the file"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "file",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The locked file after the deletion, with its remaining stored size",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedFile\",\"description\":\"A locked (write-once, revision-safe) file: the file's identity together with one of its\\nversions, flattened into a single record.\",\"type\":\"object\",\"properties\":{\"item_id\":{\"description\":\"Locked file ID, used by the other Locked File nodes.\",\"type\":\"string\"},\"app_id\":{\"description\":\"App the file belongs to.\",\"type\":\"string\"},\"scope\":{\"description\":\"Whether the file is shared by the project or private to a user.\",\"$ref\":\"#/$defs/LockedScope\"},\"owner_id\":{\"description\":\"Owning user for user-scoped files; null for project files.\",\"type\":[\"string\",\"null\"]},\"name\":{\"description\":\"Display name, unique within its folder.\",\"type\":\"string\"},\"folder\":{\"description\":\"Virtual folder without leading or trailing slash; empty for the root.\",\"type\":\"string\"},\"path\":{\"description\":\"Folder and name joined with \\\"/\\\", without a leading slash.\",\"type\":\"string\"},\"file_name\":{\"description\":\"File name the bytes of this version were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of this version.\",\"type\":[\"string\",\"null\"]},\"size\":{\"description\":\"Size of this version.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"version\":{\"description\":\"Version number starting at 1; null while pending or when the file has no version.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"version_id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":[\"string\",\"null\"]},\"status\":{\"description\":\"Lifecycle state of this version: pending, locked or purged.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedVersionStatus\"},{\"type\":\"null\"}]},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":[\"string\",\"null\"]},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedRetentionMode\"},{\"type\":\"null\"}]},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedEnforcement\"},{\"type\":\"null\"}]},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"purgeable\":{\"description\":\"Whether this version's bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given when this version was uploaded.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata of the file.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"version_metadata\":{\"description\":\"Metadata given when this version was uploaded.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of whoever uploaded this version.\",\"type\":[\"string\",\"null\"]},\"locked_at\":{\"description\":\"When this version was committed and locked (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When this version's bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"latest_version\":{\"description\":\"Highest committed version number of the file.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_versions\":{\"description\":\"Number of committed versions whose bytes are still stored.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_size\":{\"description\":\"Bytes of all stored versions, charged to the storage quota.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"created_by\":{\"description\":\"User ID of whoever created the file.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the file was created (RFC 3339).\",\"type\":\"string\"},\"updated_at\":{\"description\":\"When the file last changed (RFC 3339).\",\"type\":\"string\"}},\"required\":[\"item_id\",\"app_id\",\"scope\",\"name\",\"folder\",\"path\",\"file_name\",\"size\",\"checksum_verified\",\"legal_hold\",\"purgeable\",\"latest_version\",\"live_versions\",\"live_size\",\"created_by\",\"created_at\",\"updated_at\"],\"$defs\":{\"LockedScope\":{\"description\":\"Who a locked file belongs to.\",\"oneOf\":[{\"description\":\"Shared by the whole project.\",\"type\":\"string\",\"const\":\"project\"},{\"description\":\"Private to one user.\",\"type\":\"string\",\"const\":\"user\"}]},\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        },
+        {
+          "name": "versions",
+          "ty": {
+            "base": "Struct",
+            "container": "Array"
+          },
+          "optional": false,
+          "doc": "Every version of the file, newest first, including purged ones",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedItemVersion\",\"description\":\"One immutable, write-once version of a locked file.\",\"type\":\"object\",\"properties\":{\"id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":\"string\"},\"item_id\":{\"description\":\"ID of the locked file this version belongs to.\",\"type\":\"string\"},\"version\":{\"description\":\"Version number starting at 1, assigned at commit; null while pending.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"status\":{\"description\":\"Lifecycle state: pending, locked or purged.\",\"$ref\":\"#/$defs/LockedVersionStatus\"},\"file_name\":{\"description\":\"File name the bytes were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of the stored bytes.\",\"type\":\"string\"},\"size\":{\"description\":\"Size of the stored bytes.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":\"string\"},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"$ref\":\"#/$defs/LockedRetentionMode\"},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":\"string\"},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"$ref\":\"#/$defs/LockedEnforcement\"},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given at upload.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata given at upload.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of the uploader.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the upload was started (RFC 3339).\",\"type\":\"string\"},\"locked_at\":{\"description\":\"When the version was committed and locked (RFC 3339); null while pending.\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When the stored bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_by\":{\"description\":\"User ID of whoever deleted the stored bytes.\",\"type\":[\"string\",\"null\"]},\"purgeable\":{\"description\":\"Whether the bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"item_id\",\"status\",\"file_name\",\"content_type\",\"size\",\"sha256\",\"checksum_verified\",\"retention_mode\",\"retain_until\",\"enforcement\",\"legal_hold\",\"uploaded_by\",\"created_at\"],\"$defs\":{\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        }
+      ],
+      "impure": true,
+      "doc": "Deletes the stored bytes of a locked file and frees its storage quota. Only works after the retention period ended and without a legal hold; the server refuses while any selected version is still retained. The record itself, including its SHA-256, is kept as evidence",
+      "namespace": "lockedFiles",
+      "alias": "purge"
+    },
+    {
+      "node_type": "locked_set_legal_hold",
+      "display": "lockedSetLegalHold",
+      "friendly": "Set Locked File Legal Hold",
+      "category": "Data/Files/Locked",
+      "inputs": [
+        {
+          "name": "item_id",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "ID of the locked file"
+        },
+        {
+          "name": "version_id",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "ID of the version to hold; empty uses the newest locked version"
+        },
+        {
+          "name": "enabled",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "True places the legal hold, false lifts it"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "version",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The version with its legal hold state",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedItemVersion\",\"description\":\"One immutable, write-once version of a locked file.\",\"type\":\"object\",\"properties\":{\"id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":\"string\"},\"item_id\":{\"description\":\"ID of the locked file this version belongs to.\",\"type\":\"string\"},\"version\":{\"description\":\"Version number starting at 1, assigned at commit; null while pending.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"status\":{\"description\":\"Lifecycle state: pending, locked or purged.\",\"$ref\":\"#/$defs/LockedVersionStatus\"},\"file_name\":{\"description\":\"File name the bytes were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of the stored bytes.\",\"type\":\"string\"},\"size\":{\"description\":\"Size of the stored bytes.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":\"string\"},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"$ref\":\"#/$defs/LockedRetentionMode\"},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":\"string\"},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"$ref\":\"#/$defs/LockedEnforcement\"},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given at upload.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata given at upload.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of the uploader.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the upload was started (RFC 3339).\",\"type\":\"string\"},\"locked_at\":{\"description\":\"When the version was committed and locked (RFC 3339); null while pending.\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When the stored bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_by\":{\"description\":\"User ID of whoever deleted the stored bytes.\",\"type\":[\"string\",\"null\"]},\"purgeable\":{\"description\":\"Whether the bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"item_id\",\"status\",\"file_name\",\"content_type\",\"size\",\"sha256\",\"checksum_verified\",\"retention_mode\",\"retain_until\",\"enforcement\",\"legal_hold\",\"uploaded_by\",\"created_at\"],\"$defs\":{\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        }
+      ],
+      "impure": true,
+      "doc": "Places or lifts a legal hold on a locked version. A held version cannot be deleted even after its retention ends; needs app admin rights and a provider with legal hold support",
+      "namespace": "lockedFiles",
+      "alias": "setLegalHold"
+    },
+    {
+      "node_type": "locked_storage_status",
+      "display": "lockedStorageStatus",
+      "friendly": "Locked Storage Status",
+      "category": "Data/Files/Locked",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "status",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Provider, enforcement, retention bounds and size limit of locked storage",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedStorageStatus\",\"description\":\"Locked storage configuration of the server.\",\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Whether the server has locked storage configured.\",\"type\":\"boolean\"},\"provider\":{\"description\":\"Storage provider: s3, r2, gcs or azure; null when disabled.\",\"type\":[\"string\",\"null\"]},\"enforcement\":{\"description\":\"Whether locks are set per object or by a bucket-wide policy; null when disabled.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedEnforcement\"},{\"type\":\"null\"}]},\"retention_mode\":{\"description\":\"Retention mode applied to new versions.\",\"$ref\":\"#/$defs/LockedRetentionMode\"},\"default_retention_days\":{\"description\":\"Retention in days applied when an upload asks for none.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"min_retention_days\":{\"description\":\"Shortest retention in days an upload may ask for.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"max_retention_days\":{\"description\":\"Longest retention in days an upload may ask for.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"max_file_bytes\":{\"description\":\"Largest size of one version.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"supports_legal_hold\":{\"description\":\"Whether versions can be put under legal hold.\",\"type\":\"boolean\"},\"supports_retention_extension\":{\"description\":\"Whether the retention of a locked version can be extended.\",\"type\":\"boolean\"}},\"required\":[\"enabled\",\"retention_mode\",\"default_retention_days\",\"min_retention_days\",\"max_retention_days\",\"max_file_bytes\",\"supports_legal_hold\",\"supports_retention_extension\"],\"$defs\":{\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]}}}"
+        },
+        {
+          "name": "enabled",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Whether locked storage is configured on this server"
+        }
+      ],
+      "impure": true,
+      "doc": "Reads whether this server offers write-once, revision-safe storage and its retention limits",
+      "namespace": "lockedFiles",
+      "alias": "status"
+    },
+    {
+      "node_type": "locked_upload_item",
+      "display": "lockedUploadItem",
+      "friendly": "Upload Locked File",
+      "category": "Data/Files/Locked",
+      "inputs": [
+        {
+          "name": "path",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "File to lock; it is read twice, once to hash and once to upload",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"FlowPath\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]}"
+        },
+        {
+          "name": "scope",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "project: shared with everyone in the project; user: private to the user running the flow"
+        },
+        {
+          "name": "folder",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Folder to store the file in, such as invoices/2026; empty for the root"
+        },
+        {
+          "name": "name",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Display name of the locked file; empty uses the file's name"
+        },
+        {
+          "name": "retention_days",
+          "ty": {
+            "base": "int",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Days the version stays write-once and undeletable; 0 uses the server default. The server clamps it to its allowed range and ignores it under a bucket-wide policy"
+        },
+        {
+          "name": "comment",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Note stored with this version, such as why it was archived"
+        },
+        {
+          "name": "metadata",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Optional JSON object stored with this version",
+          "schema": "{\"type\":\"object\",\"additionalProperties\":true}"
+        },
+        {
+          "name": "if_exists",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "error: fail when a file with this name already exists in the folder; new_version: add the upload as its next version"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "file",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The locked file with the uploaded version",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedFile\",\"description\":\"A locked (write-once, revision-safe) file: the file's identity together with one of its\\nversions, flattened into a single record.\",\"type\":\"object\",\"properties\":{\"item_id\":{\"description\":\"Locked file ID, used by the other Locked File nodes.\",\"type\":\"string\"},\"app_id\":{\"description\":\"App the file belongs to.\",\"type\":\"string\"},\"scope\":{\"description\":\"Whether the file is shared by the project or private to a user.\",\"$ref\":\"#/$defs/LockedScope\"},\"owner_id\":{\"description\":\"Owning user for user-scoped files; null for project files.\",\"type\":[\"string\",\"null\"]},\"name\":{\"description\":\"Display name, unique within its folder.\",\"type\":\"string\"},\"folder\":{\"description\":\"Virtual folder without leading or trailing slash; empty for the root.\",\"type\":\"string\"},\"path\":{\"description\":\"Folder and name joined with \\\"/\\\", without a leading slash.\",\"type\":\"string\"},\"file_name\":{\"description\":\"File name the bytes of this version were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of this version.\",\"type\":[\"string\",\"null\"]},\"size\":{\"description\":\"Size of this version.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"version\":{\"description\":\"Version number starting at 1; null while pending or when the file has no version.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"version_id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":[\"string\",\"null\"]},\"status\":{\"description\":\"Lifecycle state of this version: pending, locked or purged.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedVersionStatus\"},{\"type\":\"null\"}]},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":[\"string\",\"null\"]},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedRetentionMode\"},{\"type\":\"null\"}]},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedEnforcement\"},{\"type\":\"null\"}]},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"purgeable\":{\"description\":\"Whether this version's bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given when this version was uploaded.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata of the file.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"version_metadata\":{\"description\":\"Metadata given when this version was uploaded.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of whoever uploaded this version.\",\"type\":[\"string\",\"null\"]},\"locked_at\":{\"description\":\"When this version was committed and locked (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When this version's bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"latest_version\":{\"description\":\"Highest committed version number of the file.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_versions\":{\"description\":\"Number of committed versions whose bytes are still stored.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_size\":{\"description\":\"Bytes of all stored versions, charged to the storage quota.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"created_by\":{\"description\":\"User ID of whoever created the file.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the file was created (RFC 3339).\",\"type\":\"string\"},\"updated_at\":{\"description\":\"When the file last changed (RFC 3339).\",\"type\":\"string\"}},\"required\":[\"item_id\",\"app_id\",\"scope\",\"name\",\"folder\",\"path\",\"file_name\",\"size\",\"checksum_verified\",\"legal_hold\",\"purgeable\",\"latest_version\",\"live_versions\",\"live_size\",\"created_by\",\"created_at\",\"updated_at\"],\"$defs\":{\"LockedScope\":{\"description\":\"Who a locked file belongs to.\",\"oneOf\":[{\"description\":\"Shared by the whole project.\",\"type\":\"string\",\"const\":\"project\"},{\"description\":\"Private to one user.\",\"type\":\"string\",\"const\":\"user\"}]},\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        },
+        {
+          "name": "version",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The uploaded version with its lock details",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedItemVersion\",\"description\":\"One immutable, write-once version of a locked file.\",\"type\":\"object\",\"properties\":{\"id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":\"string\"},\"item_id\":{\"description\":\"ID of the locked file this version belongs to.\",\"type\":\"string\"},\"version\":{\"description\":\"Version number starting at 1, assigned at commit; null while pending.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"status\":{\"description\":\"Lifecycle state: pending, locked or purged.\",\"$ref\":\"#/$defs/LockedVersionStatus\"},\"file_name\":{\"description\":\"File name the bytes were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of the stored bytes.\",\"type\":\"string\"},\"size\":{\"description\":\"Size of the stored bytes.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":\"string\"},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"$ref\":\"#/$defs/LockedRetentionMode\"},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":\"string\"},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"$ref\":\"#/$defs/LockedEnforcement\"},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given at upload.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata given at upload.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of the uploader.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the upload was started (RFC 3339).\",\"type\":\"string\"},\"locked_at\":{\"description\":\"When the version was committed and locked (RFC 3339); null while pending.\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When the stored bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_by\":{\"description\":\"User ID of whoever deleted the stored bytes.\",\"type\":[\"string\",\"null\"]},\"purgeable\":{\"description\":\"Whether the bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"item_id\",\"status\",\"file_name\",\"content_type\",\"size\",\"sha256\",\"checksum_verified\",\"retention_mode\",\"retain_until\",\"enforcement\",\"legal_hold\",\"uploaded_by\",\"created_at\"],\"$defs\":{\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        }
+      ],
+      "impure": true,
+      "doc": "Stores a file write-once and revision-safe: once committed nobody can change or delete it until its retention ends. Fails when storage is full",
+      "namespace": "lockedFiles",
+      "alias": "upload"
+    },
+    {
+      "node_type": "locked_upload_version",
+      "display": "lockedUploadVersion",
+      "friendly": "Upload Locked File Version",
+      "category": "Data/Files/Locked",
+      "inputs": [
+        {
+          "name": "item_id",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "ID of the locked file to add a version to"
+        },
+        {
+          "name": "path",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "File to lock; it is read twice, once to hash and once to upload",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"FlowPath\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]}"
+        },
+        {
+          "name": "retention_days",
+          "ty": {
+            "base": "int",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Days the version stays write-once and undeletable; 0 uses the server default. The server clamps it to its allowed range and ignores it under a bucket-wide policy"
+        },
+        {
+          "name": "comment",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Note stored with this version, such as why it was archived"
+        },
+        {
+          "name": "metadata",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Optional JSON object stored with this version",
+          "schema": "{\"type\":\"object\",\"additionalProperties\":true}"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "file",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The locked file with the uploaded version",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedFile\",\"description\":\"A locked (write-once, revision-safe) file: the file's identity together with one of its\\nversions, flattened into a single record.\",\"type\":\"object\",\"properties\":{\"item_id\":{\"description\":\"Locked file ID, used by the other Locked File nodes.\",\"type\":\"string\"},\"app_id\":{\"description\":\"App the file belongs to.\",\"type\":\"string\"},\"scope\":{\"description\":\"Whether the file is shared by the project or private to a user.\",\"$ref\":\"#/$defs/LockedScope\"},\"owner_id\":{\"description\":\"Owning user for user-scoped files; null for project files.\",\"type\":[\"string\",\"null\"]},\"name\":{\"description\":\"Display name, unique within its folder.\",\"type\":\"string\"},\"folder\":{\"description\":\"Virtual folder without leading or trailing slash; empty for the root.\",\"type\":\"string\"},\"path\":{\"description\":\"Folder and name joined with \\\"/\\\", without a leading slash.\",\"type\":\"string\"},\"file_name\":{\"description\":\"File name the bytes of this version were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of this version.\",\"type\":[\"string\",\"null\"]},\"size\":{\"description\":\"Size of this version.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"version\":{\"description\":\"Version number starting at 1; null while pending or when the file has no version.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"version_id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":[\"string\",\"null\"]},\"status\":{\"description\":\"Lifecycle state of this version: pending, locked or purged.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedVersionStatus\"},{\"type\":\"null\"}]},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":[\"string\",\"null\"]},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedRetentionMode\"},{\"type\":\"null\"}]},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"anyOf\":[{\"$ref\":\"#/$defs/LockedEnforcement\"},{\"type\":\"null\"}]},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"purgeable\":{\"description\":\"Whether this version's bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given when this version was uploaded.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata of the file.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"version_metadata\":{\"description\":\"Metadata given when this version was uploaded.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of whoever uploaded this version.\",\"type\":[\"string\",\"null\"]},\"locked_at\":{\"description\":\"When this version was committed and locked (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When this version's bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"latest_version\":{\"description\":\"Highest committed version number of the file.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_versions\":{\"description\":\"Number of committed versions whose bytes are still stored.\",\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0},\"live_size\":{\"description\":\"Bytes of all stored versions, charged to the storage quota.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"created_by\":{\"description\":\"User ID of whoever created the file.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the file was created (RFC 3339).\",\"type\":\"string\"},\"updated_at\":{\"description\":\"When the file last changed (RFC 3339).\",\"type\":\"string\"}},\"required\":[\"item_id\",\"app_id\",\"scope\",\"name\",\"folder\",\"path\",\"file_name\",\"size\",\"checksum_verified\",\"legal_hold\",\"purgeable\",\"latest_version\",\"live_versions\",\"live_size\",\"created_by\",\"created_at\",\"updated_at\"],\"$defs\":{\"LockedScope\":{\"description\":\"Who a locked file belongs to.\",\"oneOf\":[{\"description\":\"Shared by the whole project.\",\"type\":\"string\",\"const\":\"project\"},{\"description\":\"Private to one user.\",\"type\":\"string\",\"const\":\"user\"}]},\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        },
+        {
+          "name": "version",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "The uploaded version with its lock details",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"LockedItemVersion\",\"description\":\"One immutable, write-once version of a locked file.\",\"type\":\"object\",\"properties\":{\"id\":{\"description\":\"Version ID, used to download, extend, hold or purge this exact version.\",\"type\":\"string\"},\"item_id\":{\"description\":\"ID of the locked file this version belongs to.\",\"type\":\"string\"},\"version\":{\"description\":\"Version number starting at 1, assigned at commit; null while pending.\",\"type\":[\"integer\",\"null\"],\"format\":\"uint32\",\"minimum\":0},\"status\":{\"description\":\"Lifecycle state: pending, locked or purged.\",\"$ref\":\"#/$defs/LockedVersionStatus\"},\"file_name\":{\"description\":\"File name the bytes were uploaded as.\",\"type\":\"string\"},\"content_type\":{\"description\":\"MIME type of the stored bytes.\",\"type\":\"string\"},\"size\":{\"description\":\"Size of the stored bytes.\",\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0},\"sha256\":{\"description\":\"Lowercase hex SHA-256 of the stored bytes.\",\"type\":\"string\"},\"checksum_verified\":{\"description\":\"Whether the storage provider or the server confirmed the SHA-256 of the stored bytes.\",\"type\":\"boolean\"},\"provider_version_id\":{\"description\":\"Storage provider's version identifier (S3 VersionId, GCS generation or Azure version ID).\",\"type\":[\"string\",\"null\"]},\"retention_mode\":{\"description\":\"Retention mode: governance or compliance.\",\"$ref\":\"#/$defs/LockedRetentionMode\"},\"retain_until\":{\"description\":\"Date until which the object cannot be modified or deleted (RFC 3339).\",\"type\":\"string\"},\"enforcement\":{\"description\":\"Whether the lock is set on the object or by a bucket-wide policy.\",\"$ref\":\"#/$defs/LockedEnforcement\"},\"legal_hold\":{\"description\":\"Whether a legal hold blocks deletion regardless of the retention date.\",\"type\":\"boolean\"},\"comment\":{\"description\":\"Comment given at upload.\",\"type\":[\"string\",\"null\"]},\"metadata\":{\"description\":\"Metadata given at upload.\",\"type\":[\"object\",\"null\"],\"additionalProperties\":true},\"uploaded_by\":{\"description\":\"User ID of the uploader.\",\"type\":\"string\"},\"created_at\":{\"description\":\"When the upload was started (RFC 3339).\",\"type\":\"string\"},\"locked_at\":{\"description\":\"When the version was committed and locked (RFC 3339); null while pending.\",\"type\":[\"string\",\"null\"]},\"purged_at\":{\"description\":\"When the stored bytes were deleted after the retention ended (RFC 3339).\",\"type\":[\"string\",\"null\"]},\"purged_by\":{\"description\":\"User ID of whoever deleted the stored bytes.\",\"type\":[\"string\",\"null\"]},\"purgeable\":{\"description\":\"Whether the bytes may be deleted now: locked, retention ended and no legal hold.\",\"type\":\"boolean\",\"default\":false}},\"required\":[\"id\",\"item_id\",\"status\",\"file_name\",\"content_type\",\"size\",\"sha256\",\"checksum_verified\",\"retention_mode\",\"retain_until\",\"enforcement\",\"legal_hold\",\"uploaded_by\",\"created_at\"],\"$defs\":{\"LockedVersionStatus\":{\"description\":\"Lifecycle state of a locked file version.\",\"oneOf\":[{\"description\":\"Upload started but not committed yet.\",\"type\":\"string\",\"const\":\"pending\"},{\"description\":\"Committed and protected by its retention lock.\",\"type\":\"string\",\"const\":\"locked\"},{\"description\":\"Bytes deleted after the retention ended; the record is kept as evidence.\",\"type\":\"string\",\"const\":\"purged\"}]},\"LockedRetentionMode\":{\"description\":\"How strictly the retention lock is enforced by the storage provider.\",\"oneOf\":[{\"description\":\"Privileged storage administrators could lift the lock.\",\"type\":\"string\",\"const\":\"governance\"},{\"description\":\"Nobody, including the storage account owner, can lift the lock before it ends.\",\"type\":\"string\",\"const\":\"compliance\"}]},\"LockedEnforcement\":{\"description\":\"Where the write-once guarantee is enforced.\",\"oneOf\":[{\"description\":\"A retention lock set on the stored object version itself.\",\"type\":\"string\",\"const\":\"object\"},{\"description\":\"A retention policy of the whole bucket or container.\",\"type\":\"string\",\"const\":\"bucket\"}]}}}"
+        }
+      ],
+      "impure": true,
+      "doc": "Adds a new write-once version to an existing locked file; earlier versions stay unchanged. Fails when storage is full",
+      "namespace": "lockedFiles",
+      "alias": "uploadVersion"
     },
     {
       "node_type": "log_error",

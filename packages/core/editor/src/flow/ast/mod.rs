@@ -3012,7 +3012,7 @@ mod module_reconcile_tests {
         let main = file(&board, FlowScriptFile::Main);
         for (path, layer) in [("alpha::helper", "fn-a"), ("beta::helper", "fn-b")] {
             let called = append_to_last_block(&main.text, &format!("{path}()"));
-            let result = reconcile_text_with_catalog(&board, &called, &board_catalog(&board));
+            let result = reconcile_file(&board, &called, &main.scope_anchors, FlowScriptFile::Main);
             assert!(
                 result.diagnostics.is_empty(),
                 "{path}: {:?}",

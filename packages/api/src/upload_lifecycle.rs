@@ -53,6 +53,9 @@ pub(crate) fn spawn_cleanup(state: &AppState) {
             if let Err(error) = cleanup_expired(&state).await {
                 tracing::warn!(%error, "Expired upload cleanup failed");
             }
+            if let Err(error) = crate::locked_storage::sweep_abandoned_uploads(&state).await {
+                tracing::warn!(%error, "Abandoned locked upload sweep failed");
+            }
         }
     });
 }
