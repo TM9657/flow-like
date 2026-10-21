@@ -117,6 +117,27 @@ pub(super) fn add_attachments_pin(node: &mut Node) {
     .set_default_value(Some(json!([])));
 }
 
+pub(super) fn add_sender_name_pin(node: &mut Node) {
+    node.add_input_pin(
+        "sender_name",
+        "Sender Name",
+        "Name recipients see as the sender, at most 64 characters; empty uses the email event's name",
+        VariableType::String,
+    )
+    .set_default_value(Some(json!("")));
+}
+
+/// An empty name is omitted, so an API that predates sender names still accepts the message.
+pub(super) async fn name_sender(
+    context: &mut ExecutionContext,
+    body: &mut Value,
+) -> flow_like_types::Result<()> {
+    if let Some(name) = optional_text(context.evaluate_pin::<String>("sender_name").await?) {
+        body["sender_name"] = json!(name.trim());
+    }
+    Ok(())
+}
+
 /// Adds the attachment pin's files to `body`. Messages without files omit the field, so
 /// an API that predates attachments still accepts them.
 pub(super) async fn attach_files(
@@ -319,7 +340,7 @@ impl NodeLogic for PlatformSendMailNode {
             "Send email from an authorized event's address",
             "Email",
         );
-        node.set_version(3);
+        node.set_version(4);
         node.set_flowscript_name("email", "sendPlatform");
         node.set_receiver("session");
         node.add_icon("/flow/icons/mail.svg");
@@ -351,6 +372,7 @@ impl NodeLogic for PlatformSendMailNode {
                 .set_default_value(Some(json!("")));
         }
         add_attachments_pin(&mut node);
+        add_sender_name_pin(&mut node);
         add_result_pins(&mut node);
         node
     }
@@ -360,6 +382,7 @@ impl NodeLogic for PlatformSendMailNode {
         let session = context.evaluate_pin::<MailSession>("session").await?;
         let mut body = message_body(context, &session).await?;
         attach_files(context, &mut body).await?;
+        name_sender(context, &mut body).await?;
         let result = submit(context, &session, "send", body).await?;
         finish(context, result).await
     }
@@ -439,9 +462,15 @@ mod tests {
     }
 
     #[test]
-    fn session_input_is_required_and_caller_cannot_supply_sender() {
+    fn session_input_is_required_and_caller_names_but_never_addresses_the_sender() {
         let node = PlatformSendMailNode::new().get_node();
-        assert_eq!(node.version, Some(3));
+        assert_eq!(node.version, Some(4));
+        let sender_name = node.get_pin_by_name("sender_name").unwrap();
+        assert_eq!(sender_name.data_type, VariableType::String);
+        assert_eq!(
+            sender_name.default_value,
+            Some(flow_like_types::json::to_vec(&json!("")).unwrap())
+        );
         assert!(node.scores.is_some());
         let session = node.get_pin_by_name("session").unwrap();
         assert_eq!(session.data_type, VariableType::Struct);
@@ -508,7 +537,10 @@ mod tests {
         let mut placed = catalog.clone();
         placed.set_version(1);
         placed.pins.retain(|_, pin| {
-            !matches!(pin.name.as_str(), "session" | "session_out" | "attachments")
+            !matches!(
+                pin.name.as_str(),
+                "session" | "session_out" | "attachments" | "sender_name"
+            )
         });
         placed.add_input_pin("reply_to", "Reply To", "", VariableType::String);
         let mut original_pins = Vec::new();
@@ -527,9 +559,10 @@ mod tests {
             .unwrap()
             .set_default_value(Some(json!("Existing subject")));
         sync_node_with_catalog(&mut placed, &catalog);
-        assert_eq!(placed.version, Some(3));
+        assert_eq!(placed.version, Some(4));
         assert!(placed.get_pin_by_name("reply_to").is_none());
         assert!(placed.get_pin_by_name("attachments").is_some());
+        assert!(placed.get_pin_by_name("sender_name").is_some());
         assert!(
             placed
                 .get_pin_by_name("session")

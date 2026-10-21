@@ -10881,6 +10881,7 @@ dependencies = [
  "rig-core",
  "schemars 1.2.1",
  "serde",
+ "sha2 0.10.9",
  "sqlx 0.8.6",
  "tdms-rs",
  "tempfile",

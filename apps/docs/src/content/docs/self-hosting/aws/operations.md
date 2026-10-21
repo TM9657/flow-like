@@ -337,7 +337,9 @@ continue to use the configured `from_email`.
 Connect the inbound event's Session output to Send Platform Email. To answer
 the received message, connect both Session and Message to Reply Platform Email.
 The backend checks that the session belongs to the current app and that its
-event is still active, and chooses the event's active From address. Any live
+event is still active, and sends from the event's alias, or from its stable
+address when the event has no alias. The optional Sender Name sets the name
+recipients see; when it is empty, they see the event's name. Any live
 run of that app may use the session, whichever event started it, so a
 scheduled or manually started flow can send with a session it stored earlier.
 A reply derives its recipient, subject, and threading headers from the stored
@@ -345,9 +347,9 @@ original message. Reply requires that the original receipt has not expired.
 Callers provide neither sender addresses nor raw headers.
 
 The corresponding endpoints are `POST /api/v1/apps/{app_id}/mail/send` with
-`{session,to,cc,bcc,subject,text,html,attachments}` and
+`{session,to,cc,bcc,subject,text,html,attachments,sender_name}` and
 `POST /api/v1/apps/{app_id}/mail/reply` with
-`{session,message,text,html,attachments}`. Both return the session and a
+`{session,message,text,html,attachments,sender_name}`. Both return the session and a
 request ID after provider acceptance. The default limit is one message per app
 every five seconds, configured with `MAIL_CONFIG.min_send_interval_seconds`. A
 message can address at most 20 recipients across To, CC, and BCC, with at most

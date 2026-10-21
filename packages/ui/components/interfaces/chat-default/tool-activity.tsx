@@ -13,7 +13,7 @@ import { type ReactNode, useId, useState } from "react";
 import { cn } from "../../../lib/utils";
 import { getToolActivityLabel } from "../../../state/global-chat/tool-step-activity";
 import type { IPlanStep, IToolActivityDetail } from "./chat-db";
-import { ReasoningViewer } from "./reasoning-viewer";
+import { ReasoningBody } from "./reasoning-viewer";
 
 type ActivitySource = NonNullable<IToolActivityDetail["sources"]>[number];
 
@@ -269,11 +269,7 @@ export function ToolActivityRow({
 					)}
 					{isExpanded && hasReasoning && (
 						<div id={reasoningId}>
-							<ReasoningViewer
-								reasoning={step.reasoning ?? ""}
-								defaultExpanded
-								compact
-							/>
+							<ReasoningBody reasoning={step.reasoning ?? ""} compact />
 						</div>
 					)}
 				</div>

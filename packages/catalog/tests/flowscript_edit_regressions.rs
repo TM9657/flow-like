@@ -914,7 +914,8 @@ eventsSimple go() {
 
 /// "assignment to `changed` carries node anchor …, but its value is not an anchored call or
 /// variable-set operation": a `let` in a module's event lives on the module layer, and neither the
-/// board document nor the module's own file declared it again.
+/// board document nor the module's own file declared it again. Written by two events, it is
+/// declared once; the other event's anchored assignment resolves through the module scope.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_module_layer_variable_is_declared_and_seen_by_every_section_of_its_module() {
     let mut board = board_from(
@@ -928,11 +929,11 @@ async fn a_module_layer_variable_is_declared_and_seen_by_every_section_of_its_mo
 "#,
     )
     .await;
-    let module_id = board
+    let (module_id, variable_id) = board
         .layers
         .values()
         .find(|layer| layer.name == "lea" && layer.variables.len() == 1)
-        .map(|layer| layer.id.clone())
+        .and_then(|layer| Some((layer.id.clone(), layer.variables.keys().next()?.clone())))
         .expect("the event `let` lives on module `lea`");
     let text = anchored(&board);
     assert!(text.contains("let changed: string"), "{text}");
@@ -940,19 +941,45 @@ async fn a_module_layer_variable_is_declared_and_seen_by_every_section_of_its_mo
 
     let close = text.rfind("\n}").expect("the module block closes");
     let edited = format!(
-        "{}\n    eventsSimple leaReset() {{\n        changed = \"reset\"\n        log::info({{ message: changed, toast: false }})\n    }}{}",
+        "{}\n    eventsSimple leaReset() {{\n        let changed: string = \"\"\n        changed = \"reset\"\n        log::info({{ message: changed, toast: false }})\n    }}{}",
         &text[..close],
         &text[close..]
     );
     apply_edit(&mut board, &edited).await;
+    assert_eq!(writers_of(&board, &variable_id), 2, "both events write it");
+    let text = anchored(&board);
+    assert_eq!(text.matches("let changed: string").count(), 1, "{text}");
     assert_round_trips(&board);
-    apply_module_file_edit(&mut board, &module_id, "\"reset\"", "\"cleared\"").await;
+
+    let file = apply_module_file_edit(&mut board, &module_id, "\"reset\"", "\"cleared\"").await;
+    assert_eq!(file.matches("let changed: string").count(), 1, "{file}");
+    assert_eq!(writers_of(&board, &variable_id), 2, "both events write it");
     assert_round_trips(&board);
 }
 
+/// How many `variable_set` nodes write variable `variable_id`.
+fn writers_of(board: &Board, variable_id: &str) -> usize {
+    let expected = format!("\"{variable_id}\"");
+    all_nodes(board)
+        .into_iter()
+        .filter(|node| {
+            node.name == "variable_set"
+                && node.pins.values().any(|pin| {
+                    pin.name == "var_ref"
+                        && pin.default_value.as_deref() == Some(expected.as_bytes())
+                })
+        })
+        .count()
+}
+
 /// Render module `module_id`'s own file, replace `from` with `to` in it, and apply it the way the
-/// editor applies a module file.
-async fn apply_module_file_edit(board: &mut Board, module_id: &str, from: &str, to: &str) {
+/// editor applies a module file. Returns the file as rendered before the edit.
+async fn apply_module_file_edit(
+    board: &mut Board,
+    module_id: &str,
+    from: &str,
+    to: &str,
+) -> String {
     let file = flow_like::flow::ast::FlowScriptFile::Module(module_id.to_string());
     let rendered = flow_like::flow::ast::board_to_flowscript_file(
         board,
@@ -981,6 +1008,7 @@ async fn apply_module_file_edit(board: &mut Board, module_id: &str, from: &str, 
         result.diagnostics,
         rendered.text
     );
+    rendered.text
 }
 
 /// A board variable with a CUID-style id, as the variables panel creates it.

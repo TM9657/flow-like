@@ -3538,10 +3538,9 @@ impl<'a> Lowering<'a> {
     /// `hash::md5` with `receiver("input")` renders as `content.md5()`); the receiver is wired
     /// to a source whose board type reconcile recovers as that same class, or holds a string
     /// literal (numeric, boolean, null and JSON literals stay static); no user `function`
-    /// shadows the alias (UFCS); and the node is not a statement with its own sugar (loops,
-    /// `if`, `structSet` accumulators) or a `structGet`, whose call is spelled only when its
-    /// member sugar cannot be (a wired or path key): a function's purity prescan cannot see the
-    /// receiver's type and counts `x.get(…)` as one of the impure `get` nodes.
+    /// shadows the alias (UFCS); the node is not a statement with its own sugar (loops, `if`,
+    /// `structSet` accumulators); and it is not a `structGet` of a field path, whose `x.get(…)`
+    /// a function's purity prescan cannot type and counts among the impure `get` nodes.
     fn method_receiver(
         &self,
         node: &'a Node,
@@ -3550,7 +3549,8 @@ impl<'a> Lowering<'a> {
         alias: &str,
     ) -> Option<&'a Pin> {
         if loop_keyword(node).is_some()
-            || matches!(node.name.as_str(), CONTROL_BRANCH | STRUCT_SET | STRUCT_GET)
+            || matches!(node.name.as_str(), CONTROL_BRANCH | STRUCT_SET)
+            || self.reads_a_field_path(node)
         {
             return None;
         }
@@ -3896,13 +3896,8 @@ impl<'a> Lowering<'a> {
                 })
             }
             // `structGet` -> `base.field` member access (only when the field key is a literal).
-            // A path key (`asset.hostname`, `items[0]`) keeps the call form: spelled as a member
-            // chain it reads back as one accessor per segment, not as this node.
-            STRUCT_GET => {
+            STRUCT_GET if !self.reads_a_field_path(owner) => {
                 let field = self.pin_literal_string(owner, "field")?;
-                if field.contains(['.', '[']) {
-                    return None;
-                }
                 let base = self.member_base(owner, "struct", &field)?;
                 Some(Expr::Member {
                     base: Box::new(base),
@@ -4072,6 +4067,15 @@ impl<'a> Lowering<'a> {
             Literal::String(s) => Some(s),
             _ => None,
         }
+    }
+
+    /// A `structGet` whose literal key is a field path (`asset.hostname`, `items[0]`). Spelled as
+    /// a member chain it reads back as one accessor per segment, so it keeps the static call form.
+    fn reads_a_field_path(&self, node: &'a Node) -> bool {
+        node.name == STRUCT_GET
+            && self
+                .pin_literal_string(node, "field")
+                .is_some_and(|field| field.contains(['.', '[']))
     }
 
     /// The camelCase variable name backing a `variableGet`/`variableSet` node's `var_ref` pin.

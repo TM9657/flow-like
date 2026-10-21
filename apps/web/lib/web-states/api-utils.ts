@@ -33,6 +33,7 @@ const PROTECTED_APP_ROUTE_SEGMENTS = new Set([
 	"fork",
 	"graph",
 	"invoke",
+	"locked",
 	"nodes",
 	"notifications",
 	"packages",

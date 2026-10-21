@@ -94,6 +94,9 @@ pub struct SendMailRequest {
     #[serde(default)]
     #[schema(value_type = Vec<MailAttachmentSchema>)]
     pub attachments: Vec<MailAttachment>,
+    /// Name recipients see as the sender, at most 64 characters. Defaults to the event's name.
+    #[serde(default)]
+    pub sender_name: Option<String>,
     /// Retries with the same ID within 24 hours return the first response instead of
     /// sending again. 1-128 characters of letters, digits, `:`, `.`, `_` and `-`.
     #[serde(default)]
@@ -113,6 +116,9 @@ pub struct ReplyMailRequest {
     #[serde(default)]
     #[schema(value_type = Vec<MailAttachmentSchema>)]
     pub attachments: Vec<MailAttachment>,
+    /// Name recipients see as the sender, at most 64 characters. Defaults to the event's name.
+    #[serde(default)]
+    pub sender_name: Option<String>,
     /// Retries with the same ID within 24 hours return the first response instead of
     /// replying again. 1-128 characters of letters, digits, `:`, `.`, `_` and `-`.
     #[serde(default)]
@@ -354,9 +360,18 @@ fn ensure_external<'a>(
     Ok(())
 }
 
-/// The event name as display name, so recipients see who writes instead of the platform.
-fn display_name(event_name: &str, from: &str) -> String {
-    let cleaned = event_name
+/// The flow's sender name, else the event name, so recipients see who writes instead of the
+/// platform.
+fn display_name(requested: Option<&str>, event_name: &str, from: &str) -> String {
+    requested
+        .into_iter()
+        .chain([event_name])
+        .find_map(clean_display_name)
+        .unwrap_or_else(|| from.split('@').next().unwrap_or(from).to_owned())
+}
+
+fn clean_display_name(raw: &str) -> Option<String> {
+    let cleaned = raw
         .chars()
         .map(|c| {
             if c.is_alphanumeric() || " -_.&+'".contains(c) {
@@ -374,11 +389,7 @@ fn display_name(event_name: &str, from: &str) -> String {
         .take(MAX_DISPLAY_NAME)
         .collect::<String>();
     let name = name.trim();
-    if name.is_empty() {
-        from.split('@').next().unwrap_or(from).to_owned()
-    } else {
-        name.to_owned()
-    }
+    (!name.is_empty()).then(|| name.to_owned())
 }
 
 fn has_ended(run: &ExecutionRunRecord) -> bool {
@@ -773,9 +784,13 @@ async fn send(
         state.mail_automation.domain(),
         request.to.iter().chain(&request.cc).chain(&request.bcc),
     )?;
-    let from = crate::mail_ingress::address::sending_address(state, &request.session, None).await?;
+    let from = crate::mail_ingress::address::sending_address(state, &request.session).await?;
     let message = AutomationEmailMessage {
-        from_name: Some(display_name(&sender.event_name, &from)),
+        from_name: Some(display_name(
+            request.sender_name.as_deref(),
+            &sender.event_name,
+            &from,
+        )),
         from_email: Some(from.clone()),
         to: request.to,
         cc: request.cc,
@@ -984,14 +999,13 @@ async fn reply(
     refuse_unsafe_reply(&source, &original)?;
     let headers = reply_headers(&original)?;
     ensure_external(state.mail_automation.domain(), [&headers.to])?;
-    let from = crate::mail_ingress::address::sending_address(
-        state,
-        &request.session,
-        Some(&source.recipient),
-    )
-    .await?;
+    let from = crate::mail_ingress::address::sending_address(state, &request.session).await?;
     let message = AutomationEmailMessage {
-        from_name: Some(display_name(&sender.event_name, &from)),
+        from_name: Some(display_name(
+            request.sender_name.as_deref(),
+            &sender.event_name,
+            &from,
+        )),
         from_email: Some(from.clone()),
         to: vec![headers.to],
         cc: Vec::new(),
@@ -1085,6 +1099,7 @@ mod tests {
             text: Some("Thank you".into()),
             html: None,
             attachments: vec![],
+            sender_name: None,
             request_id: None,
         }
     }
@@ -1138,7 +1153,6 @@ mod tests {
 
     fn reply_source(envelope_from: &str, raw: &[u8]) -> ReplySource {
         ReplySource {
-            recipient: "event@mail.example.com".into(),
             envelope_from: envelope_from.into(),
             raw: raw.to_vec(),
             authentication: None,
@@ -1428,22 +1442,53 @@ mod tests {
     #[test]
     fn senders_are_named_after_their_event_never_the_platform() {
         assert_eq!(
-            display_name("Invoice Intake", "m-1@mail.example.com"),
+            display_name(None, "Invoice Intake", "m-1@mail.example.com"),
             "Invoice Intake"
         );
         assert_eq!(
-            display_name("  <Orders>\r\n\"Desk\" ", "m-1@mail.example.com"),
+            display_name(None, "  <Orders>\r\n\"Desk\" ", "m-1@mail.example.com"),
             "Orders Desk"
         );
         assert_eq!(
-            display_name("Bestellungen & Rückfragen", "m-1@mail.example.com"),
+            display_name(None, "Bestellungen & Rückfragen", "m-1@mail.example.com"),
             "Bestellungen & Rückfragen"
         );
-        assert_eq!(display_name("<>", "orders@mail.example.com"), "orders");
         assert_eq!(
-            display_name(&"x".repeat(100), "m-1@mail.example.com").len(),
+            display_name(None, "<>", "orders@mail.example.com"),
+            "orders"
+        );
+        assert_eq!(
+            display_name(None, &"x".repeat(100), "m-1@mail.example.com").len(),
             MAX_DISPLAY_NAME
         );
+    }
+
+    #[test]
+    fn flows_name_the_sender_and_fall_back_to_the_event() {
+        assert_eq!(
+            display_name(Some(" Momo "), "inboundEmailEvent", "momo@mail.example.com"),
+            "Momo"
+        );
+        assert_eq!(
+            display_name(
+                Some("\"CEO\" <ceo@bank.example>"),
+                "Orders",
+                "orders@mail.example.com"
+            ),
+            "CEO ceo bank.example"
+        );
+        for blank in ["", "  ", "<>"] {
+            assert_eq!(
+                display_name(Some(blank), "Orders", "orders@mail.example.com"),
+                "Orders"
+            );
+        }
+        let request: SendMailRequest = serde_json::from_value(serde_json::json!({
+            "session": session(), "to": ["a@example.com"], "subject": "Mail", "text": "Body",
+            "sender_name": "Momo"
+        }))
+        .unwrap();
+        assert_eq!(request.sender_name.as_deref(), Some("Momo"));
     }
 
     #[test]

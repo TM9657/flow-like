@@ -965,7 +965,6 @@
 	"invitePeople": "Leute einladen",
 	"invitePeopleIn": "Einladen von Leuten in",
 	"invitesLinks": "Einladungen & Links",
-	"inviteSomeoneDirectly": "Jemanden direkt einladen",
 	"inYourProfile": "In deinem Profil",
 	"inYourProfile2": "In deinem Profil",
 	"irreversibleActionsThatAffectYourProfile": "Nicht rückgängig zu machende Aktionen, die dein Profil betreffen",
@@ -1074,7 +1073,6 @@
 	"markDoneTitle": "Markierung fertig: {{title}}",
 	"markdownSupported": "Markdown unterstützt",
 	"markThisRequestAsHighPriority": "Diesen Antrag als hohe Priorität markieren",
-	"matchingAccountsShowUpAsYouTypeAUsernameOrEmailPickTheRightOneAndItGetsTheInvitationStraightAwayAddAPersonalMessageAndItTravelsWithTheInvite": "Passende Konten werden angezeigt, während du einen Benutzernamen oder eine E-Mail-Adresse eingibst. Wähle das richtige Konto aus, um die Einladung sofort zu senden. Eine persönliche Nachricht wird mit der Einladung verschickt.",
 	"maxContextSize": "Max. Kontextgröße",
 	"maximumUses": "Höchstverwendung",
 	"maxUsesOptional": "Max-Uses (optional)",
@@ -1754,7 +1752,6 @@
 	"schemasLoadOnlyAfterYouContinue": "Schemas werden erst geladen, wenn du fortfährst.",
 	"scope": "Geltungsbereich",
 	"sdkInstallation": "Installation von SDK",
-	"searchAFlowlikeAccountAndSendItAnInvitationWithANote": "Suche nach einem Flow-Like-Konto und sende ihm eine Einladung mit einer Nachricht.",
 	"searchAndInspectGeneratedObjectViews": "Suchen und inspizieren von generierten Objektansichten",
 	"searchAppsOrPasteAnAppId": "Apps durchsuchen oder eine App-ID einfügen",
 	"searchByNameEmailOrCompany": "Suche nach Namen, E-Mail oder Firma...",
@@ -2341,5 +2338,9 @@
 	"confirmComp": "Kostenlosen Zugriff bestätigen",
 	"grantComp": "Kostenlosen Zugriff gewähren",
 	"zoomIn": "Vergrößern",
-	"zoomOut": "Verkleinern"
+	"zoomOut": "Verkleinern",
+	"workflowEditor": "",
+	"boardRendererDefaultDescription": "",
+	"useWasmBoardPreview": "",
+	"boardRendererLocalPreference": ""
 }

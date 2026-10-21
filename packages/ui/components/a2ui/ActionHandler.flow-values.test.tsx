@@ -37,6 +37,8 @@ function installDom(): Window {
 	return window;
 }
 
+type Components = Record<string, SurfaceComponent>;
+
 const field = (id: string, value: string): SurfaceComponent =>
 	({
 		id,
@@ -44,10 +46,10 @@ const field = (id: string, value: string): SurfaceComponent =>
 	}) as unknown as SurfaceComponent;
 
 function setValue(
-	components: Record<string, SurfaceComponent>,
+	components: Components,
 	id: string,
 	value: string,
-): Record<string, SurfaceComponent> {
+): Components {
 	return {
 		...components,
 		[id]: applyElementUpdate(components[id], { type: "setValue", value }),
@@ -57,65 +59,75 @@ function setValue(
 const sentValue = (elements: Record<string, unknown>, elementId: string) =>
 	(elements[elementId] as { component: { value: unknown } }).component.value;
 
-describe("flow writes and the run payload", () => {
-	test("an action after a flow write sends the value the screen shows", async () => {
-		const window = installDom();
-		const [
-			{ createRoot },
-			{ ActionProvider, useCollectEventElements, useOnAction },
-			{ useBackendStore },
-			uiState,
-			{ AppRouterContext },
-			{ PathnameContext },
-		] = await Promise.all([
-			import("react-dom/client"),
-			import("./ActionHandler"),
-			import("../../state/backend-state"),
-			import("../../db/ui-state-db"),
-			import("next/dist/shared/lib/app-router-context.shared-runtime"),
-			import("next/dist/shared/lib/hooks-client-context.shared-runtime"),
-		]);
+/** Mounts an ActionProvider on surface `page` whose storage holds `restored`. */
+async function mountProvider(restored: Record<string, unknown>) {
+	const window = installDom();
+	const [
+		{ createRoot },
+		{ ActionProvider, useCollectEventElements, useOnAction },
+		{ useBackendStore },
+		uiState,
+		{ AppRouterContext },
+		{ PathnameContext },
+	] = await Promise.all([
+		import("react-dom/client"),
+		import("./ActionHandler"),
+		import("../../state/backend-state"),
+		import("../../db/ui-state-db"),
+		import("next/dist/shared/lib/app-router-context.shared-runtime"),
+		import("next/dist/shared/lib/hooks-client-context.shared-runtime"),
+	]);
 
-		const persisted: [string, unknown][] = [];
-		const spies = [
-			spyOn(uiState.uiElementValues, "getAll").mockResolvedValue({
-				"page/kcal": {
-					id: "restored",
-					appId: "app",
-					elementId: "page/kcal",
-					value: "208",
-					updatedAt: Date.now(),
-				},
-			}),
-			spyOn(uiState.uiElementValues, "set").mockImplementation(
-				async (_appId, elementId, value) => {
-					persisted.push([elementId, value]);
-				},
-			),
-			spyOn(uiState, "pruneElementValues").mockResolvedValue(),
-		];
-		cleanup.push(() => {
-			for (const spy of spies) spy.mockRestore();
-		});
+	const records = Object.fromEntries(
+		Object.entries(restored).map(([elementId, value]) => [
+			elementId,
+			{
+				id: `restored-${elementId}`,
+				appId: "app",
+				elementId,
+				value,
+				updatedAt: Date.now(),
+			},
+		]),
+	);
+	const persisted: [string, unknown][] = [];
+	const spies = [
+		spyOn(uiState.uiElementValues, "getAll").mockResolvedValue(records),
+		spyOn(uiState.uiElementValues, "set").mockImplementation(
+			async (_appId, elementId, value) => {
+				persisted.push([elementId, value]);
+			},
+		),
+		spyOn(uiState, "pruneElementValues").mockResolvedValue(),
+	];
+	cleanup.push(() => {
+		for (const spy of spies) spy.mockRestore();
+	});
 
-		const previousBackend = useBackendStore.getState().backend;
-		cleanup.push(() => useBackendStore.setState({ backend: previousBackend }));
-		useBackendStore
-			.getState()
-			.setBackend({ boardState: {}, eventState: {} } as never);
+	const previousBackend = useBackendStore.getState().backend;
+	cleanup.push(() => useBackendStore.setState({ backend: previousBackend }));
+	useBackendStore
+		.getState()
+		.setBackend({ boardState: {}, eventState: {} } as never);
 
-		const probe: {
-			onAction?: ReturnType<typeof useOnAction>;
-			collect?: ReturnType<typeof useCollectEventElements>;
-		} = {};
-		function Probe() {
-			probe.onAction = useOnAction();
-			probe.collect = useCollectEventElements();
-			return null;
-		}
+	const probe: {
+		onAction?: ReturnType<typeof useOnAction>;
+		collect?: ReturnType<typeof useCollectEventElements>;
+	} = {};
+	function Probe() {
+		probe.onAction = useOnAction();
+		probe.collect = useCollectEventElements();
+		return null;
+	}
 
-		const appId = `flow-values-${crypto.randomUUID()}`;
-		const render = (components: Record<string, SurfaceComponent>) =>
+	const appId = `flow-values-${crypto.randomUUID()}`;
+	const host = window.document.createElement("div");
+	window.document.body.appendChild(host);
+	root = createRoot(host as unknown as HTMLElement);
+
+	return {
+		persisted,
+		render: (components: Components) =>
 			act(async () => {
 				root?.render(
 					<AppRouterContext.Provider value={{} as never}>
@@ -131,52 +143,80 @@ describe("flow writes and the run payload", () => {
 						</PathnameContext.Provider>
 					</AppRouterContext.Provider>,
 				);
-			});
-		const collect = () => {
+			}),
+		collect: () => {
 			if (!probe.collect) throw new Error("ActionProvider probe did not mount");
 			return probe.collect();
-		};
-		const settle = (ms = 0) =>
-			act(() => new Promise((resolve) => setTimeout(resolve, ms)));
-		const edit = (value: string) =>
+		},
+		settle: (ms = 0) =>
+			act(() => new Promise((resolve) => setTimeout(resolve, ms))),
+		edit: (componentId: string, value: string) =>
 			act(() => {
 				probe.onAction?.({
 					type: "userAction",
 					name: "change",
 					surfaceId: "page",
-					sourceComponentId: "kcal",
+					sourceComponentId: componentId,
 					timestamp: Date.now(),
 					context: { value },
 				});
-			});
+			}),
+	};
+}
 
-		const host = window.document.createElement("div");
-		window.document.body.appendChild(host);
-		root = createRoot(host as unknown as HTMLElement);
+describe("flow writes and the run payload", () => {
+	test("an action after a flow write sends the value the screen shows", async () => {
+		const page = await mountProvider({ "page/kcal": "208" });
 
-		let surface: Record<string, SurfaceComponent> = {
-			kcal: field("kcal", "210"),
-		};
-		await render(surface);
-		await settle();
-		expect(sentValue(await collect(), "page/kcal")).toEqual({
-			literalString: "208",
+		let surface: Components = { kcal: field("kcal", "210") };
+		await page.render(surface);
+		await page.settle();
+		expect(sentValue(await page.collect(), "page/kcal")).toEqual({
+			literalString: "210",
 		});
 
-		await edit("211");
+		await page.edit("kcal", "211");
 		surface = setValue(surface, "kcal", "405");
-		await render(surface);
-		expect(sentValue(await collect(), "page/kcal")).toEqual({
+		await page.render(surface);
+		expect(sentValue(await page.collect(), "page/kcal")).toEqual({
 			literalString: "405",
 		});
 
-		await settle(350);
-		expect(persisted).toEqual([["page/kcal", "405"]]);
+		await page.settle(350);
+		expect(page.persisted).toEqual([["page/kcal", "405"]]);
 
-		await edit("410");
-		await render({ ...surface });
-		expect(sentValue(await collect(), "page/kcal")).toEqual({
+		await page.edit("kcal", "410");
+		await page.render({ ...surface });
+		expect(sentValue(await page.collect(), "page/kcal")).toEqual({
 			literalString: "410",
+		});
+	});
+
+	test("a restored draft the field does not show never reaches the payload", async () => {
+		const page = await mountProvider({
+			"page/description": "Hähnchen",
+			"page/kcal": "405",
+			"page/later": "stale",
+		});
+
+		const surface: Components = {
+			description: field("description", ""),
+			kcal: field("kcal", "405"),
+		};
+		await page.render(surface);
+		await page.settle();
+		let sent = await page.collect();
+		expect(sentValue(sent, "page/description")).toEqual({ literalString: "" });
+		expect(sentValue(sent, "page/kcal")).toEqual({ literalString: "405" });
+		await page.settle(350);
+		expect(page.persisted).toEqual([]);
+
+		await page.edit("description", "Pizza");
+		await page.render({ ...surface, later: field("later", "") });
+		sent = await page.collect();
+		expect(sentValue(sent, "page/later")).toEqual({ literalString: "" });
+		expect(sentValue(sent, "page/description")).toEqual({
+			literalString: "Pizza",
 		});
 	});
 });

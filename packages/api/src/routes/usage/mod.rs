@@ -7,7 +7,7 @@ pub(crate) mod cache;
 mod history;
 
 #[cfg(test)]
-mod test_db;
+pub(crate) mod test_db;
 
 pub fn routes() -> Router<AppState> {
     Router::new()

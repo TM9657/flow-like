@@ -3,6 +3,7 @@ import { applyElementUpdate } from "./apply-a2ui-message";
 import {
 	type FlowValueBaseline,
 	collectFlowValueWrites,
+	hiddenRestoredInputs,
 } from "./flow-value-sync";
 import type { SurfaceComponent } from "./types";
 import { mergeStoredElementValues } from "./workflow-elements";
@@ -222,5 +223,87 @@ describe("flow writes to inputs reach the run payload", () => {
 		expect(sentValue(stored, written, "instance/kcal")).toEqual({
 			literalString: "410",
 		});
+	});
+});
+
+describe("restored input values the screen does not show", () => {
+	const hidden = (values: Record<string, unknown>, components: Components) =>
+		hiddenRestoredInputs(
+			values,
+			new Set(Object.keys(values)),
+			components,
+			"page",
+		);
+
+	test("a stale draft under an empty field is hidden, a shown value is not", () => {
+		expect(
+			hidden(
+				{
+					"page/description": "Hähnchen",
+					"page/kcal": "405",
+					"page/amount": 7,
+					"page/tags": ["a"],
+				},
+				{
+					description: text("description", ""),
+					kcal: text("kcal", "405"),
+					amount: input("amount", { value: { literalNumber: 7 } }, "slider"),
+					tags: input("tags", { value: { literalJson: '["a"]' } }, "select"),
+				},
+			),
+		).toEqual(["page/description"]);
+	});
+
+	test("values edited on this mount are not judged", () => {
+		expect(
+			hiddenRestoredInputs(
+				{ "page/description": "typed now" },
+				new Set(),
+				{ description: text("description", "") },
+				"page",
+			),
+		).toEqual([]);
+	});
+
+	test("path bindings and undeclared values never show a restored value", () => {
+		expect(
+			hidden(
+				{ "page/bound": "old", "page/blank": "old", "page/done": true },
+				{
+					bound: input("bound", { value: { path: "/meal/description" } }),
+					blank: input("blank", {}),
+					done: input("done", { checked: false }, "checkbox"),
+				},
+			),
+		).toEqual(["page/bound", "page/blank", "page/done"]);
+	});
+
+	test("display components, micro widget values and unmounted ids keep theirs", () => {
+		expect(
+			hidden(
+				{
+					"page/progress": 40,
+					"micro/values": { draft: "kept" },
+					"page/later": "x",
+				},
+				{
+					progress: input(
+						"progress",
+						{ value: { literalNumber: 0 } },
+						"progress",
+					),
+					micro: input("micro", { instanceId: "micro" }, "microWidgetInstance"),
+				},
+			),
+		).toEqual([]);
+	});
+
+	test("widget children are judged under their instance key", () => {
+		expect(
+			hidden(
+				{ "instance/kcal": "210" },
+				widget("instance", [text("kcal", "")]),
+			),
+		).toEqual(["instance/kcal"]);
 	});
 });

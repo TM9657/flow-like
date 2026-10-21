@@ -5396,6 +5396,124 @@ declare namespace linkedin {
     function shareText({ provider: Struct, authorId: string, text: string, visibility?: string }): { postId: string, errorMessage: string };
 }
 
+declare namespace lockedFiles {
+    // === Data/Files/Locked ===
+
+    /**
+     * Downloads one version of a write-once, revision-safe file into the run's cache and checks its size and SHA-256 against the record
+     * @node locked_download_item @alias lockedDownloadItem
+     * @param itemId (optional) — ID of the locked file to download
+     * @param version (optional) — Version number to download; 0 downloads the newest locked version
+     * @returns path — The downloaded bytes in the run's cache
+     * @returns file — The downloaded version with its lock details
+     * @returns verified — True when the storage provider also confirmed the SHA-256 when the version was locked; the downloaded bytes always match the recorded SHA-256
+     * @impure has side effects / drives control flow
+     */
+    function download({ itemId?: string, version?: int }): { path: Struct, file: Struct, verified: bool };
+
+    /**
+     * Moves the retention date of a locked version further into the future. Retention can only be extended, never shortened; needs app admin rights and per-object locks
+     * @node locked_extend_retention @alias lockedExtendRetention
+     * @param itemId (optional) — ID of the locked file
+     * @param versionId (optional) — ID of the version to extend; empty extends the newest locked version
+     * @param retainUntil (optional) — New retention date as RFC 3339 date-time (2036-12-31T00:00:00Z) or date (2036-12-31); leave empty when using Retain Days From Now
+     * @param extendDays (optional) — Retain until this many days from now instead of a fixed date; 0 uses Retain Until
+     * @returns version — The version with its new retention date
+     * @impure has side effects / drives control flow
+     */
+    function extendRetention({ itemId?: string, versionId?: string, retainUntil?: string, extendDays?: int }): Struct;
+
+    /**
+     * Looks up a write-once, revision-safe file by its ID, or by scope, folder and name, with every version and its lock details
+     * @node locked_get_item @alias lockedGetItem
+     * @param itemId (optional) — ID of the locked file; leave empty to look it up by scope, folder and name
+     * @param scope (optional) — project: shared with everyone in the project; user: private to the user running the flow
+     * @param folder (optional) — Folder of the file when looking it up by name; empty for the root
+     * @param name (optional) — Name of the file when looking it up without an ID
+     * @returns file — The file with its newest locked version
+     * @returns versions — Every version of the file, newest first, including purged ones
+     * @returns found — Whether the file exists and is visible to this run
+     * @impure has side effects / drives control flow
+     */
+    function get({ itemId?: string, scope?: string, folder?: string, name?: string }): { file: Struct, versions: Struct[], found: bool };
+
+    /**
+     * Lists the write-once, revision-safe files of this app in a folder, with their newest locked version
+     * @node locked_list_items @alias lockedListItems
+     * @param scope (optional) — project: shared with everyone in the project; user: private to the user running the flow
+     * @param folder (optional) — Folder to list, such as invoices/2026; empty lists the root
+     * @param recursive (optional) — Also list files in all subfolders
+     * @param search (optional) — Only files whose name contains this text, ignoring case; empty lists all
+     * @param limit (optional) — Maximum number of files to return
+     * @returns files — Files in the folder, ordered by name
+     * @returns folders — Names of the folder's direct subfolders; empty for recursive listings
+     * @impure has side effects / drives control flow
+     */
+    function list({ scope?: string, folder?: string, recursive?: bool, search?: string, limit?: int }): { files: Struct[], folders: string[] };
+
+    /**
+     * Deletes the stored bytes of a locked file and frees its storage quota. Only works after the retention period ended and without a legal hold; the server refuses while any selected version is still retained. The record itself, including its SHA-256, is kept as evidence
+     * @node locked_purge @alias lockedPurge
+     * @param itemId (optional) — ID of the locked file
+     * @param versionId (optional) — ID of the one version to delete; empty deletes every version of the file
+     * @returns file — The locked file after the deletion, with its remaining stored size
+     * @returns versions — Every version of the file, newest first, including purged ones
+     * @impure has side effects / drives control flow
+     */
+    function purge({ itemId?: string, versionId?: string }): { file: Struct, versions: Struct[] };
+
+    /**
+     * Places or lifts a legal hold on a locked version. A held version cannot be deleted even after its retention ends; needs app admin rights and a provider with legal hold support
+     * @node locked_set_legal_hold @alias lockedSetLegalHold
+     * @param itemId (optional) — ID of the locked file
+     * @param versionId (optional) — ID of the version to hold; empty uses the newest locked version
+     * @param enabled (optional) — True places the legal hold, false lifts it
+     * @returns version — The version with its legal hold state
+     * @impure has side effects / drives control flow
+     */
+    function setLegalHold({ itemId?: string, versionId?: string, enabled?: bool }): Struct;
+
+    /**
+     * Reads whether this server offers write-once, revision-safe storage and its retention limits
+     * @node locked_storage_status @alias lockedStorageStatus
+     * @returns status — Provider, enforcement, retention bounds and size limit of locked storage
+     * @returns enabled — Whether locked storage is configured on this server
+     * @impure has side effects / drives control flow
+     */
+    function status(): { status: Struct, enabled: bool };
+
+    /**
+     * Stores a file write-once and revision-safe: once committed nobody can change or delete it until its retention ends. Fails when storage is full
+     * @node locked_upload_item @alias lockedUploadItem
+     * @param path — File to lock; it is read twice, once to hash and once to upload
+     * @param scope (optional) — project: shared with everyone in the project; user: private to the user running the flow
+     * @param folder (optional) — Folder to store the file in, such as invoices/2026; empty for the root
+     * @param name (optional) — Display name of the locked file; empty uses the file's name
+     * @param retentionDays (optional) — Days the version stays write-once and undeletable; 0 uses the server default. The server clamps it to its allowed range and ignores it under a bucket-wide policy
+     * @param comment (optional) — Note stored with this version, such as why it was archived
+     * @param metadata (optional) — Optional JSON object stored with this version
+     * @param ifExists (optional) — error: fail when a file with this name already exists in the folder; new_version: add the upload as its next version
+     * @returns file — The locked file with the uploaded version
+     * @returns version — The uploaded version with its lock details
+     * @impure has side effects / drives control flow
+     */
+    function upload({ path: Struct, scope?: string, folder?: string, name?: string, retentionDays?: int, comment?: string, metadata?: Struct, ifExists?: string }): { file: Struct, version: Struct };
+
+    /**
+     * Adds a new write-once version to an existing locked file; earlier versions stay unchanged. Fails when storage is full
+     * @node locked_upload_version @alias lockedUploadVersion
+     * @param itemId (optional) — ID of the locked file to add a version to
+     * @param path — File to lock; it is read twice, once to hash and once to upload
+     * @param retentionDays (optional) — Days the version stays write-once and undeletable; 0 uses the server default. The server clamps it to its allowed range and ignores it under a bucket-wide policy
+     * @param comment (optional) — Note stored with this version, such as why it was archived
+     * @param metadata (optional) — Optional JSON object stored with this version
+     * @returns file — The locked file with the uploaded version
+     * @returns version — The uploaded version with its lock details
+     * @impure has side effects / drives control flow
+     */
+    function uploadVersion({ itemId?: string, path: Struct, retentionDays?: int, comment?: string, metadata?: Struct }): { file: Struct, version: Struct };
+}
+
 declare namespace microsoft {
     // === Data/Microsoft ===
 

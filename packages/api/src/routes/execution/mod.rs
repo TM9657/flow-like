@@ -48,6 +48,10 @@ pub fn routes() -> Router<AppState> {
                 crate::routes::app::mail::MAX_REQUEST_BYTES,
             )),
         )
+        .nest(
+            "/apps/{app_id}/locked",
+            crate::routes::app::locked::executor_routes(),
+        )
         .route("/result", get(progress::executor_result))
         .route("/apps/{app_id}/widgets", get(widgets::get_app_widgets))
         .route(

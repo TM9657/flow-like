@@ -110,3 +110,29 @@ export function collectFlowValueWrites(
 
 	return { baseline: { scope, inputs }, writes };
 }
+
+/**
+ * The restored values among `restoredKeys` that their input does not show.
+ *
+ * Nothing pushes a restored value into its input, which goes on rendering its declared
+ * value. Sending the restored one would hand a workflow a draft the user cannot see. A path
+ * binding renders the data context, so a restored value never matches what it shows.
+ */
+export function hiddenRestoredInputs(
+	values: Readonly<Record<string, unknown>>,
+	restoredKeys: ReadonlySet<string>,
+	components: Record<string, SurfaceComponent> | undefined,
+	surfaceId: string,
+): string[] {
+	const hidden: string[] = [];
+	for (const [elementId, data] of elementValueTargets(components, surfaceId)) {
+		if (!restoredKeys.has(elementId)) continue;
+		const input = boundInput(data);
+		if (!input) continue;
+		const shown = literalValue(input.value);
+		if (shown === undefined || !sameContent(values[elementId], shown)) {
+			hidden.push(elementId);
+		}
+	}
+	return hidden;
+}

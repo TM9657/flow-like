@@ -106,6 +106,7 @@ const MessageActionButton = ({
 	title?: string;
 }) => (
 	<button
+		type="button"
 		onClick={onClick}
 		className={cn(
 			"text-muted-foreground hover:text-foreground transition-colors",
@@ -129,6 +130,7 @@ const FeedbackButton = ({
 	children: React.ReactNode;
 }) => (
 	<button
+		type="button"
 		onClick={onClick}
 		className={cn(
 			"transition-colors",
@@ -416,7 +418,7 @@ const MessageActions = ({
 			</>
 		)}
 		{feedbackEnabled && rating !== 0 && (
-			<button onClick={onFeedbackClick}>
+			<button type="button" onClick={onFeedbackClick}>
 				<Badge
 					variant={gaveMoreFeedback ? "outline" : "default"}
 					className="h-6 rounded-full"
@@ -552,7 +554,7 @@ export const MessageComponent = memo(
 			// re-measure has to happen a frame after the notification rather than
 			// inside it.
 			return observeResize([el], evaluate);
-		}, [message.inner, isUser]);
+		}, [isUser]);
 
 		const handleFileClick = useCallback((file: ProcessedAttachment) => {
 			// A cited page is a destination, not a file — downloading its markup is
@@ -849,13 +851,18 @@ export const MessageComponent = memo(
 											</div>
 										),
 									)}
+									{/* The live group's header already spins; the dots only mark
+									    a trailing group that is not the one still working. */}
 									{loading &&
-										Boolean(
-											inlineSegments[inlineSegments.length - 1]?.steps,
-										) && <ThinkingIndicator />}
+										Boolean(inlineSegments[inlineSegments.length - 1]?.steps) &&
+										liveSegmentIndex !== inlineSegments.length - 1 && (
+											<ThinkingIndicator />
+										)}
 								</>
 							) : loading && !isUser && messageContent.text === "" ? (
-								<ThinkingIndicator />
+								planSteps.length > 0 ? null : (
+									<ThinkingIndicator />
+								)
 							) : loading && !isUser && messageContent.text !== "" ? (
 								<div data-fl-chat-prose>
 									<StreamingTextEditor

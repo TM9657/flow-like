@@ -965,7 +965,6 @@
 	"invitePeople": "邀请成员",
 	"invitePeopleIn": "邀请成员加入",
 	"invitesLinks": "邀请与链接",
-	"inviteSomeoneDirectly": "直接邀请某人",
 	"inYourProfile": "在您的个人资料中",
 	"inYourProfile2": "在您的个人资料中",
 	"irreversibleActionsThatAffectYourProfile": "影响您个人资料的不可逆操作",
@@ -1074,7 +1073,6 @@
 	"markDoneTitle": "标记完成: {{title}}",
 	"markdownSupported": "支持 Markdown",
 	"markThisRequestAsHighPriority": "将此请求标记为高优先级",
-	"matchingAccountsShowUpAsYouTypeAUsernameOrEmailPickTheRightOneAndItGetsTheInvitationStraightAwayAddAPersonalMessageAndItTravelsWithTheInvite": "输入用户名或电子邮件时会显示匹配的账户 — 选择正确的一个，即可立即发送邀请。添加个人留言，它将随邀请一起发送。",
 	"maxContextSize": "最大上下文大小",
 	"maximumUses": "最大使用次数",
 	"maxUsesOptional": "最大使用次数（可选）",
@@ -1754,7 +1752,6 @@
 	"schemasLoadOnlyAfterYouContinue": "架构仅在您继续后加载。",
 	"scope": "范围",
 	"sdkInstallation": "SDK 安装",
-	"searchAFlowlikeAccountAndSendItAnInvitationWithANote": "搜索 Flow-Like 账户，并附带备注发送邀请。",
 	"searchAndInspectGeneratedObjectViews": "搜索并检查生成的对象视图",
 	"searchAppsOrPasteAnAppId": "搜索应用或粘贴应用 ID",
 	"searchByNameEmailOrCompany": "按姓名、电子邮件或公司搜索…",
@@ -2341,5 +2338,9 @@
 	"confirmComp": "",
 	"grantComp": "",
 	"zoomIn": "",
-	"zoomOut": ""
+	"zoomOut": "",
+	"workflowEditor": "",
+	"boardRendererDefaultDescription": "",
+	"useWasmBoardPreview": "",
+	"boardRendererLocalPreference": ""
 }

@@ -487,6 +487,8 @@ pub struct State {
     /// Which concrete bucket, region and account each of the three stores above points
     /// at. The stores themselves cannot answer that, and every provider metrics API asks.
     pub storage_identity: crate::storage_identity::StorageIdentity,
+    /// The write-once bucket, when `LOCKED_BUCKET` (or a provider variant) is set.
+    pub locked_storage: Option<Arc<crate::locked_storage::LockedStorage>>,
     /// Positive cache for the pre-dispatch compiled-artifact check, keyed by
     /// (app, board, version|etag, registry fingerprint). Entries are
     /// content-addressed. ETag-bound dispatches revalidate object existence
@@ -959,6 +961,10 @@ impl State {
                 .expect("Failed to create meta store from master credentials"),
         );
         let storage_identity = crate::storage_identity::from_credentials(&master_creds);
+        let locked_storage = crate::locked_storage::LockedStorage::load(&secrets)
+            .await
+            .expect("Invalid locked storage configuration")
+            .map(Arc::new);
         crate::routes::registry::widget_policy::init_widget_policy(
             &mut platform_config,
             &storage_identity.content,
@@ -1242,6 +1248,7 @@ impl State {
             cdn_bucket,
             meta_bucket,
             storage_identity,
+            locked_storage,
             response_cache,
             execution_usage_cache: Default::default(),
             wasm_permission_cache: moka::sync::Cache::builder()
