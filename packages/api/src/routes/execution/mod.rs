@@ -8,6 +8,7 @@
 use crate::state::AppState;
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{get, post},
 };
 
@@ -37,11 +38,15 @@ pub fn routes() -> Router<AppState> {
         )
         .route(
             "/apps/{app_id}/mail/send",
-            post(crate::routes::app::mail::executor_send_mail),
+            post(crate::routes::app::mail::executor_send_mail).layer(DefaultBodyLimit::max(
+                crate::routes::app::mail::MAX_REQUEST_BYTES,
+            )),
         )
         .route(
             "/apps/{app_id}/mail/reply",
-            post(crate::routes::app::mail::executor_reply_mail),
+            post(crate::routes::app::mail::executor_reply_mail).layer(DefaultBodyLimit::max(
+                crate::routes::app::mail::MAX_REQUEST_BYTES,
+            )),
         )
         .route("/result", get(progress::executor_result))
         .route("/apps/{app_id}/widgets", get(widgets::get_app_widgets))

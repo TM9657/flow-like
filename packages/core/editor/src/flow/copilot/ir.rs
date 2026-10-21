@@ -1816,6 +1816,7 @@ fn compile_steps_with_offset(
                     name: id.clone(),
                     call,
                     anchor: anchor.clone(),
+                    ty: None,
                 });
             }
             FlowIrStep::CallFunction {
@@ -1841,6 +1842,7 @@ fn compile_steps_with_offset(
                     name: id.clone(),
                     call,
                     anchor: anchor.clone(),
+                    ty: None,
                 });
             }
             FlowIrStep::If {

@@ -6359,6 +6359,71 @@ mod tests {
         );
     }
 
+    /// A connect whose endpoint an earlier command removed changed nothing, so undoing it failed a
+    /// second time on the same missing node and the batch reported a spurious rollback error.
+    #[tokio::test]
+    async fn an_edge_to_a_missing_node_fails_without_a_rollback_error() {
+        use crate::flow::{
+            board::commands::{
+                GenericCommand, nodes::remove_node::RemoveNodeCommand,
+                pins::connect_pins::ConnectPinsCommand,
+                pins::disconnect_pins::DisconnectPinsCommand,
+            },
+            node::Node,
+            variable::VariableType,
+        };
+
+        let state = flow_state().await;
+        let mut board = super::Board::new(None, Path::from("boards"), state.clone());
+        let mut from_node = Node::new("test_from", "From", "", "test");
+        let from_pin = from_node
+            .add_output_pin("exec_out", "Out", "", VariableType::Execution)
+            .id
+            .clone();
+        let mut to_node = Node::new("test_to", "To", "", "test");
+        let to_pin = to_node
+            .add_input_pin("exec_in", "In", "", VariableType::Execution)
+            .id
+            .clone();
+        let (from_id, to_id) = (from_node.id.clone(), to_node.id.clone());
+        board.nodes.insert(from_id.clone(), from_node.clone());
+        board.nodes.insert(to_id.clone(), to_node);
+
+        for edge in [
+            GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                from_id.clone(),
+                to_id.clone(),
+                from_pin.clone(),
+                to_pin.clone(),
+            )),
+            GenericCommand::DisconnectPin(DisconnectPinsCommand::new(
+                from_id.clone(),
+                to_id.clone(),
+                from_pin.clone(),
+                to_pin.clone(),
+            )),
+        ] {
+            let error = board
+                .execute_commands(
+                    vec![
+                        GenericCommand::RemoveNode(RemoveNodeCommand::new(from_node.clone())),
+                        edge,
+                    ],
+                    state.clone(),
+                )
+                .await
+                .err()
+                .expect("an edge to a removed node fails")
+                .to_string();
+            assert!(error.contains(&from_id), "{error}");
+            assert!(!error.contains("rollback"), "{error}");
+            assert!(
+                board.nodes.contains_key(&from_id),
+                "the removal before the failed edge is rolled back"
+            );
+        }
+    }
+
     #[test]
     fn comment_node_id_roundtrips_serde_and_proto_and_changes_hash() {
         use super::{Comment, CommentType};

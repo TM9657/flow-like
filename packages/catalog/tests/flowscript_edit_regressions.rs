@@ -9,8 +9,9 @@
 mod flowscript_support;
 
 use flow_like::flow::ast::{
-    ApplyFlowScriptResult, RenderOptions, apply_board_commands_to_board, apply_flowscript_to_board,
-    board_to_flowscript, reconcile_text_with_catalog_enriched,
+    ApplyFlowScriptResult, ReconcileMode, ReconcileOptions, RenderOptions,
+    apply_board_commands_to_board, apply_flowscript_to_board, board_to_flowscript,
+    reconcile_text_with_catalog_enriched, reconcile_text_with_catalog_enriched_opts,
 };
 use flow_like::flow::board::Board;
 use flow_like::flow::copilot::{BoardCommand, NodePosition};
@@ -833,4 +834,1194 @@ eventsSimple useMcp() {
         "the array_push runs inside the function's execution chain"
     );
     assert_round_trips(&board);
+}
+
+/// Rename a Function layer's boundary pin in place, the way a canvas edit leaves it: FlowScript
+/// cannot author two same-named boundary pins.
+fn rename_function_pin(board: &mut Board, function: &str, from: &str, to: &str) {
+    let pin = board
+        .layers
+        .values_mut()
+        .find(|layer| layer.name == function)
+        .and_then(|layer| layer.pins.values_mut().find(|pin| pin.name == from))
+        .unwrap_or_else(|| panic!("function {function} has no pin {from}"));
+    pin.name = to.to_string();
+    pin.friendly_name = to.to_string();
+}
+
+/// "duplicate FlowScript function return `samples`": a Function layer with two outputs named alike
+/// rendered both as `samples`, and the preflight refused every edit of the board.
+#[tokio::test(flavor = "multi_thread")]
+async fn same_named_function_returns_render_distinct_names() {
+    let mut board = board_from(
+        r#"function pair(first: string, second: string): (samples: string, picks: string) {
+    return first.toUpper(), second.trim()
+}
+
+eventsSimple tick() {
+    log::info({ message: "before", toast: false })
+}
+"#,
+    )
+    .await;
+    rename_function_pin(&mut board, "pair", "picks", "samples");
+    let text = anchored(&board);
+    assert!(
+        text.contains("(samples: string, samples2: string)"),
+        "{text}"
+    );
+    assert_round_trips(&board);
+    apply_edit(&mut board, &text.replace("\"before\"", "\"after\"")).await;
+    info(&board, "after");
+    assert_round_trips(&board);
+}
+
+/// "source `child.path` is `Struct/Normal`, but input `p` requires `String/Normal`": the FlowPath
+/// field read rendered as `child(...).path`, which reconcile reads as the `path` OUTPUT PIN. The
+/// board's own round trip survived on its existing wiring; the same text anywhere else did not.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_field_read_named_like_an_output_pin_renders_the_pin_explicitly() {
+    let board = board_from(
+        r#"function storagePath(): (p: string) {
+    return files::uploadDir().child("Rechnungen").path.path
+}
+
+eventsSimple go() {
+    const p = storagePath()
+    log::info({ message: p, toast: false })
+}
+"#,
+    )
+    .await;
+    let text = anchored(&board);
+    assert!(
+        text.contains(r#"files::uploadDir().child("Rechnungen").path.path"#),
+        "{text}"
+    );
+    assert_round_trips(&board);
+    assert_round_trips(&board_from(&text).await);
+
+    let empty = Board::new_detached(Some("edit-regressions".into()), Path::default());
+    let pin_read = text.replace(".path.path", ".path");
+    let diagnostics = reconcile_diagnostics(&empty, &pin_read);
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("read the field with `.path.path`")),
+        "{diagnostics:?}"
+    );
+}
+
+/// "assignment to `changed` carries node anchor …, but its value is not an anchored call or
+/// variable-set operation": a `let` in a module's event lives on the module layer, and neither the
+/// board document nor the module's own file declared it again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_module_layer_variable_is_declared_and_seen_by_every_section_of_its_module() {
+    let mut board = board_from(
+        r#"module lea {
+    eventsSimple leaToggle() {
+        let changed: string = ""
+        changed = "a"
+        log::info({ message: changed, toast: false })
+    }
+}
+"#,
+    )
+    .await;
+    let module_id = board
+        .layers
+        .values()
+        .find(|layer| layer.name == "lea" && layer.variables.len() == 1)
+        .map(|layer| layer.id.clone())
+        .expect("the event `let` lives on module `lea`");
+    let text = anchored(&board);
+    assert!(text.contains("let changed: string"), "{text}");
+    assert_round_trips(&board);
+
+    let close = text.rfind("\n}").expect("the module block closes");
+    let edited = format!(
+        "{}\n    eventsSimple leaReset() {{\n        changed = \"reset\"\n        log::info({{ message: changed, toast: false }})\n    }}{}",
+        &text[..close],
+        &text[close..]
+    );
+    apply_edit(&mut board, &edited).await;
+    assert_round_trips(&board);
+    apply_module_file_edit(&mut board, &module_id, "\"reset\"", "\"cleared\"").await;
+    assert_round_trips(&board);
+}
+
+/// Render module `module_id`'s own file, replace `from` with `to` in it, and apply it the way the
+/// editor applies a module file.
+async fn apply_module_file_edit(board: &mut Board, module_id: &str, from: &str, to: &str) {
+    let file = flow_like::flow::ast::FlowScriptFile::Module(module_id.to_string());
+    let rendered = flow_like::flow::ast::board_to_flowscript_file(
+        board,
+        &file,
+        &RenderOptions {
+            anchors: true,
+            ..RenderOptions::default()
+        },
+    )
+    .expect("the module file renders");
+    let result = flow_like::flow::ast::apply_flowscript_to_board_file(
+        board,
+        &rendered.text.replace(from, to),
+        &CATALOG.nodes,
+        catalog_state().await,
+        Some(module_id.to_string()),
+        false,
+        Some(&rendered.scope_anchors),
+        Some(file),
+    )
+    .await
+    .expect("the module file applies");
+    assert!(
+        result.diagnostics.is_empty(),
+        "{:?}\n{}",
+        result.diagnostics,
+        rendered.text
+    );
+}
+
+/// A board variable with a CUID-style id, as the variables panel creates it.
+fn create_variable(id: &str, name: &str, data_type: &str, value_type: &str) -> BoardCommand {
+    BoardCommand::CreateVariable {
+        variable_id: Some(id.into()),
+        name: name.into(),
+        data_type: data_type.into(),
+        value_type: value_type.into(),
+        default_value: None,
+        description: None,
+        category: None,
+        schema: None,
+        exposed: None,
+        secret: None,
+        editable: None,
+        runtime_configured: None,
+        target_layer: None,
+        summary: None,
+    }
+}
+
+fn assert_text_reconciles_to_nothing(board: &Board, text: &str) {
+    let (catalog, enricher) = catalog();
+    let result = reconcile_text_with_catalog_enriched(board, text, &catalog, &enricher);
+    assert!(
+        result.commands.is_empty() && result.diagnostics.is_empty(),
+        "{:?}\n{:?}\n{text}",
+        result.commands,
+        result.diagnostics
+    );
+}
+
+/// "variable reference `m5fr…` does not resolve to a board or FlowScript variable":
+/// `array::pushRef` spelled its variable by id, and an id means nothing on the board the text is
+/// pasted into, although the text declares the variable.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_var_ref_literal_renders_the_variable_name_and_survives_a_copy() {
+    let mut board = Board::new_detached(Some("edit-regressions".into()), Path::default());
+    apply_commands(
+        &mut board,
+        vec![create_variable(
+            "m5fr5na9m1poac41clty7rk6",
+            "committedPaths",
+            "String",
+            "Array",
+        )],
+    )
+    .await;
+    apply_edit(
+        &mut board,
+        r#"const committedPaths: string[]   //@v:m5fr5na9m1poac41clty7rk6
+
+eventsSimple collect() {
+    array::pushRef({ varRef: "committedPaths", value: "x" })
+}
+"#,
+    )
+    .await;
+
+    let text = anchored(&board);
+    assert!(text.contains(r#"varRef: "committedPaths""#), "{text}");
+    assert_round_trips(&board);
+    let by_id = text.replace(
+        r#"varRef: "committedPaths""#,
+        r#"varRef: "m5fr5na9m1poac41clty7rk6""#,
+    );
+    assert_text_reconciles_to_nothing(&board, &by_id);
+
+    let copy = board_from(&text).await;
+    let copied = copy
+        .variables
+        .values()
+        .find(|variable| variable.name == "committedPaths")
+        .expect("the copy declares committedPaths");
+    let push = all_nodes(&copy)
+        .into_iter()
+        .find(|node| node.name == "array_push_ref")
+        .expect("pushRef is copied");
+    let expected = format!("\"{}\"", copied.id);
+    assert!(push.pins.values().any(|pin| {
+        pin.name == "var_ref" && pin.default_value.as_deref() == Some(expected.as_bytes())
+    }));
+    assert_round_trips(&copy);
+}
+
+/// "variable reference `m8db…` does not resolve to a board or FlowScript variable": three
+/// `variable::set` nodes still held the ids of deleted variables, and those unchanged lines blocked
+/// every edit of the board.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unchanged_set_of_a_deleted_variable_does_not_block_edits() {
+    let mut board = board_from(
+        r#"let note: string = ""
+
+eventsSimple tick() {
+    note = "a"
+    log::info({ message: "before", toast: false })
+}
+"#,
+    )
+    .await;
+    let variable_id = board
+        .variables
+        .keys()
+        .next()
+        .cloned()
+        .expect("note is declared");
+    apply_commands(
+        &mut board,
+        vec![BoardCommand::RemoveVariable {
+            variable_id: variable_id.clone(),
+            summary: None,
+        }],
+    )
+    .await;
+    let text = anchored(&board);
+    assert!(
+        text.contains(&format!("varRef: \"{variable_id}\"")),
+        "{text}"
+    );
+    assert_round_trips(&board);
+    let edited = text.replace("\"before\"", "\"after\"");
+    apply_edit(&mut board, &edited).await;
+    info(&board, "after");
+    assert_round_trips(&board);
+
+    let changed = anchored(&board).replace(&variable_id, "gone");
+    let diagnostics = reconcile_diagnostics(&board, &changed);
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("variable reference `gone` does not resolve")),
+        "{diagnostics:?}"
+    );
+}
+
+/// A `struct::get` whose field is a path rendered as `alert.asset.hostname`, which reads back as
+/// one accessor per segment: the board's own text re-planned two nodes on every apply.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_struct_get_of_a_field_path_keeps_its_call_form() {
+    let board = board_from(
+        r#"function host(alert: Struct): (hostname: string) {
+    return struct::get({ struct: alert, field: "asset.hostname" }).value
+}
+
+eventsGeneric go(payload: Struct) {
+    const hostname = host(payload)
+    log::info({ message: hostname, toast: false })
+}
+"#,
+    )
+    .await;
+    let text = anchored(&board);
+    assert!(
+        text.contains(r#""asset.hostname""#) && !text.contains(".asset.hostname"),
+        "{text}"
+    );
+    assert_round_trips(&board);
+}
+
+fn reconcile_on_empty_board(source: &str) -> Vec<String> {
+    let board = Board::new_detached(Some("edit-regressions".into()), Path::default());
+    let (catalog, enricher) = catalog();
+    reconcile_text_with_catalog_enriched(&board, source, &catalog, &enricher).diagnostics
+}
+
+/// "binary operator `==` has ambiguous operand type … Make one side concrete": the author typed
+/// the binding as the hint asked (`const requestedDraftId: string = actionContext.draftId`), but
+/// the parser dropped the annotation and the same error came back.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_typed_local_const_makes_an_untyped_field_concrete() {
+    let board = board_from(
+        r#"function f(p: Struct) {
+    const a: string = p.x
+    if (a == p.y) {
+        log::info({ message: "same", toast: false })
+    }
+}
+
+eventsGeneric go(payload: Struct) {
+    f(payload)
+}
+"#,
+    )
+    .await;
+    assert!(
+        all_nodes(&board)
+            .iter()
+            .any(|node| node.name == "equal_string"),
+        "the declared `string` selects the string comparison"
+    );
+    assert_round_trips(&board);
+
+    let diagnostics = reconcile_on_empty_board(
+        "eventsSimple tick() {\n    const label: int = string::trim({ string: \" x \" })\n    log::info({ message: label, toast: false })\n}\n",
+    );
+    assert!(
+        diagnostics.iter().any(|diagnostic| diagnostic.contains(
+            "`const label: int` does not match its value: `string::trim(...)` is `String`"
+        )),
+        "{diagnostics:?}"
+    );
+}
+
+/// "none of the outputs of `db::filter` (`values` (Struct)) fits `data` (Struct)": Update Table's
+/// `data` takes the rows array, but its catalog declaration said one Struct, and the hint printed
+/// the array as a single Struct.
+#[tokio::test(flavor = "multi_thread")]
+async fn update_table_takes_the_rows_a_query_returns() {
+    let rows = r#"    const { database } = db::open({ name: "t", userScoped: false, batchSize: 0 })
+    const rows = database.filter({ limit: 200, offset: 0 })
+"#;
+    let board = board_from(&format!(
+        "eventsGeneric go(payload: Struct) {{\n{rows}    ui::updateTable({{ elementRef: ui::getElement({{ elementRef: \"episode_table\" }}).element, operation: \"Set Data\", data: rows }})\n}}\n"
+    ))
+    .await;
+    let table = all_nodes(&board)
+        .into_iter()
+        .find(|node| node.name == "a2ui_update_table")
+        .expect("the update table node is planned");
+    let data = table
+        .pins
+        .values()
+        .find(|pin| pin.name == "data" && pin.pin_type == PinType::Input)
+        .expect("Set Data has a data input");
+    assert!(
+        !data.depends_on.is_empty(),
+        "the rows are wired into `data`"
+    );
+    assert_round_trips(&board);
+
+    let diagnostics = reconcile_on_empty_board(&format!(
+        "eventsGeneric go(payload: Struct) {{\n{rows}    ui::writeCsvToTable({{ elementRef: \"t\", csv: \"\", table: rows, delimiter: \",\" }})\n}}\n"
+    ));
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("(`values` (Struct[])) fits `table` (Struct)")),
+        "{diagnostics:?}"
+    );
+}
+
+/// "source `string_concat.concatenated` is `String/Normal`, but input `element_ref` requires
+/// `Struct/Normal`": the element pins take an id string or an element object, yet only a typed-in
+/// id was accepted.
+#[tokio::test(flavor = "multi_thread")]
+async fn element_nodes_accept_a_computed_element_id() {
+    let board = board_from(
+        r#"function f(pageId: string) {
+    ui::setElementText({ elementRef: pageId + "/front", text: "x" })
+    ui::setElementLoading({ elementRef: pageId + "/save", loading: true })
+    ui::setButtonLabel({ elementRef: pageId + "/save", label: "Save" })
+    ui::setElementDisabled({ elementRef: pageId + "/save", disabled: false })
+    ui::setElementValue({ elementRef: pageId + "/name", value: "x" })
+    ui::setInputPlaceholder({ elementRef: pageId + "/name", placeholder: "Name" })
+    ui::setSelectValue({ elementRef: pageId + "/kind", value: "a" })
+    ui::setChartLayout({ elementRef: pageId + "/chart", layout: { title: "t" } })
+    ui::setElementAction({ elementRef: pageId + "/link", route: "/next", queryParams: "", url: "", nodeId: "" })
+    if (ui::getFileInputFiles({ elementRef: pageId + "/upload" }).exists) {
+        log::info({ message: "uploaded", toast: false })
+    }
+}
+
+eventsGeneric go(payload: Struct) {
+    f("abc")
+}
+"#,
+    )
+    .await;
+    for node_type in [
+        "a2ui_set_element_text",
+        "a2ui_set_element_loading",
+        "a2ui_set_button_label",
+        "a2ui_set_element_disabled",
+        "a2ui_set_element_value",
+        "a2ui_set_input_placeholder",
+        "a2ui_set_select_value",
+        "a2ui_set_chart_layout",
+        "a2ui_set_element_action",
+        "a2ui_get_file_input_files",
+    ] {
+        let node = all_nodes(&board)
+            .into_iter()
+            .find(|node| node.name == node_type)
+            .unwrap_or_else(|| panic!("{node_type} is planned"));
+        let element = node
+            .pins
+            .values()
+            .find(|pin| pin.name == "element_ref")
+            .expect("element_ref pin");
+        assert!(
+            !element.depends_on.is_empty(),
+            "{node_type} takes the computed id"
+        );
+    }
+    assert_round_trips(&board);
+}
+
+fn node_types_on(board: &Board) -> Vec<&str> {
+    all_nodes(board)
+        .into_iter()
+        .map(|node| node.name.as_str())
+        .collect()
+}
+
+/// "`session5.sqlQuery(...)` is ambiguous between `db::graph::sqlQuery`, `df::sqlQuery`": the
+/// database, graph and DataFusion session handles are all `{cache_key}` and differ only by title.
+/// A titled receiver dispatches on its own class whatever `use` opens; `use db::*` alone used to
+/// wire a DataFusion session into `db::graph::sqlQuery` without a diagnostic.
+#[tokio::test(flavor = "multi_thread")]
+async fn equal_shaped_handles_dispatch_on_their_own_class() {
+    let cases = [
+        (
+            "df_sql_query",
+            "    const session = df::createSession({ sessionName: \"default\" })\n    const { rows } = session.sqlQuery({ query: \"SELECT 1\", params: {} })\n    log::info({ message: rows, toast: false })",
+        ),
+        (
+            "schema_local_db",
+            "    const { database } = db::open({ name: \"x\", userScoped: false })\n    const tableSchema = database.schema()\n    log::info({ message: tableSchema, toast: false })",
+        ),
+        (
+            "graph_schema",
+            "    const { graph } = db::graph::openOverlay({ overlayId: \"g\" })\n    const graphSchema = graph.schema()\n    log::info({ message: graphSchema, toast: false })",
+        ),
+    ];
+    for (node_type, body) in cases {
+        for uses in ["", "use db::*\n\n", "use db::*\nuse df::*\n\n"] {
+            let board = board_from(&format!("{uses}eventsSimple query() {{\n{body}\n}}\n")).await;
+            let types = node_types_on(&board);
+            assert!(
+                types.contains(&node_type),
+                "{node_type} with {uses:?}: {types:?}"
+            );
+            assert_round_trips(&board);
+        }
+    }
+}
+
+/// The headline example of `studio/flowscript.md`: with only `use db::*` open, a DataFusion
+/// session's `sqlQuery` is `df::sqlQuery`.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_documented_session_query_runs_on_datafusion() {
+    let board = board_from(
+        r#"use db::*
+
+eventsSimple clickLatestOverview() {
+    const database = open({ name: "report_overview", userScoped: true, batchSize: 1000 })
+    const session = df::createSession({ sessionName: "default" })
+    session.registerLance({ database: database, tableName: "reports" })
+    const { rows } = session.sqlQuery({ query: "SELECT report_id FROM reports ORDER BY created DESC LIMIT 1;" })
+    log::info({ message: rows, toast: false })
+}
+"#,
+    )
+    .await;
+    let types = node_types_on(&board);
+    assert!(types.contains(&"df_sql_query"), "{types:?}");
+    assert!(!types.contains(&"graph_sql_query"), "{types:?}");
+    assert_round_trips(&board);
+}
+
+/// "argument `string` on `equalString` … source `f.n` is `Integer/Normal`": a comparison whose
+/// operands change type needs a comparator of the new type instead of the live one rewired.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_comparison_whose_operands_change_type_gets_a_matching_comparator() {
+    for (seeded, edited) in [
+        (r#"s == "1""#, "n == 1"),
+        (r#"(s == "a") && (s == "b")"#, r#"(s == "a") && (n == 1)"#),
+    ] {
+        let mut board = board_from(&format!(
+            "function f(s: string, n: int): (ok: bool) {{\n    return {seeded}\n}}\n"
+        ))
+        .await;
+        let text = replace_body(
+            &anchored(&board),
+            "function f(",
+            &[format!("    return {edited}")],
+        );
+        apply_edit(&mut board, &text).await;
+        let comparator = all_nodes(&board)
+            .into_iter()
+            .find(|node| node.name == "int_equal")
+            .unwrap_or_else(|| panic!("{edited}: {:?}", node_types_on(&board)));
+        assert!(
+            comparator
+                .pins
+                .values()
+                .any(|pin| pin.pin_type == PinType::Output && !pin.connected_to.is_empty()),
+            "{edited}: the Integer comparison feeds the return"
+        );
+        assert_round_trips(&board);
+    }
+}
+
+async fn board_with_chat_event() -> Board {
+    let mut board = board_from(
+        r#"eventsSimple seed() {
+    log::info({ message: "seed", toast: false })
+}
+"#,
+    )
+    .await;
+    apply_commands(
+        &mut board,
+        vec![BoardCommand::AddNode {
+            node_type: "events_chat".into(),
+            ref_id: None,
+            position: None,
+            friendly_name: None,
+            additional_pins: None,
+            target_layer: None,
+            summary: None,
+        }],
+    )
+    .await;
+    board
+}
+
+/// "event `eventsChat` changes the parameter contract of anchored entry": a variable whose
+/// interface is named `ToolCall` makes the render suffix the chat `History` family's `ToolCall2`.
+/// `History` is recursive, and the board's own text must still match the live event.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_chat_history_with_renamed_definitions_round_trips() {
+    let mut board = board_with_chat_event().await;
+    let call = r#"{"type":"object","properties":{"id":{"type":"string"},"extra":{"type":"integer"}},"required":["id","extra"]}"#;
+    apply_commands(
+        &mut board,
+        vec![struct_variable("var_toolCall", "toolCall", call.into())],
+    )
+    .await;
+    let text = anchored(&board);
+    assert!(text.contains("interface ToolCall2"), "{text}");
+    assert_round_trips(&board);
+}
+
+/// "argument `history` on `prep` … the source schema does not cover every field the input
+/// declares": a function typed with the rendered `History` takes the chat event's own `history`,
+/// whose `thinking` (and its tools' schema `type`) is an `Option<enum>`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_function_typed_with_the_rendered_history_takes_the_chat_history() {
+    let mut board = board_with_chat_event().await;
+    let text = anchored(&board);
+    let first_event = text
+        .lines()
+        .find(|line| line.starts_with("events"))
+        .expect("events render")
+        .to_string();
+    let chat = text
+        .lines()
+        .find(|line| line.starts_with("eventsChat "))
+        .expect("the chat event renders")
+        .to_string();
+    let edited = text
+        .replace(
+            &chat,
+            &format!(
+                "{chat}\n    const ready = prep(history)\n    log::info({{ message: ready, toast: false }})"
+            ),
+        )
+        .replace(
+            &first_event,
+            &format!(
+                "function prep(history: History): (ready: bool) {{\n    return true\n}}\n\n{first_event}"
+            ),
+        );
+    apply_edit(&mut board, &edited).await;
+    assert_round_trips(&board);
+}
+
+fn struct_variable(id: &str, name: &str, schema: String) -> BoardCommand {
+    let mut command = create_variable(id, name, "Struct", "Normal");
+    if let BoardCommand::CreateVariable { schema: slot, .. } = &mut command {
+        *slot = Some(schema);
+    }
+    command
+}
+
+fn without_enum_values(schema: &mut flow_like_types::Value, removed: &[&str]) {
+    use flow_like_types::Value;
+    match schema {
+        Value::Object(fields) => {
+            if let Some(Value::Array(values)) = fields.get_mut("enum") {
+                values.retain(|value| value.as_str().is_none_or(|value| !removed.contains(&value)));
+            }
+            fields
+                .values_mut()
+                .for_each(|field| without_enum_values(field, removed));
+        }
+        Value::Array(items) => items
+            .iter_mut()
+            .for_each(|item| without_enum_values(item, removed)),
+        _ => {}
+    }
+}
+
+/// "assignment to variable … the source declares `Bit`, the input requires an untitled schema":
+/// a `Bit` variable created before `BitTypes` gained `SystemOne` and `Forecasting` holds the old
+/// enum. The board refreshes that copy, so `ai::findModel`'s current `Bit` assigns to it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_bit_variable_from_before_new_model_types_takes_find_model() {
+    let bit_schema = CATALOG
+        .nodes
+        .iter()
+        .find(|node| node.name == "ai_generative_find_model")
+        .and_then(|node| {
+            node.pins
+                .values()
+                .find(|pin| pin.pin_type == PinType::Output && pin.name == "model")
+        })
+        .and_then(|pin| pin.schema.clone())
+        .expect("findModel declares its Bit schema");
+    let mut stale: flow_like_types::Value =
+        flow_like_types::json::from_str(&bit_schema).expect("Bit schema parses");
+    without_enum_values(&mut stale, &["SystemOne", "Forecasting"]);
+    let mut board = board_from(
+        r#"eventsSimple pick() {
+    log::info({ message: "start", toast: false })
+}
+"#,
+    )
+    .await;
+    apply_commands(
+        &mut board,
+        vec![struct_variable("var_model", "model", stale.to_string())],
+    )
+    .await;
+    let text = anchored(&board);
+    assert!(text.contains("\"Forecasting\""), "{text}");
+    let start_line = text
+        .lines()
+        .find(|line| line.contains("\"start\""))
+        .expect("start renders")
+        .to_string();
+    let edited = text.replace(
+        &start_line,
+        &format!("{start_line}\n    model = ai::findModel({{}})"),
+    );
+    apply_edit(&mut board, &edited).await;
+    assert_round_trips(&board);
+}
+
+const HELPER_AND_CALLER: &str = r#"function helper() {
+    log::info({ message: "inside", toast: false })
+    log::info({ message: "inside2", toast: false })
+}
+
+eventsSimple run() {
+    helper()
+    log::info({ message: "after", toast: false })
+}
+"#;
+
+/// Drop the line containing `header` through the `}` that closes it: the declaration deleted.
+fn without_block(text: &str, header: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines
+        .iter()
+        .position(|line| line.contains(header))
+        .unwrap_or_else(|| panic!("no line contains {header:?}:\n{text}"));
+    let end = start
+        + lines[start..]
+            .iter()
+            .position(|line| *line == "}")
+            .expect("the block closes");
+    lines[..start]
+        .iter()
+        .chain(&lines[end + 1..])
+        .map(|line| format!("{line}\n"))
+        .collect()
+}
+
+/// "Cannot connect a node to itself": once a Function's whole body went (its statements deleted,
+/// or the declaration together with its call), the re-join around the removed nodes wired the
+/// layer's entry to its own exit and the apply rolled back.
+#[tokio::test(flavor = "multi_thread")]
+async fn removing_a_whole_function_body_never_wires_the_layer_to_itself() {
+    let log_count = |board: &Board| {
+        node_types_on(board)
+            .into_iter()
+            .filter(|node_type| *node_type == "log_info")
+            .count()
+    };
+
+    let mut board = board_from(HELPER_AND_CALLER).await;
+    let emptied = replace_body(&anchored(&board), "function helper()", &[]);
+    apply_edit(&mut board, &emptied).await;
+    assert_eq!(log_count(&board), 1);
+    assert!(node_types_on(&board).contains(&"control_call_function"));
+    assert_round_trips(&board);
+
+    let mut board = board_from(HELPER_AND_CALLER).await;
+    let deleted = without_line(
+        &without_block(&anchored(&board), "function helper()"),
+        "helper()",
+    );
+    apply_edit(&mut board, &deleted).await;
+    assert_eq!(log_count(&board), 1);
+    assert!(!node_types_on(&board).contains(&"control_call_function"));
+    let entry = all_nodes(&board)
+        .into_iter()
+        .find(|node| node.name == "events_simple")
+        .expect("the event keeps its entry");
+    assert!(runs_before(&board, entry, info(&board, "after")));
+    assert_round_trips(&board);
+}
+
+/// Deleting a `function` the text still calls applied silently and failed only at run time
+/// ("Function 'helper' has no node connected to its exec input"). A selection or a module file
+/// that does not render the function is not deleting it.
+#[tokio::test(flavor = "multi_thread")]
+async fn deleting_a_function_that_is_still_called_is_refused() {
+    let board = board_from(HELPER_AND_CALLER).await;
+    let diagnostics = reconcile_diagnostics(
+        &board,
+        &without_block(&anchored(&board), "function helper()"),
+    );
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.contains("function `helper` is no longer declared")
+                && diagnostic.contains("in event `run`")
+        }),
+        "{diagnostics:?}"
+    );
+
+    let board = board_from(&format!(
+        "{HELPER_AND_CALLER}\neventsSimple other() {{\n    log::info({{ message: \"other\", toast: false }})\n}}\n"
+    ))
+    .await;
+    let scoped = flow_like::flow::ast::board_to_flowscript_scoped(
+        &board,
+        &[info(&board, "other").id.clone()],
+        &RenderOptions {
+            anchors: true,
+            ..RenderOptions::default()
+        },
+    );
+    assert!(!scoped.text.contains("function helper"), "{}", scoped.text);
+    let (catalog, enricher) = catalog();
+    let diagnostics = reconcile_text_with_catalog_enriched_opts(
+        &board,
+        &scoped.text,
+        &catalog,
+        &enricher,
+        &ReconcileOptions {
+            scope_anchors: Some(&scoped.scope_anchors),
+            ..ReconcileOptions::default()
+        },
+    )
+    .diagnostics;
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+
+    let mut board = board_from(
+        r#"function helper() {
+    log::info({ message: "inside", toast: false })
+}
+
+module lea {
+    eventsSimple leaToggle() {
+        helper()
+        log::info({ message: "lea", toast: false })
+    }
+}
+"#,
+    )
+    .await;
+    let module_id = board
+        .layers
+        .values()
+        .find(|layer| layer.name == "lea")
+        .map(|layer| layer.id.clone())
+        .expect("module `lea` exists");
+    apply_module_file_edit(&mut board, &module_id, "\"lea\"", "\"lea2\"").await;
+}
+
+const ROBOT_SHOWROOM: &str = r#"use log::*
+
+eventsGeneric robotChat(payload: Struct, message: string) {
+    info({ message: message, toast: false })
+}
+
+eventsGeneric robotHealth(payload: Struct) {
+    info({ message: "ok", toast: false })
+}
+
+eventsSimple startRobotShowroom() {
+    const config = rest::serverConfig({ host: "127.0.0.1", port: 38477, tls: {} })
+    const chat = rest::registerFunction({ configIn: config, path: "/chat", method: "POST", fnRefs: [robotChat] })
+    const health = rest::registerFunction({ configIn: chat, path: "/health", method: "GET", fnRefs: [robotHealth] })
+    rest::server({ config: health })
+}
+"#;
+
+fn event_entry_ids(board: &Board) -> Vec<String> {
+    let mut ids: Vec<String> = all_nodes(board)
+        .into_iter()
+        .filter(|node| node.name.starts_with("events_"))
+        .map(|node| node.id.clone())
+        .collect();
+    ids.sort();
+    ids
+}
+
+/// "Node reference `robotChat` is ambiguous": re-applying a program written without anchors added
+/// a second entry beside every live event, so `fnRefs: [robotChat]` named two entries and the
+/// apply rolled back. Without references the duplicates simply stayed (`robotChat`, emptied, and
+/// `robotChat2`).
+#[tokio::test(flavor = "multi_thread")]
+async fn reapplying_an_unanchored_program_keeps_its_event_entries() {
+    let mut board = board_from(ROBOT_SHOWROOM).await;
+    let entries = event_entry_ids(&board);
+    apply_edit(&mut board, ROBOT_SHOWROOM).await;
+    assert_eq!(event_entry_ids(&board), entries);
+    assert_round_trips(&board);
+
+    let changed_contract = ROBOT_SHOWROOM.replace(
+        "robotChat(payload: Struct, message: string)",
+        "robotChat(payload: Struct, message: string, topic: string)",
+    );
+    let diagnostics = reconcile_diagnostics(&board, &changed_contract);
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("changes that entry's parameter contract")),
+        "{diagnostics:?}"
+    );
+}
+
+const POST_HELPER: &str = r#"use http::*
+use log::*
+@secret
+const engineeringKey = ""
+function post(path: string, body: Struct): (result: Struct) {
+ const request = http::request({method:"POST",url:"http://127.0.0.1:38551/api"}).setHeader({name:"X-Rheosoph-Key",value:engineeringKey}).setStructBody({body:body})
+ return request.fetch().toJson()
+}
+eventsSimple go() {
+ info({message: post({path:"a", body:{}}), toast:false})
+}
+"#;
+
+/// "Entity (…) not found; recovery errors: failed to rollback current command": re-applying an
+/// unanchored function reused its old `fetch` and `toJson` for `request.fetch().toJson()`, nodes
+/// the same apply removes, so the batch connected into a deleted node.
+#[tokio::test(flavor = "multi_thread")]
+async fn reapplying_an_unanchored_function_never_reuses_the_nodes_it_removes() {
+    let mut board = board_from(POST_HELPER).await;
+    apply_edit(&mut board, POST_HELPER).await;
+    let fetches = node_types_on(&board)
+        .into_iter()
+        .filter(|node_type| *node_type == "http_fetch")
+        .count();
+    assert_eq!(fetches, 1);
+    assert_round_trips(&board);
+}
+
+const EVENT_LOCAL_A: &str = r#"use log::*
+
+eventsSimple a() {
+    let inputId: string = ""
+    inputId = "a"
+    info({ message: inputId, toast: false })
+}
+"#;
+
+const EVENT_LOCAL_B: &str = r#"
+eventsSimple b() {
+    let inputId: string = ""
+    inputId = "b"
+    info({ message: inputId, toast: false })
+}
+"#;
+
+const EVENT_LOCAL_C: &str = r#"
+eventsSimple c() {
+    let inputId: string = ""
+    inputId = "c"
+    info({ message: inputId, toast: false })
+}
+"#;
+
+fn variables_named(board: &Board, name: &str) -> Vec<String> {
+    let mut ids: Vec<String> = board
+        .variables
+        .values()
+        .filter(|variable| variable.name == name)
+        .map(|variable| variable.id.clone())
+        .collect();
+    ids.sort();
+    ids
+}
+
+/// The variable the `variable_set` in event `event` writes.
+fn variable_written_by(board: &Board, event: &str) -> String {
+    let entry = all_nodes(board)
+        .into_iter()
+        .find(|node| node.name == "events_simple" && node.friendly_name == event)
+        .unwrap_or_else(|| panic!("no event {event}"));
+    let set = all_nodes(board)
+        .into_iter()
+        .find(|node| node.name == "variable_set" && runs_before(board, entry, node))
+        .unwrap_or_else(|| panic!("event {event} sets no variable"));
+    let var_ref = set
+        .pins
+        .values()
+        .find(|pin| pin.name == "var_ref")
+        .and_then(|pin| pin.default_value.as_deref())
+        .expect("the set names its variable");
+    serde_json::from_slice(var_ref).expect("a variable id")
+}
+
+/// "unanchored local variable `inputId` matches 2 live variables": each root event's own
+/// `let inputId` minted another board global (`var_inputId_2`, …), after which no unanchored
+/// `let inputId` could bind.
+#[tokio::test(flavor = "multi_thread")]
+async fn event_locals_of_one_name_share_one_board_variable() {
+    let mut board = board_from(&format!("{EVENT_LOCAL_A}{EVENT_LOCAL_B}")).await;
+    assert_eq!(variables_named(&board, "inputId").len(), 1);
+    assert_round_trips(&board);
+
+    apply_edit(
+        &mut board,
+        &format!("{EVENT_LOCAL_A}{EVENT_LOCAL_B}{EVENT_LOCAL_C}"),
+    )
+    .await;
+    let ids = variables_named(&board, "inputId");
+    assert_eq!(ids.len(), 1, "{ids:?}");
+    for event in ["a", "b", "c"] {
+        assert_eq!(variable_written_by(&board, event), ids[0]);
+    }
+    assert_round_trips(&board);
+}
+
+/// Boards the old behaviour left with `var_inputId_2` keep working: an event that already writes
+/// the duplicate stays on it, and a new event's `let inputId` takes the first variable
+/// FlowScript created with that name and initial value.
+#[tokio::test(flavor = "multi_thread")]
+async fn event_locals_stay_on_the_duplicate_variables_they_already_use() {
+    let mut board = board_from(EVENT_LOCAL_A).await;
+    apply_commands(
+        &mut board,
+        vec![create_variable(
+            "var_inputId_2",
+            "inputId",
+            "String",
+            "Normal",
+        )],
+    )
+    .await;
+    let text = anchored(&board);
+    let duplicate = text
+        .lines()
+        .find(|line| line.contains("//@v:var_inputId_2"))
+        .and_then(|line| line.split_whitespace().nth(1))
+        .unwrap_or_else(|| panic!("the duplicate renders:\n{text}"))
+        .trim_end_matches(':')
+        .to_string();
+    apply_edit(
+        &mut board,
+        &format!(
+            "{text}\neventsSimple b() {{\n    {duplicate} = \"b\"\n    log::info({{ message: {duplicate}, toast: false }})\n}}\n"
+        ),
+    )
+    .await;
+    assert_eq!(variable_written_by(&board, "b"), "var_inputId_2");
+    assert_round_trips(&board);
+
+    apply_edit(
+        &mut board,
+        &format!("{EVENT_LOCAL_A}{EVENT_LOCAL_B}{EVENT_LOCAL_C}"),
+    )
+    .await;
+    assert_eq!(variable_written_by(&board, "a"), "var_inputId");
+    assert_eq!(variable_written_by(&board, "b"), "var_inputId_2");
+    assert_eq!(variable_written_by(&board, "c"), "var_inputId");
+    assert_round_trips(&board);
+}
+
+fn line_with<'a>(text: &'a str, needle: &str) -> &'a str {
+    text.lines()
+        .find(|line| line.contains(needle))
+        .unwrap_or_else(|| panic!("no line with {needle}:\n{text}"))
+}
+
+fn anchor_of(line: &str) -> String {
+    line.split("//@n:")
+        .nth(1)
+        .unwrap_or_else(|| panic!("{line} carries no node anchor"))
+        .trim()
+        .to_string()
+}
+
+fn layer_id(board: &Board, name: &str) -> String {
+    board
+        .layers
+        .values()
+        .find(|layer| layer.name == name)
+        .map(|layer| layer.id.clone())
+        .unwrap_or_else(|| panic!("no layer {name}"))
+}
+
+/// The function's exit is driven by `tail`'s execution output.
+fn exits_after(board: &Board, function: &str, tail: &Node) -> bool {
+    function_exit(board, function)
+        .depends_on
+        .contains(&exec_pin(tail, PinType::Output).id)
+}
+
+/// "call `info` keeps anchor …, but that node belongs to the board root while this statement is in
+/// layer `$0`" (I062, I101, I113): cutting anchored lines out of an event and pasting them into a
+/// new `function` is an extract-function refactor. The nodes keep their identity and move, and so
+/// does a pure helper that only fed them.
+#[tokio::test(flavor = "multi_thread")]
+async fn anchored_lines_pasted_into_a_new_function_move_there() {
+    let mut board = board_from(
+        r#"eventsSimple extract() {
+    log::info({ message: "before", toast: false })
+    log::info({ message: "hello".toUpper(), toast: false })
+    log::info({ message: "second", toast: false })
+    log::info({ message: "after", toast: false })
+}
+"#,
+    )
+    .await;
+    let text = anchored(&board);
+    let first = line_with(&text, "toUpper");
+    let second = line_with(&text, "\"second\"");
+    let (first_id, second_id) = (anchor_of(first), anchor_of(second));
+    let upper_id = all_nodes(&board)
+        .into_iter()
+        .find(|node| node.name == "string_to_upper")
+        .map(|node| node.id.clone())
+        .expect("the inline toUpper is a node");
+    let edited = format!(
+        "{}\nfunction helper() {{\n{first}\n{second}\n}}\n",
+        text.replace(&format!("{first}\n{second}\n"), "    helper()\n")
+    );
+
+    let result = apply_edit(&mut board, &edited).await;
+
+    assert!(
+        !result
+            .board_commands
+            .iter()
+            .any(|command| matches!(command, BoardCommand::RemoveNode { .. })),
+        "{:?}",
+        result.board_commands
+    );
+    let helper = layer_id(&board, "helper");
+    for id in [&first_id, &second_id, &upper_id] {
+        let node = all_nodes(&board)
+            .into_iter()
+            .find(|node| &node.id == id)
+            .unwrap_or_else(|| panic!("{id} kept its identity"));
+        assert_eq!(
+            node.layer.as_deref(),
+            Some(helper.as_str()),
+            "{}",
+            node.name
+        );
+    }
+    let second = all_nodes(&board)
+        .into_iter()
+        .find(|node| node.id == second_id)
+        .unwrap();
+    assert!(exits_after(&board, "helper", second));
+    assert!(!runs_before(&board, info(&board, "before"), second));
+    assert_round_trips(&board);
+}
+
+/// Moving the last statement of one function into another keeps both functions whole: the
+/// shortened one now exits after its new tail.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_statement_moved_between_functions_rewires_both() {
+    let mut board = board_from(
+        r#"function report() {
+    log::info({ message: "x", toast: false })
+}
+
+function other() {
+    log::info({ message: "o1", toast: false })
+    log::info({ message: "o2", toast: false })
+}
+
+eventsSimple run() {
+    report()
+    other()
+}
+"#,
+    )
+    .await;
+    let text = anchored(&board);
+    let x = line_with(&text, "\"x\"");
+    let o2 = line_with(&text, "\"o2\"");
+    let edited = text
+        .replace(&format!("{o2}\n"), "")
+        .replace(x, &format!("{x}\n{o2}"));
+
+    apply_edit(&mut board, &edited).await;
+
+    let moved = info(&board, "o2");
+    assert_eq!(moved.layer, Some(layer_id(&board, "report")));
+    assert!(runs_before(&board, info(&board, "x"), moved));
+    assert!(exits_after(&board, "report", moved));
+    assert!(exits_after(&board, "other", info(&board, "o1")));
+    assert_round_trips(&board);
+}
+
+/// A document that moves lines into a function but leaves out the event they came from cannot
+/// say what runs there now; refusing beats silently cutting the event's chain.
+#[tokio::test(flavor = "multi_thread")]
+async fn moving_lines_out_of_an_unwritten_event_is_refused() {
+    let board = board_from(
+        r#"eventsSimple run() {
+    log::info({ message: "a", toast: false })
+    log::info({ message: "b", toast: false })
+    log::info({ message: "c", toast: false })
+}
+"#,
+    )
+    .await;
+    let text = anchored(&board);
+    let partial = format!(
+        "use log::*\n\nfunction helper() {{\n{}\n}}\n",
+        line_with(&text, "\"b\"")
+    );
+    let (catalog, enricher) = catalog();
+    let diagnostics = reconcile_text_with_catalog_enriched_opts(
+        &board,
+        &partial,
+        &catalog,
+        &enricher,
+        &ReconcileOptions {
+            mode: ReconcileMode::Additive,
+            ..ReconcileOptions::default()
+        },
+    )
+    .diagnostics;
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("with a `helper(…)` call where they were")),
+        "{diagnostics:?}"
+    );
 }

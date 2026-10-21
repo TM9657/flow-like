@@ -502,6 +502,7 @@ pub struct State {
     pub prerun_manifest_cache:
         moka::sync::Cache<String, Arc<flow_like::flow::compiled::PrerunManifest>>,
     pub response_cache: moka::sync::Cache<String, Value>,
+    pub(crate) execution_usage_cache: crate::routes::usage::cache::UsageCache,
     /// WASM package permission cache: "wasm:{user_id}:{package_id}" -> the
     /// caller's grant. "No access" is never stored.
     pub wasm_permission_cache: moka::sync::Cache<String, WasmPackagePermission>,
@@ -1242,6 +1243,7 @@ impl State {
             meta_bucket,
             storage_identity,
             response_cache,
+            execution_usage_cache: Default::default(),
             wasm_permission_cache: moka::sync::Cache::builder()
                 .max_capacity(10_000)
                 .time_to_live(Duration::from_secs(120))

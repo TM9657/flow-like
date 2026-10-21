@@ -341,6 +341,9 @@ pub enum Stmt {
         name: String,
         call: Call,
         anchor: Option<String>,
+        /// `const name: Type = …`: the type the author declared for the binding.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ty: Option<TypeRef>,
     },
     /// `const { a, b: c } = call(...)` — one node whose outputs are bound by pin name.
     Destructure {
@@ -414,6 +417,9 @@ pub enum Stmt {
         name: String,
         value: Expr,
         anchor: Option<String>,
+        /// `const name: Type = expr`: the type the author declared for the binding.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ty: Option<TypeRef>,
     },
     /// `return a, b` — function layer outputs, or an event/tool-entry result
     /// (`events_generic_return_result`). `anchor` is that result node's id when the return maps to

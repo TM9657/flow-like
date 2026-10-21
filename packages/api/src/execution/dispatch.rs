@@ -137,7 +137,7 @@ use flow_like_types::dispatch::{
     DIRECT_LAMBDA_INVOKE_API_ID, LAMBDA_ASYNC_INLINE_PAYLOAD_BYTES, LAMBDA_ASYNC_MAX_PAYLOAD_BYTES,
 };
 
-use super::compiled_artifacts::EnsuredArtifact;
+use super::compiled_artifacts::{EnsuredArtifact, LocalOnlyBoard};
 
 use crate::channel::ChannelIssuer;
 use serde::{Deserialize, Serialize};
@@ -445,12 +445,15 @@ pub enum DispatchError {
     Serialization(String),
     #[error("Compiled artifact error: {0}")]
     Artifact(String),
+    #[error("{0}")]
+    LocalOnly(String),
 }
 
 impl From<DispatchError> for crate::error::ApiError {
     fn from(error: DispatchError) -> Self {
         match error {
             DispatchError::Quota(error) => error,
+            DispatchError::LocalOnly(message) => Self::unprocessable(message),
             error => Self::internal(error.to_string()),
         }
     }
@@ -857,7 +860,10 @@ impl Dispatcher {
             request.wasm_packages.clone(),
         )
         .await
-        .map_err(|e| DispatchError::Artifact(e.to_string()))
+        .map_err(|error| match error.downcast::<LocalOnlyBoard>() {
+            Ok(local_only) => DispatchError::LocalOnly(local_only.to_string()),
+            Err(error) => DispatchError::Artifact(error.to_string()),
+        })
     }
 
     /// Dispatch an execution request to the configured sync/streaming backend (EXECUTION_BACKEND)

@@ -61,6 +61,10 @@ remote-metadata = [
     "package-processing",
     "package-geo",
 ]
+# Desktop-only nodes as metadata. Every one is `only_offline`, so servers list them and
+# refuse boards that use them before any node runs. APIs (via flow-like-api) and executors
+# (via `server`) must both enable it, or their registry fingerprints diverge.
+local-only-metadata = ["package-automation"]
 # Metadata advertised by APIs paired with a local-ML server executor. The API can describe
 # ONNX, training and published-model nodes without linking their execution dependencies.
 server-local-metadata = ["remote-metadata", "package-onnx", "training-metadata"]
@@ -97,16 +101,17 @@ mobile-apple = [
     "local-stt-metal",
     "local-stt-accelerate",
 ]
-# Headless servers run forecasting on CPU and proxy general text/image models.
+# Headless servers run forecasting on CPU and proxy general text/image models. They
+# list desktop automation as metadata only and refuse boards that use it.
 # The historical `server-execute` feature remains compatibility-complete below.
-server = ["remote-all", "portable-execute", "remote", "forecasting"]
+server = ["remote-all", "portable-execute", "remote", "forecasting", "local-only-metadata"]
 # Executors keep no device-local training ledger, so server-local-ml, executor-local-ml
 # and local-runtime-ml never train: boards with training nodes still load, and running
 # one reports that training needs the desktop app or an offline device placement. Through
 # ml-inference they serve models published under storage/models with Burn CPU, without
 # GPU crates.
 server-local-ml = ["server", "package-onnx", "local-ml", "ml-inference"]
-# Network executors exclude desktop/RPA automation, including locally hosted backends.
+# Network executors never run desktop/RPA automation, including locally hosted backends.
 executor = ["server"]
 executor-local-ml = ["executor", "local-ml", "ml-inference"]
 # Self-contained bundle for the local and Docker backend services. The server

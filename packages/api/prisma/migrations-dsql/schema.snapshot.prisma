@@ -4385,6 +4385,10 @@ model ExecutionUsageTracking {
 
   @@index([createdAt])
   @@index([appId, createdAt])
+  // DSQL includes the final three columns as payload; Prisma uses trailing keys.
+  @@index([userId, createdAt, id, appId, status, microseconds], map: "ExecutionUsageTracking_userId_createdAt_id_idx")
+  @@index([userId, status, createdAt, id])
+  // Keep exact account counts on a narrower index than the activity projection.
   @@index([userId, createdAt])
   @@index([technicalUserId, createdAt])
   @@index([version])

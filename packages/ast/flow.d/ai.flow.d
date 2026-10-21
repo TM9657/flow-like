@@ -90,6 +90,16 @@ declare namespace agent {
     function lazyRegisterFunctionTools(this: Agent, { agentIn: Struct, model: Struct }): Struct;
 
     /**
+     * Gives the agent the tools exposed by the document open in a page's file editor. Reopening the document requires registering its new session.
+     * @node agent_register_editor_mcp_tools @receiver agent_in @alias agentRegisterEditorMcpTools
+     * @param agentIn — Agent to receive the editor tools (receiver: `this` in `x.registerEditorMcpTools(...)`)
+     * @param elementRef — Connect Element from Get Element, select the file editor, or use its full surface/component reference
+     * @param tools (optional) — Exact MCP tool names to expose. Leave empty to expose all tools provided by this editor.
+     * @returns agentOut — Agent connected to this live editor document
+     */
+    function registerEditorMcpTools(this: Agent, { agentIn: Struct, elementRef: any, tools?: string[] }): Struct;
+
+    /**
      * Adds referenced Flow-Like functions as callable tool references to an Agent
      * @node agent_register_function_tools @receiver agent_in @alias agentRegisterFunctionTools
      * @param agentIn — Agent object to add function references to (receiver: `this` in `x.registerFunctionTools(...)`)
@@ -566,7 +576,7 @@ declare namespace ai {
          * @param kind (optional) — Which media input to prepare
          * @param maxFrames (optional) — Maximum uniformly sampled video frames
          * @param includeAudio (optional) — Include the video's audio track; missing audio returns an error
-         * @returns content — Decoded media for Embed Content
+         * @returns content — Content parts for Embed Content
          * @impure has side effects / drives control flow
          */
         function prepareMedia({ source: Struct, encoded?: bool, kind?: string, maxFrames?: int, includeAudio?: bool }): Struct;
@@ -1020,6 +1030,29 @@ declare namespace ai {
          * @impure has side effects / drives control flow
          */
         function summarizeDocument({ pages: Struct[], model: Struct, detailLevel?: string, includeToc?: bool, strategy?: string, densification?: string, maxContextTokens?: int, chunkOverlap?: int, trackEntities?: bool, parallelRequests?: int, densitySteps?: int }): Struct;
+
+        /**
+         * Summarizes a document (PDF, DOCX, PPTX, XLSX, HTML, images, etc.) straight from the file: the model reads every page (text, page images, figures) and writes a summary, key points with page citations and short notes per page. Pages are read, never transcribed, so it is much faster and cheaper than extracting the document first and summarizing the text afterwards.
+         * @node ai_processing_summarize_file @alias aiProcessingSummarizeFile
+         * @param file — Document to summarize (PDF, DOCX, PPTX, XLSX, HTML, EPUB, images, etc.).
+         * @param model — Vision-capable model. Scanned pages, slides and figures are sent as images; a text-only model only works for documents with a text layer and Include Images turned off.
+         * @param focus (optional) — What the summary should concentrate on, e.g. "financial risks" or a question. Leave empty for a general summary.
+         * @param language (optional) — Language of the summary and notes, e.g. "English". Leave empty to write in the document's language.
+         * @param strategy (optional) — How long documents are read: • MapReduce — page windows are read in parallel, fastest • Sequential — windows are read in order with a running summary, so notes can resolve references to earlier pages (narratives, contracts, documents that build on themselves) Short documents are always read and summarized in a single request.
+         * @param summaryWords (optional) — Target length of the summary in words (at least 20).
+         * @param maxKeyPoints (optional) — Maximum number of key points. 0 disables them.
+         * @param includeImages (optional) — Send embedded images (figures, photos, slide graphics) to the model. Rendered pages of scanned or image-heavy PDFs are always sent.
+         * @param parallelRequests (optional) — Maximum number of concurrent model requests.
+         * @param temperature (optional) — Model temperature. Models that only accept their default temperature are retried without one automatically.
+         * @param maxTokens (optional) — Maximum output tokens per model request. Leave at 0 for the model default; leave headroom for reasoning models, whose thinking counts as output.
+         * @returns summary — The document summary as markdown prose.
+         * @returns keyPoints — The most important points, each citing its pages.
+         * @returns notes — Concise notes for every page that was read, in document order.
+         * @returns markdown — Summary, key points and page notes rendered as one markdown document.
+         * @returns failedPages — Pages that could not be read completely, so the summary may not cover them. Empty when every page was read.
+         * @impure has side effects / drives control flow
+         */
+        function summarizeFile({ file: Struct, model: Struct, focus?: string, language?: string, strategy?: string, summaryWords?: int, maxKeyPoints?: int, includeImages?: bool, parallelRequests?: int, temperature?: float, maxTokens?: int }): { summary: string, keyPoints: string[], notes: Struct[], markdown: string, failedPages: int[] };
     }
 
     namespace provider {

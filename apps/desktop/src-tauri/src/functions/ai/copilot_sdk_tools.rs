@@ -4010,6 +4010,16 @@ fn known_props_for_type(component_type: &str) -> Option<&'static [&'static str]>
             "src",
             "url",
         ]),
+        "excalidraw" => Some(&[
+            "value",
+            "width",
+            "height",
+            "readOnly",
+            "theme",
+            "autoSave",
+            "autoSaveDelayMs",
+            "autoSaveMinChanges",
+        ]),
         "imageLabeler" => Some(&[
             "src",
             "alt",

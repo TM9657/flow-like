@@ -548,6 +548,15 @@
     "class": null,
     "category": "UI/Elements"
   },
+  "a2ui_set_excalidraw_scene": {
+    "qualified": "ui::setExcalidrawScene",
+    "namespace": "ui",
+    "alias": "setExcalidrawScene",
+    "flat": "a2uiSetExcalidrawScene",
+    "receiver": null,
+    "class": null,
+    "category": "UI/Elements/Excalidraw"
+  },
   "a2ui_set_global_state": {
     "qualified": "ui::setGlobalState",
     "namespace": "ui",
@@ -827,6 +836,15 @@
     "class": null,
     "category": "UI/Elements/Checkbox"
   },
+  "a2ui_uploaded_file_to_path": {
+    "qualified": "ui::uploadedFileToPath",
+    "namespace": "ui",
+    "alias": "uploadedFileToPath",
+    "flat": "a2uiUploadedFileToPath",
+    "receiver": null,
+    "class": null,
+    "category": "UI/Elements/Files"
+  },
   "a2ui_upsert_element": {
     "qualified": "ui::upsertElement",
     "namespace": "ui",
@@ -940,6 +958,15 @@
     "namespace": "agent",
     "alias": "lazyRegisterFunctionTools",
     "flat": "agentLazyRegisterFunctionTools",
+    "receiver": "agent_in",
+    "class": "Agent",
+    "category": "AI/Agents/Builder"
+  },
+  "agent_register_editor_mcp_tools": {
+    "qualified": "agent::registerEditorMcpTools",
+    "namespace": "agent",
+    "alias": "registerEditorMcpTools",
+    "flat": "agentRegisterEditorMcpTools",
     "receiver": "agent_in",
     "class": "Agent",
     "category": "AI/Agents/Builder"
@@ -2020,6 +2047,15 @@
     "namespace": "ai.processing",
     "alias": "summarizeDocument",
     "flat": "aiProcessingSummarizeDocument",
+    "receiver": null,
+    "class": null,
+    "category": "AI/Processing"
+  },
+  "ai_processing_summarize_file": {
+    "qualified": "ai::processing::summarizeFile",
+    "namespace": "ai.processing",
+    "alias": "summarizeFile",
+    "flat": "aiProcessingSummarizeFile",
     "receiver": null,
     "class": null,
     "category": "AI/Processing"

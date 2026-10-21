@@ -15,10 +15,12 @@ mod template;
 mod types;
 
 pub use apply::{
-    ApplyFlowScriptResult, DESTRUCTIVE_BLOCK_PREFIX, apply_board_commands_to_board,
-    apply_flowscript_to_board, apply_flowscript_to_board_file, apply_flowscript_to_board_scoped,
-    blocked_destructive_flowscript_message, destructive_flowscript_command_summaries,
-    ensure_module_layer, is_destructive_block, validate_module_apply_params,
+    ApplyFlowScriptResult, DESTRUCTIVE_BLOCK_PREFIX, FLOWPILOT_BOARD_RESERVED_PREFIX,
+    apply_board_commands_to_board, apply_flowscript_to_board, apply_flowscript_to_board_file,
+    apply_flowscript_to_board_scoped, blocked_destructive_flowscript_message,
+    destructive_flowscript_command_summaries, ensure_module_layer,
+    flowpilot_board_reserved_message, is_destructive_block, is_flowpilot_board_reservation,
+    validate_module_apply_params,
 };
 pub use diagnostics::{
     FlowScriptDiagnostic, FlowScriptDiagnosticCode, FlowScriptDiagnosticFix,

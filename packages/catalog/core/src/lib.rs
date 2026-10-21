@@ -56,7 +56,7 @@ macro_rules! run_with_execute_gate {
     }};
 }
 
-pub use types::attachment::Attachment;
+pub use types::attachment::{Attachment, mime_type_for, read_file_attachments};
 pub use types::bounding_box::BoundingBox;
 pub use types::class_prediction::ClassPrediction;
 pub use types::db_connection::NodeDBConnection;
@@ -76,7 +76,8 @@ pub use types::graph_overlay::{
 };
 pub use types::inbound_email::{
     InboundEmail, InboundEmailAddress, InboundEmailAttachment, InboundEmailAuthentication,
-    InboundEmailHeader, InboundEmailVerdict, MailMessageRef, MailSession,
+    InboundEmailHeader, InboundEmailVerdict, MAX_MAIL_ATTACHMENT_BYTES, MAX_MAIL_ATTACHMENTS,
+    MailAttachment, MailMessageRef, MailSession,
 };
 pub use types::keypoint::{
     COCO_KEYPOINT_NAMES, COCO_SKELETON_CONNECTIONS, Keypoint, PoseDetection, SkeletonConnection,

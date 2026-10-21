@@ -93,8 +93,18 @@ pub fn routes() -> Router<AppState> {
             "/{app_id}/notifications/create",
             post(notifications::create_notification),
         )
-        .route("/{app_id}/mail/send", post(mail::send_mail))
-        .route("/{app_id}/mail/reply", post(mail::reply_mail))
+        .route(
+            "/{app_id}/mail/send",
+            post(mail::send_mail).layer(axum::extract::DefaultBodyLimit::max(
+                mail::MAX_REQUEST_BYTES,
+            )),
+        )
+        .route(
+            "/{app_id}/mail/reply",
+            post(mail::reply_mail).layer(axum::extract::DefaultBodyLimit::max(
+                mail::MAX_REQUEST_BYTES,
+            )),
+        )
         .route(
             "/{app_id}/cache",
             get(cache::read_cache_entry)

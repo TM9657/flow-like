@@ -24,6 +24,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { useBoardRenderer } from "../../hooks/use-board-renderer";
+import { domRendererMinZoom } from "../../lib/board-canvas/dom-visibility";
 import {
 	type MeasuredNodeGeometry,
 	collectDomNodeIds,
@@ -41,9 +42,11 @@ import {
 	useReactFlow,
 	useStore,
 	useStoreApi,
+	zoomAboutCenter,
 } from "./board-runtime";
 import { EguiCanvasLayer } from "./egui-canvas-layer";
 import {
+	createDomFlowGeometryCache,
 	createNativeFlowProjectionCache,
 	prepareNativeSceneNodes,
 } from "./egui-flow-proxy";
@@ -55,6 +58,9 @@ import {
 import { StandaloneBoardHost } from "./standalone-board-host";
 
 import type { FlowCanvasProps } from "./flow-board";
+
+const MAX_ZOOM = 3;
+const NATIVE_MIN_ZOOM = 0.02;
 
 function NativeViewportPlane({
 	zIndex,
@@ -129,6 +135,21 @@ export function EguiFlowCanvas(props: FlowCanvasProps) {
 	const failure =
 		fallback?.preference === preferenceSession ? fallback.message : undefined;
 	const renderer = failure ? "react-flow" : preferredRenderer;
+	const paneWidth = useStore((state) => state.width);
+	const paneHeight = useStore((state) => state.height);
+	// React Flow mounts every node in view as a rich editor, so its floor follows
+	// the board's density. Before React Flow measures its pane, the window bounds it.
+	const minZoom = useMemo(
+		() =>
+			renderer === "egui"
+				? NATIVE_MIN_ZOOM
+				: domRendererMinZoom(
+						props.nodes ?? [],
+						paneWidth || globalThis.innerWidth || 0,
+						paneHeight || globalThis.innerHeight || 0,
+					),
+		[renderer, props.nodes, paneWidth, paneHeight],
+	);
 	const [flowMounted, setFlowMounted] = useState(false);
 	const [readyScopes, setReadyScopes] = useState<{
 		preference?: typeof preferenceSession;
@@ -144,6 +165,7 @@ export function EguiFlowCanvas(props: FlowCanvasProps) {
 	const pointerHeld = useRef(false);
 	const viewportMoving = useRef(false);
 	const [projection] = useState(createNativeFlowProjectionCache);
+	const [domGeometry] = useState(createDomFlowGeometryCache);
 	const [retainedDomIds, setRetainedDomIds] = useState<Set<string>>(
 		() => new Set(),
 	);
@@ -516,8 +538,18 @@ export function EguiFlowCanvas(props: FlowCanvasProps) {
 		() =>
 			nativePlanned && scene
 				? projection.nodes(props.nodes ?? [], scene, hoveredNodeId)
-				: props.nodes,
-		[nativePlanned, scene, props.nodes, hoveredNodeId, projection],
+				: renderer === "react-flow"
+					? domGeometry(props.nodes ?? [])
+					: props.nodes,
+		[
+			nativePlanned,
+			scene,
+			props.nodes,
+			hoveredNodeId,
+			projection,
+			renderer,
+			domGeometry,
+		],
 	);
 	const onNodesReady = useCallback(
 		() =>
@@ -537,6 +569,20 @@ export function EguiFlowCanvas(props: FlowCanvasProps) {
 			})),
 		[props.scopeKey, preferenceSession],
 	);
+	const handoverViewport = () => {
+		const viewport = flow.getViewport();
+		const { width, height } = store.getState();
+		return zoomAboutCenter(
+			viewport,
+			Math.max(minZoom, Math.min(MAX_ZOOM, viewport.zoom)),
+			width,
+			height,
+		);
+	};
+	useEffect(() => {
+		if (renderer === "react-flow" && flow.getViewport().zoom < minZoom)
+			void flow.zoomTo(minZoom);
+	}, [renderer, minZoom, flow]);
 	const onScreenshot = useCallback(async () => {
 		if (screenshotBusy.current) return;
 		screenshotBusy.current = true;
@@ -577,7 +623,7 @@ export function EguiFlowCanvas(props: FlowCanvasProps) {
 			{flowMounted && (
 				<CanvasHost
 					exporting={exporting}
-					defaultViewport={flow.getViewport()}
+					defaultViewport={handoverViewport()}
 					suppressHydrationWarning
 					deleteKeyCode={null}
 					onContextMenu={props.onContextMenu}
@@ -596,8 +642,8 @@ export function EguiFlowCanvas(props: FlowCanvasProps) {
 					nodeTypes={props.nodeTypes}
 					edges={edges}
 					edgeTypes={props.edgeTypes}
-					maxZoom={3}
-					minZoom={0.02}
+					maxZoom={MAX_ZOOM}
+					minZoom={minZoom}
 					onNodeDoubleClick={props.onNodeDoubleClick}
 					onEdgeDoubleClick={props.onEdgeDoubleClick}
 					onNodesChange={props.onNodesChange}

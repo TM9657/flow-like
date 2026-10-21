@@ -5,9 +5,11 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::{MailMessageRef, MailSession};
-use flow_like_types::{anyhow, async_trait, json::json};
+use flow_like_types::{Value, anyhow, async_trait, json::json};
 
-use super::platform_send::{add_result_pins, finish, mail_scores, optional_text, submit};
+use super::platform_send::{
+    add_attachments_pin, add_result_pins, attach_files, finish, mail_scores, optional_text, submit,
+};
 
 #[crate::register_node]
 #[derive(Default)]
@@ -40,7 +42,7 @@ impl NodeLogic for PlatformReplyMailNode {
             "Reply to a received email and preserve its thread",
             "Email",
         );
-        node.set_version(1);
+        node.set_version(2);
         node.set_flowscript_name("email", "replyPlatform");
         node.set_receiver("session");
         node.add_icon("/flow/icons/mail.svg");
@@ -74,6 +76,7 @@ impl NodeLogic for PlatformReplyMailNode {
             node.add_input_pin(name, label, description, VariableType::String)
                 .set_default_value(Some(json!("")));
         }
+        add_attachments_pin(&mut node);
         add_result_pins(&mut node);
         node
     }
@@ -83,17 +86,22 @@ impl NodeLogic for PlatformReplyMailNode {
         let session = context.evaluate_pin::<MailSession>("session").await?;
         let message = context.evaluate_pin::<MailMessageRef>("message").await?;
         validate_message(&session, &message)?;
-        let text = optional_text(context.evaluate_pin::<String>("text").await?);
-        let html = optional_text(context.evaluate_pin::<String>("html").await?);
-        let result = submit(
-            context,
-            &session,
-            "reply",
-            json!({"session":session,"message":message,"text":text,"html":html}),
-        )
-        .await?;
+        let body = reply_body(context, &session, &message).await?;
+        let result = submit(context, &session, "reply", body).await?;
         finish(context, result).await
     }
+}
+
+async fn reply_body(
+    context: &mut ExecutionContext,
+    session: &MailSession,
+    message: &MailMessageRef,
+) -> flow_like_types::Result<Value> {
+    let text = optional_text(context.evaluate_pin::<String>("text").await?);
+    let html = optional_text(context.evaluate_pin::<String>("html").await?);
+    let mut body = json!({"session":session,"message":message,"text":text,"html":html});
+    attach_files(context, &mut body).await?;
+    Ok(body)
 }
 
 #[cfg(test)]
@@ -128,6 +136,8 @@ mod tests {
             );
         }
         assert!(node.get_pin_by_name("session_out").is_some());
+        assert!(node.get_pin_by_name("attachments").is_some());
+        assert_eq!(node.version, Some(2));
         assert!(node.scores.is_some());
     }
 

@@ -7,6 +7,7 @@ import {
 	AlertTriangleIcon,
 	AnchorIcon,
 	BugIcon,
+	CircleXIcon,
 	CopyIcon,
 	FileCode2Icon,
 	FocusIcon,
@@ -122,7 +123,10 @@ import {
 	resolveFlowScriptConflict,
 } from "./flowscript-merge";
 import {
+	type FlowScriptApplyReport,
 	canApplyFlowScript,
+	flowScriptApplyReport,
+	isRejectedFlowScriptDraft,
 	resolveFlowScriptScope,
 	shouldReloadFlowScriptAfterApply,
 } from "./flowscript-panel-state";
@@ -365,7 +369,9 @@ export function FlowScriptPanel({
 	const [loading, setLoading] = useState(true);
 	const [loadError, setLoadError] = useState<string | undefined>(undefined);
 	const [applying, setApplying] = useState(false);
-	const [diagnostics, setDiagnostics] = useState<string[]>([]);
+	const [applyReport, setApplyReport] = useState<
+		FlowScriptApplyReport | undefined
+	>(undefined);
 	const [boardChangedBehindEdits, setBoardChangedBehindEdits] = useState(false);
 	const [refreshConfirmationOpen, setRefreshConfirmationOpen] = useState(false);
 	const [editorReady, setEditorReady] = useState(false);
@@ -423,6 +429,10 @@ export function FlowScriptPanel({
 
 	const readOnly = typeof version !== "undefined";
 	const dirty = text !== baseline;
+	const rejectedDraft = isRejectedFlowScriptDraft(applyReport, {
+		text,
+		baseline,
+	});
 	const applyState = {
 		readOnly,
 		dirty,
@@ -430,6 +440,7 @@ export function FlowScriptPanel({
 		loading,
 		boardChangedBehindEdits,
 		unresolvedConflicts: mergeConflicts.length > 0,
+		rejectedDraft,
 	};
 	const canApply = canApplyFlowScript(applyState);
 	const applyStateRef = useRef(applyState);
@@ -764,7 +775,7 @@ export function FlowScriptPanel({
 		setRemoteTouched(new Set());
 		setBoardChangedBehindEdits(false);
 		setCheckState(undefined);
-		setDiagnostics([]);
+		setApplyReport(undefined);
 		preMergeLocalTextRef.current = undefined;
 		pendingSeatRef.current = undefined;
 
@@ -1052,6 +1063,13 @@ export function FlowScriptPanel({
 							"Resolve the merge conflicts before applying",
 						),
 					);
+				} else if (applyStateRef.current.rejectedDraft) {
+					toast.warning(
+						t(
+							"flowscriptApplyBlockedFixErrors",
+							"Apply blocked — fix the errors above",
+						),
+					);
 				}
 				return;
 			}
@@ -1060,8 +1078,12 @@ export function FlowScriptPanel({
 				applying: true,
 			};
 			setApplying(true);
+			const draft = {
+				text: textRef.current,
+				baseline: baselineRef.current,
+			};
 			try {
-				const result = await onApplyFlowScript(textRef.current, {
+				const result = await onApplyFlowScript(draft.text, {
 					allowDeletions,
 					suppressBlockedToast: true,
 					// The current file's anchors and its identity travel together: the host turns
@@ -1079,7 +1101,15 @@ export function FlowScriptPanel({
 					return;
 				}
 
-				setDiagnostics(result.diagnostics);
+				setApplyReport(
+					flowScriptApplyReport(
+						{
+							commandCount: result.commands.length,
+							diagnostics: result.diagnostics,
+						},
+						draft,
+					),
+				);
 				if (
 					shouldReloadFlowScriptAfterApply({
 						commandCount: result.commands.length,
@@ -2820,28 +2850,39 @@ export function FlowScriptPanel({
 				)}
 			</div>
 
-			{diagnostics.length > 0 && (
+			{applyReport && (
 				<div className="max-h-28 shrink-0 overflow-y-auto border-t px-3 py-2">
 					<div className="mb-1 flex items-center justify-between">
-						<span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-							<AlertTriangleIcon className="h-3 w-3 text-yellow-500" />
-							{t("countWarnings", {
-								defaultValue_one: "{{count}} warning",
-								defaultValue_other: "{{count}} warnings",
-								count: diagnostics.length,
-							})}
-						</span>
+						{applyReport.rejected ? (
+							<span className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+								<CircleXIcon className="h-3 w-3" />
+								{t("flowscriptApplyRejectedErrors", {
+									defaultValue_one: "{{count}} error — nothing was applied",
+									defaultValue_other: "{{count}} errors — nothing was applied",
+									count: applyReport.diagnostics.length,
+								})}
+							</span>
+						) : (
+							<span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+								<AlertTriangleIcon className="h-3 w-3 text-yellow-500" />
+								{t("countWarnings", {
+									defaultValue_one: "{{count}} warning",
+									defaultValue_other: "{{count}} warnings",
+									count: applyReport.diagnostics.length,
+								})}
+							</span>
+						)}
 						<Button
 							variant="ghost"
 							size="icon"
 							className="h-5 w-5"
-							onClick={() => setDiagnostics([])}
+							onClick={() => setApplyReport(undefined)}
 						>
 							<XIcon className="h-3 w-3" />
 						</Button>
 					</div>
 					<ul className="space-y-1">
-						{diagnostics.map((diagnostic) => (
+						{applyReport.diagnostics.map((diagnostic) => (
 							<li
 								key={diagnostic}
 								className="text-xs text-muted-foreground break-words"
@@ -2855,7 +2896,15 @@ export function FlowScriptPanel({
 
 			{!readOnly && (
 				<div className="flex shrink-0 items-center justify-between gap-2 border-t px-3 py-2">
-					<span className="text-[11px] text-muted-foreground">
+					<span
+						className={
+							rejectedDraft &&
+							!boardChangedBehindEdits &&
+							mergeConflicts.length === 0
+								? "text-[11px] text-destructive"
+								: "text-[11px] text-muted-foreground"
+						}
+					>
 						{boardChangedBehindEdits
 							? t(
 									"boardChangedRefreshBeforeApplying",
@@ -2866,12 +2915,17 @@ export function FlowScriptPanel({
 										"flowscriptResolveConflictsBeforeApply",
 										"Resolve the merge conflicts before applying",
 									)
-								: dirty
+								: rejectedDraft
 									? t(
-											"unappliedChangesSToApply",
-											"Unapplied changes — ⌘S to apply",
+											"flowscriptApplyBlockedFixErrors",
+											"Apply blocked — fix the errors above",
 										)
-									: t("inSyncWithBoard", "In sync with board")}
+									: dirty
+										? t(
+												"unappliedChangesSToApply",
+												"Unapplied changes — ⌘S to apply",
+											)
+										: t("inSyncWithBoard", "In sync with board")}
 					</span>
 					<div className="flex items-center gap-2">
 						<Button
@@ -2881,7 +2935,7 @@ export function FlowScriptPanel({
 							disabled={!dirty || applying}
 							onClick={() => {
 								setText(baseline);
-								setDiagnostics([]);
+								setApplyReport(undefined);
 								// The baseline IS the board's latest render — a reset settles
 								// every outstanding merge conflict as "theirs".
 								setMergeConflicts([]);

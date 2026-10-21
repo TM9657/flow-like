@@ -77,7 +77,10 @@ export type {
 } from "./backend-state/storage-state";
 import type { ITeamState } from "./backend-state/team-state";
 import type { ITemplateState } from "./backend-state/template-state";
-import type { IUsageState } from "./backend-state/usage-state";
+import type {
+	IUsageRequestOptions,
+	IUsageState,
+} from "./backend-state/usage-state";
 import type { IUserState } from "./backend-state/user-state";
 import type { IWidgetState } from "./backend-state/widget-state";
 
@@ -123,6 +126,7 @@ export type {
 	ITemplateState,
 	IUserState,
 	IWidgetState,
+	IUsageRequestOptions,
 	IUsageState,
 	IAnalyticsState,
 	IGraphState,

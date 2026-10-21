@@ -104,6 +104,25 @@ pub fn is_destructive_block(command_count: usize, diagnostics: &[String]) -> boo
             .is_some_and(|diagnostic| diagnostic.starts_with(DESTRUCTIVE_BLOCK_PREFIX))
 }
 
+/// How the refusal of a board mutation starts while a FlowPilot edit of the same board is applying,
+/// failed-recovery or awaiting receipt delivery. It is a lock, not a failed edit: the editor retries
+/// once FlowPilot releases the board, and failure capture skips it like the deletion gate.
+pub const FLOWPILOT_BOARD_RESERVED_PREFIX: &str =
+    "FlowPilot has an applying, failed-recovery, or pending-delivery edit for this board.";
+
+pub fn flowpilot_board_reserved_message() -> String {
+    format!(
+        "{FLOWPILOT_BOARD_RESERVED_PREFIX} Retry/dismiss it or finish receipt delivery before making another board mutation."
+    )
+}
+
+/// Whether an apply error is FlowPilot's board lock (see [`FLOWPILOT_BOARD_RESERVED_PREFIX`]).
+pub fn is_flowpilot_board_reservation(error_message: &str) -> bool {
+    error_message
+        .trim_start()
+        .starts_with(FLOWPILOT_BOARD_RESERVED_PREFIX)
+}
+
 pub fn blocked_destructive_flowscript_message(summaries: &[String]) -> String {
     let preview = summaries
         .iter()
@@ -1238,8 +1257,13 @@ impl FlowScriptApplyPlanner {
                 BoardCommand::MoveToLayer {
                     ids, target_layer, ..
                 } => {
-                    let resolved_ids = self.resolve_node_ids(board, ids)?;
                     let target = self.resolve_optional_layer(board, target_layer.as_deref())?;
+                    // Runs with the connections instead: cleanup at the end of this phase would
+                    // bridge the edges that still cross the new function boundary.
+                    if self.is_function_layer(board, target.as_deref()) {
+                        continue;
+                    }
+                    let resolved_ids = self.resolve_node_ids(board, ids)?;
                     if let Some(target_id) = target.as_deref() {
                         let target_is_module = self
                             .staged_layers
@@ -1545,8 +1569,28 @@ impl FlowScriptApplyPlanner {
                 | BoardCommand::UpdateNodePinOptions { .. }
                 | BoardCommand::RenameNode { .. }
                 | BoardCommand::RenameLayer { .. }
-                | BoardCommand::MoveToLayer { .. }
                 | BoardCommand::UpdateLayerCache { .. } => {}
+                BoardCommand::MoveToLayer {
+                    ids, target_layer, ..
+                } => {
+                    let target = self.resolve_optional_layer(board, target_layer.as_deref())?;
+                    if !self.is_function_layer(board, target.as_deref()) {
+                        continue;
+                    }
+                    let resolved_ids = self.resolve_node_ids(board, ids)?;
+                    if let Some(layer_id) = resolved_ids
+                        .iter()
+                        .find(|id| board.layers.contains_key(id.as_str()))
+                    {
+                        return Err(flow_like_types::anyhow!(
+                            "MoveToLayer cannot nest layer `{layer_id}` inside a Function layer; only nodes and comments move into a function"
+                        ));
+                    }
+                    generic_commands.push(GenericCommand::MoveToLayer(MoveToLayerCommand::new(
+                        resolved_ids,
+                        target,
+                    )));
+                }
                 BoardCommand::RemoveNode { node_id, .. } => {
                     let node_id = self.resolve_node_id(board, node_id)?;
                     let node = self.resolve_node(board, &node_id)?.clone();
@@ -1585,9 +1629,9 @@ impl FlowScriptApplyPlanner {
                     let from_node_id = self.resolve_node_id(board, from_node)?;
                     let to_node_id = self.resolve_node_id(board, to_node)?;
                     let from_pin_id =
-                        self.resolve_pin_id(board, &from_node_id, from_pin, Some(PinType::Output))?;
+                        self.resolve_disconnect_source_pin_id(board, &from_node_id, from_pin)?;
                     let to_pin_id =
-                        self.resolve_pin_id(board, &to_node_id, to_pin, Some(PinType::Input))?;
+                        self.resolve_disconnect_target_pin_id(board, &to_node_id, to_pin)?;
                     connection_commands.push(GenericCommand::DisconnectPin(
                         DisconnectPinsCommand::new(
                             from_node_id,
@@ -2050,6 +2094,49 @@ impl FlowScriptApplyPlanner {
         }
 
         Err(flow_like_types::anyhow!("Entity `{entity_id}` not found"))
+    }
+
+    /// A disconnect may name its source by the exact id of a layer boundary pin. The id alone is
+    /// unambiguous, and the inverted direction filter that disambiguates boundary pin NAMES would
+    /// reject a collapsed frame's outward bridge, which is an `Output` pin feeding the outside.
+    fn resolve_disconnect_source_pin_id(
+        &self,
+        board: &Board,
+        entity_id: &str,
+        pin_ref: &str,
+    ) -> flow_like_types::Result<String> {
+        let layer = board
+            .layers
+            .get(entity_id)
+            .or_else(|| self.staged_layers.get(entity_id));
+        if layer.is_some_and(|layer| layer.pins.contains_key(pin_ref)) {
+            return Ok(pin_ref.to_string());
+        }
+        self.resolve_pin_id(board, entity_id, pin_ref, Some(PinType::Output))
+    }
+
+    /// The target-side twin: a collapsed frame's inward bridge is an `Input` pin fed from outside,
+    /// which the inverted boundary direction filter would reject.
+    fn resolve_disconnect_target_pin_id(
+        &self,
+        board: &Board,
+        entity_id: &str,
+        pin_ref: &str,
+    ) -> flow_like_types::Result<String> {
+        let layer = board
+            .layers
+            .get(entity_id)
+            .or_else(|| self.staged_layers.get(entity_id));
+        if layer.is_some_and(|layer| layer.pins.contains_key(pin_ref)) {
+            return Ok(pin_ref.to_string());
+        }
+        self.resolve_pin_id(board, entity_id, pin_ref, Some(PinType::Input))
+    }
+
+    fn is_function_layer(&self, board: &Board, layer_id: Option<&str>) -> bool {
+        layer_id
+            .and_then(|id| self.staged_layers.get(id).or_else(|| board.layers.get(id)))
+            .is_some_and(|layer| matches!(layer.r#type, LayerType::Function))
     }
 
     fn resolve_optional_layer(
@@ -2770,6 +2857,115 @@ mod tests {
             .as_deref()
             .expect("pin has a default value");
         flow_like_types::json::from_slice(bytes).expect("default value decodes")
+    }
+
+    fn wired_payload_catalog() -> Vec<Node> {
+        let mut event = Node::new("events_simple", "Simple Event", "", "events");
+        event.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+        let mut source = Node::new("make_value", "Make Value", "", "test");
+        source.add_output_pin("value", "Value", "", VariableType::String);
+        let mut sink = Node::new("payload_sink", "Payload Sink", "", "test");
+        sink.add_input_pin("exec_in", "In", "", VariableType::Execution);
+        sink.add_input_pin("payload", "Payload", "", VariableType::String);
+        sink.add_output_pin("exec_out", "Out", "", VariableType::Execution);
+        vec![event, source, sink]
+    }
+
+    /// `event → sink` with `sink.payload` fed by a pure `make_value`. With `collapsed_source`
+    /// the producer sits inside a collapsed frame, so the sink reads an outward bridge pin.
+    fn board_with_wired_payload(catalog: &[Node], collapsed_source: bool) -> Board {
+        use crate::flow::board::commands::pins::connect_pins::connect_pins;
+        let mut board = empty_board();
+        let mut place = |index: usize, id: &str| {
+            let mut node = catalog[index].clone();
+            node.id = id.to_string();
+            board.nodes.insert(node.id.clone(), node);
+        };
+        place(0, "event");
+        place(1, "source");
+        place(2, "sink");
+        board.nodes.get_mut("event").unwrap().set_start(true);
+        let pin_id = |board: &Board, node: &str, name: &str| {
+            board.nodes[node].get_pin_by_name(name).unwrap().id.clone()
+        };
+        let (event_out, sink_in) = (
+            pin_id(&board, "event", "exec_out"),
+            pin_id(&board, "sink", "exec_in"),
+        );
+        connect_pins(&mut board, "event", &event_out, "sink", &sink_in).unwrap();
+        let (value, payload) = (
+            pin_id(&board, "source", "value"),
+            pin_id(&board, "sink", "payload"),
+        );
+        connect_pins(&mut board, "source", &value, "sink", &payload).unwrap();
+        if collapsed_source {
+            let frame = Layer::new(
+                "frame".to_string(),
+                "Frame".to_string(),
+                LayerType::Collapsed,
+            );
+            board.layers.insert(frame.id.clone(), frame);
+            board.nodes.get_mut("source").unwrap().layer = Some("frame".to_string());
+            board.cleanup();
+            let payload = board.nodes["sink"].get_pin_by_name("payload").unwrap();
+            assert!(
+                payload
+                    .depends_on
+                    .iter()
+                    .all(|source| board.layers["frame"].pins.contains_key(source)),
+                "the fixture must read the producer through the frame's bridge"
+            );
+        }
+        board
+    }
+
+    #[tokio::test]
+    async fn literal_replacing_a_wired_input_cuts_the_wire_on_apply() {
+        let catalog = wired_payload_catalog();
+        let anchored = flow_like_ast::RenderOptions {
+            anchors: true,
+            ..Default::default()
+        };
+        for collapsed_source in [false, true] {
+            let mut board = board_with_wired_payload(&catalog, collapsed_source);
+            let text = super::super::board_to_flowscript(&board, &anchored);
+            assert!(text.contains("payload: makeValue()"), "{text}");
+            let state = Arc::new(crate::state::FlowLikeState::new(
+                FlowLikeConfig::new(),
+                HTTPClient::new_without_refetch(),
+            ));
+
+            let edited = text.replace("payload: makeValue()", "payload: \"literal\"");
+            let result =
+                apply_flowscript_to_board(&mut board, &edited, &catalog, state.clone(), None, true)
+                    .await
+                    .expect("apply");
+            assert!(
+                result.diagnostics.is_empty(),
+                "collapsed_source={collapsed_source}: {:?}",
+                result.diagnostics
+            );
+
+            let payload = board.nodes["sink"].get_pin_by_name("payload").unwrap();
+            assert!(
+                payload.depends_on.is_empty(),
+                "collapsed_source={collapsed_source}: the literal must replace the wire"
+            );
+            assert_eq!(decode_default(payload), json!("literal"));
+            let rendered = super::super::board_to_flowscript(&board, &anchored);
+            assert!(rendered.contains("payload: \"literal\""), "{rendered}");
+
+            let again =
+                apply_flowscript_to_board(&mut board, &rendered, &catalog, state, None, true)
+                    .await
+                    .expect("re-apply");
+            assert!(again.diagnostics.is_empty(), "{:?}", again.diagnostics);
+            assert!(
+                again.board_commands.is_empty(),
+                "collapsed_source={collapsed_source}: {:?}",
+                again.board_commands
+            );
+        }
     }
 
     struct TestVariableGetLogic;

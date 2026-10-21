@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use flow_like::{
     flow::{
         execution::{ExecutionEnvironment, context::ExecutionContext},
@@ -9,7 +10,10 @@ use flow_like::{
     },
     hub::{HubRetry, hub_api_url, hub_response_error, send_hub_request},
 };
-use flow_like_catalog_core::MailSession;
+use flow_like_catalog_core::{
+    FlowPath, MAX_MAIL_ATTACHMENT_BYTES, MAX_MAIL_ATTACHMENTS, MailAttachment, MailSession,
+    read_file_attachments,
+};
 use flow_like_types::{
     Value, anyhow, async_trait, authorization::ResourceAudience, json::json, reqwest,
 };
@@ -98,6 +102,48 @@ async fn message_body(
         "text": text,
         "html": html,
     }))
+}
+
+pub(super) fn add_attachments_pin(node: &mut Node) {
+    node.add_input_pin(
+        "attachments",
+        "Attachments",
+        "Files to attach: at most 10, together at most 3 MiB",
+        VariableType::Struct,
+    )
+    .set_value_type(ValueType::Array)
+    .set_schema::<FlowPath>()
+    .set_options(PinOptions::new().set_enforce_schema(true).build())
+    .set_default_value(Some(json!([])));
+}
+
+/// Adds the attachment pin's files to `body`. Messages without files omit the field, so
+/// an API that predates attachments still accepts them.
+pub(super) async fn attach_files(
+    context: &mut ExecutionContext,
+    body: &mut Value,
+) -> flow_like_types::Result<()> {
+    let files = context.evaluate_pin::<Vec<FlowPath>>("attachments").await?;
+    if files.is_empty() {
+        return Ok(());
+    }
+    if files.len() > MAX_MAIL_ATTACHMENTS {
+        return Err(anyhow!(
+            "Platform email accepts at most {MAX_MAIL_ATTACHMENTS} attachments, got {}",
+            files.len()
+        ));
+    }
+    let attachments = read_file_attachments(context, &files, MAX_MAIL_ATTACHMENT_BYTES)
+        .await?
+        .into_iter()
+        .map(|file| MailAttachment {
+            filename: file.filename.unwrap_or_default(),
+            content_type: file.content_type,
+            content: STANDARD.encode(file.data),
+        })
+        .collect::<Vec<_>>();
+    body["attachments"] = json!(attachments);
+    Ok(())
 }
 
 fn validate_session(session: &MailSession, app_id: &str) -> flow_like_types::Result<()> {
@@ -273,7 +319,7 @@ impl NodeLogic for PlatformSendMailNode {
             "Send email from an authorized event's address",
             "Email",
         );
-        node.set_version(2);
+        node.set_version(3);
         node.set_flowscript_name("email", "sendPlatform");
         node.set_receiver("session");
         node.add_icon("/flow/icons/mail.svg");
@@ -304,6 +350,7 @@ impl NodeLogic for PlatformSendMailNode {
             node.add_input_pin(name, label, description, VariableType::String)
                 .set_default_value(Some(json!("")));
         }
+        add_attachments_pin(&mut node);
         add_result_pins(&mut node);
         node
     }
@@ -311,7 +358,8 @@ impl NodeLogic for PlatformSendMailNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         let session = context.evaluate_pin::<MailSession>("session").await?;
-        let body = message_body(context, &session).await?;
+        let mut body = message_body(context, &session).await?;
+        attach_files(context, &mut body).await?;
         let result = submit(context, &session, "send", body).await?;
         finish(context, result).await
     }
@@ -393,7 +441,7 @@ mod tests {
     #[test]
     fn session_input_is_required_and_caller_cannot_supply_sender() {
         let node = PlatformSendMailNode::new().get_node();
-        assert_eq!(node.version, Some(2));
+        assert_eq!(node.version, Some(3));
         assert!(node.scores.is_some());
         let session = node.get_pin_by_name("session").unwrap();
         assert_eq!(session.data_type, VariableType::Struct);
@@ -438,14 +486,30 @@ mod tests {
     }
 
     #[test]
+    fn attachments_are_an_optional_list_of_files() {
+        let node = PlatformSendMailNode::new().get_node();
+        let pin = node.get_pin_by_name("attachments").unwrap();
+        assert_eq!(pin.data_type, VariableType::Struct);
+        assert_eq!(pin.value_type, ValueType::Array);
+        assert_eq!(pin.options.as_ref().unwrap().enforce_schema, Some(true));
+        let schema: Value =
+            flow_like_types::json::from_str(pin.schema.as_deref().unwrap()).unwrap();
+        assert_eq!(schema["title"], "FlowPath");
+        assert_eq!(
+            pin.default_value,
+            Some(flow_like_types::json::to_vec(&json!([])).unwrap())
+        );
+    }
+
+    #[test]
     fn catalog_upgrade_preserves_message_and_execution_wires() {
         use flow_like::flow::board::cleanup::sync_node_schema::sync_node_with_catalog;
         let catalog = PlatformSendMailNode::new().get_node();
         let mut placed = catalog.clone();
         placed.set_version(1);
-        placed
-            .pins
-            .retain(|_, pin| !matches!(pin.name.as_str(), "session" | "session_out"));
+        placed.pins.retain(|_, pin| {
+            !matches!(pin.name.as_str(), "session" | "session_out" | "attachments")
+        });
         placed.add_input_pin("reply_to", "Reply To", "", VariableType::String);
         let mut original_pins = Vec::new();
         for name in ["exec_in", "to", "cc", "bcc", "subject", "text", "html"] {
@@ -463,8 +527,9 @@ mod tests {
             .unwrap()
             .set_default_value(Some(json!("Existing subject")));
         sync_node_with_catalog(&mut placed, &catalog);
-        assert_eq!(placed.version, Some(2));
+        assert_eq!(placed.version, Some(3));
         assert!(placed.get_pin_by_name("reply_to").is_none());
+        assert!(placed.get_pin_by_name("attachments").is_some());
         assert!(
             placed
                 .get_pin_by_name("session")

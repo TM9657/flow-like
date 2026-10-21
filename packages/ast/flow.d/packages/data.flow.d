@@ -2233,12 +2233,12 @@ declare namespace events {
     function simple(): void;
 
     /**
-     * Entry point triggered when a widget action is invoked. Provides action context data.
+     * Entry point for component events and widget actions. Provides action context data.
      * @node events_widget_action @alias eventsWidgetAction
-     * @param actionId (optional) — The action identifier that triggers this event (e.g., 'clicked_delete', 'clicked_open')
+     * @param actionId (optional) — The component event or widget action identifier (e.g., 'save', 'clicked_delete')
      * @returns widgetInstanceId — The unique ID of the widget instance that triggered the action
      * @returns eventName — The action ID / event name that was triggered
-     * @returns actionContext — The context data passed from the widget action (JSON object with field values)
+     * @returns actionContext — The context data passed from the component event or widget action
      * @returns inputValues — Map of component ID to current value for components marked as event-relevant
      * @impure has side effects / drives control flow
      */
@@ -6267,12 +6267,13 @@ declare namespace microsoft {
          * @param subject — Email subject
          * @param body — Email body content
          * @param isHtml (optional) — Whether the body is HTML content
-         * @param attachments — Optional file attachments to include in the message
+         * @param attachments — Outlook attachments to include, such as those from Get Message Attachments
          * @param saveToSentItems (optional) — Save the message to Sent Items folder
+         * @param files (optional) — Files to attach, together at most 3 MiB
          * @returns errorMessage
          * @impure has side effects / drives control flow
          */
-        function sendMessage({ provider: Struct, to: string, cc?: string, subject: string, body: string, isHtml?: bool, attachments: Struct[], saveToSentItems?: bool }): string;
+        function sendMessage({ provider: Struct, to: string, cc?: string, subject: string, body: string, isHtml?: bool, attachments: Struct[], saveToSentItems?: bool, files?: Struct[] }): string;
 
         /**
          * Update an existing Outlook calendar event

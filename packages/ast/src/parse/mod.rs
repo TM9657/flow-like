@@ -10,4 +10,5 @@ mod lexer;
 mod parser;
 
 pub use error::ParseError;
+pub(crate) use lexer::{is_ident_continue, is_ident_start};
 pub use parser::parse;

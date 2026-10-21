@@ -21,6 +21,8 @@ const REROUTE_NODE: &str = "reroute";
 /// Variable accessor node types (sugared to bare refs / assignments).
 const VARIABLE_GET: &str = "variable_get";
 const VARIABLE_SET: &str = "variable_set";
+/// Input naming the variable a by-reference node (`array::pushRef`, `clearRef`, …) operates on.
+const VAR_REF_PIN: &str = "var_ref";
 
 /// Struct node types (sugared to `{…}` literals and `.field` access).
 const STRUCT_MAKE: &str = "struct_make";
@@ -920,6 +922,92 @@ fn collect_ref_names(expr: &Expr, out: &mut HashSet<String>) {
     }
 }
 
+/// Whether `block` reads or writes the variable `name`: a bare reference, an assignment or
+/// struct-field-write target, or a `varRef` literal spelling it.
+fn block_mentions_name(block: &Block, name: &str) -> bool {
+    block.stmts.iter().any(|stmt| match stmt {
+        Stmt::Let { call, .. } | Stmt::Destructure { call, .. } | Stmt::Call { call, .. } => {
+            call_mentions_name(call, name)
+        }
+        Stmt::Branch {
+            call,
+            condition,
+            arms,
+            ..
+        } => {
+            call_mentions_name(call, name)
+                || condition
+                    .as_ref()
+                    .is_some_and(|condition| expr_mentions_name(condition, name))
+                || arms.iter().any(|arm| block_mentions_name(&arm.body, name))
+        }
+        Stmt::Loop {
+            call,
+            iterable,
+            body,
+            ..
+        } => {
+            call_mentions_name(call, name)
+                || iterable
+                    .as_ref()
+                    .is_some_and(|iterable| expr_mentions_name(iterable, name))
+                || block_mentions_name(body, name)
+        }
+        Stmt::Assign { target, value, .. } => target == name || expr_mentions_name(value, name),
+        Stmt::FieldAssign { base, value, .. } => base == name || expr_mentions_name(value, name),
+        Stmt::LocalAlias { value, .. } => expr_mentions_name(value, name),
+        Stmt::Return { values, .. } => values.iter().any(|value| expr_mentions_name(value, name)),
+        Stmt::Handler(event) => block_mentions_name(&event.body, name),
+        Stmt::Local(_) | Stmt::Comment(_) => false,
+    })
+}
+
+fn call_mentions_name(call: &Call, name: &str) -> bool {
+    call.receiver
+        .as_deref()
+        .is_some_and(|receiver| expr_mentions_name(receiver, name))
+        || call
+            .positional
+            .iter()
+            .any(|value| expr_mentions_name(value, name))
+        || call.args.iter().any(|arg| {
+            expr_mentions_name(&arg.value, name)
+                || (arg.name == VAR_REF_PIN
+                    && matches!(&arg.value, Expr::Literal(Literal::String(value)) if value == name))
+        })
+}
+
+fn expr_mentions_name(expr: &Expr, name: &str) -> bool {
+    match expr {
+        Expr::Ref(reference) => reference == name,
+        Expr::Call(call) => call_mentions_name(call, name),
+        Expr::Field { base, .. } | Expr::Member { base, .. } => expr_mentions_name(base, name),
+        Expr::Object(fields) => fields
+            .iter()
+            .any(|field| expr_mentions_name(&field.value, name)),
+        Expr::Array(values) => values.iter().any(|value| expr_mentions_name(value, name)),
+        Expr::Index { base, index } => {
+            expr_mentions_name(base, name) || expr_mentions_name(index, name)
+        }
+        Expr::Ternary {
+            cond,
+            then,
+            otherwise,
+        } => {
+            expr_mentions_name(cond, name)
+                || expr_mentions_name(then, name)
+                || expr_mentions_name(otherwise, name)
+        }
+        Expr::Binary { lhs, rhs, .. } => {
+            expr_mentions_name(lhs, name) || expr_mentions_name(rhs, name)
+        }
+        Expr::Template { parts } => parts
+            .iter()
+            .any(|part| matches!(part, TemplatePart::Expr(expr) if expr_mentions_name(expr, name))),
+        Expr::Literal(_) => false,
+    }
+}
+
 /// One declared FlowScript name per board variable, keyed by variable id.
 ///
 /// Camelization is not injective: `user id`, `user_id` and `userId` all become `userId`, so two
@@ -932,7 +1020,7 @@ fn collect_ref_names(expr: &Expr, out: &mut HashSet<String>) {
 /// board-level `const`, so uniquifying across that boundary would rename correct code. Allocation
 /// order is by (name, id) — the same order the declarations render in — so the result is stable
 /// across runs and machines.
-fn variable_names(board: &Board) -> HashMap<&str, String> {
+pub(crate) fn variable_names(board: &Board) -> HashMap<&str, String> {
     fn allocate<'a>(
         variables: impl Iterator<Item = &'a Variable>,
         used: &mut HashSet<String>,
@@ -1093,6 +1181,30 @@ pub(crate) fn function_params(layer: &Layer) -> Vec<&Pin> {
         }
     }
     distinct
+}
+
+/// A Function layer's return pins in order, each with the name the text declares it by. The
+/// canvas can leave two outputs with one name (or an output named like a parameter), and
+/// declaring that name twice rejected the whole document ("duplicate FlowScript function
+/// return"). A repeat takes the next free numbered spelling; reconcile maps the rendered names
+/// back to these pins by position.
+pub(crate) fn function_returns(layer: &Layer) -> Vec<(&Pin, String)> {
+    let mut pins: Vec<&Pin> = layer
+        .pins
+        .values()
+        .filter(|pin| pin.pin_type == PinType::Output && !is_exec(pin))
+        .collect();
+    pins.sort_by_key(|pin| (pin.index, pin.id.as_str()));
+    let mut used: HashSet<String> = function_params(layer)
+        .into_iter()
+        .map(|pin| util::declared_name(&pin.name).to_lowercase())
+        .collect();
+    pins.into_iter()
+        .map(|pin| {
+            let name = unique_name(&util::declared_name(&pin.name), &mut used);
+            (pin, name)
+        })
+        .collect()
 }
 
 /// Every parameter the text declares: Function layer inputs and trigger-entry payload outputs.
@@ -1434,6 +1546,9 @@ struct Lowering<'a> {
     event_params: HashMap<&'a str, String>,
     /// variable id -> camelCase variable name (for `varRef` sugar).
     var_names: HashMap<&'a str, String>,
+    /// The lookup reconcile resolves this document's `varRef` literals with: board variables by
+    /// name plus every global's declared spelling.
+    variable_refs: super::reconcile::VariableRefLookup,
     /// function-layer id -> camelCase function name (for `fnRef`/`functionLayerId` sugar).
     fn_names: HashMap<&'a str, String>,
     /// function-layer id -> the `Module` layer owning it (the nearest module ancestor of the
@@ -1530,6 +1645,12 @@ impl<'a> Lowering<'a> {
         // function-layer ids -> camelCase function names. These back the `varRef` / `fnRef`
         // sugar so the clean text never leaks a CUID.
         let var_names = variable_names(board);
+        let mut variable_refs = super::reconcile::VariableRefLookup::from_board(board);
+        for id in board.variables.keys() {
+            if let Some(name) = var_names.get(id.as_str()) {
+                variable_refs.insert(id, name, None);
+            }
+        }
         let mut fn_names = HashMap::new();
         let mut module_of_function = HashMap::new();
         let mut module_paths = HashMap::new();
@@ -1560,6 +1681,7 @@ impl<'a> Lowering<'a> {
             boundary_pins,
             event_params: HashMap::new(),
             var_names,
+            variable_refs,
             fn_names,
             module_of_function,
             module_of_node,
@@ -1616,8 +1738,9 @@ impl<'a> Lowering<'a> {
         }
 
         let (events, detached) = self.lower_events(&root_nodes);
-        let (functions, events, detached, modules) =
+        let (functions, events, detached, mut modules) =
             self.partition_modules(functions, events, detached);
+        self.declare_module_variables(&mut modules);
 
         BoardAst {
             board_id: self.board.id.clone(),
@@ -1738,6 +1861,49 @@ impl<'a> Lowering<'a> {
         ));
 
         (root_functions, root_events, root_detached, modules)
+    }
+
+    /// Declare a module layer's own variables — what a `let` in one of its events creates — as a
+    /// `let` at the head of the first of its events or `detached` blocks that names them, where
+    /// such a declaration is written. Undeclared, the board's own text assigned a name that
+    /// resolved to nothing and every apply of it was refused. Other sections of the module read
+    /// the variable through reconcile's module scope.
+    fn declare_module_variables(&self, modules: &mut [ModuleDecl]) {
+        for module in modules {
+            self.declare_module_variables(&mut module.modules);
+            let Some(layer) = module
+                .anchor
+                .as_deref()
+                .and_then(|layer_id| self.board.layers.get(layer_id))
+            else {
+                continue;
+            };
+            let mut variables: Vec<&Variable> = layer.variables.values().collect();
+            variables.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+            for variable in variables {
+                let Some(name) = self.var_names.get(variable.id.as_str()) else {
+                    continue;
+                };
+                let Some(body) = module
+                    .events
+                    .iter_mut()
+                    .map(|event| &mut event.body)
+                    .chain(module.detached.iter_mut())
+                    .find(|body| block_mentions_name(body, name))
+                else {
+                    continue;
+                };
+                let at = body
+                    .stmts
+                    .iter()
+                    .take_while(|stmt| matches!(stmt, Stmt::Local(_)))
+                    .count();
+                body.stmts.insert(
+                    at,
+                    Stmt::Local(var_decl_of(variable, &self.board.refs, name)),
+                );
+            }
+        }
     }
 
     /// Group every node by the function layer it ultimately belongs to (or the root scope).
@@ -2194,15 +2360,9 @@ impl<'a> Lowering<'a> {
             .into_iter()
             .map(|pin| Param::new(util::declared_name(&pin.name), self.type_ref_for_pin(pin)))
             .collect();
-        let mut outputs: Vec<&Pin> = layer
-            .pins
-            .values()
-            .filter(|p| p.pin_type == PinType::Output && !is_exec(p))
-            .collect();
-        outputs.sort_by_key(|p| (p.index, p.id.as_str()));
-        let returns = outputs
+        let returns = function_returns(layer)
             .into_iter()
-            .map(|pin| Param::new(util::declared_name(&pin.name), self.type_ref_for_pin(pin)))
+            .map(|(pin, name)| Param::new(name, self.type_ref_for_pin(pin)))
             .collect();
 
         let mut body = self.lower_scope_body(nodes);
@@ -3140,6 +3300,7 @@ impl<'a> Lowering<'a> {
                     name: target.clone(),
                     value,
                     anchor: Some(node.id.clone()),
+                    ty: None,
                 };
             }
             return Stmt::Assign {
@@ -3183,6 +3344,7 @@ impl<'a> Lowering<'a> {
                 name: name.clone(),
                 call,
                 anchor: Some(node.id.clone()),
+                ty: None,
             }
         } else {
             Stmt::Call {
@@ -3358,6 +3520,12 @@ impl<'a> Lowering<'a> {
         {
             return Some(Expr::Ref(name));
         }
+        if pin.name == VAR_REF_PIN
+            && let Literal::String(id) = &lit
+            && let Some(name) = self.portable_variable_ref(node, id)
+        {
+            return Some(Expr::Literal(Literal::String(name)));
+        }
         Some(self.sugar_literal(lit))
     }
 
@@ -3371,7 +3539,9 @@ impl<'a> Lowering<'a> {
     /// to a source whose board type reconcile recovers as that same class, or holds a string
     /// literal (numeric, boolean, null and JSON literals stay static); no user `function`
     /// shadows the alias (UFCS); and the node is not a statement with its own sugar (loops,
-    /// `if`, `structSet` accumulators).
+    /// `if`, `structSet` accumulators) or a `structGet`, whose call is spelled only when its
+    /// member sugar cannot be (a wired or path key): a function's purity prescan cannot see the
+    /// receiver's type and counts `x.get(…)` as one of the impure `get` nodes.
     fn method_receiver(
         &self,
         node: &'a Node,
@@ -3379,7 +3549,8 @@ impl<'a> Lowering<'a> {
         written: &[(&'a Pin, Expr)],
         alias: &str,
     ) -> Option<&'a Pin> {
-        if loop_keyword(node).is_some() || matches!(node.name.as_str(), CONTROL_BRANCH | STRUCT_SET)
+        if loop_keyword(node).is_some()
+            || matches!(node.name.as_str(), CONTROL_BRANCH | STRUCT_SET | STRUCT_GET)
         {
             return None;
         }
@@ -3601,6 +3772,70 @@ impl<'a> Lowering<'a> {
         bp.depends_on.iter().next().cloned()
     }
 
+    /// The base of a `base.field` read of `owner`'s `input` value. Reconcile reads `.name` on an
+    /// inlined call or a `const x = call()` binding as an output pin of that node FIRST, so the
+    /// FlowPath field read `child(...).path` came back as the `path` pin itself whenever the
+    /// producer has an output answering to the field. That read names the pin it reads from
+    /// explicitly: `child(...).path.path`.
+    fn member_base(&mut self, owner: &'a Node, input: &str, field: &str) -> Option<Expr> {
+        let base = self.input_expr(owner, input)?;
+        let Some(source_pin_id) = owner
+            .pins
+            .values()
+            .find(|pin| pin.pin_type == PinType::Input && pin.name == input)
+            .and_then(|pin| pin.depends_on.iter().next())
+        else {
+            return Some(base);
+        };
+        let source_pin_id = self.traced_source_pin(source_pin_id);
+        let (Some(source_pin), Some(producer)) = (
+            self.pins.get(source_pin_id.as_str()).copied(),
+            self.pin_owner.get(source_pin_id.as_str()).copied(),
+        ) else {
+            return Some(base);
+        };
+        let segment = field.split(['.', '[']).next().unwrap_or(field);
+        if !self.reads_as_node(&base, source_pin, producer)
+            || !output_pin_answers_to(producer, segment)
+        {
+            return Some(base);
+        }
+        Some(Expr::Field {
+            base: Box::new(base),
+            pin: source_pin.name.clone(),
+        })
+    }
+
+    /// The producer pin `output_pin_id` carries, past reroutes and collapsed-frame bridges.
+    fn traced_source_pin(&self, output_pin_id: &str) -> String {
+        let mut current = output_pin_id.to_string();
+        let mut seen = HashSet::new();
+        while seen.insert(current.clone()) {
+            match self
+                .reroute_passthrough(&current)
+                .or_else(|| self.boundary_passthrough(&current))
+            {
+                Some(upstream) => current = upstream,
+                None => break,
+            }
+        }
+        current
+    }
+
+    /// Whether reconcile binds `base`, rendered for `source_pin`, to the producing NODE rather
+    /// than to that pin: an inlined call, or the `const x = call()` binding of a single-output
+    /// node.
+    fn reads_as_node(&self, base: &Expr, source_pin: &Pin, producer: &Node) -> bool {
+        match base {
+            Expr::Call(call) => call.anchor.as_deref() == Some(producer.id.as_str()),
+            Expr::Ref(name) => {
+                self.destructure_locals.get(source_pin.id.as_str()) == Some(name)
+                    && !self.destructured.contains_key(&producer.id)
+            }
+            _ => false,
+        }
+    }
+
     /// Sugar a data-plumbing source node into an idiomatic expression. Returns `None` for nodes
     /// that should keep their literal call form. `source_pin` is the specific output being read.
     fn sugar_source(&mut self, owner: &'a Node, source_pin: &'a Pin) -> Option<Expr> {
@@ -3623,7 +3858,7 @@ impl<'a> Lowering<'a> {
             MAKE_ARRAY => Some(Expr::Array(Vec::new())),
             // `arrayLength` -> `base.length` member access.
             ARRAY_LENGTH => {
-                let base = self.input_expr(owner, "array")?;
+                let base = self.member_base(owner, "array", "length")?;
                 Some(Expr::Member {
                     base: Box::new(base),
                     field: "length".to_string(),
@@ -3661,9 +3896,14 @@ impl<'a> Lowering<'a> {
                 })
             }
             // `structGet` -> `base.field` member access (only when the field key is a literal).
+            // A path key (`asset.hostname`, `items[0]`) keeps the call form: spelled as a member
+            // chain it reads back as one accessor per segment, not as this node.
             STRUCT_GET => {
-                let base = self.input_expr(owner, "struct")?;
                 let field = self.pin_literal_string(owner, "field")?;
+                if field.contains(['.', '[']) {
+                    return None;
+                }
+                let base = self.member_base(owner, "struct", &field)?;
                 Some(Expr::Member {
                     base: Box::new(base),
                     field,
@@ -3676,7 +3916,7 @@ impl<'a> Lowering<'a> {
                     .strip_prefix(BREAK_STRUCT_PREFIX)
                     .unwrap_or(&source_pin.name)
                     .to_string();
-                let base = self.input_expr(owner, "struct_in")?;
+                let base = self.member_base(owner, "struct_in", &field)?;
                 Some(Expr::Member {
                     base: Box::new(base),
                     field,
@@ -3838,6 +4078,18 @@ impl<'a> Lowering<'a> {
     fn var_name_of(&self, node: &'a Node) -> Option<String> {
         let id = self.pin_literal_string(node, "var_ref")?;
         self.var_names.get(id.as_str()).cloned()
+    }
+
+    /// The declared name a `varRef` literal holding variable `id` is spelled as, when reconcile's
+    /// lookup from the node's scope resolves that name back to the same variable. A raw id means
+    /// nothing on a board the text is pasted into; one that does not resolve back stays an id.
+    fn portable_variable_ref(&self, node: &Node, id: &str) -> Option<String> {
+        let name = self.var_names.get(id)?;
+        let scope = super::reconcile::board_node_semantic_scope(self.board, node);
+        match self.variable_refs.resolve(name, scope.as_deref()) {
+            Ok(Some(resolved)) if resolved == id => Some(name.clone()),
+            _ => None,
+        }
     }
 
     /// Resolve a `controlCallReference` target node id literal to that node's display name (its
@@ -4606,6 +4858,17 @@ fn arm_label(node: &Node, pin: &Pin) -> String {
         Some(0) | None => pin.name.clone(),
         Some(occurrence) => super::pin_occurrence_ref(&pin.name, occurrence),
     }
+}
+
+/// Whether reconcile's `.segment` on `node` selects one of its output pins: a pin whose name or
+/// friendly name is `segment`, raw or camelCased (`find_output_pin`'s test).
+fn output_pin_answers_to(node: &Node, segment: &str) -> bool {
+    node.pins.values().any(|pin| {
+        pin.pin_type == PinType::Output
+            && [&pin.name, &pin.friendly_name]
+                .into_iter()
+                .any(|name| name == segment || util::to_camel_case(name) == segment)
+    })
 }
 
 fn binding_base_name(node: &Node) -> String {

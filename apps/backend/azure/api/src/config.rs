@@ -1,7 +1,8 @@
 use axum::http::{
     HeaderName, HeaderValue, Method,
     header::{
-        ACCEPT, AUTHORIZATION, CONTENT_TYPE, ETAG, IF_MATCH, IF_NONE_MATCH, RANGE, WWW_AUTHENTICATE,
+        ACCEPT, AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_MATCH, IF_NONE_MATCH, RANGE,
+        WWW_AUTHENTICATE,
     },
 };
 use flow_like_secrets::{
@@ -148,6 +149,7 @@ impl Config {
             ])
             .allow_headers([
                 AUTHORIZATION,
+                CACHE_CONTROL,
                 CONTENT_TYPE,
                 ACCEPT,
                 RANGE,

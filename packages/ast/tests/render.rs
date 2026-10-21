@@ -46,6 +46,7 @@ fn renders_event_with_let_and_named_args() {
                     Stmt::Let {
                         name: "model".to_string(),
                         anchor: None,
+                        ty: None,
                         call: call(
                             "ai_generative_find_model",
                             "aiGenerativeFindModel",
@@ -658,6 +659,7 @@ fn renders_sugared_loops_and_template_literals() {
                                     ],
                                 },
                                 anchor: None,
+                                ty: None,
                             }],
                         },
                         anchor: Some("n1".to_string()),

@@ -260,6 +260,15 @@ impl Writer<'_> {
         self.schema_types.get(&normalized).map(String::as_str)
     }
 
+    /// `name`, or `name: Type` for a binding whose author declared its type.
+    fn binding_name(&mut self, name: &str, ty: Option<&TypeRef>) {
+        self.out.push_str(name);
+        if let Some(ty) = ty {
+            self.out.push_str(": ");
+            self.out.push_str(&render_type(ty));
+        }
+    }
+
     fn fn_decl(&mut self, func: &FnDecl) {
         if let Some(cache) = &func.cache {
             self.function_cache_decorator(cache);
@@ -396,10 +405,15 @@ impl Writer<'_> {
 
     fn stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::Let { name, call, anchor } => {
+            Stmt::Let {
+                name,
+                call,
+                anchor,
+                ty,
+            } => {
                 self.indent();
                 self.out.push_str("const ");
-                self.out.push_str(name);
+                self.binding_name(name, ty.as_ref());
                 self.out.push_str(" = ");
                 self.out.push_str(&render_call(call));
                 self.anchor("n", anchor.as_deref());
@@ -503,10 +517,13 @@ impl Writer<'_> {
                 name,
                 value,
                 anchor,
+                ty,
             } => {
                 self.indent();
-                self.out.push_str("let ");
-                self.out.push_str(name);
+                // `let name: Type = …` declares a layer variable, so a typed alias stays `const`.
+                self.out
+                    .push_str(if ty.is_some() { "const " } else { "let " });
+                self.binding_name(name, ty.as_ref());
                 self.out.push_str(" = ");
                 self.out.push_str(&render_expr(value));
                 self.anchor("n", anchor.as_deref());

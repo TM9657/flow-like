@@ -970,6 +970,7 @@ fn device_docs() -> [utoipa::openapi::OpenApi; 4] {
         crate::routes::app::mail::ReplyMailRequest,
         crate::routes::app::mail::MailSessionSchema,
         crate::routes::app::mail::MailMessageRefSchema,
+        crate::routes::app::mail::MailAttachmentSchema,
         crate::routes::app::mail::SendMailResponse,
         crate::mail_ingress::address::AddressView,
         crate::mail_ingress::address::AliasUpdate,
