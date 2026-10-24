@@ -43,6 +43,7 @@ export function getCommandIcon(cmd: BoardCommand, size = "w-4 h-4") {
 		case "RenameLayer":
 		case "MoveToLayer":
 		case "UpdateLayerCache":
+		case "UpdateFunctionSignature":
 		case "AddNodesToLayer":
 		case "RemoveNodesFromLayer":
 			return <SquarePenIcon className={size} />;
@@ -66,10 +67,14 @@ export function getCommandSummary(cmd: BoardCommand): string {
 			return `Set ${cmd.pin_id}`;
 		case "MoveNode":
 			return "Move node";
+		case "SetNodeCodeNames":
+			return "Name FlowScript values";
 		case "UpdateLayerCache":
 			return cmd.cache?.enabled
 				? "Configure function cache"
 				: "Disable function cache";
+		case "UpdateFunctionSignature":
+			return "Change function signature";
 		default:
 			return cmd.command_type.replace(/([A-Z])/g, " $1").trim();
 	}

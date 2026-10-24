@@ -469,13 +469,13 @@ export function FlowScoreCard({
 		<Card
 			ref={(element) => registerCard?.(row.board.id, element)}
 			className={cn(
-				"gap-0 overflow-hidden border-border/60 bg-card/80 py-0 backdrop-blur-sm transition-colors",
+				"relative gap-0 overflow-hidden border-border/60 bg-card/80 py-0 backdrop-blur-sm transition-colors",
 				"dark:border-white/10 dark:bg-muted/40",
 				"hover:border-border",
 				highlighted && "ring-2 ring-primary/60",
 			)}
 		>
-			<Collapsible open={expanded}>
+			<Collapsible open={expanded} className="[&_a]:relative [&_a]:z-20">
 				<div className="flex items-start gap-2.5 px-3 pt-3">
 					<ScoreShield row={row} />
 					<div className="min-w-0 flex-1">
@@ -504,7 +504,7 @@ export function FlowScoreCard({
 						<Button
 							variant="ghost"
 							size="icon"
-							className="size-7"
+							className="size-7 after:absolute after:inset-0 after:z-10 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
 							title={t("openName", "Open {{name}}", { name: row.board.name })}
 							data-href={boardHref}
 							data-title={row.board.name}
@@ -520,7 +520,7 @@ export function FlowScoreCard({
 								<Button
 									variant="ghost"
 									size="icon"
-									className="size-7 text-muted-foreground hover:text-destructive"
+									className="relative z-20 size-7 text-muted-foreground hover:text-destructive"
 									title={t("deleteName", "Delete {{name}}", {
 										name: row.board.name,
 									})}
@@ -582,7 +582,7 @@ export function FlowScoreCard({
 					type="button"
 					aria-expanded={expanded}
 					onClick={() => onToggle(row.board.id)}
-					className="mt-2 flex w-full items-center gap-1.5 border-t border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+					className="relative z-20 mt-2 flex w-full items-center gap-1.5 border-t border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
 				>
 					{expanded ? (
 						<ChevronDownIcon className="size-3.5 shrink-0" />

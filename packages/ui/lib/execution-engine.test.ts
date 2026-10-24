@@ -183,3 +183,139 @@ describe("ExecutionEngineProvider live events", () => {
 		expect(state.getSnapshot().globalState.count).toBe(4);
 	});
 });
+
+describe("ExecutionEngineProvider unclaimed streams", () => {
+	test("keeps the newest finished streams nobody came back for, and every watched one", async () => {
+		const engine = new ExecutionEngineProvider();
+		engine.setBackend({
+			eventState: { executeEvent: async () => undefined },
+		} as unknown as IBackendState);
+		engine.subscribeToEventStream("watched", "chat", () => {});
+		const abandoned = Array.from({ length: 10 }, (_, index) => `left-${index}`);
+		for (const streamId of ["watched", ...abandoned]) {
+			await engine.executeEvent(streamId, {
+				appId: "app",
+				eventId: "event",
+				payload: { id: "node" },
+			});
+		}
+
+		expect(engine.hasStream("watched")).toBe(true);
+		expect(abandoned.filter((streamId) => engine.hasStream(streamId))).toEqual(
+			abandoned.slice(2),
+		);
+	});
+});
+
+describe("ExecutionEngineProvider stream lifecycle", () => {
+	function controlledEngine() {
+		const engine = new ExecutionEngineProvider();
+		let emit!: (events: IIntercomEvent[]) => void;
+		let finish!: () => void;
+		let fail!: (error: unknown) => void;
+		const executeEvent: ExecuteEventFn = (_a, _e, _p, _s, _start, callback) => {
+			if (!callback) throw new Error("Missing event callback");
+			emit = callback;
+			return new Promise((resolve, reject) => {
+				finish = () => resolve(undefined);
+				fail = reject;
+			});
+		};
+		engine.setBackend({
+			eventState: { executeEvent },
+		} as unknown as IBackendState);
+		const run = (streamId: string) =>
+			engine.executeEvent(streamId, {
+				appId: "app",
+				eventId: "event",
+				payload: { id: "node" },
+			});
+		return {
+			engine,
+			run,
+			emit: (events: IIntercomEvent[]) => emit(events),
+			finish: () => finish(),
+			fail: (error: unknown) => fail(error),
+		};
+	}
+	const token = (id: string) =>
+		({
+			event_id: id,
+			event_type: "chat_stream_partial",
+			payload: {},
+		}) as IIntercomEvent;
+
+	test("a subscription alone is not a running stream", () => {
+		const { engine } = controlledEngine();
+		engine.subscribeToEventStream("waiting", "chat", () => {});
+		expect(engine.isStreamActive("waiting")).toBe(false);
+		engine.unsubscribeFromEventStream("waiting", "chat");
+		expect(engine.getBackgroundStreams()).toEqual([]);
+	});
+
+	test("the running card lists a detached stream only while it runs", async () => {
+		const { engine, run, finish } = controlledEngine();
+		const running = run("chat-session");
+		expect(
+			engine.getBackgroundStreams().map((stream) => stream.streamId),
+		).toEqual(["chat-session"]);
+		finish();
+		await running;
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(engine.hasStream("chat-session")).toBe(true);
+		expect(engine.getBackgroundStreams()).toEqual([]);
+	});
+
+	test("a failing subscriber neither ends the run nor starves the others", async () => {
+		const { engine, run, emit, finish } = controlledEngine();
+		const running = run("chat-session");
+		const seen: string[] = [];
+		const completed = mock(() => {});
+		engine.subscribeToEventStream(
+			"chat-session",
+			"broken",
+			() => {
+				throw new Error("bad payload");
+			},
+			async () => {
+				throw new Error("save failed");
+			},
+		);
+		engine.subscribeToEventStream(
+			"chat-session",
+			"healthy",
+			(events) => seen.push(...events.map((event) => event.event_id)),
+			completed,
+		);
+		expect(() => emit([token("a"), token("b")])).not.toThrow();
+		finish();
+		await running;
+		await Promise.resolve();
+		expect(seen).toEqual(["a", "b"]);
+		expect(completed).toHaveBeenCalledTimes(1);
+	});
+
+	test("completion carries why a run failed, and the next run starts without it", async () => {
+		const { engine, run, finish, fail } = controlledEngine();
+		const completed = mock(
+			(_events: IIntercomEvent[], _failure?: unknown) => {},
+		);
+		const failure = { error: "Automation approval is required" };
+		const failing = run("chat-session");
+		engine.subscribeToEventStream("chat-session", "chat", () => {}, completed);
+		fail(failure);
+		await expect(failing).rejects.toBe(failure);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(completed).toHaveBeenLastCalledWith([], failure);
+
+		const late = mock((_events: IIntercomEvent[], _failure?: unknown) => {});
+		engine.subscribeToEventStream("chat-session", "late", () => {}, late);
+		expect(late).toHaveBeenLastCalledWith([], failure);
+
+		const succeeding = run("chat-session");
+		finish();
+		await succeeding;
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(completed).toHaveBeenLastCalledWith([], undefined);
+	});
+});

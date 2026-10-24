@@ -458,7 +458,7 @@ export function WidgetBuilderSurface({
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={() => setShowSettings(!showSettings)}
+						onClick={() => setShowSettings(true)}
 					>
 						<Settings className="h-4 w-4 mr-2" />
 						{t("settings", "Settings")}

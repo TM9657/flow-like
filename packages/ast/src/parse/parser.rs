@@ -25,6 +25,88 @@ pub fn parse(src: &str) -> Result<BoardAst, ParseError> {
     parser.board()
 }
 
+const COLLAPSE_DECORATOR: &str = "collapse";
+const COLLAPSE_NEEDS_BLOCK: &str = "`@collapse(\"…\")` must be followed directly by a `{ … }` block of statements; it cannot be combined with other decorators";
+const COLLAPSE_OUTSIDE_SECTION: &str =
+    "`@collapse` groups statements; write it inside an event, function or `detached` block";
+
+/// Split the source text of a `@collapse` string literal into its group path. Separators are the
+/// unescaped `/` of the RAW text — the decoded value cannot tell `"In\/Out"` (one name) from
+/// `"In/Out"` (two) — and every segment is then decoded like any string literal. A leading `/`
+/// makes the path absolute (`"/"` alone is the section root); the literal `""` is one group with an
+/// empty name; any other empty segment is an error.
+fn collapse_path(src: &str, literal: &Token) -> Result<(bool, Vec<String>), ParseError> {
+    let error = |message: &str| ParseError::new(message, literal.line, literal.col);
+    let (quote, content) = raw_string_content(&src[literal.byte..])
+        .ok_or_else(|| error("unterminated `@collapse` group name"))?;
+    let (absolute, rest) = match content.strip_prefix('/') {
+        Some(rest) => (true, rest),
+        None => (false, content.as_str()),
+    };
+    if rest.is_empty() {
+        let path = if absolute {
+            Vec::new()
+        } else {
+            vec![String::new()]
+        };
+        return Ok((absolute, path));
+    }
+    split_unescaped_slashes(rest)
+        .iter()
+        .map(|segment| decode_group_name(quote, segment).map_err(|message| error(&message)))
+        .collect::<Result<Vec<_>, _>>()
+        .map(|path| (absolute, path))
+}
+
+/// The quote and the undecoded text between the quotes of the string literal `raw` starts with.
+fn raw_string_content(raw: &str) -> Option<(char, String)> {
+    let mut chars = raw.chars();
+    let quote = chars.next()?;
+    let mut content = String::new();
+    let mut escaped = false;
+    for ch in chars {
+        if !escaped && ch == quote {
+            return Some((quote, content));
+        }
+        escaped = !escaped && ch == '\\';
+        content.push(ch);
+    }
+    None
+}
+
+/// `text` split at every `/` no backslash escapes; the escapes stay in the segments.
+fn split_unescaped_slashes(text: &str) -> Vec<String> {
+    let mut segments = vec![String::new()];
+    let mut escaped = false;
+    for ch in text.chars() {
+        if !escaped && ch == '/' {
+            segments.push(String::new());
+            continue;
+        }
+        escaped = !escaped && ch == '\\';
+        segments
+            .last_mut()
+            .expect("the split starts with one segment")
+            .push(ch);
+    }
+    segments
+}
+
+/// Decode one raw group name exactly like the string literal it was written in.
+fn decode_group_name(quote: char, raw: &str) -> Result<String, String> {
+    if raw.is_empty() {
+        return Err(
+            "empty group name in `@collapse` path; separate names with a single `/` and write `\\/` for a slash inside a name"
+                .to_string(),
+        );
+    }
+    let tokens = lex(&format!("{quote}{raw}{quote}")).map_err(|failure| failure.message)?;
+    match tokens.into_iter().next().map(|token| token.tok) {
+        Some(Tok::Str(value)) => Ok(value),
+        _ => Err("invalid `@collapse` group name".to_string()),
+    }
+}
+
 /// Recursion ceiling for nested expressions/blocks. User-authored text feeds this parser
 /// directly (editor view, API route), so unbounded recursion is a process-killing DoS.
 /// Each level costs ~5 stack frames through the Pratt chain; 128 keeps the worst case
@@ -489,6 +571,71 @@ impl Parser<'_> {
         }
     }
 
+    // ---- visual groups --------------------------------------------------------------------
+
+    fn at_collapse_decorator(&self) -> bool {
+        matches!(self.cur(), Tok::At)
+            && matches!(
+                self.toks.get(self.pos + 1).map(|t| &t.tok),
+                Some(Tok::Ident(name)) if name == COLLAPSE_DECORATOR
+            )
+    }
+
+    fn reject_collapse(&self, decorators: &[Decorator], message: &str) -> Result<(), ParseError> {
+        if decorators.iter().any(|dec| dec.name == COLLAPSE_DECORATOR) {
+            return Err(self.err(message));
+        }
+        Ok(())
+    }
+
+    /// `@collapse("A/B") { … }` — assumes [`Self::at_collapse_decorator`] just returned true.
+    /// The group name is read from the literal's source text, where `\/` keeps a slash inside one
+    /// name; see [`collapse_path`].
+    fn collapse_stmt(&mut self) -> Result<Stmt, ParseError> {
+        self.bump(); // @
+        self.bump(); // collapse
+        self.expect(&Tok::LParen)?;
+        let (absolute, path) = self.collapse_argument()?;
+        self.expect(&Tok::RParen)?;
+        if !matches!(self.cur(), Tok::LBrace) {
+            return Err(self.err(COLLAPSE_NEEDS_BLOCK));
+        }
+        self.bump(); // {
+        let anchor = self.collapse_anchor(&path)?;
+        let body = self.block_body()?;
+        Ok(Stmt::Collapse(CollapseBlock {
+            path,
+            absolute,
+            body,
+            anchor,
+        }))
+    }
+
+    fn collapse_argument(&mut self) -> Result<(bool, Vec<String>), ParseError> {
+        let literal = self.cur_token().clone();
+        if !matches!(literal.tok, Tok::Str(_)) {
+            return Err(self.err(
+                "`@collapse` takes the group name as a string, e.g. `@collapse(\"Validation\")`",
+            ));
+        }
+        self.bump();
+        collapse_path(self.src, &literal)
+    }
+
+    /// The group's `//@l:` anchor. The section root names no group, so it takes none.
+    fn collapse_anchor(&mut self, path: &[String]) -> Result<Option<String>, ParseError> {
+        let token = self.cur_token().clone();
+        let anchor = self.take_anchor();
+        if anchor.is_some() && path.is_empty() {
+            return Err(ParseError::new(
+                "`@collapse(\"/\")` names no group, so it takes no `//@l:` anchor",
+                token.line,
+                token.col,
+            ));
+        }
+        Ok(anchor)
+    }
+
     // ---- top level ------------------------------------------------------------------------
 
     fn board(&mut self) -> Result<BoardAst, ParseError> {
@@ -498,6 +645,7 @@ impl Parser<'_> {
                 continue;
             }
             let decorators = self.decorators()?;
+            self.reject_collapse(&decorators, COLLAPSE_OUTSIDE_SECTION)?;
             match self.cur().clone() {
                 Tok::Ident(kw) if kw == "use" => {
                     if !decorators.is_empty() {
@@ -869,6 +1017,7 @@ impl Parser<'_> {
                 continue;
             }
             let decorators = self.decorators()?;
+            self.reject_collapse(&decorators, COLLAPSE_OUTSIDE_SECTION)?;
             match self.cur().clone() {
                 Tok::Ident(kw) if kw == "function" => {
                     let mut func = self.fn_decl()?;
@@ -1133,9 +1282,13 @@ impl Parser<'_> {
 
     fn stmt(&mut self) -> Result<Stmt, ParseError> {
         // Leading decorators bind to a following local `let` declaration, or `@parallel` to a
-        // sugared `for` loop.
+        // sugared `for` loop. `@collapse("…") { … }` opens a visual group instead.
         if matches!(self.cur(), Tok::At) {
+            if self.at_collapse_decorator() {
+                return self.collapse_stmt();
+            }
             let decorators = self.decorators()?;
+            self.reject_collapse(&decorators, COLLAPSE_NEEDS_BLOCK)?;
             if self.is_ident("for") {
                 return self.parallel_for_stmt(&decorators);
             }

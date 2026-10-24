@@ -69,27 +69,34 @@ A top-level `const` whose initializer is a scalar literal infers its type (`stri
 ## Calling nodes
 
 Every catalog node has a **namespace** and an **alias**. A call is the qualified path followed by
-an object whose keys are the node's exact input pin names:
+its arguments: an object whose keys are the node's exact input pin names, optionally preceded by
+leading inputs passed positionally in pin order:
 
 ```ts
-const hash = hash::md5({ input: item.content })
-log::info({ message: source, toast: false })
 const markdown = md::fromHtml({ html: text, skippedTags: ["script", "style"] })
+const same = md::fromHtml(text, ["script", "style"])
+log::info(source, { toast: false })
 ```
+
+Rendered boards pass at most two values positionally (a method receiver counts as one) and stop
+at the first input that is not set, at an object literal (a trailing `{ … }` is the named
+object), and at a bare boolean, number or `null` unless it is the call's only argument. Everything
+after that is named. Naming an argument is always valid; giving the same pin positionally and by
+name is an error.
 
 `::` separates namespace segments; `.` is field or method access on a *value*. The same node can
 be spelled three ways, and all three resolve to the same node:
 
 | Spelling | Example | When |
 | --- | --- | --- |
-| qualified | `string::trim({ string: s })` | always works; the canonical static form |
+| qualified | `string::trim(s)` | always works; the canonical static form |
 | method | `s.trim()` | nodes whose declaration has a `this:` parameter |
 | legacy flat | `stringTrim({ string: s })` | the camelCase node type; accepted forever, never rendered |
 
 A node is a **method** when it has a receiver pin — by default the first input when its type is
 the namespace's own value type (`string`, `int`, `float`, `bool`, `array`, `map`, `set`, `struct`,
 `bytes`, `path`, `datetime`). The receiver binds that pin, so it is not repeated inside `{ … }`;
-when exactly one input remains it may be passed positionally:
+the next input may follow positionally:
 
 ```ts
 const arrayOut = elements.push(item)
@@ -196,6 +203,65 @@ if (pathExists({ path: child({ parentPath: pathFromUserDir({ nodeScope: false })
 }
 ```
 
+## Groups (`@collapse`)
+
+`@collapse("Name") { … }` wraps statements in a **group**: a Collapsed layer on the canvas that
+holds every node they produce, including inlined pure calls and the nodes behind `if`, loops,
+assignments and `return`. Groups are presentation only. Execution order, bindings and `let` scope
+behave exactly as if the statements were written in the enclosing block, so `session` below is
+still in scope after its group closes.
+
+```ts
+eventsSimple publishLatestReport() {
+    @collapse("Load") {   //@l:tq3hw8zk1lr0bmx6c2vye9pa
+        const database = open({ name: "report_overview", userScoped: true, batchSize: 1000 })
+        const session = df::createSession({ sessionName: "default" })
+        session.registerLance({ database: database, tableName: "reports" })
+    }
+    const { rows } = session.sqlQuery({ query: "SELECT report_id FROM reports ORDER BY created DESC LIMIT 1;" })
+    @collapse("Publish/Notify") {                                 // no anchor: two new groups
+        if (reportCreated) {
+            @collapse("/") {
+                log::info({ message: "Report already published", toast: false })
+            }
+        } else {
+            navigateTo({ route: `/briefing?report_id=${rows[0].report_id}` })
+        }
+    }
+}
+```
+
+Nested blocks build the hierarchy. The path is read from the raw string literal:
+
+```ts
+@collapse("Publish/Notify") { … }   // Notify inside Publish, same as two nested blocks
+@collapse("Input\/Output") { … }    // one group named Input/Output
+@collapse("/Cleanup") { … }         // Cleanup directly under the section root
+@collapse("/") { … }                // no group and no anchor: back at the section root
+```
+
+The section root is the board root, module or Function layer the statements belong to.
+`@collapse("/")` steps out of every group; above, it takes a branch arm out of the group its `if`
+sits in. `""` is one group with an empty name; any other empty segment (`"A//B"`, `"A/"`) is an
+error. Groups are statements: write them in an event, function, handler, `detached`, branch arm
+or loop body, never at the top level or directly in a `module` body. The argument is a string
+literal followed by `{`, and `@collapse` does not combine with other decorators.
+
+The `{` line carries the group's `//@l:` anchor. An anchored block is that group: edit the name to
+rename it, or nest the block under another group to re-parent it. A block without an anchor
+creates a new group, shared by every unanchored block with the same name under the same parent
+in the same event or function. An anchor copied from another board names no group there, so its
+block also creates a new group, shared by every block carrying that same anchor.
+Rendered boards nest one block per level, each with its own anchor; a group whose statements are
+not consecutive renders as several blocks with the same anchor.
+
+Applying the document moves the nodes of every statement written inside a block into that group;
+inlined pure calls follow when all of their consumers move to the same group. A document that
+contains any `@collapse` block is authoritative for grouping: statements written outside every
+block move out of their group to the section root, and a group the edit leaves empty is removed.
+A document without a single `@collapse` block moves nothing out and removes no group. Event
+headers never move.
+
 ## Functions and handlers
 
 ```ts
@@ -263,6 +329,8 @@ In the editable view every statement carries its node id as a trailing `//@n:<id
 are deleting it — and deletions are blocked unless explicitly allowed. See the
 [FlowScript blog post](https://flow-like.com/blog/flowscript/) for the reasoning behind the
 round-trip invariants.
+
+`//@l:` also identifies [groups](#groups-collapse): it sits on the `{` line of a `@collapse` block.
 
 ## Declarations (`.flow.d`)
 

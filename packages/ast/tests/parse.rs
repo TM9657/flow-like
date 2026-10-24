@@ -2329,3 +2329,171 @@ fn detached_is_a_contextual_keyword() {
             .is_empty()
     );
 }
+
+// ---- `@collapse` groups ----------------------------------------------------------------------
+
+fn only_event_stmts(text: &str) -> Vec<flow_like_ast::Stmt> {
+    parse(text).expect("parse should succeed").events[0]
+        .body
+        .stmts
+        .clone()
+}
+
+fn group(stmt: &flow_like_ast::Stmt) -> &flow_like_ast::CollapseBlock {
+    match stmt {
+        flow_like_ast::Stmt::Collapse(group) => group,
+        other => panic!("expected a @collapse group, got {other:?}"),
+    }
+}
+
+#[test]
+fn roundtrip_nested_collapse_groups_with_anchors() {
+    let text = "onStart() {   //@n:entry\n    @collapse(\"Load\") {   //@l:load\n        const rows = query({ sql: \"x\" })   //@n:q\n        @collapse(\"Parse\") {   //@l:parse\n            log({ message: rows })   //@n:l\n        }\n    }\n    done()   //@n:d\n}\n";
+    assert_idempotent(text, &anchored_opts());
+    let stmts = only_event_stmts(text);
+    let load = group(&stmts[0]);
+    assert_eq!(load.path, vec!["Load".to_string()]);
+    assert!(!load.absolute);
+    assert_eq!(load.anchor.as_deref(), Some("load"));
+    let parse_group = group(&load.body.stmts[1]);
+    assert_eq!(parse_group.anchor.as_deref(), Some("parse"));
+}
+
+#[test]
+fn collapse_shorthand_splits_on_slash_and_renders_back_unchanged() {
+    let text = "onStart() {\n    @collapse(\"Layer 1/Layer 2\") {\n        log({ message: \"hi\" })\n    }\n}\n";
+    assert_idempotent(text, &RenderOptions::default());
+    let stmts = only_event_stmts(text);
+    assert_eq!(
+        group(&stmts[0]).path,
+        vec!["Layer 1".to_string(), "Layer 2".to_string()]
+    );
+}
+
+#[test]
+fn escaped_slash_stays_inside_one_group_name() {
+    let text = "onStart() {\n    @collapse(\"Input\\/Output\") {\n        log({ message: \"hi\" })\n    }\n}\n";
+    assert_idempotent(text, &RenderOptions::default());
+    assert_eq!(
+        group(&only_event_stmts(text)[0]).path,
+        vec!["Input/Output".to_string()]
+    );
+    // Single quotes read the same path.
+    let single =
+        "onStart() {\n    @collapse('A\\/B/C') {\n        log({ message: \"hi\" })\n    }\n}\n";
+    assert_eq!(
+        group(&only_event_stmts(single)[0]).path,
+        vec!["A/B".to_string(), "C".to_string()]
+    );
+}
+
+#[test]
+fn leading_slash_resolves_from_the_section_root() {
+    let text = "onStart() {\n    @collapse(\"A\") {\n        if (flag) {\n            @collapse(\"/\") {\n                log({ message: \"root\" })\n            }\n            @collapse(\"/B\") {\n                log({ message: \"b\" })\n            }\n        }\n    }\n}\n";
+    assert_idempotent(text, &RenderOptions::default());
+    let outer = group(&only_event_stmts(text)[0]).clone();
+    let flow_like_ast::Stmt::Branch { arms, .. } = &outer.body.stmts[0] else {
+        panic!("expected the if inside the group");
+    };
+    let reset = group(&arms[0].body.stmts[0]);
+    assert!(reset.absolute);
+    assert!(reset.path.is_empty());
+    let rooted = group(&arms[0].body.stmts[1]);
+    assert!(rooted.absolute);
+    assert_eq!(rooted.path, vec!["B".to_string()]);
+}
+
+#[test]
+fn an_empty_literal_is_one_unnamed_group() {
+    let text = "onStart() {\n    @collapse(\"\") {\n        log({ message: \"hi\" })\n    }\n}\n";
+    assert_idempotent(text, &RenderOptions::default());
+    assert_eq!(group(&only_event_stmts(text)[0]).path, vec![String::new()]);
+}
+
+#[test]
+fn collapse_is_transparent_to_statement_order() {
+    let ast = parse(
+        "onStart() {\n    a()   //@n:a\n    @collapse(\"G\") {\n        b()   //@n:b\n    }\n    c()   //@n:c\n}\n",
+    )
+    .unwrap();
+    let body = &ast.events[0].body;
+    let anchors: Vec<_> = body
+        .flat_stmts()
+        .into_iter()
+        .filter_map(flow_like_ast::Stmt::anchor)
+        .collect();
+    assert_eq!(anchors, vec!["a", "b", "c"]);
+
+    let detached =
+        parse("detached {\n    @collapse(\"G\") {\n        b()   //@n:b\n    }\n}\n").unwrap();
+    assert_eq!(detached.detached[0].root_anchor(), Some("b"));
+
+    let mut flat = body.clone();
+    flat.flatten_collapse();
+    assert_eq!(flat.stmts.len(), 3);
+}
+
+#[test]
+fn collapse_rejects_empty_segments() {
+    for path in ["A//B", "A/", "//", "/A/"] {
+        let text = format!(
+            "onStart() {{\n    @collapse(\"{path}\") {{\n        log({{ message: \"hi\" }})\n    }}\n}}\n"
+        );
+        let err = parse(&text).unwrap_err();
+        assert!(
+            err.message.contains("empty group name"),
+            "`{path}`: {}",
+            err.message
+        );
+    }
+}
+
+#[test]
+fn collapse_outside_a_section_is_rejected() {
+    let top = parse("@collapse(\"G\") {\n}\n").unwrap_err();
+    assert!(
+        top.message
+            .contains("inside an event, function or `detached` block")
+    );
+    let in_module = parse("module m {\n    @collapse(\"G\") {\n    }\n}\n").unwrap_err();
+    assert!(
+        in_module
+            .message
+            .contains("inside an event, function or `detached` block")
+    );
+}
+
+#[test]
+fn collapse_needs_a_block_and_stands_alone() {
+    let no_block =
+        parse("onStart() {\n    @collapse(\"G\")\n    log({ message: \"hi\" })\n}\n").unwrap_err();
+    assert!(
+        no_block
+            .message
+            .contains("followed directly by a `{ … }` block")
+    );
+    let combined = parse(
+        "onStart() {\n    @parallel @collapse(\"G\") {\n        log({ message: \"hi\" })\n    }\n}\n",
+    )
+    .unwrap_err();
+    assert!(combined.message.contains("cannot be combined"));
+    let not_a_string = parse("onStart() {\n    @collapse(group) {\n    }\n}\n").unwrap_err();
+    assert!(
+        not_a_string
+            .message
+            .contains("takes the group name as a string")
+    );
+}
+
+#[test]
+fn the_section_root_takes_no_anchor() {
+    let err = parse("onStart() {\n    @collapse(\"/\") {   //@l:layer\n    }\n}\n").unwrap_err();
+    assert!(err.message.contains("takes no `//@l:` anchor"));
+}
+
+#[test]
+fn collapse_is_still_an_ordinary_identifier() {
+    let ast = parse("onStart() {\n    const collapse = log({ message: \"hi\" })\n    log({ message: collapse })\n}\n")
+        .expect("`collapse` without `@` is a plain name");
+    assert_eq!(ast.events[0].body.stmts.len(), 2);
+}

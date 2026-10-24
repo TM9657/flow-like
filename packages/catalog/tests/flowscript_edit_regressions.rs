@@ -2053,3 +2053,430 @@ async fn moving_lines_out_of_an_unwritten_event_is_refused() {
         "{diagnostics:?}"
     );
 }
+
+/// Whether execution can flow from `from` to `to` along any chain of execution wires.
+fn exec_reaches(board: &Board, from: &Node, to: &Node) -> bool {
+    let nodes = all_nodes(board);
+    let owners: std::collections::HashMap<&str, &Node> = nodes
+        .iter()
+        .flat_map(|node| node.pins.keys().map(move |id| (id.as_str(), *node)))
+        .collect();
+    let mut stack = vec![from];
+    let mut seen = std::collections::HashSet::new();
+    while let Some(node) = stack.pop() {
+        if !seen.insert(node.id.as_str()) {
+            continue;
+        }
+        let exec_outputs = node.pins.values().filter(|pin| {
+            pin.pin_type == PinType::Output && pin.data_type == VariableType::Execution
+        });
+        for target in exec_outputs.flat_map(|pin| pin.connected_to.iter()) {
+            let Some(next) = owners.get(target.as_str()) else {
+                continue;
+            };
+            if next.id == to.id {
+                return true;
+            }
+            stack.push(next);
+        }
+    }
+    false
+}
+
+/// Beleg: `let total = 0` inside a loop body only became the variable's default value, so the
+/// sum of one outer iteration carried over into the next. A `let` that runs more than once per
+/// run has to reset its variable where it is written.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_let_inside_a_loop_resets_its_variable_on_every_iteration() {
+    let board = board_from(
+        r#"eventsSimple countRows() {
+    for (const row of ["a", "b"]) {
+        let total = 0
+        for (const x of [1, 2]) {
+            total = total + x
+        }
+        log::info({ message: "row", toast: false })
+    }
+}
+"#,
+    )
+    .await;
+    let variable_id = board
+        .variables
+        .values()
+        .find(|variable| variable.name == "total")
+        .map(|variable| variable.id.clone())
+        .expect("`total` becomes a variable");
+    let expected_ref = format!("\"{variable_id}\"");
+    let writers: Vec<&Node> = all_nodes(&board)
+        .into_iter()
+        .filter(|node| {
+            node.name == "variable_set"
+                && node.pins.values().any(|pin| {
+                    pin.name == "var_ref"
+                        && pin.default_value.as_deref() == Some(expected_ref.as_bytes())
+                })
+        })
+        .collect();
+    assert_eq!(writers.len(), 2, "a reset and the accumulation");
+    let (resets, accumulations): (Vec<&Node>, Vec<&Node>) = writers.into_iter().partition(|node| {
+        node.pins.values().any(|pin| {
+            pin.name == "value_in"
+                && pin.depends_on.is_empty()
+                && pin.default_value.as_deref() == Some(b"0".as_slice())
+        })
+    });
+    let (reset, accumulation) = (resets[0], accumulations[0]);
+    assert!(
+        all_nodes(&board)
+            .into_iter()
+            .any(|node| node.name == "control_for_each" && exec_reaches(&board, node, reset)),
+        "the reset runs inside the outer loop"
+    );
+    assert!(exec_reaches(&board, reset, accumulation));
+    assert_round_trips(&board);
+}
+
+/// The `control_call_function` nodes that call function `name`.
+fn calls_of<'a>(board: &'a Board, name: &str) -> Vec<&'a Node> {
+    let expected = format!("\"{}\"", layer_id(board, name));
+    all_nodes(board)
+        .into_iter()
+        .filter(|node| {
+            node.name == "control_call_function"
+                && node.pins.values().any(|pin| {
+                    pin.name == "function_layer_id"
+                        && pin.default_value.as_deref() == Some(expected.as_bytes())
+                })
+        })
+        .collect()
+}
+
+fn input_named<'a>(node: &'a Node, name: &str) -> &'a Pin {
+    node.pins
+        .values()
+        .find(|pin| pin.pin_type == PinType::Input && pin.name == name)
+        .unwrap_or_else(|| panic!("`{}` has no input `{name}`", node.friendly_name))
+}
+
+fn function_param<'a>(board: &'a Board, function: &str, name: &str) -> &'a Pin {
+    board.layers[&layer_id(board, function)]
+        .pins
+        .values()
+        .find(|pin| pin.pin_type == PinType::Input && pin.name == name)
+        .unwrap_or_else(|| panic!("function `{function}` has no parameter `{name}`"))
+}
+
+const GREETER: &str = r#"function greet(name: string) {
+    log::info({ message: name, toast: false })
+}
+
+eventsSimple run() {
+    greet({ name: "a" })
+}
+"#;
+
+/// Relay: changing a function's signature together with its calls was refused with "nothing was
+/// applied". Adding a parameter now migrates the layer and its calls in one apply.
+#[tokio::test(flavor = "multi_thread")]
+async fn adding_a_parameter_migrates_the_function_and_its_calls() {
+    let mut board = board_from(GREETER).await;
+    let kept_param = function_param(&board, "greet", "name").id.clone();
+    let edited = anchored(&board)
+        .replace("greet(name: string)", "greet(name: string, loud: bool)")
+        .replace(
+            "greet({ name: \"a\" })",
+            "greet({ name: \"a\", loud: true })",
+        );
+    let result = apply_edit(&mut board, &edited).await;
+
+    assert_eq!(function_param(&board, "greet", "name").id, kept_param);
+    function_param(&board, "greet", "loud");
+    let calls = calls_of(&board, "greet");
+    assert_eq!(calls.len(), 1);
+    assert_eq!(
+        input_named(calls[0], "loud").default_value.as_deref(),
+        Some(b"true".as_slice())
+    );
+    assert!(
+        result
+            .changes
+            .layers_changed
+            .iter()
+            .any(|layer| layer.name == "greet"),
+        "{:?}",
+        result.changes
+    );
+    assert_round_trips(&board);
+}
+
+/// A renamed parameter is a new pin: the body and the call are wired to it again from the text.
+#[tokio::test(flavor = "multi_thread")]
+async fn renaming_a_parameter_rewires_the_body_and_the_call() {
+    let mut board = board_from(GREETER).await;
+    let edited = anchored(&board)
+        .replace("greet(name: string)", "greet(who: string)")
+        .replace("info(name,", "info(who,")
+        .replace("greet({ name: \"a\" })", "greet({ who: \"a\" })");
+    apply_edit(&mut board, &edited).await;
+
+    let who = function_param(&board, "greet", "who");
+    assert!(
+        !board.layers[&layer_id(&board, "greet")]
+            .pins
+            .values()
+            .any(|pin| pin.name == "name")
+    );
+    let message = all_nodes(&board)
+        .into_iter()
+        .find(|node| node.name == "log_info")
+        .map(|node| input_named(node, "message"))
+        .expect("the body keeps its log");
+    assert!(message.depends_on.contains(&who.id), "{message:?}");
+    let calls = calls_of(&board, "greet");
+    assert_eq!(
+        input_named(calls[0], "who").default_value.as_deref(),
+        Some(b"\"a\"".as_slice())
+    );
+    assert_round_trips(&board);
+}
+
+/// Dropping a parameter while a call the document does not write keeps using the function would
+/// silently cut that call's wire, so it is refused.
+#[tokio::test(flavor = "multi_thread")]
+async fn dropping_a_parameter_with_an_unwritten_call_is_refused() {
+    let board = board_from(GREETER).await;
+    let text = anchored(&board);
+    let function = text
+        .split("eventsSimple")
+        .next()
+        .expect("the function renders first")
+        .replace("greet(name: string)", "greet()")
+        .replace("info(name,", "info(\"hi\",");
+    let (catalog, enricher) = catalog();
+    let diagnostics = reconcile_text_with_catalog_enriched_opts(
+        &board,
+        &function,
+        &catalog,
+        &enricher,
+        &ReconcileOptions {
+            mode: ReconcileMode::Additive,
+            ..ReconcileOptions::default()
+        },
+    )
+    .diagnostics;
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("are not part of this document")),
+        "{diagnostics:?}\n{function}"
+    );
+}
+
+/// "Gleicher Graph, gleicher Export": a name the text gives a value is stored on its node, so the
+/// next render keeps it, and a node added elsewhere renames nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_renamed_binding_is_stored_and_survives_unrelated_edits() {
+    let mut board = board_from(
+        r#"function stamp(value: string): (out: string) {
+    log::info({ message: value, toast: false })
+    return value
+}
+
+eventsSimple run() {
+    const out = stamp("x")
+    log::info({ message: out, toast: false })
+}
+"#,
+    )
+    .await;
+    let edited = anchored(&board)
+        .replace("out = stamp", "selectedPerson = stamp")
+        .replace("info(out,", "info(selectedPerson,");
+    let result = apply_edit(&mut board, &edited).await;
+    assert!(
+        result
+            .board_commands
+            .iter()
+            .all(|command| matches!(command, BoardCommand::SetNodeCodeNames { .. })),
+        "a rename only stores the name: {:?}",
+        result.board_commands
+    );
+    let text = anchored(&board);
+    assert!(text.contains("const selectedPerson = stamp("), "{text}");
+
+    let reader = line_with(&text, "info(selectedPerson,");
+    let extended = text.replace(
+        reader,
+        &format!(
+            "    const second = stamp({{ value: \"y\" }})\n{reader}\n    log::info({{ message: second, toast: false }})"
+        ),
+    );
+    apply_edit(&mut board, &extended).await;
+    let text = anchored(&board);
+    assert!(
+        text.contains("const selectedPerson = stamp({ value: \"x\" })"),
+        "{text}"
+    );
+    assert!(
+        text.contains("const second = stamp({ value: \"y\" })"),
+        "{text}"
+    );
+    assert_round_trips(&board);
+}
+
+/// Loop element names written in the text survive too, instead of falling back to `item`.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_loop_element_keeps_its_written_name() {
+    let board = board_from(
+        r#"eventsSimple run() {
+    for (const row of ["a", "b"]) {
+        log::info({ message: row, toast: false })
+    }
+}
+"#,
+    )
+    .await;
+    let text = anchored(&board);
+    assert!(text.contains("for (const row of"), "{text}");
+    assert_round_trips(&board);
+}
+
+fn forget_code_names(board: &mut Board) {
+    for node in board.nodes.values_mut() {
+        node.code_names = None;
+    }
+    for layer in board.layers.values_mut() {
+        for node in layer.nodes.values_mut() {
+            node.code_names = None;
+        }
+    }
+}
+
+fn function_block(text: &str, header: &str) -> String {
+    let start = text
+        .find(header)
+        .unwrap_or_else(|| panic!("no {header}:\n{text}"));
+    let end = text[start..]
+        .find("\n}\n")
+        .map(|end| start + end)
+        .unwrap_or(text.len());
+    text[start..end].to_string()
+}
+
+/// Relay: an unchanged call was renumbered `saved7` → `saved9` because a node elsewhere joined one
+/// board-wide numbering. Generated names are numbered per function, so a node added to an event
+/// renames nothing inside a function, even on a board that stores no names.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_node_added_to_an_event_renames_nothing_in_a_function() {
+    let mut board = board_from(
+        r#"function stamp(value: string): (out: string) {
+    log::info({ message: value, toast: false })
+    return value
+}
+
+function pair(): (a: string, b: string) {
+    const first = stamp("x")
+    const second = stamp("y")
+    return first, second
+}
+
+eventsSimple run() {
+    const { a, b } = pair()
+    log::info({ message: a, toast: false })
+}
+"#,
+    )
+    .await;
+    forget_code_names(&mut board);
+    let before = function_block(&anchored(&board), "function pair");
+
+    let text = anchored(&board);
+    let reader = line_with(&text, "info(a,");
+    let edited = text.replace(
+        reader,
+        &format!(
+            "    const extra = stamp({{ value: \"z\" }})\n{reader}\n    log::info({{ message: extra, toast: false }})"
+        ),
+    );
+    assert_ne!(edited, text, "the edit adds a call to the event");
+    apply_edit(&mut board, &edited).await;
+    forget_code_names(&mut board);
+    let after = function_block(&anchored(&board), "function pair");
+    assert!(
+        before.contains("const "),
+        "the function binds its calls:\n{before}"
+    );
+    assert_eq!(before, after);
+}
+
+/// Sentinel / t4-pr-review-bot: a statement after a branch rendered inside one arm when another
+/// arm held a call with an unhandled error output, so the next apply ran it on that path only.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_statement_after_a_branch_stays_after_it_when_an_arm_leaves_an_error_unhandled() {
+    let board = board_from(
+        r#"eventsSimple run() {
+    if (1 > 0) {
+        http::fetch({ request: http::request({ method: "GET", url: "https://example.com" }) })
+        log::info({ message: "fetched", toast: false })
+    } else {
+        log::info({ message: "skipped", toast: false })
+    }
+    log::info({ message: "after", toast: false })
+}
+"#,
+    )
+    .await;
+    let after = info(&board, "after");
+    assert!(exec_reaches(&board, info(&board, "fetched"), after));
+    assert!(exec_reaches(&board, info(&board, "skipped"), after));
+
+    let text = anchored(&board);
+    let line = line_with(&text, "\"after\"");
+    assert!(
+        line.starts_with("    ") && !line.starts_with("     "),
+        "the statement after the branch renders after it, not inside an arm:\n{text}"
+    );
+    assert_round_trips(&board);
+}
+
+/// Beleg / t1-faker-seed: `if (hasLead)` over `struct::get(…).found` rendered as the member read
+/// `lead.company`, which means the field's VALUE, so the next apply branched on the value.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_struct_get_found_output_keeps_its_meaning_on_render() {
+    let board = board_from(
+        r#"eventsSimple run() {
+    const lead = struct::make().set("company", "acme")
+    const { value: org, found: hasLead } = struct::get({ struct: lead, field: "company" })
+    if (hasLead) {
+        log::info({ message: "lead", toast: false })
+    }
+}
+"#,
+    )
+    .await;
+    let text = anchored(&board);
+    assert!(text.contains(".found"), "{text}");
+    assert_round_trips(&board);
+}
+
+/// t3-jira-confluence: `array::length({ array: issue.labels })` rendered as `issue.labels.length`,
+/// and a member read of an untyped field reads `.length` back as another field.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_length_of_a_field_read_keeps_its_call_form() {
+    let board = board_from(
+        r#"function labelCount(issue: Struct): (count: int) {
+    return array::length({ array: issue.labels })
+}
+
+eventsSimple run() {
+    const count = labelCount(struct::make())
+    log::info({ message: count, toast: false })
+}
+"#,
+    )
+    .await;
+    let text = anchored(&board);
+    assert!(!text.contains("labels.length"), "{text}");
+    assert_round_trips(&board);
+}

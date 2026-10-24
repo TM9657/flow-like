@@ -1912,3 +1912,191 @@ describe("Geometry FlowScript types", () => {
 		).toBeTrue();
 	});
 });
+
+describe("FlowScript collapse groups", () => {
+	const COLLAPSE_LABEL = '@collapse("…")';
+
+	test("colours @collapse as an annotation and keeps escaped slashes in the name", () => {
+		expect(tokens('@collapse("Input\\/Output") {   //@l:grp1')).toEqual([
+			"@collapse=annotation",
+			"(=delimiter.parenthesis",
+			'"=string.quote',
+			"Input=string",
+			"\\/=string.escape",
+			"Output=string",
+			'"=string.quote',
+			")=delimiter.parenthesis",
+			"{=delimiter.curly",
+			"//@l:grp1=comment.anchor",
+		]);
+	});
+
+	test("keeps group blocks out of the diagnostics in sections, arms and loops", () => {
+		const text = `eventsSimple onLoad() {
+	@collapse("Fetch") {   //@l:grp1
+		const s = "  hi  "
+		const t = s.trim()
+		@collapse("Parse/Trim") {
+			logInfo({ message: t })
+		}
+	}
+	@collapse("Input\\/Output") {   //@l:grp2
+		const r = streamCall({ prompt: t })
+		r {
+			execSuccess: {
+				@collapse("A") {   //@l:grp3
+					logInfo({ message: s })
+				}
+			}
+			execError: {
+				@collapse("/") {
+					logInfo({ message: "failed" })
+				}
+			}
+		}
+	}
+	for (const item of items) {
+		@collapse("Loop") {
+			logInfo({ message: item })
+		}
+	}
+	if (s.contains("h")) {
+		@collapse("A/B") {   //@l:grp4
+			logInfo({ message: t })
+		}
+	}
+}`;
+		expect(diagnosticMessages(text)).toEqual([]);
+	});
+
+	test("still lints the statements inside a group", () => {
+		const messages = diagnosticMessages(
+			'eventsSimple onLoad() {\n\t@collapse("A") {\n\t\tlogUnknown()\n\t}\n}',
+		);
+		expect(messages).toHaveLength(1);
+		expect(messages[0]).toContain("Unknown function 'logUnknown'");
+	});
+
+	test("is no scope: a binding declared inside stays visible after the block", () => {
+		const text = `eventsSimple onLoad() {
+	if (ready) {
+		@collapse("A") {
+			const fee = 2
+		}
+		logInfo({ message: fee })
+	}
+	logInfo({ message: fee })
+}`;
+		const semantic = decodeSemanticTokens(text);
+		const at = (line: number) =>
+			semantic.find((token) => token.word === "fee" && token.line === line);
+		expect(at(4)).toMatchObject({ type: "local", declaration: true });
+		expect(at(6)?.type).toBe("local");
+		// Still scoped by the enclosing `if` block, exactly as if written there.
+		expect(at(8)).toBeUndefined();
+
+		const providers = registerTestProviders();
+		const model = testModel(text, { lineNumber: 1, column: 1 });
+		const definition = providers.definition()(
+			model,
+			positionOfWord(text, "fee", 1),
+		);
+		const refs = providers.references()(model, positionOfWord(text, "fee"), {
+			includeDeclaration: true,
+		});
+		providers.dispose();
+		expect(definition?.range.startLineNumber).toBe(4);
+		expect(refs.map((ref) => ref.range.startLineNumber)).toEqual([4, 6]);
+	});
+
+	test("offers the group block only at statement position inside a block", () => {
+		const item = completionItem(
+			"eventsSimple onLoad() {\n\t@co",
+			COLLAPSE_LABEL,
+		);
+		expect(item?.insertText).toBe('@collapse("${1:Group}") {\n\t$0\n}');
+		expect(
+			completionLabels(
+				"eventsSimple onLoad() {\n\tfor (const x of xs) {\n\t\t@",
+			),
+		).toContain(COLLAPSE_LABEL);
+		expect(
+			completionLabels(
+				"eventsSimple onLoad() {\n\tr {\n\t\texecSuccess: {\n\t\t\t@",
+			),
+		).toContain(COLLAPSE_LABEL);
+		expect(
+			completionLabels('eventsSimple onLoad() {\n\t@collapse("A") {\n\t\t@'),
+		).toContain(COLLAPSE_LABEL);
+		expect(completionLabels("detached {\n\t@co")).toContain(COLLAPSE_LABEL);
+
+		expect(completionLabels("@co")).not.toContain(COLLAPSE_LABEL);
+		expect(completionLabels("module checkout {\n\t@co")).not.toContain(
+			COLLAPSE_LABEL,
+		);
+		expect(completionLabels("use ui::{\n\t@co")).not.toContain(COLLAPSE_LABEL);
+		expect(
+			completionLabels("eventsSimple onLoad() {\n\tr {\n\t\t@co"),
+		).not.toContain(COLLAPSE_LABEL);
+		expect(
+			completionLabels("eventsSimple onLoad() {\n\tconst x = @co"),
+		).not.toContain(COLLAPSE_LABEL);
+		expect(
+			completionLabels("eventsSimple onLoad() {\n\tlogInfo({\n\t\t@co"),
+		).not.toContain(COLLAPSE_LABEL);
+	});
+
+	test("offers the group block as a statement snippet inside a block only", () => {
+		const snippet = extraCompletionItem(
+			"eventsSimple onLoad() {\n\t",
+			COLLAPSE_LABEL,
+		);
+		expect(snippet?.insertText).toBe('@collapse("${1:Group}") {\n\t$0\n}');
+		expect(snippet?.filterText).toBe("collapse");
+		expect(extraCompletionItems("").map(labelOf)).not.toContain(COLLAPSE_LABEL);
+	});
+
+	test("documents the group block on hover", () => {
+		const markdown = hoverAt(
+			'eventsSimple onLoad() {\n\t@collapse("A") {\n\t}\n}',
+			"collapse",
+		);
+		expect(markdown).toContain("visual Collapsed layer");
+		expect(markdown).toContain("no scope");
+	});
+
+	test("folds a group block like any other block", () => {
+		const text =
+			'eventsSimple onLoad() {\n\t@collapse("A") {   //@l:grp1\n\t\tlogInfo({ message: "x" })\n\t}\n}\n';
+		const providers = registerTestProviders();
+		const ranges = providers.folding()(testModel(text, editorPosition(text)));
+		providers.dispose();
+		expect(ranges).toContainEqual({ start: 2, end: 3 });
+	});
+
+	test("outlines group blocks nested inside their section", () => {
+		const text = `eventsSimple onLoad() {
+	@collapse("Fetch") {   //@l:grp1
+		@collapse("Parse/Trim") {
+			eventsGeneric nested(payload: Struct) {
+			}
+		}
+	}
+	@collapse("Input\\/Output") {
+		logInfo({ message: "x" })
+	}
+}`;
+		const symbols = documentSymbols(text);
+		expect(symbols.map((symbol) => symbol.name)).toEqual(["onLoad"]);
+		const [fetch, io] = symbols[0].children;
+		expect([fetch.name, io.name]).toEqual(["Fetch", "Input\\/Output"]);
+		expect(fetch).toMatchObject({ kind: "namespace", detail: "@collapse" });
+		expect(fetch.selectionRange.startLineNumber).toBe(2);
+		expect(fetch.range.endLineNumber).toBe(7);
+		const [parse] = fetch.children;
+		expect(parse.name).toBe("Parse/Trim");
+		expect(parse.children.map((child) => [child.name, child.kind])).toEqual([
+			["nested", "event"],
+		]);
+	});
+});

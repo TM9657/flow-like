@@ -90,6 +90,10 @@ import {
 	flowScriptApplyOutcome,
 } from "@flow-like/flow-like-ui/lib/flowscript-apply-failure";
 import {
+	flowScriptFromResponse,
+	scopedFlowScriptFromResponse,
+} from "@flow-like/flow-like-ui/lib/flowscript/response";
+import {
 	isExpiredPin,
 	isWidgetsOnlyCopy,
 } from "@flow-like/flow-like-ui/lib/package-license";
@@ -455,14 +459,6 @@ const logBoardDifferences = (localBoard: IBoard, remoteBoard: IBoard) => {
 		console.groupEnd();
 	});
 };
-const flowScriptFromResponse = (response: unknown, boardId: string): string => {
-	const flowscript = isRecord(response) ? response.flowscript : undefined;
-	if (typeof flowscript !== "string") {
-		throw new Error(`The hub returned no FlowScript for board ${boardId}`);
-	}
-	return flowscript;
-};
-
 const getAppPackageCatalogNodes = (
 	catalogNodes: INode[] | undefined,
 ): INode[] | undefined => {
@@ -4002,10 +3998,7 @@ export class BoardState implements IBoardState {
 				{ method: "GET" },
 				this.backend.auth,
 			);
-			return {
-				flowscript: flowScriptFromResponse(response, boardId),
-				scope_anchors: asArray(response.scope_anchors),
-			};
+			return scopedFlowScriptFromResponse(response, boardId);
 		}
 	}
 
@@ -4039,10 +4032,7 @@ export class BoardState implements IBoardState {
 				{ method: "GET" },
 				this.backend.auth,
 			);
-			return {
-				flowscript: flowScriptFromResponse(response, boardId),
-				scope_anchors: asArray(response.scope_anchors),
-			};
+			return scopedFlowScriptFromResponse(response, boardId);
 		}
 	}
 

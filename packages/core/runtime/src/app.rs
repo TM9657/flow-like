@@ -31,7 +31,7 @@ pub enum StandardInterfaces {
     A2UI,
 }
 
-#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct FrontendConfiguration {
     pub landing_page: Option<String>,
 
@@ -40,6 +40,14 @@ pub struct FrontendConfiguration {
     /// keeps winning ties.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_css: Option<String>,
+
+    /// The app publisher's legal notice (imprint), linked from hosted pages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legal_notice_url: Option<String>,
+
+    /// The app publisher's privacy policy, linked from hosted pages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub privacy_policy_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -1466,6 +1474,8 @@ mod tests {
         app.frontend = Some(super::FrontendConfiguration {
             landing_page: Some("/home".to_string()),
             custom_css: Some(".card { border-radius: 1rem; }".to_string()),
+            legal_notice_url: Some("https://example.com/imprint".to_string()),
+            privacy_policy_url: Some("https://example.com/privacy".to_string()),
         });
         app.save().await.expect("app should save");
 
@@ -1479,6 +1489,14 @@ mod tests {
             Some(".card { border-radius: 1rem; }")
         );
         assert_eq!(frontend.landing_page.as_deref(), Some("/home"));
+        assert_eq!(
+            frontend.legal_notice_url.as_deref(),
+            Some("https://example.com/imprint")
+        );
+        assert_eq!(
+            frontend.privacy_policy_url.as_deref(),
+            Some("https://example.com/privacy")
+        );
     }
 
     #[tokio::test]
